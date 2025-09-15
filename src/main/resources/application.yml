@@ -1,0 +1,26 @@
+micronaut:
+  application:
+    name: full-steam
+  server:
+    port: ${SERVER_PORT:8080}
+    max-request-size: 1KB
+    netty:
+      worker:
+        threads: 8
+      max-header-size: 8192
+  executors:
+    scheduled:
+      type: scheduled
+      core-pool-size: 8
+  jackson:
+    bean-introspection-module: true
+  http:
+    client:
+      ws:
+        compression:
+          enabled: true
+    services:
+      default:
+        ws:
+          compression:
+            enabled: true
