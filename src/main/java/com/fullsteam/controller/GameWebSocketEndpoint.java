@@ -35,8 +35,12 @@ public class GameWebSocketEndpoint {
 
     @OnOpen
     public void onOpen(WebSocketSession session, String gameId, String gameType) {
+        log.info("WebSocket connection opened for gameId: {}, gameType: {}", gameId, gameType);
         if (!connectionService.connectPlayer(session, gameId, gameType)) {
+            log.warn("Failed to connect player to game {}, closing session", gameId);
             session.close();
+        } else {
+            log.info("Player successfully connected to game {}", gameId);
         }
     }
 
@@ -49,7 +53,7 @@ public class GameWebSocketEndpoint {
         }
 
         AbstractGameStateManager game = playerSession.getGame();
-        Long playerId = playerSession.getPlayerId();
+        int playerId = playerSession.getPlayerId();
 
         if (game == null) {
             log.warn("Received message from session without game context. Closing.");
@@ -84,6 +88,7 @@ public class GameWebSocketEndpoint {
 
     @OnClose
     public void onClose(WebSocketSession session) {
+        log.info("WebSocket connection closed for session: {}", session.getId());
         connectionService.disconnectPlayer(session);
     }
 }
