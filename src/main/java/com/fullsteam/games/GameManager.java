@@ -39,11 +39,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 public class GameManager implements CollisionProcessor.CollisionHandler, StepListener<Body> {
@@ -64,7 +64,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
 
     protected long gameStartTime;
     protected boolean gameRunning = false;
-    
+
     // AI management settings - initialized from gameConfig
     private boolean autoFillWithAI;
     private double minAIFillPercentage;
@@ -82,7 +82,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         this.gameType = gameType;
         this.gameConfig = gameConfig;
         this.gameStartTime = System.currentTimeMillis();
-        
+
         // Initialize AI management settings from config
         this.autoFillWithAI = gameConfig.isAutoFillWithAI();
         this.minAIFillPercentage = gameConfig.getMinAIFillPercentage();
@@ -193,7 +193,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         }
 
         Vector2 spawnPoint = findSpawnPoint();
-        AIPlayer aiPlayer = AIPlayerManager.createRandomAIPlayer(Config.nextId(), spawnPoint.x, spawnPoint.y);
+        int assignedTeam = assignPlayerToTeam();
+        AIPlayer aiPlayer = AIPlayerManager.createRandomAIPlayer(Config.nextId(), spawnPoint.x, spawnPoint.y, assignedTeam);
 
         // Add to game entities
         gameEntities.addPlayer(aiPlayer);
@@ -202,9 +203,9 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         // Add to AI manager
         aiPlayerManager.addAIPlayer(aiPlayer);
 
-        log.info("Added AI player {} ({}) with personality {} at spawn point ({}, {})",
+        log.info("Added AI player {} ({}) with personality {} on team {} at spawn point ({}, {})",
                 aiPlayer.getId(), aiPlayer.getPlayerName(), aiPlayer.getPersonality().getPersonalityType(),
-                spawnPoint.x, spawnPoint.y);
+                assignedTeam, spawnPoint.x, spawnPoint.y);
 
         return true;
     }
@@ -218,7 +219,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         }
 
         Vector2 spawnPoint = findSpawnPoint();
-        AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithPersonality(Config.nextId(), spawnPoint.x, spawnPoint.y, personalityType);
+        int assignedTeam = assignPlayerToTeam();
+        AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithPersonality(Config.nextId(), spawnPoint.x, spawnPoint.y, personalityType, assignedTeam);
 
         // Add to game entities
         gameEntities.addPlayer(aiPlayer);
@@ -227,9 +229,9 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         // Add to AI manager
         aiPlayerManager.addAIPlayer(aiPlayer);
 
-        log.info("Added AI player {} ({}) with {} personality at spawn point ({}, {})",
+        log.info("Added AI player {} ({}) with {} personality on team {} at spawn point ({}, {})",
                 aiPlayer.getId(), aiPlayer.getPlayerName(), personalityType,
-                spawnPoint.x, spawnPoint.y);
+                assignedTeam, spawnPoint.x, spawnPoint.y);
 
         return true;
     }
@@ -270,14 +272,62 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     }
 
     /**
+     * Assign a player to the team with the fewest members.
+     *
+     * @return Team number (0 for FFA, 1+ for team modes)
+     */
+    private int assignPlayerToTeam() {
+        if (gameConfig.isFreeForAll()) {
+            return 0; // FFA mode
+        }
+
+        // Count players on each team
+        int[] teamCounts = new int[gameConfig.getTeamCount() + 1]; // +1 for index alignment
+        for (Player player : gameEntities.getAllPlayers()) {
+            int team = player.getTeam();
+            if (team > 0 && team <= gameConfig.getTeamCount()) {
+                teamCounts[team]++;
+            }
+        }
+
+        // Find team with fewest players
+        int bestTeam = 1;
+        int minCount = teamCounts[1];
+        for (int team = 2; team <= gameConfig.getTeamCount(); team++) {
+            if (teamCounts[team] < minCount) {
+                minCount = teamCounts[team];
+                bestTeam = team;
+            }
+        }
+
+        return bestTeam;
+    }
+
+    /**
+     * Get team counts for all teams.
+     *
+     * @return Map of team number to player count
+     */
+    public java.util.Map<Integer, Integer> getTeamCounts() {
+        java.util.Map<Integer, Integer> teamCounts = new java.util.HashMap<>();
+
+        for (Player player : gameEntities.getAllPlayers()) {
+            int team = player.getTeam();
+            teamCounts.put(team, teamCounts.getOrDefault(team, 0) + 1);
+        }
+
+        return teamCounts;
+    }
+
+    /**
      * Configure automatic AI filling settings.
      */
     public void setAutoFillSettings(boolean enabled, double minFillPercentage, double maxFillPercentage) {
         this.autoFillWithAI = enabled;
         this.minAIFillPercentage = Math.max(0.0, Math.min(1.0, minFillPercentage));
         this.maxAIFillPercentage = Math.max(minFillPercentage, Math.min(1.0, maxFillPercentage));
-        log.info("Auto-fill AI settings updated: enabled={}, min={}%, max={}%", 
-            enabled, minFillPercentage * 100, maxFillPercentage * 100);
+        log.info("Auto-fill AI settings updated: enabled={}, min={}%, max={}%",
+                enabled, minFillPercentage * 100, maxFillPercentage * 100);
     }
 
     /**
@@ -316,8 +366,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             int aiToAdd = minTargetPlayers - totalPlayers;
             int added = AIGameHelper.addMixedAIPlayers(this, aiToAdd);
             if (added > 0) {
-                log.info("Auto-filled {} AI players to reach minimum activity level (total: {})", 
-                    added, totalPlayers + added);
+                log.info("Auto-filled {} AI players to reach minimum activity level (total: {})",
+                        added, totalPlayers + added);
             }
         }
         // If we have too many AI players compared to humans, remove some
@@ -325,8 +375,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             int aiToRemove = totalPlayers - maxTargetPlayers;
             int removed = removeExcessAIPlayers(aiToRemove);
             if (removed > 0) {
-                log.info("Removed {} excess AI players (total remaining: {})", 
-                    removed, totalPlayers - removed);
+                log.info("Removed {} excess AI players (total remaining: {})",
+                        removed, totalPlayers - removed);
             }
         }
         // If we have a good number of human players but could use more activity
@@ -334,8 +384,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             int aiToAdd = Math.min(3, maxTargetPlayers - totalPlayers); // Add up to 3 AI
             int added = AIGameHelper.addMixedAIPlayers(this, aiToAdd);
             if (added > 0) {
-                log.info("Added {} AI players to increase game activity (total: {})", 
-                    added, totalPlayers + added);
+                log.info("Added {} AI players to increase game activity (total: {})",
+                        added, totalPlayers + added);
             }
         }
     }
@@ -346,7 +396,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     private int removeExcessAIPlayers(int count) {
         int removed = 0;
         java.util.List<Integer> aiPlayerIds = new java.util.ArrayList<>();
-        
+
         // Collect all AI player IDs
         for (Player player : gameEntities.getAllPlayers()) {
             if (isAIPlayer(player.getId())) {
@@ -433,16 +483,18 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
 
     protected void onPlayerJoined(PlayerSession playerSession) {
         Vector2 spawnPoint = findSpawnPoint();
-        log.info("Player {} joining game {} at spawn point ({}, {})", playerSession.getPlayerId(), gameId, spawnPoint.x, spawnPoint.y);
+        int assignedTeam = assignPlayerToTeam();
+        log.info("Player {} joining game {} at spawn point ({}, {}) on team {}",
+                playerSession.getPlayerId(), gameId, spawnPoint.x, spawnPoint.y, assignedTeam);
 
-        Player player = new Player(playerSession.getPlayerId(), playerSession.getPlayerName(), spawnPoint.x, spawnPoint.y);
+        Player player = new Player(playerSession.getPlayerId(), playerSession.getPlayerName(), spawnPoint.x, spawnPoint.y, assignedTeam);
         gameEntities.addPlayer(player);
         bodiesToAdd.add(player.getBody());
 
         send(playerSession.getSession(), createInitialGameState());
         log.info("Player {} ({}) joined game {} successfully. Total players: {}, Total sessions: {}",
                 playerSession.getPlayerId(), playerSession.getPlayerName(), gameId, gameEntities.getPlayers().size(), gameEntities.getPlayerSessions().size());
-        
+
         // Adjust AI players when a human player joins
         if (autoFillWithAI) {
             adjustAIPlayers();
@@ -462,7 +514,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             }
         }
         log.info("Player {} left game {}", playerSession.getPlayerId(), gameId);
-        
+
         // Adjust AI players when a human player leaves
         if (autoFillWithAI && !aiPlayerManager.isAIPlayer(playerSession.getPlayerId())) {
             adjustAIPlayers();
@@ -533,11 +585,9 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
 
     private void createStrategicLocations() {
         String[] locationNames = {"Alpha", "Beta", "Gamma", "Delta", "Echo"};
-        Random random = new Random();
-
         for (int i = 0; i < gameConfig.getStrategicLocationsCount(); i++) {
-            double x = (random.nextDouble() - 0.5) * (gameConfig.getWorldWidth() - 200);
-            double y = (random.nextDouble() - 0.5) * (gameConfig.getWorldHeight() - 200);
+            double x = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldWidth() - 200);
+            double y = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldHeight() - 200);
 
             StrategicLocation location = new StrategicLocation(locationNames[i], x, y);
             gameEntities.addStrategicLocation(location);
@@ -546,13 +596,12 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     }
 
     private void createObstacles() {
-        Random random = new Random();
-        int obstacleCount = 5 + random.nextInt(6); // 5 to 10 obstacles
+        int obstacleCount = 5 + ThreadLocalRandom.current().nextInt(6); // 5 to 10 obstacles
 
         for (int i = 0; i < obstacleCount; i++) {
-            double x = (random.nextDouble() - 0.5) * (gameConfig.getWorldWidth() - 200);
-            double y = (random.nextDouble() - 0.5) * (gameConfig.getWorldHeight() - 200);
-            double radius = 10 + random.nextInt(21); // 10 to 30 radius
+            double x = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldWidth() - 200);
+            double y = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldHeight() - 200);
+            double radius = 10 + ThreadLocalRandom.current().nextInt(21); // 10 to 30 radius
 
             Boulder boulder = new Boulder(x, y, radius);
             gameEntities.addObstacle(boulder);
@@ -594,6 +643,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             Map<String, Object> playerState = new HashMap<>();
             playerState.put("id", player.getId());
             playerState.put("name", player.getPlayerName());
+            playerState.put("team", player.getTeam());
             playerState.put("x", pos.x);
             playerState.put("y", pos.y);
             playerState.put("rotation", player.getRotation());
@@ -654,10 +704,9 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     }
 
     private Vector2 findSpawnPoint() {
-        Random random = new Random();
         for (int attempts = 0; attempts < 10; attempts++) {
-            double x = (random.nextDouble() - 0.5) * (gameConfig.getWorldWidth() - 100);
-            double y = (random.nextDouble() - 0.5) * (gameConfig.getWorldHeight() - 100);
+            double x = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldWidth() - 100);
+            double y = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldHeight() - 100);
             Vector2 candidate = new Vector2(x, y);
 
             boolean tooClose = false;
@@ -674,8 +723,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         }
 
         return new Vector2(
-                (random.nextDouble() - 0.5) * gameConfig.getWorldWidth() * 0.8,
-                (random.nextDouble() - 0.5) * gameConfig.getWorldHeight() * 0.8);
+                (ThreadLocalRandom.current().nextDouble() - 0.5) * gameConfig.getWorldWidth() * 0.8,
+                (ThreadLocalRandom.current().nextDouble() - 0.5) * gameConfig.getWorldHeight() * 0.8);
     }
 
     private Map<String, Object> createInitialGameState() {
@@ -683,6 +732,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         state.put("type", "initialState");
         state.put("worldWidth", gameConfig.getWorldWidth());
         state.put("worldHeight", gameConfig.getWorldHeight());
+        state.put("teamCount", gameConfig.getTeamCount());
+        state.put("teamMode", gameConfig.isTeamMode());
 
         List<Map<String, Object>> locations = new ArrayList<>();
         for (StrategicLocation location : gameEntities.getAllStrategicLocations()) {

@@ -83,9 +83,15 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
 
     private void handlePlayerProjectileCollision(Player player, Projectile projectile) {
-        if (player.getId() == projectile.getOwnerId() || !player.isActive() || !projectile.isActive()) {
+        if (!player.isActive() || !projectile.isActive()) {
             return;
         }
+        
+        // Use the projectile's team-aware damage logic
+        if (!projectile.canDamage(player)) {
+            return; // Can't damage self or teammates
+        }
+        
         if (collisionHandler != null) {
             collisionHandler.onPlayerHitByProjectile(player, projectile);
         }

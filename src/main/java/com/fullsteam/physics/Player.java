@@ -14,6 +14,7 @@ import org.dyn4j.geometry.Vector2;
 @Setter
 public class Player extends GameEntity {
     private String playerName;
+    private int team = 0; // 0 = no team (FFA), 1+ = team number
     private Weapon primaryWeapon;
     private Weapon secondaryWeapon;
     private int currentWeapon = 0; // 0 = primary, 1 = secondary
@@ -27,8 +28,13 @@ public class Player extends GameEntity {
     private Vector2 respawnPoint;
 
     public Player(int id, String playerName, double x, double y) {
+        this(id, playerName, x, y, 0); // Default to no team (FFA)
+    }
+    
+    public Player(int id, String playerName, double x, double y, int team) {
         super(id, createPlayerBody(x, y), 100.0);
         this.playerName = playerName != null ? playerName : "Player " + id;
+        this.team = team;
         this.respawnPoint = new Vector2(x, y);
 
         // Default weapons
@@ -155,7 +161,9 @@ public class Player extends GameEntity {
                 velocity.x,
                 velocity.y,
                 weapon.getDamage(),
-                weapon.getRange()
+                weapon.getRange(),
+                false, // bounces
+                team   // pass team information
         );
     }
 
@@ -195,16 +203,25 @@ public class Player extends GameEntity {
     public int getCurrentWeaponIndex() {
         return currentWeapon;
     }
-
-    public Vector2 getAimDirection() {
-        return aimDirection.copy();
+    
+    /**
+     * Check if this player is on the same team as another player.
+     * @param otherPlayer The other player to check
+     * @return true if on same team, false if enemies or FFA
+     */
+    public boolean isTeammate(Player otherPlayer) {
+        if (otherPlayer == null || this.team == 0 || otherPlayer.team == 0) {
+            return false; // FFA mode or null player
+        }
+        return this.team == otherPlayer.team;
     }
-
-    public Vector2 getRespawnPoint() {
-        return respawnPoint.copy();
-    }
-
-    public void setRespawnPoint(Vector2 point) {
-        this.respawnPoint = point.copy();
+    
+    /**
+     * Check if this player is an enemy of another player.
+     * @param otherPlayer The other player to check
+     * @return true if enemies (different teams or FFA), false if teammates
+     */
+    public boolean isEnemy(Player otherPlayer) {
+        return !isTeammate(otherPlayer) && otherPlayer != null && otherPlayer.getId() != this.getId();
     }
 }

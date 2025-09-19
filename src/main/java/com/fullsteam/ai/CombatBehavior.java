@@ -32,27 +32,32 @@ public class CombatBehavior implements AIBehavior {
             double distance = direction.getMagnitude();
             
             // Movement strategy based on distance and personality
-            if (distance > aiPlayer.getPersonality().getPreferredCombatRange()) {
+            double preferredRange = aiPlayer.getPersonality().getPreferredCombatRange();
+            
+            if (distance > preferredRange + 30) {
                 // Move towards target
                 direction.normalize();
-                input.setMoveX(direction.x);
-                input.setMoveY(direction.y);
+                input.setMoveX(direction.x * 0.8); // Slightly reduced for smoother movement
+                input.setMoveY(direction.y * 0.8);
                 
-                // Use sprint if aggressive personality
-                if (aiPlayer.getPersonality().getAggressiveness() > 0.7) {
+                // Use sprint if aggressive personality and far away
+                if (aiPlayer.getPersonality().getAggressiveness() > 0.6 && distance > preferredRange * 1.5) {
                     input.setShift(true);
                 }
-            } else if (distance < aiPlayer.getPersonality().getPreferredCombatRange() * 0.5) {
+            } else if (distance < preferredRange * 0.6) {
                 // Too close, back away while shooting
                 direction.normalize();
-                input.setMoveX(-direction.x * 0.5);
-                input.setMoveY(-direction.y * 0.5);
+                input.setMoveX(-direction.x * 0.6);
+                input.setMoveY(-direction.y * 0.6);
             } else {
                 // Good distance, strafe around target
                 Vector2 strafeDirection = new Vector2(-direction.y, direction.x);
                 strafeDirection.normalize();
-                input.setMoveX(strafeDirection.x * 0.7);
-                input.setMoveY(strafeDirection.y * 0.7);
+                
+                // Vary strafe direction based on time to avoid predictable movement
+                double strafeVariation = Math.sin(System.currentTimeMillis() / 1000.0) * 0.3;
+                input.setMoveX((strafeDirection.x + strafeVariation) * 0.8);
+                input.setMoveY((strafeDirection.y + strafeVariation) * 0.8);
             }
             
             // Aim at target with prediction based on target velocity
@@ -112,15 +117,20 @@ public class CombatBehavior implements AIBehavior {
         }
         
         double distance = aiPlayer.getPosition().distance(nearestEnemy.getPosition());
-        double maxCombatRange = 300; // Maximum engagement range
+        double maxCombatRange = 500; // Increased engagement range
         
         if (distance > maxCombatRange) {
             return 0;
         }
         
         // Higher priority for closer enemies and more aggressive personalities
-        int basePriority = (int) (80 * (1.0 - distance / maxCombatRange));
-        int personalityBonus = (int) (aiPlayer.getPersonality().getAggressiveness() * 20);
+        int basePriority = (int) (90 * (1.0 - distance / maxCombatRange));
+        int personalityBonus = (int) (aiPlayer.getPersonality().getAggressiveness() * 10);
+        
+        // Always prioritize combat when enemies are very close
+        if (distance < 200) {
+            basePriority = Math.max(basePriority, 85);
+        }
         
         return Math.min(100, basePriority + personalityBonus);
     }
@@ -140,15 +150,27 @@ public class CombatBehavior implements AIBehavior {
                 continue;
             }
             
+            // Skip teammates - only target enemies
+            if (aiPlayer.isTeammate(player)) {
+                continue;
+            }
+            
             double distance = playerPos.distance(player.getPosition());
-            if (distance > 400) { // Max engagement range
+            if (distance > 600) { // Increased max engagement range
                 continue;
             }
             
             // Score based on distance (closer is better) and health (lower health is better)
-            double distanceScore = 1.0 - (distance / 400.0);
+            double distanceScore = 1.0 - (distance / 600.0);
             double healthScore = 1.0 - (player.getHealth() / 100.0);
-            double totalScore = (distanceScore * 0.7) + (healthScore * 0.3);
+            
+            // Bonus for maintaining the same target
+            double continuityBonus = 0;
+            if (targetPlayerId == player.getId()) {
+                continuityBonus = 0.3; // Prefer to keep the same target
+            }
+            
+            double totalScore = (distanceScore * 0.6) + (healthScore * 0.2) + continuityBonus;
             
             if (totalScore > bestScore) {
                 bestScore = totalScore;
@@ -169,11 +191,19 @@ public class CombatBehavior implements AIBehavior {
         double accuracy = aiPlayer.getCurrentWeapon().getAccuracy();
         double effectiveRange = aiPlayer.getCurrentWeapon().getRange();
         
-        // Reduce accuracy at longer ranges
-        double rangeAccuracy = Math.max(0.1, 1.0 - (distance / effectiveRange));
-        double finalAccuracy = accuracy * rangeAccuracy * aiPlayer.getPersonality().getAccuracy();
+        // Reduce accuracy at longer ranges but be more generous
+        double rangeAccuracy = Math.max(0.3, 1.0 - (distance / (effectiveRange * 1.5)));
+        double personalityAccuracy = Math.max(0.4, aiPlayer.getPersonality().getAccuracy());
+        double finalAccuracy = accuracy * rangeAccuracy * personalityAccuracy;
         
-        // Random chance to shoot based on accuracy and personality
-        return Math.random() < finalAccuracy;
+        // Be more aggressive - shoot more frequently
+        double shootChance = Math.max(0.6, finalAccuracy); // At least 60% chance to shoot
+        
+        // Always shoot if very close
+        if (distance < 100) {
+            shootChance = 0.9;
+        }
+        
+        return Math.random() < shootChance;
     }
 }

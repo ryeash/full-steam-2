@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Defines the personality traits that influence AI decision-making and behavior.
@@ -12,8 +13,7 @@ import java.util.Random;
 @Getter
 @Builder
 public class AIPersonality {
-    private static final Random RANDOM = new Random();
-    
+
     // Combat-related traits
     @Builder.Default
     private double aggressiveness = 0.5; // 0.0 = passive, 1.0 = very aggressive
@@ -59,7 +59,7 @@ public class AIPersonality {
             .aggressiveness(randomTrait(0.3, 0.8))
             .accuracy(randomTrait(0.4, 0.9))
             .reactionSpeed(randomTrait(0.4, 0.8))
-            .preferredCombatRange(100 + RANDOM.nextDouble() * 200) // 100-300 range
+            .preferredCombatRange(100 + ThreadLocalRandom.current().nextDouble() * 200) // 100-300 range
             .strategicThinking(randomTrait(0.3, 0.9))
             .teamwork(randomTrait(0.2, 0.8))
             .riskTolerance(randomTrait(0.3, 0.8))
@@ -166,7 +166,7 @@ public class AIPersonality {
     }
     
     private static double randomTrait(double min, double max) {
-        return min + RANDOM.nextDouble() * (max - min);
+        return min + ThreadLocalRandom.current().nextDouble() * (max - min);
     }
     
     /**

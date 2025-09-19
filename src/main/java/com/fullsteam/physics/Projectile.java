@@ -10,17 +10,23 @@ import org.dyn4j.geometry.Vector2;
 @Getter
 public class Projectile extends GameEntity {
     private final int ownerId;
+    private final int ownerTeam; // Team of the player who fired this projectile
     private final double damage;
     private double timeToLive; // Time in seconds before projectile is removed
     private final boolean bounces;
 
     public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange) {
-        this(ownerId, x, y, vx, vy, damage, maxRange, false); // Default to not bouncing
+        this(ownerId, x, y, vx, vy, damage, maxRange, false, 0); // Default to not bouncing, FFA team
+    }
+    
+    public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange, boolean bounces) {
+        this(ownerId, x, y, vx, vy, damage, maxRange, bounces, 0); // Default to FFA team
     }
 
-    public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange, boolean bounces) {
+    public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange, boolean bounces, int ownerTeam) {
         super(Config.nextId(), createProjectileBody(x, y, vx, vy), 1.0);
         this.ownerId = ownerId;
+        this.ownerTeam = ownerTeam;
         this.damage = damage;
         this.bounces = bounces;
 
@@ -56,5 +62,31 @@ public class Projectile extends GameEntity {
         }
 
         lastUpdateTime = System.currentTimeMillis();
+    }
+    
+    /**
+     * Check if this projectile can damage the given player.
+     * Projectiles cannot damage teammates (unless FFA mode).
+     * 
+     * @param player The player to check
+     * @return true if projectile can damage this player, false if teammate or self
+     */
+    public boolean canDamage(Player player) {
+        if (player == null) {
+            return false;
+        }
+        
+        // Can't damage self
+        if (player.getId() == ownerId) {
+            return false;
+        }
+        
+        // In FFA mode (team 0), can damage anyone except self
+        if (ownerTeam == 0 || player.getTeam() == 0) {
+            return true;
+        }
+        
+        // In team mode, can only damage players on different teams
+        return ownerTeam != player.getTeam();
     }
 }

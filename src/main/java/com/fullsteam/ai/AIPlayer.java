@@ -15,13 +15,17 @@ public class AIPlayer extends Player {
     private AIBehavior currentBehavior;
     private AIMemory memory;
     private double lastDecisionTime = 0;
-    private double decisionCooldown = 0.1; // Make decisions every 100ms
+    private double decisionCooldown = 0.3; // Make decisions every 300ms for smoother behavior
     private int targetPlayerId = -1;
     private int targetLocationId = -1;
     private boolean isHuman = false; // Always false for AI players
 
     public AIPlayer(int id, String playerName, double x, double y, AIPersonality personality) {
-        super(id, playerName, x, y);
+        this(id, playerName, x, y, personality, 0); // Default to FFA team
+    }
+    
+    public AIPlayer(int id, String playerName, double x, double y, AIPersonality personality, int team) {
+        super(id, playerName, x, y, team);
         this.personality = personality;
         this.memory = new AIMemory();
         this.currentBehavior = new IdleBehavior();
