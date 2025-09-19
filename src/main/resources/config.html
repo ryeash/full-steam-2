@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Game Configuration</title>
+    <link rel="stylesheet" type="text/css" href="unified.css">
+</head>
+<body>
+<div id="config-wrapper">
+    <h1>Game Configuration</h1>
+    <div class="config-section">
+        <label for="player-name">Player Name</label>
+        <input type="text" id="player-name" placeholder="Enter your name">
+    </div>
+    <div class="config-section">
+        <h2>Weapon Loadout</h2>
+        <div class="weapon-selection">
+            <label for="primary-weapon">Primary Weapon</label>
+            <select id="primary-weapon">
+                <option value="assault">Assault Rifle</option>
+                <option value="sniper">Sniper Rifle</option>
+                <option value="shotgun">Shotgun</option>
+                <option value="smg">SMG</option>
+            </select>
+        </div>
+        <div class="weapon-selection">
+            <label for="secondary-weapon">Secondary Weapon</label>
+            <select id="secondary-weapon">
+                <option value="pistol">Pistol</option>
+                <option value="magnum">Magnum</option>
+                <option value="auto-pistol">Auto Pistol</option>
+            </select>
+        </div>
+    </div>
+    <button id="start-game">Start Game</button>
+</div>
+
+<script>
+    document.getElementById('start-game').addEventListener('click', () => {
+        const playerName = document.getElementById('player-name').value || 'Player';
+        const primaryWeapon = document.getElementById('primary-weapon').value;
+        const secondaryWeapon = document.getElementById('secondary-weapon').value;
+
+        const params = new URLSearchParams(window.location.search);
+        const gameId = params.get('gameId');
+        const gameType = params.get('gameType');
+        const spectate = params.get('spectate');
+
+        const newParams = new URLSearchParams();
+        newParams.set('playerName', playerName);
+        newParams.set('primaryWeapon', primaryWeapon);
+        newParams.set('secondaryWeapon', secondaryWeapon);
+        if (gameId) newParams.set('gameId', gameId);
+        if (gameType) newParams.set('gameType', gameType);
+        if (spectate) newParams.set('spectate', spectate);
+
+        window.location.href = `/game.html?${newParams.toString()}`;
+    });
+</script>
+</body>
+</html>

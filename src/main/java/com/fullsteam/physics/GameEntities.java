@@ -18,10 +18,11 @@ import java.util.concurrent.ConcurrentSkipListMap;
 public class GameEntities {
 
     protected final Map<Integer, PlayerSession> playerSessions = new ConcurrentSkipListMap<>();
-    protected final Map<Integer, PlayerInput> playerInput = new ConcurrentSkipListMap<>();
+    protected final Map<Integer, PlayerInput> playerInputs = new ConcurrentSkipListMap<>();
     private final Map<Integer, Player> players = new ConcurrentSkipListMap<>();
     private final Map<Integer, Projectile> projectiles = new ConcurrentSkipListMap<>();
     private final Map<Integer, StrategicLocation> strategicLocations = new ConcurrentSkipListMap<>();
+    private final Map<Integer, Obstacle> obstacles = new ConcurrentSkipListMap<>();
 
     public void addPlayerSession(PlayerSession playerSession) {
         playerSessions.put(playerSession.getPlayerId(), playerSession);
@@ -32,7 +33,7 @@ public class GameEntities {
     }
 
     public PlayerInput getPlayerInput(Integer id) {
-        return playerInput.get(id);
+        return playerInputs.get(id);
     }
 
     public void addPlayer(Player player) {
@@ -79,6 +80,16 @@ public class GameEntities {
         return strategicLocations.values();
     }
 
+    // ===== Obstacle Management =====
+
+    public void addObstacle(Obstacle obstacle) {
+        obstacles.put(obstacle.getId(), obstacle);
+    }
+
+    public Collection<Obstacle> getAllObstacles() {
+        return obstacles.values();
+    }
+
     /**
      * Remove inactive entities across all collections.
      * This is useful for cleanup operations.
@@ -110,12 +121,8 @@ public class GameEntities {
         strategicLocations.values().forEach(location -> location.update(deltaTime));
     }
 
-    public void clearPlayerEntities(Integer playerId) {
-        if (playerId != null) {
-            playerSessions.remove(playerId);
-            playerInput.remove(playerId);
-            players.remove(playerId);
-            projectiles.values().removeIf(p -> p.getOwnerId() == playerId);
-        }
+    public PlayerSession removePlayerSession(int playerId) {
+        return playerSessions.remove(playerId);
     }
+
 }

@@ -11,6 +11,7 @@ class GameEngine {
         this.players = new Map();
         this.projectiles = new Map();
         this.strategicLocations = new Map();
+        this.obstacles = new Map();
         this.myPlayerId = null;
         this.gameState = null;
         this.websocket = null;
@@ -118,9 +119,6 @@ class GameEngine {
     }
     
     setupUI() {
-        // Setup weapon customization
-        this.setupWeaponCustomization();
-        
         // Setup event listeners
         document.getElementById('close-scoreboard')?.addEventListener('click', () => {
             document.getElementById('scoreboard').style.display = 'none';
@@ -140,59 +138,6 @@ class GameEngine {
             }
         });
     }
-    
-    setupWeaponCustomization() {
-        const weaponPresets = {
-            assault: { damage: 25, fireRate: 8, range: 300, accuracy: 0.9, magazineSize: 30, reloadTime: 2.0, projectileSpeed: 800 },
-            sniper: { damage: 80, fireRate: 1.5, range: 600, accuracy: 0.99, magazineSize: 5, reloadTime: 3.0, projectileSpeed: 1200 },
-            shotgun: { damage: 60, fireRate: 2, range: 150, accuracy: 0.7, magazineSize: 8, reloadTime: 2.5, projectileSpeed: 400 },
-            smg: { damage: 18, fireRate: 12, range: 200, accuracy: 0.8, magazineSize: 40, reloadTime: 1.5, projectileSpeed: 600 },
-            pistol: { damage: 35, fireRate: 4, range: 200, accuracy: 0.95, magazineSize: 12, reloadTime: 1.5, projectileSpeed: 600 },
-            magnum: { damage: 65, fireRate: 2, range: 250, accuracy: 0.98, magazineSize: 6, reloadTime: 2.0, projectileSpeed: 800 },
-            'auto-pistol': { damage: 22, fireRate: 8, range: 180, accuracy: 0.85, magazineSize: 20, reloadTime: 1.8, projectileSpeed: 650 }
-        };
-        
-        const updateWeaponStats = (weaponType, statsElementId) => {
-            const stats = weaponPresets[weaponType];
-            const statsElement = document.getElementById(statsElementId);
-            if (stats && statsElement) {
-                statsElement.innerHTML = `
-                    <div class="stat-item"><span>Damage:</span><span>${stats.damage}</span></div>
-                    <div class="stat-item"><span>Fire Rate:</span><span>${stats.fireRate}/s</span></div>
-                    <div class="stat-item"><span>Range:</span><span>${stats.range}m</span></div>
-                    <div class="stat-item"><span>Accuracy:</span><span>${Math.round(stats.accuracy * 100)}%</span></div>
-                    <div class="stat-item"><span>Magazine:</span><span>${stats.magazineSize}</span></div>
-                    <div class="stat-item"><span>Reload:</span><span>${stats.reloadTime}s</span></div>
-                `;
-            }
-        };
-        
-        document.getElementById('primary-weapon-type')?.addEventListener('change', (e) => {
-            updateWeaponStats(e.target.value, 'primary-stats');
-        });
-        
-        document.getElementById('secondary-weapon-type')?.addEventListener('change', (e) => {
-            updateWeaponStats(e.target.value, 'secondary-stats');
-        });
-        
-        // Initialize with default values
-        updateWeaponStats('assault', 'primary-stats');
-        updateWeaponStats('pistol', 'secondary-stats');
-        
-        document.getElementById('apply-loadout')?.addEventListener('click', () => {
-            this.sendWeaponConfig();
-        });
-        
-        // Show weapon customization with C key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'c' || e.key === 'C') {
-                const panel = document.getElementById('weapon-customization');
-                if (panel) {
-                    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-                }
-                }
-            });
-        }
 
     async loadAssets() {
         // Create clean 2D top-down assets
@@ -225,6 +170,13 @@ class GameEngine {
         locationGraphics.lineStyle(3, 0x9b59b6);
         locationGraphics.drawCircle(0, 0, 50);
         this.locationTexture = this.app.renderer.generateTexture(locationGraphics);
+
+        // Obstacle - boulder
+        const boulderGraphics = new PIXI.Graphics();
+        boulderGraphics.beginFill(0x808080);
+        boulderGraphics.drawCircle(0, 0, 20);
+        boulderGraphics.endFill();
+        this.boulderTexture = this.app.renderer.generateTexture(boulderGraphics);
     }
     
     
@@ -240,7 +192,7 @@ class GameEngine {
             this.websocket = new WebSocket(wsUrl);
             
             this.websocket.onopen = () => {
-                this.sendPlayerName();
+                this.sendPlayerConfiguration();
                 resolve();
             };
             
@@ -333,6 +285,12 @@ class GameEngine {
                 this.createStrategicLocation(location);
             });
         }
+
+        if (data.obstacles) {
+            data.obstacles.forEach(obstacle => {
+                this.createObstacle(obstacle);
+            });
+        }
         
     }
     
@@ -388,6 +346,24 @@ class GameEngine {
             data.locations.forEach(locationData => {
                 this.updateStrategicLocation(locationData);
             });
+        }
+
+        if (data.obstacles) {
+            const currentObstacleIds = new Set();
+            data.obstacles.forEach(obstacleData => {
+                currentObstacleIds.add(obstacleData.id);
+                if (this.obstacles.has(obstacleData.id)) {
+                    this.updateObstacle(obstacleData);
+                } else {
+                    this.createObstacle(obstacleData);
+                }
+            });
+
+            for (let [obstacleId, obstacle] of this.obstacles) {
+                if (!currentObstacleIds.has(obstacleId)) {
+                    this.removeObstacle(obstacleId);
+                }
+            }
         }
         
         this.updateUI(data);
@@ -576,6 +552,33 @@ class GameEngine {
         
         if (locationData.capturingPlayer && locationData.captureProgress > 0) {
             this.showCaptureProgress(locationData);
+        }
+    }
+
+    createObstacle(obstacleData) {
+        const sprite = new PIXI.Sprite(this.boulderTexture);
+        sprite.anchor.set(0.5);
+        const isoPos = this.worldToIsometric(obstacleData.x, obstacleData.y);
+        sprite.position.set(isoPos.x, isoPos.y);
+        sprite.width = obstacleData.radius * 2;
+        sprite.height = obstacleData.radius * 2;
+        sprite.zIndex = 5;
+        this.obstacles.set(obstacleData.id, sprite);
+        this.gameContainer.addChild(sprite);
+    }
+
+    updateObstacle(obstacleData) {
+        const sprite = this.obstacles.get(obstacleData.id);
+        if (!sprite) return;
+        const isoPos = this.worldToIsometric(obstacleData.x, obstacleData.y);
+        sprite.position.set(isoPos.x, isoPos.y);
+    }
+
+    removeObstacle(obstacleId) {
+        const sprite = this.obstacles.get(obstacleId);
+        if (sprite) {
+            this.gameContainer.removeChild(sprite);
+            this.obstacles.delete(obstacleId);
         }
     }
     
@@ -775,21 +778,12 @@ class GameEngine {
         }
     }
     
-    sendPlayerName() {
-        const name = prompt("Enter your player name:") || `Player${Math.floor(Math.random() * 1000)}`;
-        
-        const message = {
-            type: 'configChange',
-            playerName: name
-        };
-        
-        this.websocket.send(JSON.stringify(message));
-    }
-    
-    sendWeaponConfig() {
-        const primaryType = document.getElementById('primary-weapon-type')?.value || 'assault';
-        const secondaryType = document.getElementById('secondary-weapon-type')?.value || 'pistol';
-        
+    sendPlayerConfiguration() {
+        const params = new URLSearchParams(window.location.search);
+        const playerName = params.get('playerName') || `Player${Math.floor(Math.random() * 1000)}`;
+        const primaryWeaponType = params.get('primaryWeapon') || 'assault';
+        const secondaryWeaponType = params.get('secondaryWeapon') || 'pistol';
+
         const weaponPresets = {
             assault: { type: 'Assault Rifle', damage: 25, fireRate: 8, range: 300, accuracy: 0.9, magazineSize: 30, reloadTime: 2.0, projectileSpeed: 800 },
             sniper: { type: 'Sniper Rifle', damage: 80, fireRate: 1.5, range: 600, accuracy: 0.99, magazineSize: 5, reloadTime: 3.0, projectileSpeed: 1200 },
@@ -799,14 +793,15 @@ class GameEngine {
             magnum: { type: 'Magnum', damage: 65, fireRate: 2, range: 250, accuracy: 0.98, magazineSize: 6, reloadTime: 2.0, projectileSpeed: 800 },
             'auto-pistol': { type: 'Auto Pistol', damage: 22, fireRate: 8, range: 180, accuracy: 0.85, magazineSize: 20, reloadTime: 1.8, projectileSpeed: 650 }
         };
-        
-        this.websocket.send(JSON.stringify({
+
+        const message = {
             type: 'configChange',
-            primaryWeapon: weaponPresets[primaryType],
-            secondaryWeapon: weaponPresets[secondaryType]
-        }));
-        
-        document.getElementById('weapon-customization').style.display = 'none';
+            playerName: playerName,
+            primaryWeapon: weaponPresets[primaryWeaponType],
+            secondaryWeapon: weaponPresets[secondaryWeaponType]
+        };
+
+        this.websocket.send(JSON.stringify(message));
     }
     
     updateLoadingProgress(percent, status) {

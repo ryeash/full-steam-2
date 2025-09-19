@@ -7,18 +7,14 @@ import com.fullsteam.model.GameInfo;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
-import com.fullsteam.physics.CollisionProcessor;
-import com.fullsteam.physics.GameEntities;
-import com.fullsteam.physics.Player;
-import com.fullsteam.physics.Projectile;
-import com.fullsteam.physics.StrategicLocation;
-import io.micronaut.context.annotation.Prototype;
+import com.fullsteam.physics.*;
 import io.micronaut.websocket.WebSocketSession;
 import lombok.Getter;
 import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.Settings;
 import org.dyn4j.dynamics.TimeStep;
+import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
@@ -28,14 +24,7 @@ import org.dyn4j.world.listener.StepListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -64,7 +53,6 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         this.gameId = gameId;
         this.gameType = gameType;
         this.gameStartTime = System.currentTimeMillis();
-        scheduler.scheduleAtFixedRate(this::update, 0, 16, TimeUnit.MILLISECONDS);
 
         this.world = new World<>();
         Settings settings = new Settings();
@@ -79,6 +67,9 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
 
         createWorldBoundaries();
         createStrategicLocations();
+        createObstacles();
+
+        scheduler.scheduleAtFixedRate(this::update, 0, 16, TimeUnit.MILLISECONDS);
     }
 
     public boolean addPlayer(PlayerSession playerSession) {
@@ -91,15 +82,15 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     }
 
     public void removePlayer(int playerId) {
-        PlayerSession removed = gameEntities.getPlayerSessions().remove(playerId);
+        PlayerSession removed = gameEntities.removePlayerSession(playerId);
         if (removed != null) {
             onPlayerLeft(removed);
         }
     }
 
     public void acceptPlayerInput(int playerId, PlayerInput input) {
-        if (input != null) {
-            gameEntities.getPlayerInput().put(playerId, input);
+        if(input != null) {
+            gameEntities.getPlayerInputs().put(playerId, input);
         }
     }
 
@@ -155,7 +146,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             double deltaTime = currentTime - lastUpdateTime;
             lastUpdateTime = currentTime;
 
-            gameEntities.getPlayerInput().forEach(this::processPlayerInput);
+            gameEntities.getPlayerInputs().forEach(this::processPlayerInput);
 
             gameEntities.getAllPlayers().forEach(player -> player.update(deltaTime));
 
@@ -205,7 +196,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     }
 
     protected void onPlayerLeft(PlayerSession playerSession) {
-        gameEntities.getPlayerInput().remove(playerSession.getPlayerId());
+        gameEntities.getPlayerInputs().remove(playerSession.getPlayerId());
         Player player = gameEntities.getPlayer(playerSession.getPlayerId());
         if (player != null) {
             bodiesToRemove.add(player.getBody());
@@ -286,6 +277,21 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         }
     }
 
+    private void createObstacles() {
+        Random random = new Random();
+        int obstacleCount = 5 + random.nextInt(6); // 5 to 10 obstacles
+
+        for (int i = 0; i < obstacleCount; i++) {
+            double x = (random.nextDouble() - 0.5) * (Config.WORLD_WIDTH - 200);
+            double y = (random.nextDouble() - 0.5) * (Config.WORLD_HEIGHT - 200);
+            double radius = 10 + random.nextInt(21); // 10 to 30 radius
+
+            Boulder boulder = new Boulder(x, y, radius);
+            gameEntities.addObstacle(boulder);
+            bodiesToAdd.add(boulder.getBody());
+        }
+    }
+
     private void updateStrategicLocations(double deltaTime) {
         for (StrategicLocation location : gameEntities.getAllStrategicLocations()) {
             location.update(deltaTime);
@@ -362,6 +368,20 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         }
         gameState.put("locations", locationStates);
 
+        List<Map<String, Object>> obstacleStates = new ArrayList<>();
+        for (Obstacle obstacle : gameEntities.getAllObstacles()) {
+            Vector2 pos = obstacle.getPosition();
+            Map<String, Object> obsState = new HashMap<>();
+            obsState.put("id", obstacle.getId());
+            obsState.put("x", pos.x);
+            obsState.put("y", pos.y);
+            obsState.put("type", obstacle.getType());
+            // This is a bit of a hack, but it's the easiest way to get the radius for now
+            obsState.put("radius", ((Circle) obstacle.getBody().getFixture(0).getShape()).getRadius());
+            obstacleStates.add(obsState);
+        }
+        gameState.put("obstacles", obstacleStates);
+
         broadcast(gameState);
     }
 
@@ -406,6 +426,19 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             locations.add(locData);
         }
         state.put("locations", locations);
+
+        List<Map<String, Object>> obstacles = new ArrayList<>();
+        for (Obstacle obstacle : gameEntities.getAllObstacles()) {
+            Vector2 pos = obstacle.getPosition();
+            Map<String, Object> obsData = new HashMap<>();
+            obsData.put("id", obstacle.getId());
+            obsData.put("x", pos.x);
+            obsData.put("y", pos.y);
+            obsData.put("type", obstacle.getType());
+            obsData.put("radius", ((Circle) obstacle.getBody().getFixture(0).getShape()).getRadius());
+            obstacles.add(obsData);
+        }
+        state.put("obstacles", obstacles);
 
         return state;
     }

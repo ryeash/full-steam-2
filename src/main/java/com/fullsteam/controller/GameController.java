@@ -54,6 +54,7 @@ public class GameController {
             "/",
             "/lobby.html",
             "/game.html",
+            "/config.html",
             "/color-palette.js",
             "/game-engine.js",
             "/unified.css",
