@@ -3,11 +3,15 @@ package com.fullsteam.physics;
 import com.fullsteam.Config;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.WeaponConfig;
+import lombok.Getter;
+import lombok.Setter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
+@Getter
+@Setter
 public class Player extends GameEntity {
     private String playerName;
     private Weapon primaryWeapon;
@@ -125,6 +129,9 @@ public class Player extends GameEntity {
 
     public Projectile shoot() {
         if (!canShoot()) {
+            if (getCurrentWeapon().getAmmo() == 0) {
+                startReload();
+            }
             return null;
         }
 
@@ -143,8 +150,8 @@ public class Player extends GameEntity {
         Vector2 velocity = direction.multiply(weapon.getProjectileSpeed());
         return new Projectile(
                 id,
-                pos.x /*+ direction.x * spawnDistance*/,
-                pos.y /*+ direction.y * spawnDistance*/,
+                pos.x,
+                pos.y,
                 velocity.x,
                 velocity.y,
                 weapon.getDamage(),
@@ -181,48 +188,16 @@ public class Player extends GameEntity {
         kills++;
     }
 
-    public String getPlayerName() {
-        return playerName;
-    }
-
-    public void setPlayerName(String playerName) {
-        this.playerName = playerName;
-    }
-
     public Weapon getCurrentWeapon() {
         return currentWeapon == 0 ? primaryWeapon : secondaryWeapon;
-    }
-
-    public Weapon getPrimaryWeapon() {
-        return primaryWeapon;
-    }
-
-    public Weapon getSecondaryWeapon() {
-        return secondaryWeapon;
     }
 
     public int getCurrentWeaponIndex() {
         return currentWeapon;
     }
 
-    public boolean isReloading() {
-        return isReloading;
-    }
-
     public Vector2 getAimDirection() {
         return aimDirection.copy();
-    }
-
-    public int getKills() {
-        return kills;
-    }
-
-    public int getDeaths() {
-        return deaths;
-    }
-
-    public double getRespawnTime() {
-        return respawnTime;
     }
 
     public Vector2 getRespawnPoint() {

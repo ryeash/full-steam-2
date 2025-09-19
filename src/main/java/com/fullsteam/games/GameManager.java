@@ -7,7 +7,13 @@ import com.fullsteam.model.GameInfo;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
-import com.fullsteam.physics.*;
+import com.fullsteam.physics.Boulder;
+import com.fullsteam.physics.CollisionProcessor;
+import com.fullsteam.physics.GameEntities;
+import com.fullsteam.physics.Obstacle;
+import com.fullsteam.physics.Player;
+import com.fullsteam.physics.Projectile;
+import com.fullsteam.physics.StrategicLocation;
 import io.micronaut.websocket.WebSocketSession;
 import lombok.Getter;
 import org.dyn4j.collision.AxisAlignedBounds;
@@ -24,7 +30,14 @@ import org.dyn4j.world.listener.StepListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -89,7 +102,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     }
 
     public void acceptPlayerInput(int playerId, PlayerInput input) {
-        if(input != null) {
+        if (input != null) {
             gameEntities.getPlayerInputs().put(playerId, input);
         }
     }
@@ -242,24 +255,28 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         topWall.addFixture(new Rectangle(Config.WORLD_WIDTH + wallThickness * 2, wallThickness));
         topWall.setMass(MassType.INFINITE);
         topWall.getTransform().setTranslation(0, halfHeight + wallThickness / 2.0);
+        topWall.setUserData("boundary");
         bodiesToAdd.add(topWall);
 
         Body bottomWall = new Body();
         bottomWall.addFixture(new Rectangle(Config.WORLD_WIDTH + wallThickness * 2, wallThickness));
         bottomWall.setMass(MassType.INFINITE);
         bottomWall.getTransform().setTranslation(0, -halfHeight - wallThickness / 2.0);
+        bottomWall.setUserData("boundary");
         bodiesToAdd.add(bottomWall);
 
         Body leftWall = new Body();
         leftWall.addFixture(new Rectangle(wallThickness, Config.WORLD_HEIGHT));
         leftWall.setMass(MassType.INFINITE);
         leftWall.getTransform().setTranslation(-halfWidth - wallThickness / 2.0, 0);
+        leftWall.setUserData("boundary");
         bodiesToAdd.add(leftWall);
 
         Body rightWall = new Body();
         rightWall.addFixture(new Rectangle(wallThickness, Config.WORLD_HEIGHT));
         rightWall.setMass(MassType.INFINITE);
         rightWall.getTransform().setTranslation(halfWidth + wallThickness / 2.0, 0);
+        rightWall.setUserData("boundary");
         bodiesToAdd.add(rightWall);
     }
 
