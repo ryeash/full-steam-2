@@ -85,6 +85,10 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         } else if (entity1 instanceof StrategicLocation && entity2 instanceof Player) {
             handlePlayerLocationInteraction((Player) entity2, (StrategicLocation) entity1);
             return false; // Allow physics to handle player-location overlaps (sensors should not resolve anyway)
+        } else if (entity1 instanceof Projectile && entity2 instanceof Obstacle) {
+            return handleProjectileObstacleCollision((Projectile) entity1, (Obstacle) entity2);
+        } else if (entity1 instanceof Obstacle && entity2 instanceof Projectile) {
+            return handleProjectileObstacleCollision((Projectile) entity2, (Obstacle) entity1);
         }
         
         // For any other collision types, let physics handle them normally
@@ -108,6 +112,26 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         
         if (collisionHandler != null) {
             collisionHandler.onPlayerHitByProjectile(player, projectile);
+        }
+    }
+
+    /**
+     * Handle projectile hitting an obstacle
+     * @return true if physics resolution should be prevented, false if physics should resolve normally
+     */
+    private boolean handleProjectileObstacleCollision(Projectile projectile, Obstacle obstacle) {
+        if (!projectile.isActive()) {
+            return false;
+        }
+
+        if (projectile.isBounces()) {
+            // Let the physics engine handle the bounce
+            return false;
+        } else {
+            // Deactivate the projectile
+            projectile.setActive(false);
+            // Prevent the physics engine from resolving the collision (e.g., bouncing)
+            return true;
         }
     }
     

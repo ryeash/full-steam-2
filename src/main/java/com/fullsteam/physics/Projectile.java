@@ -12,11 +12,17 @@ public class Projectile extends GameEntity {
     private final int ownerId;
     private final double damage;
     private double timeToLive; // Time in seconds before projectile is removed
+    private final boolean bounces;
 
     public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange) {
+        this(ownerId, x, y, vx, vy, damage, maxRange, false); // Default to not bouncing
+    }
+
+    public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange, boolean bounces) {
         super(Config.nextId(), createProjectileBody(x, y, vx, vy), 1.0);
         this.ownerId = ownerId;
         this.damage = damage;
+        this.bounces = bounces;
 
         // Calculate time to live based on range and speed
         double speed = new Vector2(vx, vy).getMagnitude();

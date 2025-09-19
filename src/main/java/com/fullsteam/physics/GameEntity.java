@@ -20,8 +20,6 @@ public abstract class GameEntity {
         body.setAtRest(false);
         body.setAtRestDetectionEnabled(false);
         body.setEnabled(true);
-        
-        // Set this entity as user data for collision detection
         body.setUserData(this);
     }
 
