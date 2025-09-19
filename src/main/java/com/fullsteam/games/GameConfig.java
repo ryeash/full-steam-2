@@ -26,6 +26,16 @@ public class GameConfig {
     private double captureRadius = 50.0;
     @Builder.Default
     private double captureTime = 3.0; // seconds
+    
+    // AI Management Settings
+    @Builder.Default
+    private boolean autoFillWithAI = true;
+    @Builder.Default
+    private double minAIFillPercentage = 0.4; // 40%
+    @Builder.Default
+    private double maxAIFillPercentage = 0.8; // 80%
+    @Builder.Default
+    private long aiCheckIntervalMs = 10000; // 10 seconds
 }
 
 

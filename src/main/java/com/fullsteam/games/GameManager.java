@@ -3,6 +3,9 @@ package com.fullsteam.games;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fullsteam.Config;
+import com.fullsteam.ai.AIGameHelper;
+import com.fullsteam.ai.AIPlayer;
+import com.fullsteam.ai.AIPlayerManager;
 import com.fullsteam.model.GameInfo;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
@@ -50,29 +53,48 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     protected final String gameId;
     @Getter
     protected final String gameType;
+    @Getter
+    protected final GameConfig gameConfig;
+    @Getter
     protected final GameEntities gameEntities = new GameEntities();
     protected final ObjectMapper objectMapper = new ObjectMapper();
     protected final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+    @Getter
+    protected final AIPlayerManager aiPlayerManager = new AIPlayerManager();
 
     protected long gameStartTime;
     protected boolean gameRunning = false;
+    
+    // AI management settings - initialized from gameConfig
+    private boolean autoFillWithAI;
+    private double minAIFillPercentage;
+    private double maxAIFillPercentage;
+    private long aiCheckIntervalMs;
+    private long lastAICheckTime = 0;
 
     private final World<Body> world;
     private final Queue<Body> bodiesToAdd = new ConcurrentLinkedQueue<>();
     private final Queue<Body> bodiesToRemove = new ConcurrentLinkedQueue<>();
     private double lastUpdateTime = System.nanoTime() / 1e9;
 
-    public GameManager(String gameId, String gameType) {
+    public GameManager(String gameId, String gameType, GameConfig gameConfig) {
         this.gameId = gameId;
         this.gameType = gameType;
+        this.gameConfig = gameConfig;
         this.gameStartTime = System.currentTimeMillis();
+        
+        // Initialize AI management settings from config
+        this.autoFillWithAI = gameConfig.isAutoFillWithAI();
+        this.minAIFillPercentage = gameConfig.getMinAIFillPercentage();
+        this.maxAIFillPercentage = gameConfig.getMaxAIFillPercentage();
+        this.aiCheckIntervalMs = gameConfig.getAiCheckIntervalMs();
 
         this.world = new World<>();
         Settings settings = new Settings();
         settings.setMaximumTranslation(300.0);
         this.world.setSettings(settings);
         this.world.setGravity(new Vector2(0, 0));
-        this.world.setBounds(new AxisAlignedBounds(Config.WORLD_WIDTH, Config.WORLD_HEIGHT));
+        this.world.setBounds(new AxisAlignedBounds(gameConfig.getWorldWidth(), gameConfig.getWorldHeight()));
 
         CollisionProcessor collisionProcessor = new CollisionProcessor(this.gameEntities, this);
         this.world.addCollisionListener(collisionProcessor);
@@ -81,6 +103,15 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         createWorldBoundaries();
         createStrategicLocations();
         createObstacles();
+
+        // Add initial AI players to make the game more interesting from the start
+        if (autoFillWithAI) {
+            int initialAICount = (int) Math.ceil(getMaxPlayers() * minAIFillPercentage);
+            int added = AIGameHelper.addMixedAIPlayers(this, initialAICount);
+            if (added > 0) {
+                log.info("Added {} initial AI players to game {} for better gameplay", added, gameId);
+            }
+        }
 
         scheduler.scheduleAtFixedRate(this::update, 0, 16, TimeUnit.MILLISECONDS);
     }
@@ -153,11 +184,216 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         scheduler.shutdown();
     }
 
+    /**
+     * Add an AI player to the game with a random personality.
+     */
+    public boolean addAIPlayer() {
+        if (gameEntities.getAllPlayers().size() >= getMaxPlayers()) {
+            return false;
+        }
+
+        Vector2 spawnPoint = findSpawnPoint();
+        AIPlayer aiPlayer = AIPlayerManager.createRandomAIPlayer(Config.nextId(), spawnPoint.x, spawnPoint.y);
+
+        // Add to game entities
+        gameEntities.addPlayer(aiPlayer);
+        bodiesToAdd.add(aiPlayer.getBody());
+
+        // Add to AI manager
+        aiPlayerManager.addAIPlayer(aiPlayer);
+
+        log.info("Added AI player {} ({}) with personality {} at spawn point ({}, {})",
+                aiPlayer.getId(), aiPlayer.getPlayerName(), aiPlayer.getPersonality().getPersonalityType(),
+                spawnPoint.x, spawnPoint.y);
+
+        return true;
+    }
+
+    /**
+     * Add an AI player with a specific personality type.
+     */
+    public boolean addAIPlayer(String personalityType) {
+        if (gameEntities.getAllPlayers().size() >= getMaxPlayers()) {
+            return false;
+        }
+
+        Vector2 spawnPoint = findSpawnPoint();
+        AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithPersonality(Config.nextId(), spawnPoint.x, spawnPoint.y, personalityType);
+
+        // Add to game entities
+        gameEntities.addPlayer(aiPlayer);
+        bodiesToAdd.add(aiPlayer.getBody());
+
+        // Add to AI manager
+        aiPlayerManager.addAIPlayer(aiPlayer);
+
+        log.info("Added AI player {} ({}) with {} personality at spawn point ({}, {})",
+                aiPlayer.getId(), aiPlayer.getPlayerName(), personalityType,
+                spawnPoint.x, spawnPoint.y);
+
+        return true;
+    }
+
+    /**
+     * Remove an AI player from the game.
+     */
+    public void removeAIPlayer(int playerId) {
+        if (aiPlayerManager.isAIPlayer(playerId)) {
+            Player player = gameEntities.getPlayer(playerId);
+            if (player != null) {
+                bodiesToRemove.add(player.getBody());
+                gameEntities.removePlayer(playerId);
+            }
+            aiPlayerManager.removeAIPlayer(playerId);
+            log.info("Removed AI player {}", playerId);
+        }
+    }
+
+    /**
+     * Get the number of AI players in the game.
+     */
+    public int getAIPlayerCount() {
+        int count = 0;
+        for (Player player : gameEntities.getAllPlayers()) {
+            if (aiPlayerManager.isAIPlayer(player.getId())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Check if a player is an AI player.
+     */
+    public boolean isAIPlayer(int playerId) {
+        return aiPlayerManager.isAIPlayer(playerId);
+    }
+
+    /**
+     * Configure automatic AI filling settings.
+     */
+    public void setAutoFillSettings(boolean enabled, double minFillPercentage, double maxFillPercentage) {
+        this.autoFillWithAI = enabled;
+        this.minAIFillPercentage = Math.max(0.0, Math.min(1.0, minFillPercentage));
+        this.maxAIFillPercentage = Math.max(minFillPercentage, Math.min(1.0, maxFillPercentage));
+        log.info("Auto-fill AI settings updated: enabled={}, min={}%, max={}%", 
+            enabled, minFillPercentage * 100, maxFillPercentage * 100);
+    }
+
+    /**
+     * Enable automatic AI filling with default settings.
+     */
+    public void enableAutoFillAI() {
+        setAutoFillSettings(true, 0.4, 0.8);
+    }
+
+    /**
+     * Disable automatic AI filling.
+     */
+    public void disableAutoFillAI() {
+        this.autoFillWithAI = false;
+        log.info("Auto-fill AI disabled for game {}", gameId);
+    }
+
+    /**
+     * Manually trigger AI player adjustment based on current settings.
+     */
+    public void adjustAIPlayers() {
+        if (!autoFillWithAI) {
+            return;
+        }
+
+        int totalPlayers = gameEntities.getAllPlayers().size();
+        int humanPlayers = totalPlayers - getAIPlayerCount();
+        int maxPlayers = getMaxPlayers();
+
+        // Calculate target player count
+        int minTargetPlayers = (int) Math.ceil(maxPlayers * minAIFillPercentage);
+        int maxTargetPlayers = (int) Math.floor(maxPlayers * maxAIFillPercentage);
+
+        // If we have very few human players, fill up to minimum
+        if (totalPlayers < minTargetPlayers) {
+            int aiToAdd = minTargetPlayers - totalPlayers;
+            int added = AIGameHelper.addMixedAIPlayers(this, aiToAdd);
+            if (added > 0) {
+                log.info("Auto-filled {} AI players to reach minimum activity level (total: {})", 
+                    added, totalPlayers + added);
+            }
+        }
+        // If we have too many AI players compared to humans, remove some
+        else if (humanPlayers > 0 && totalPlayers > maxTargetPlayers) {
+            int aiToRemove = totalPlayers - maxTargetPlayers;
+            int removed = removeExcessAIPlayers(aiToRemove);
+            if (removed > 0) {
+                log.info("Removed {} excess AI players (total remaining: {})", 
+                    removed, totalPlayers - removed);
+            }
+        }
+        // If we have a good number of human players but could use more activity
+        else if (humanPlayers >= 2 && totalPlayers < (minTargetPlayers + maxTargetPlayers) / 2) {
+            int aiToAdd = Math.min(3, maxTargetPlayers - totalPlayers); // Add up to 3 AI
+            int added = AIGameHelper.addMixedAIPlayers(this, aiToAdd);
+            if (added > 0) {
+                log.info("Added {} AI players to increase game activity (total: {})", 
+                    added, totalPlayers + added);
+            }
+        }
+    }
+
+    /**
+     * Remove a specified number of AI players, prioritizing idle ones.
+     */
+    private int removeExcessAIPlayers(int count) {
+        int removed = 0;
+        java.util.List<Integer> aiPlayerIds = new java.util.ArrayList<>();
+        
+        // Collect all AI player IDs
+        for (Player player : gameEntities.getAllPlayers()) {
+            if (isAIPlayer(player.getId())) {
+                aiPlayerIds.add(player.getId());
+            }
+        }
+
+        // Remove AI players, up to the requested count
+        for (int i = 0; i < Math.min(count, aiPlayerIds.size()); i++) {
+            removeAIPlayer(aiPlayerIds.get(i));
+            removed++;
+        }
+
+        return removed;
+    }
+
+    /**
+     * Periodically check and adjust AI player count based on current game state.
+     */
+    private void checkAndAdjustAIPlayers() {
+        if (!autoFillWithAI) {
+            return;
+        }
+
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastAICheckTime >= aiCheckIntervalMs) {
+            adjustAIPlayers();
+            lastAICheckTime = currentTime;
+        }
+    }
+
     protected void update() {
         try {
             double currentTime = System.nanoTime() / 1e9;
             double deltaTime = currentTime - lastUpdateTime;
             lastUpdateTime = currentTime;
+
+            // Update AI players and generate their inputs
+            aiPlayerManager.update(gameEntities, deltaTime);
+
+            // Add AI inputs to the main input queue
+            aiPlayerManager.getAllPlayerInputs().forEach((playerId, input) -> {
+                gameEntities.getPlayerInputs().put(playerId, input);
+            });
+
+            // Periodically check and adjust AI player count
+            checkAndAdjustAIPlayers();
 
             gameEntities.getPlayerInputs().forEach(this::processPlayerInput);
 
@@ -206,6 +442,11 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         send(playerSession.getSession(), createInitialGameState());
         log.info("Player {} ({}) joined game {} successfully. Total players: {}, Total sessions: {}",
                 playerSession.getPlayerId(), playerSession.getPlayerName(), gameId, gameEntities.getPlayers().size(), gameEntities.getPlayerSessions().size());
+        
+        // Adjust AI players when a human player joins
+        if (autoFillWithAI) {
+            adjustAIPlayers();
+        }
     }
 
     protected void onPlayerLeft(PlayerSession playerSession) {
@@ -214,8 +455,18 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         if (player != null) {
             bodiesToRemove.add(player.getBody());
             gameEntities.removePlayer(player.getId());
+
+            // Remove from AI manager if it's an AI player
+            if (aiPlayerManager.isAIPlayer(playerSession.getPlayerId())) {
+                aiPlayerManager.removeAIPlayer(playerSession.getPlayerId());
+            }
         }
         log.info("Player {} left game {}", playerSession.getPlayerId(), gameId);
+        
+        // Adjust AI players when a human player leaves
+        if (autoFillWithAI && !aiPlayerManager.isAIPlayer(playerSession.getPlayerId())) {
+            adjustAIPlayers();
+        }
     }
 
     protected void processPlayerInput(Integer playerId, PlayerInput input) {
@@ -242,38 +493,38 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         }
     }
 
-    protected int getMaxPlayers() {
-        return Config.MAX_PLAYERS_PER_GAME;
+    public int getMaxPlayers() {
+        return gameConfig.getMaxPlayers();
     }
 
     private void createWorldBoundaries() {
-        double halfWidth = Config.WORLD_WIDTH / 2.0;
-        double halfHeight = Config.WORLD_HEIGHT / 2.0;
+        double halfWidth = gameConfig.getWorldWidth() / 2.0;
+        double halfHeight = gameConfig.getWorldHeight() / 2.0;
         double wallThickness = 50.0;
 
         Body topWall = new Body();
-        topWall.addFixture(new Rectangle(Config.WORLD_WIDTH + wallThickness * 2, wallThickness));
+        topWall.addFixture(new Rectangle(gameConfig.getWorldWidth() + wallThickness * 2, wallThickness));
         topWall.setMass(MassType.INFINITE);
         topWall.getTransform().setTranslation(0, halfHeight + wallThickness / 2.0);
         topWall.setUserData("boundary");
         bodiesToAdd.add(topWall);
 
         Body bottomWall = new Body();
-        bottomWall.addFixture(new Rectangle(Config.WORLD_WIDTH + wallThickness * 2, wallThickness));
+        bottomWall.addFixture(new Rectangle(gameConfig.getWorldWidth() + wallThickness * 2, wallThickness));
         bottomWall.setMass(MassType.INFINITE);
         bottomWall.getTransform().setTranslation(0, -halfHeight - wallThickness / 2.0);
         bottomWall.setUserData("boundary");
         bodiesToAdd.add(bottomWall);
 
         Body leftWall = new Body();
-        leftWall.addFixture(new Rectangle(wallThickness, Config.WORLD_HEIGHT));
+        leftWall.addFixture(new Rectangle(wallThickness, gameConfig.getWorldHeight()));
         leftWall.setMass(MassType.INFINITE);
         leftWall.getTransform().setTranslation(-halfWidth - wallThickness / 2.0, 0);
         leftWall.setUserData("boundary");
         bodiesToAdd.add(leftWall);
 
         Body rightWall = new Body();
-        rightWall.addFixture(new Rectangle(wallThickness, Config.WORLD_HEIGHT));
+        rightWall.addFixture(new Rectangle(wallThickness, gameConfig.getWorldHeight()));
         rightWall.setMass(MassType.INFINITE);
         rightWall.getTransform().setTranslation(halfWidth + wallThickness / 2.0, 0);
         rightWall.setUserData("boundary");
@@ -284,9 +535,9 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         String[] locationNames = {"Alpha", "Beta", "Gamma", "Delta", "Echo"};
         Random random = new Random();
 
-        for (int i = 0; i < Config.STRATEGIC_LOCATIONS_COUNT; i++) {
-            double x = (random.nextDouble() - 0.5) * (Config.WORLD_WIDTH - 200);
-            double y = (random.nextDouble() - 0.5) * (Config.WORLD_HEIGHT - 200);
+        for (int i = 0; i < gameConfig.getStrategicLocationsCount(); i++) {
+            double x = (random.nextDouble() - 0.5) * (gameConfig.getWorldWidth() - 200);
+            double y = (random.nextDouble() - 0.5) * (gameConfig.getWorldHeight() - 200);
 
             StrategicLocation location = new StrategicLocation(locationNames[i], x, y);
             gameEntities.addStrategicLocation(location);
@@ -299,8 +550,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         int obstacleCount = 5 + random.nextInt(6); // 5 to 10 obstacles
 
         for (int i = 0; i < obstacleCount; i++) {
-            double x = (random.nextDouble() - 0.5) * (Config.WORLD_WIDTH - 200);
-            double y = (random.nextDouble() - 0.5) * (Config.WORLD_HEIGHT - 200);
+            double x = (random.nextDouble() - 0.5) * (gameConfig.getWorldWidth() - 200);
+            double y = (random.nextDouble() - 0.5) * (gameConfig.getWorldHeight() - 200);
             double radius = 10 + random.nextInt(21); // 10 to 30 radius
 
             Boulder boulder = new Boulder(x, y, radius);
@@ -405,8 +656,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     private Vector2 findSpawnPoint() {
         Random random = new Random();
         for (int attempts = 0; attempts < 10; attempts++) {
-            double x = (random.nextDouble() - 0.5) * (Config.WORLD_WIDTH - 100);
-            double y = (random.nextDouble() - 0.5) * (Config.WORLD_HEIGHT - 100);
+            double x = (random.nextDouble() - 0.5) * (gameConfig.getWorldWidth() - 100);
+            double y = (random.nextDouble() - 0.5) * (gameConfig.getWorldHeight() - 100);
             Vector2 candidate = new Vector2(x, y);
 
             boolean tooClose = false;
@@ -422,14 +673,16 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             }
         }
 
-        return new Vector2((random.nextDouble() - 0.5) * Config.WORLD_WIDTH * 0.8, (random.nextDouble() - 0.5) * Config.WORLD_HEIGHT * 0.8);
+        return new Vector2(
+                (random.nextDouble() - 0.5) * gameConfig.getWorldWidth() * 0.8,
+                (random.nextDouble() - 0.5) * gameConfig.getWorldHeight() * 0.8);
     }
 
     private Map<String, Object> createInitialGameState() {
         Map<String, Object> state = new HashMap<>();
         state.put("type", "initialState");
-        state.put("worldWidth", Config.WORLD_WIDTH);
-        state.put("worldHeight", Config.WORLD_HEIGHT);
+        state.put("worldWidth", gameConfig.getWorldWidth());
+        state.put("worldHeight", gameConfig.getWorldHeight());
 
         List<Map<String, Object>> locations = new ArrayList<>();
         for (StrategicLocation location : gameEntities.getAllStrategicLocations()) {
@@ -439,7 +692,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             locData.put("name", location.getLocationName());
             locData.put("x", pos.x);
             locData.put("y", pos.y);
-            locData.put("radius", Config.CAPTURE_RADIUS);
+            locData.put("radius", gameConfig.getCaptureRadius());
             locations.add(locData);
         }
         state.put("locations", locations);
@@ -515,18 +768,18 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
 
     @Override
     public void end(TimeStep step, PhysicsWorld<Body, ?> world) {
-        for (Projectile projectile : gameEntities.getAllProjectiles()) {
-            if (projectile.isActive()) {
-                Vector2 position = projectile.getPosition();
-                Vector2 velocity = projectile.getBody().getLinearVelocity();
-                log.info(String.format("Projectile %d - Position: (%.2f, %.2f), Velocity: (%.2f, %.2f), Speed: %.2f",
-                        projectile.getId(),
-                        position.x,
-                        position.y,
-                        velocity.x,
-                        velocity.y,
-                        velocity.getMagnitude()));
-            }
-        }
+//        for (Projectile projectile : gameEntities.getAllProjectiles()) {
+//            if (projectile.isActive()) {
+//                Vector2 position = projectile.getPosition();
+//                Vector2 velocity = projectile.getBody().getLinearVelocity();
+//                log.info(String.format("Projectile %d - Position: (%.2f, %.2f), Velocity: (%.2f, %.2f), Speed: %.2f",
+//                        projectile.getId(),
+//                        position.x,
+//                        position.y,
+//                        velocity.x,
+//                        velocity.y,
+//                        velocity.getMagnitude()));
+//            }
+//        }
     }
 }

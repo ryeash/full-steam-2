@@ -1,5 +1,6 @@
 package com.fullsteam;
 
+import com.fullsteam.games.GameConfig;
 import com.fullsteam.games.GameManager;
 import com.fullsteam.model.GameInfo;
 import jakarta.inject.Singleton;
@@ -36,7 +37,7 @@ public class GameLobby {
 
     public GameManager createGame(String gameType) {
         String gameId = "game_" + gameIdCounter.getAndIncrement();
-        GameManager game = new GameManager(gameId, "Battle Royale");
+        GameManager game = new GameManager(gameId, "Battle Royale", GameConfig.builder().build());
         activeGames.put(gameId, game);
         log.info("Created new game: {} ({})", gameId, gameType);
         return game;
