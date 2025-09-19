@@ -70,15 +70,18 @@ class GameEngine {
         // Create main containers
         this.backgroundContainer = new PIXI.Container();
         this.gameContainer = new PIXI.Container();
+        this.nameContainer = new PIXI.Container(); // Separate container for name labels
         this.uiContainer = new PIXI.Container();
 
         // Set up proper z-ordering
         this.backgroundContainer.zIndex = 0;
         this.gameContainer.zIndex = 1;
+        this.nameContainer.zIndex = 50; // Above game objects but below UI
         this.uiContainer.zIndex = 100;
 
         this.app.stage.addChild(this.backgroundContainer);
         this.app.stage.addChild(this.gameContainer);
+        this.app.stage.addChild(this.nameContainer);
         this.app.stage.addChild(this.uiContainer);
 
         // Enable sorting for proper z-index handling
@@ -292,8 +295,8 @@ class GameEngine {
         const centerX = this.app.screen.width / 2;
         const centerY = this.app.screen.height / 2;
         
-        // Apply camera transform to both background and game containers
-        [this.backgroundContainer, this.gameContainer].forEach(container => {
+        // Apply camera transform to background, game, and name containers
+        [this.backgroundContainer, this.gameContainer, this.nameContainer].forEach(container => {
             container.position.set(centerX, centerY);
             container.scale.set(this.zoomLevel);
             container.pivot.x = this.camera.x;
@@ -413,9 +416,19 @@ class GameEngine {
         sprite.alpha = 1.0; // Ensure full opacity
         sprite.visible = true; // Explicitly set visible
         
+        // Create health bar in separate container so it doesn't rotate
         const healthBar = this.createHealthBar();
-        sprite.addChild(healthBar);
         
+        // Position health bar above player
+        healthBar.position.set(isoPos.x, isoPos.y - 35);
+        
+        // Store reference to health bar on sprite for easy access
+        sprite.healthBar = healthBar;
+        
+        // Add health bar to separate container
+        this.nameContainer.addChild(healthBar);
+        
+        // Create name label in separate container so it doesn't rotate
         const nameLabel = new PIXI.Text(playerData.name || `Player ${playerData.id}`, {
             fontSize: 14,
             fill: 0xffffff,
@@ -423,8 +436,15 @@ class GameEngine {
             strokeThickness: 3
         });
         nameLabel.anchor.set(0.5);
-        nameLabel.position.set(0, -50);
-        sprite.addChild(nameLabel);
+        
+        // Position name label above health bar
+        nameLabel.position.set(isoPos.x, isoPos.y - 50);
+        
+        // Store reference to name label on sprite for easy access
+        sprite.nameLabel = nameLabel;
+        
+        // Add name label to separate container
+        this.nameContainer.addChild(nameLabel);
         
         // Set player z-index to ensure it's on top
         sprite.zIndex = 10;
@@ -440,25 +460,46 @@ class GameEngine {
     updatePlayer(playerData) {
         const sprite = this.players.get(playerData.id);
         if (!sprite) return;
-        
+
         const isoPos = this.worldToIsometric(playerData.x, playerData.y);
         sprite.position.set(isoPos.x, isoPos.y);
-        sprite.rotation = playerData.rotation || 0;
+        // The server calculates rotation in a Y-up world. PIXI operates in a Y-down world.
+        // We must negate the rotation to make it display correctly.
+        sprite.rotation = -(playerData.rotation || 0);
         sprite.visible = playerData.active;
-        
-        
-        const healthBar = sprite.children.find(child => child.isHealthBar);
-        if (healthBar) {
-            this.updateHealthBar(healthBar, playerData.health);
+
+        // Update name label position (doesn't rotate with player)
+        if (sprite.nameLabel) {
+            sprite.nameLabel.position.set(isoPos.x, isoPos.y - 50);
+            sprite.nameLabel.visible = playerData.active;
         }
-        
+
+        // Update health bar position (doesn't rotate with player)
+        if (sprite.healthBar) {
+            sprite.healthBar.position.set(isoPos.x, isoPos.y - 35);
+            sprite.healthBar.visible = playerData.active;
+            this.updateHealthBar(sprite.healthBar, playerData.health);
+        }
+
         sprite.playerData = playerData;
     }
     
     removePlayer(playerId) {
         const sprite = this.players.get(playerId);
         if (sprite) {
+            // Remove sprite from game container
             this.gameContainer.removeChild(sprite);
+            
+            // Remove name label from name container
+            if (sprite.nameLabel) {
+                this.nameContainer.removeChild(sprite.nameLabel);
+            }
+            
+            // Remove health bar from name container
+            if (sprite.healthBar) {
+                this.nameContainer.removeChild(sprite.healthBar);
+            }
+            
             this.players.delete(playerId);
         }
     }
@@ -857,10 +898,7 @@ class InputManager {
         this.onInputChange = null;
         
         this.setupEventListeners();
-        this.lastInputTime = 0;
-        this.inputInterval = 16; // ~60 FPS
-        this.lastMouseX = 0;
-        this.lastMouseY = 0;
+        this.inputInterval = 20; // 50 FPS (20ms intervals)
     }
     
     setupEventListeners() {
@@ -871,7 +909,8 @@ class InputManager {
         document.addEventListener('mouseup', (e) => this.handleMouseUp(e));
         document.addEventListener('contextmenu', (e) => e.preventDefault());
         
-        setInterval(() => this.sendInput(), 33); // Reduce to 30 FPS for better performance
+        // Send input at fixed 20ms intervals (50 FPS)
+        setInterval(() => this.sendInput(), this.inputInterval);
     }
     
     updateMovementAxes() {
@@ -918,28 +957,17 @@ class InputManager {
     handleMouseMove(e) {
         this.mouse.x = e.clientX;
         this.mouse.y = e.clientY;
-        
-        // Get the game engine instance to access camera and zoom
+
         const gameEngine = window.gameEngine;
-        if (gameEngine && gameEngine.app) {
-            const rect = gameEngine.app.view.getBoundingClientRect();
-            const canvasX = e.clientX - rect.left;
-            const canvasY = e.clientY - rect.top;
-            
-            // Convert screen coordinates to world coordinates
-            // This needs to reverse the camera transform: position + scale + pivot
-            const centerX = gameEngine.app.screen.width / 2;
-            const centerY = gameEngine.app.screen.height / 2;
-            
-            // Step 1: Convert from screen space to container local space
-            const localX = (canvasX - centerX) / gameEngine.zoomLevel;
-            const localY = (canvasY - centerY) / gameEngine.zoomLevel;
-            
-            // Step 2: Account for camera pivot to get world coordinates
-            // Camera coordinates are in screen space (Y inverted), so we need to convert back to physics space
-            this.mouse.worldX = localX + gameEngine.camera.x;
-            this.mouse.worldY = -(localY + gameEngine.camera.y); // Convert from screen space back to physics space
-            
+        if (gameEngine && gameEngine.gameContainer) {
+            // Use PIXI's built-in transformation to get coordinates relative to the game world
+            const screenPos = new PIXI.Point(this.mouse.x, this.mouse.y);
+            const worldPos = gameEngine.gameContainer.toLocal(screenPos);
+
+            // The world uses a Y-up coordinate system for physics, but PIXI uses Y-down.
+            // We need to send the physics-correct coordinates to the server.
+            this.mouse.worldX = worldPos.x;
+            this.mouse.worldY = -worldPos.y; // Invert Y for the physics engine
         }
     }
     
@@ -967,43 +995,26 @@ class InputManager {
     }
     
     sendInput() {
-        const now = performance.now();
-        if (now - this.lastInputTime < 33) return; // 30 FPS limit
-        
         if (this.onInputChange) {
-            // Always send unified input with movement, mouse position, and shooting state
-            const hasMovement = this.movement.moveX !== 0 || this.movement.moveY !== 0;
-            const hasOtherInput = this.keys.shift || this.keys.space;
-            const hasMouseMovement = this.mouse.x !== this.lastMouseX || this.mouse.y !== this.lastMouseY;
+            // Always send input at fixed intervals - no change detection needed
+            const input = {
+                type: 'playerInput',
+                moveX: this.movement.moveX,
+                moveY: this.movement.moveY,
+                shift: !!this.keys.shift,
+                space: !!this.keys.space,
+                mouseX: this.mouse.x || 0,
+                mouseY: this.mouse.y || 0,
+                worldX: this.mouse.worldX || 0,
+                worldY: this.mouse.worldY || 0,
+                left: !!this.mouse.left,
+                right: !!this.mouse.right,
+                weaponSwitch: null,
+                reload: null
+            };
             
-            // Send input if there's any meaningful activity
-            if (hasMovement || hasOtherInput || hasMouseMovement || this.mouse.left || this.mouse.right) {
-                const input = {
-                    type: 'playerInput',
-                    moveX: this.movement.moveX,
-                    moveY: this.movement.moveY,
-                    shift: !!this.keys.shift,
-                    space: !!this.keys.space,
-                    mouseX: this.mouse.x || 0,
-                    mouseY: this.mouse.y || 0,
-                    worldX: this.mouse.worldX || 0,
-                    worldY: this.mouse.worldY || 0,
-                    left: !!this.mouse.left,
-                    right: !!this.mouse.right,
-                    weaponSwitch: null,
-                    reload: null
-                };
-                
-                
-                this.onInputChange(input);
-                
-                // Track mouse position for movement detection
-                this.lastMouseX = this.mouse.x;
-                this.lastMouseY = this.mouse.y;
-            }
+            this.onInputChange(input);
         }
-        
-        this.lastInputTime = now;
     }
     
     sendWeaponSwitch(weaponIndex) {

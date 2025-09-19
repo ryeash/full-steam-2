@@ -19,7 +19,7 @@ public class Config {
     public static final double WORLD_WIDTH = 2000.0;
     public static final double WORLD_HEIGHT = 2000.0;
     public static final int TICK_RATE = 60; // 60 TPS
-    public static final double PLAYER_SPEED = 9150.0; // pixels per second
+    public static final double PLAYER_SPEED = 150.0; // pixels per second
     public static final double PLAYER_RADIUS = 20.0;
     public static final int STRATEGIC_LOCATIONS_COUNT = 5;
     public static final double CAPTURE_RADIUS = 50.0;

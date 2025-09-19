@@ -6,14 +6,13 @@ import com.fullsteam.model.GameInfo;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
+import com.fullsteam.physics.GameEntities;
+import com.fullsteam.physics.Player;
 import io.micronaut.websocket.WebSocketSession;
 import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -26,8 +25,7 @@ public abstract class AbstractGameStateManager {
     protected final String gameId;
     @Getter
     protected final String gameType;
-    protected final Map<Integer, PlayerSession> players = new ConcurrentHashMap<>();
-    protected final Map<Integer, PlayerInput> playerInput = new ConcurrentSkipListMap<>();
+    protected final GameEntities gameEntities = new GameEntities();
     protected final ObjectMapper objectMapper = new ObjectMapper();
     protected final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 
@@ -42,33 +40,33 @@ public abstract class AbstractGameStateManager {
     }
 
     public boolean addPlayer(PlayerSession playerSession) {
-        if (players.size() >= getMaxPlayers()) {
+        if (gameEntities.getPlayers().size() >= getMaxPlayers()) {
             return false;
         }
-
-        players.put(playerSession.getPlayerId(), playerSession);
+        gameEntities.addPlayerSession(playerSession);
         onPlayerJoined(playerSession);
         return true;
     }
 
     public void removePlayer(int playerId) {
-        PlayerSession removed = players.remove(playerId);
+        PlayerSession removed = gameEntities.getPlayerSessions().remove(playerId);
+        gameEntities.clearPlayerEntities(playerId);
         if (removed != null) {
             onPlayerLeft(removed);
         }
     }
 
     public void acceptPlayerInput(int playerId, PlayerInput input) {
-        playerInput.put(playerId, input);
+        gameEntities.getPlayerInput().put(playerId, input);
     }
 
     public void handlePlayerConfigChange(int playerId, PlayerConfigRequest request) {
-        PlayerSession player = players.get(playerId);
-        if (player != null) {
+        PlayerSession playerSession = gameEntities.getPlayerSession(playerId);
+        if (playerSession != null) {
             if (request.getPlayerName() != null) {
-                player.setPlayerName(request.getPlayerName());
+                playerSession.setPlayerName(request.getPlayerName());
             }
-            processPlayerConfigChange(player, request);
+            processPlayerConfigChange(playerSession, request);
         }
     }
 
@@ -82,7 +80,7 @@ public abstract class AbstractGameStateManager {
     }
 
     public void broadcast(Object message) {
-        players.values().forEach(player -> {
+        gameEntities.getPlayerSessions().values().forEach(player -> {
             if (player.getSession().isOpen()) {
                 send(player.getSession(), message);
             }
@@ -93,7 +91,7 @@ public abstract class AbstractGameStateManager {
         return new GameInfo(
                 gameId,
                 gameType,
-                players.size(),
+                gameEntities.getPlayers().size(),
                 getMaxPlayers(),
                 gameStartTime,
                 gameRunning ? "running" : "waiting"
@@ -107,14 +105,14 @@ public abstract class AbstractGameStateManager {
 
     protected abstract void onPlayerLeft(PlayerSession player);
 
-    protected abstract void processPlayerInput(PlayerSession player, PlayerInput input);
+    protected abstract void processPlayerInput(Player player, PlayerInput input);
 
     protected abstract void processPlayerConfigChange(PlayerSession player, PlayerConfigRequest request);
 
     protected abstract int getMaxPlayers();
 
     public int getPlayerCount() {
-        return players.size();
+        return gameEntities.getPlayers().size();
     }
 
     public void shutdown() {

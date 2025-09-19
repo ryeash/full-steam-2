@@ -1,131 +1,111 @@
 package com.fullsteam.physics;
 
 import org.dyn4j.dynamics.Body;
-import org.dyn4j.world.listener.StepListener;
-import org.dyn4j.world.PhysicsWorld;
-import org.dyn4j.dynamics.TimeStep;
+import org.dyn4j.dynamics.BodyFixture;
+import org.dyn4j.world.BroadphaseCollisionData;
+import org.dyn4j.world.ManifoldCollisionData;
+import org.dyn4j.world.NarrowphaseCollisionData;
+import org.dyn4j.world.listener.CollisionListener;
 
-import java.util.Map;
 
 /**
  * CollisionProcessor handles collision detection and responses in the physics world.
- * It implements StepListener to receive world step events and manually check for collisions.
+ * It implements CollisionListener to receive collision events directly from the physics engine.
  */
-public class CollisionProcessor implements StepListener<Body> {
+public class CollisionProcessor implements CollisionListener<Body, BodyFixture> {
     
-    private final Map<Integer, Player> players;
-    private final Map<Integer, Projectile> projectiles;
-    private final Map<Integer, StrategicLocation> strategicLocations;
+    private final GameEntities gameEntities;
     private final CollisionHandler collisionHandler;
     
-    public CollisionProcessor(Map<Integer, Player> players, 
-                            Map<Integer, Projectile> projectiles,
-                            Map<Integer, StrategicLocation> strategicLocations,
-                            CollisionHandler collisionHandler) {
-        this.players = players;
-        this.projectiles = projectiles;
-        this.strategicLocations = strategicLocations;
+    public CollisionProcessor(GameEntities gameEntities, CollisionHandler collisionHandler) {
+        this.gameEntities = gameEntities;
         this.collisionHandler = collisionHandler;
     }
-    
+
     @Override
-    public void begin(TimeStep step, PhysicsWorld<Body, ?> world) {
-        // Called at the beginning of each world step
-        // Can be used for pre-step processing
+    public boolean collision(BroadphaseCollisionData<Body, BodyFixture> collision) {
+        // Broadphase collision - quick rejection test
+        // Return true to continue to narrowphase
+        return true;
     }
-    
+
     @Override
-    public void updatePerformed(TimeStep step, PhysicsWorld<Body, ?> world) {
-        // Called after velocity integration but before constraint resolution
-        // We can manually check for collisions here
-        processCollisions();
+    public boolean collision(NarrowphaseCollisionData<Body, BodyFixture> collision) {
+        // Narrowphase collision - more detailed collision detection
+        // Return true to continue to manifold generation
+        return true;
     }
-    
+
     @Override
-    public void postSolve(TimeStep step, PhysicsWorld<Body, ?> world) {
-        // Called after constraint resolution
-        // Can be used for post-constraint processing
+    public boolean collision(ManifoldCollisionData<Body, BodyFixture> collision) {
+        // Manifold collision - actual contact points generated
+        // This is where we handle the actual collision response
+        boolean shouldPreventPhysicsResolution = handleCollision(collision);
+        
+        // Return false only for collisions we handle manually (like projectile hits)
+        // Return true to allow physics engine to resolve other collisions normally
+        return !shouldPreventPhysicsResolution;
     }
-    
-    @Override
-    public void end(TimeStep step, PhysicsWorld<Body, ?> world) {
-        // Called at the end of each world step
-        // Can be used for post-step processing
-    }
-    
+
     /**
-     * Manually process collisions between game entities
+     * Handle collision between two bodies using ManifoldCollisionData
+     * @return true if physics resolution should be prevented, false if physics should resolve normally
      */
-    private void processCollisions() {
-        // Check projectile vs player collisions
-        for (Projectile projectile : projectiles.values()) {
-            if (!projectile.isActive()) continue;
-            
-            for (Player player : players.values()) {
-                if (!player.isActive()) continue;
-                
-                // Skip friendly fire
-                if (projectile.getOwnerId() == player.getId()) continue;
-                
-                // Check if projectile and player are colliding
-                if (areColliding(projectile.getBody(), player.getBody())) {
-                    handlePlayerProjectileCollision(player, projectile);
-                }
-            }
+    private boolean handleCollision(ManifoldCollisionData<Body, BodyFixture> collision) {
+        Body body1 = collision.getBody1();
+        Body body2 = collision.getBody2();
+        
+        // Get the game entities from the bodies
+        GameEntity entity1 = (GameEntity) body1.getUserData();
+        GameEntity entity2 = (GameEntity) body2.getUserData();
+        
+        if (entity1 == null || entity2 == null) {
+            return false; // One of the bodies is not a game entity, let physics handle it
         }
         
-        // Check player vs strategic location interactions
-        for (Player player : players.values()) {
-            if (!player.isActive()) continue;
-            
-            for (StrategicLocation location : strategicLocations.values()) {
-                if (areOverlapping(player.getBody(), location.getBody())) {
-                    handlePlayerLocationInteraction(player, location);
-                }
-            }
+        // Handle different collision types and return whether to prevent physics resolution
+        return handleEntityCollision(entity1, entity2);
+    }
+    
+    /**
+     * Handle collision between two game entities based on their types
+     * @return true if physics resolution should be prevented, false if physics should resolve normally
+     */
+    private boolean handleEntityCollision(GameEntity entity1, GameEntity entity2) {
+        // Determine collision types and handle appropriately
+        if (entity1 instanceof Player && entity2 instanceof Projectile) {
+            handlePlayerProjectileCollision((Player) entity1, (Projectile) entity2);
+            return true; // Prevent physics resolution for projectile hits
+        } else if (entity1 instanceof Projectile && entity2 instanceof Player) {
+            handlePlayerProjectileCollision((Player) entity2, (Projectile) entity1);
+            return true; // Prevent physics resolution for projectile hits
+        } else if (entity1 instanceof Player && entity2 instanceof StrategicLocation) {
+            handlePlayerLocationInteraction((Player) entity1, (StrategicLocation) entity2);
+            return false; // Allow physics to handle player-location overlaps (sensors should not resolve anyway)
+        } else if (entity1 instanceof StrategicLocation && entity2 instanceof Player) {
+            handlePlayerLocationInteraction((Player) entity2, (StrategicLocation) entity1);
+            return false; // Allow physics to handle player-location overlaps (sensors should not resolve anyway)
         }
-    }
-    
-    /**
-     * Check if two bodies are colliding (for solid bodies)
-     */
-    private boolean areColliding(Body body1, Body body2) {
-        // Use the physics world's collision detection
-        // This is a simplified collision check
-        double distance = body1.getTransform().getTranslation()
-                .distance(body2.getTransform().getTranslation());
         
-        // Rough collision detection based on radius approximation
-        // In a real implementation, you'd use proper AABB or shape intersection
-        double combinedRadius = getApproximateRadius(body1) + getApproximateRadius(body2);
-        
-        return distance <= combinedRadius;
+        // For any other collision types, let physics handle them normally
+        return false;
     }
     
-    /**
-     * Check if two bodies are overlapping (for sensor interactions)
-     */
-    private boolean areOverlapping(Body body1, Body body2) {
-        // Similar to areColliding but for sensor-based interactions
-        return areColliding(body1, body2);
-    }
-    
-    /**
-     * Get approximate radius of a body for simple collision detection
-     */
-    private double getApproximateRadius(Body body) {
-        // This is a simple approximation - in a real implementation
-        // you'd use the actual shape bounds
-        if (body.getFixtureCount() > 0) {
-            return body.getFixture(0).getShape().getRadius();
-        }
-        return 10.0; // Default radius
-    }
     
     /**
      * Handle player hit by projectile
      */
     private void handlePlayerProjectileCollision(Player player, Projectile projectile) {
+        // Skip friendly fire - player can't hit themselves
+        if (player.getId() == projectile.getOwnerId()) {
+            return;
+        }
+        
+        // Skip if entities are not active
+        if (!player.isActive() || !projectile.isActive()) {
+            return;
+        }
+        
         if (collisionHandler != null) {
             collisionHandler.onPlayerHitByProjectile(player, projectile);
         }

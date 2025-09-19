@@ -28,8 +28,8 @@ public class Player extends GameEntity {
         this.respawnPoint = new Vector2(x, y);
 
         // Default weapons
-        this.primaryWeapon = new Weapon("Assault Rifle", 25, 8.0, 300.0, 0.9, 30, 2.0, 800.0);
-        this.secondaryWeapon = new Weapon("Pistol", 35, 4.0, 200.0, 0.95, 12, 1.5, 600.0);
+        this.primaryWeapon = new Weapon("Assault Rifle", Weapon.ASSAULT_RIFLE_PRESET);
+        this.secondaryWeapon = new Weapon("Pistol", Weapon.HAND_CANNON_PRESET);
     }
 
     private static Body createPlayerBody(double x, double y) {
@@ -39,11 +39,11 @@ public class Player extends GameEntity {
         body.setMass(MassType.NORMAL);
         body.getTransform().setTranslation(x, y);
         body.setLinearDamping(0.97);
-        
+
         // Prevent physics engine from affecting rotation
-        body.setAngularDamping(0.0); 
+        body.setAngularDamping(0.0);
         body.setAngularVelocity(0.0);
-        
+
         return body;
     }
 
@@ -96,14 +96,6 @@ public class Player extends GameEntity {
             body.setAngularVelocity(0.0);
         }
 
-        // Shooting
-        if (input.isLeft() && canShoot()) {
-            // The actual projectile creation is handled by the game manager
-            // This just fires the weapon and updates lastShotTime
-            getCurrentWeapon().fire();
-            lastShotTime = System.currentTimeMillis();
-        }
-
         // Weapon switching
         if (input.getWeaponSwitch() != null) {
             currentWeapon = input.getWeaponSwitch() % 2;
@@ -117,23 +109,14 @@ public class Player extends GameEntity {
 
     public void applyWeaponConfig(WeaponConfig primary, WeaponConfig secondary) {
         if (primary != null) {
-            primaryWeapon = new Weapon(
-                    primary.type != null ? primary.type : "Custom Primary",
-                    primary.damage, primary.fireRate, primary.range, primary.accuracy,
-                    primary.magazineSize, primary.reloadTime, primary.projectileSpeed
-            );
+            primaryWeapon = new Weapon(primary.type != null ? primary.type : "Custom Primary", primary.buildPoints());
         }
-
         if (secondary != null) {
-            secondaryWeapon = new Weapon(
-                    secondary.type != null ? secondary.type : "Custom Secondary",
-                    secondary.damage, secondary.fireRate, secondary.range, secondary.accuracy,
-                    secondary.magazineSize, secondary.reloadTime, secondary.projectileSpeed
-            );
+            secondaryWeapon = new Weapon(secondary.type != null ? secondary.type : "Custom Secondary", secondary.buildPoints());
         }
     }
 
-    private boolean canShoot() {
+    public boolean canShoot() {
         Weapon weapon = getCurrentWeapon();
         long now = System.currentTimeMillis();
         double fireInterval = 1000.0 / weapon.getFireRate();
@@ -151,19 +134,19 @@ public class Player extends GameEntity {
 
         Vector2 pos = getPosition();
         Vector2 direction = aimDirection.copy();
-
         // Add some spread for accuracy
         double spread = (1.0 - weapon.getAccuracy()) * 0.2; // Max 0.2 radians spread
         double angle = Math.atan2(direction.y, direction.x);
         angle += (Math.random() - 0.5) * spread;
         direction.set(Math.cos(angle), Math.sin(angle));
-
+        // Calculate velocity vector
+        Vector2 velocity = direction.multiply(weapon.getProjectileSpeed());
         return new Projectile(
                 id,
-                pos.x + direction.x * (Config.PLAYER_RADIUS + 10),
-                pos.y + direction.y * (Config.PLAYER_RADIUS + 10),
-                direction.x * weapon.getProjectileSpeed(),
-                direction.y * weapon.getProjectileSpeed(),
+                pos.x /*+ direction.x * spawnDistance*/,
+                pos.y /*+ direction.y * spawnDistance*/,
+                velocity.x,
+                velocity.y,
                 weapon.getDamage(),
                 weapon.getRange()
         );

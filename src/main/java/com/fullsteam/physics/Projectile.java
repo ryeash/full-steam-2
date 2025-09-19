@@ -1,5 +1,6 @@
 package com.fullsteam.physics;
 
+import com.fullsteam.Config;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Circle;
@@ -8,19 +9,22 @@ import org.dyn4j.geometry.Vector2;
 
 @Getter
 public class Projectile extends GameEntity {
-    private static int nextProjectileId = 1;
     private final int ownerId;
-    private final int damage;
-    private final double maxRange;
-    private final Vector2 startPosition;
-    private double distanceTraveled = 0;
+    private final double damage;
+    private double timeToLive; // Time in seconds before projectile is removed
 
-    public Projectile(int ownerId, double x, double y, double vx, double vy, int damage, double maxRange) {
-        super(nextProjectileId++, createProjectileBody(x, y, vx, vy), 1.0);
+    public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange) {
+        super(Config.nextId(), createProjectileBody(x, y, vx, vy), 1.0);
         this.ownerId = ownerId;
         this.damage = damage;
-        this.maxRange = maxRange;
-        this.startPosition = new Vector2(x, y);
+
+        // Calculate time to live based on range and speed
+        double speed = new Vector2(vx, vy).getMagnitude();
+        if (speed > 0) {
+            this.timeToLive = maxRange / speed;
+        } else {
+            this.timeToLive = 0; // Deactivate immediately if speed is zero
+        }
     }
 
     private static Body createProjectileBody(double x, double y, double vx, double vy) {
@@ -36,11 +40,12 @@ public class Projectile extends GameEntity {
 
     @Override
     public void update(double deltaTime) {
-        Vector2 currentPos = getPosition();
-        distanceTraveled = startPosition.distance(currentPos);
+        if (!active) {
+            return;
+        }
 
-        // Deactivate if traveled too far
-        if (distanceTraveled > maxRange) {
+        timeToLive -= deltaTime;
+        if (timeToLive <= 0) {
             active = false;
         }
 
