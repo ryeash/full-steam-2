@@ -118,6 +118,13 @@ public class AIPlayerManager {
     }
 
     /**
+     * Create an AI player with a random personality and name (FFA mode).
+     */
+    public static AIPlayer createRandomAIPlayer(int id, double x, double y) {
+        return createRandomAIPlayer(id, x, y, 0); // Default to FFA team
+    }
+    
+    /**
      * Create an AI player with a random personality, name, and specific team.
      */
     public static AIPlayer createRandomAIPlayer(int id, double x, double y, int team) {

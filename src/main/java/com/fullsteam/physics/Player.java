@@ -191,6 +191,16 @@ public class Player extends GameEntity {
         secondaryWeapon.reload();
         isReloading = false;
     }
+    
+    /**
+     * Respawn at a specific location (for team-based spawning).
+     * 
+     * @param newRespawnPoint New spawn location
+     */
+    public void respawnAt(Vector2 newRespawnPoint) {
+        this.respawnPoint = newRespawnPoint.copy();
+        respawn();
+    }
 
     public void addKill() {
         kills++;

@@ -95,6 +95,57 @@ class GameEngine {
         window.addEventListener('resize', () => this.handleResize());
     }
     
+    /**
+     * Get the color for a player based on their team.
+     * Uses easily distinguishable colors for team-based gameplay.
+     */
+    getPlayerColor(playerData) {
+        // Special highlight for the current player
+        if (playerData.id === this.myPlayerId) {
+            // Make the current player brighter but still show their team color
+            const baseColor = this.getTeamColor(playerData.team || 0);
+            // Brighten the color for the current player
+            return this.brightenColor(baseColor);
+        }
+        
+        return this.getTeamColor(playerData.team || 0);
+    }
+    
+    /**
+     * Get the base color for a team.
+     */
+    getTeamColor(teamNumber) {
+        switch (teamNumber) {
+            case 0: return 0x808080; // Gray for FFA/no team
+            case 1: return 0xff4444; // Red
+            case 2: return 0x4444ff; // Blue  
+            case 3: return 0x44ff44; // Green
+            case 4: return 0xffff44; // Yellow
+            default: return 0xff44ff; // Magenta for unexpected teams
+        }
+    }
+    
+    /**
+     * Brighten a color for the current player highlight.
+     */
+    brightenColor(color) {
+        const r = Math.min(255, ((color >> 16) & 0xFF) + 60);
+        const g = Math.min(255, ((color >> 8) & 0xFF) + 60);
+        const b = Math.min(255, (color & 0xFF) + 60);
+        return (r << 16) | (g << 8) | b;
+    }
+    
+    /**
+     * Get team color as CSS color string for minimap.
+     */
+    getTeamColorCSS(teamNumber) {
+        const color = this.getTeamColor(teamNumber);
+        const r = (color >> 16) & 0xFF;
+        const g = (color >> 8) & 0xFF;
+        const b = color & 0xFF;
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+    
     setupCamera() {
         this.camera = {
             x: 0,
@@ -280,6 +331,11 @@ class GameEngine {
         this.worldBounds.width = data.worldWidth || 2000;
         this.worldBounds.height = data.worldHeight || 2000;
         
+        // Store team information
+        this.teamMode = data.teamMode || false;
+        this.teamCount = data.teamCount || 0;
+        this.teamAreas = data.teamAreas || null;
+        
         if (data.locations) {
             data.locations.forEach(location => {
                 this.createStrategicLocation(location);
@@ -292,6 +348,10 @@ class GameEngine {
             });
         }
         
+        // Draw team spawn areas if in team mode
+        if (this.teamMode && this.teamAreas) {
+            this.createTeamSpawnAreas();
+        }
     }
     
     handleGameState(data) {
@@ -343,9 +403,22 @@ class GameEngine {
         }
         
         if (data.locations) {
+            // Check if any location is being captured
+            let anyLocationBeingCaptured = false;
+            
             data.locations.forEach(locationData => {
                 this.updateStrategicLocation(locationData);
+                
+                if (locationData.capturingPlayer && locationData.captureProgress > 0) {
+                    anyLocationBeingCaptured = true;
+                    this.showCaptureProgress(locationData);
+                }
             });
+            
+            // Hide capture progress if no location is being captured
+            if (!anyLocationBeingCaptured) {
+                this.hideCaptureProgress();
+            }
         }
 
         if (data.obstacles) {
@@ -384,8 +457,8 @@ class GameEngine {
         sprite.position.set(isoPos.x, isoPos.y);
         sprite.rotation = playerData.rotation || 0;
         
-        // Make sure players are visible with distinct colors
-        sprite.tint = playerData.id === this.myPlayerId ? 0x00ff00 : 0xff0000; // Bright green vs bright red
+        // Color players based on their team
+        sprite.tint = this.getPlayerColor(playerData);
         
         // Make sprite visible but normal size
         sprite.scale.set(1.0); // Normal size
@@ -549,10 +622,6 @@ class GameEngine {
         }
         
         sprite.locationData = locationData;
-        
-        if (locationData.capturingPlayer && locationData.captureProgress > 0) {
-            this.showCaptureProgress(locationData);
-        }
     }
 
     createObstacle(obstacleData) {
@@ -661,6 +730,17 @@ class GameEngine {
         const content = document.getElementById('scoreboard-content');
         if (!content || !players) return;
         
+        // Check if we're in team mode
+        const hasTeams = players.some(p => p.team && p.team > 0);
+        
+        if (hasTeams) {
+            this.updateTeamScoreboard(content, players);
+        } else {
+            this.updateFFAScoreboard(content, players);
+        }
+    }
+    
+    updateFFAScoreboard(content, players) {
         const sortedPlayers = [...players].sort((a, b) => (b.kills || 0) - (a.kills || 0));
         
         content.innerHTML = `
@@ -676,7 +756,7 @@ class GameEngine {
                 <tbody>
                     ${sortedPlayers.map(player => `
                         <tr style="${player.id === this.myPlayerId ? 'background: rgba(46, 204, 113, 0.2);' : ''}">
-                            <td>${player.name || `Player ${player.id}`}</td>
+                            <td><span style="color: ${this.getTeamColorCSS(player.team || 0)}">●</span> ${player.name || `Player ${player.id}`}</td>
                             <td>${player.kills || 0}</td>
                             <td>${player.deaths || 0}</td>
                             <td>${player.active ? 'Alive' : 'Dead'}</td>
@@ -685,6 +765,55 @@ class GameEngine {
                 </tbody>
             </table>
         `;
+    }
+    
+    updateTeamScoreboard(content, players) {
+        // Group players by team
+        const teams = {};
+        players.forEach(player => {
+            const teamNum = player.team || 0;
+            if (!teams[teamNum]) {
+                teams[teamNum] = [];
+            }
+            teams[teamNum].push(player);
+        });
+        
+        // Sort teams by total kills
+        const sortedTeams = Object.entries(teams).sort((a, b) => {
+            const aKills = a[1].reduce((sum, p) => sum + (p.kills || 0), 0);
+            const bKills = b[1].reduce((sum, p) => sum + (p.kills || 0), 0);
+            return bKills - aKills;
+        });
+        
+        let html = '<div style="color: white;">';
+        
+        sortedTeams.forEach(([teamNum, teamPlayers]) => {
+            const teamKills = teamPlayers.reduce((sum, p) => sum + (p.kills || 0), 0);
+            const teamDeaths = teamPlayers.reduce((sum, p) => sum + (p.deaths || 0), 0);
+            const teamName = teamNum == 0 ? 'Free For All' : `Team ${teamNum}`;
+            const teamColor = this.getTeamColorCSS(parseInt(teamNum));
+            
+            html += `
+                <div style="margin-bottom: 15px; border: 1px solid ${teamColor}; border-radius: 5px; padding: 8px;">
+                    <h4 style="margin: 0 0 8px 0; color: ${teamColor};">${teamName} (${teamKills}/${teamDeaths})</h4>
+                    <table style="width: 100%; font-size: 12px;">
+                        ${teamPlayers
+                            .sort((a, b) => (b.kills || 0) - (a.kills || 0))
+                            .map(player => `
+                                <tr style="${player.id === this.myPlayerId ? 'background: rgba(46, 204, 113, 0.2);' : ''}">
+                                    <td style="padding: 2px;">${player.name || `Player ${player.id}`}</td>
+                                    <td style="padding: 2px; text-align: center;">${player.kills || 0}</td>
+                                    <td style="padding: 2px; text-align: center;">${player.deaths || 0}</td>
+                                    <td style="padding: 2px; text-align: center;">${player.active ? 'Alive' : 'Dead'}</td>
+                                </tr>
+                            `).join('')}
+                    </table>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        content.innerHTML = html;
     }
     
     updateMinimap() {
@@ -719,10 +848,22 @@ class GameEngine {
             const x = (data.x + this.worldBounds.width / 2) * scaleX;
             const y = ((-data.y) + this.worldBounds.height / 2) * scaleY; // Invert Y for minimap
             
-            ctx.fillStyle = data.id === this.myPlayerId ? '#2ecc71' : '#e74c3c';
+            // Use team colors on minimap
+            ctx.fillStyle = this.getTeamColorCSS(data.team || 0);
+            
+            // Make current player slightly larger
+            const radius = data.id === this.myPlayerId ? 4 : 3;
+            
             ctx.beginPath();
-            ctx.arc(x, y, 3, 0, Math.PI * 2);
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
             ctx.fill();
+            
+            // Add a white border for current player
+            if (data.id === this.myPlayerId) {
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
         });
     }
     
@@ -735,6 +876,13 @@ class GameEngine {
             progressEl.style.display = 'block';
             fillEl.style.width = `${locationData.captureProgress * 100}%`;
             textEl.textContent = `Capturing ${locationData.name}...`;
+        }
+    }
+    
+    hideCaptureProgress() {
+        const progressEl = document.getElementById('capture-progress');
+        if (progressEl) {
+            progressEl.style.display = 'none';
         }
     }
     
@@ -866,6 +1014,45 @@ class GameEngine {
         
         this.backgroundContainer.addChild(grid);
         
+    }
+    
+    /**
+     * Create visual indicators for team spawn areas.
+     */
+    createTeamSpawnAreas() {
+        if (!this.teamAreas || !this.teamAreas.teamAreas) return;
+        
+        Object.entries(this.teamAreas.teamAreas).forEach(([teamNum, areaData]) => {
+            const graphics = new PIXI.Graphics();
+            const teamColor = this.getTeamColor(parseInt(teamNum));
+            
+            // Draw semi-transparent team area
+            graphics.beginFill(teamColor, 0.1);
+            graphics.lineStyle(2, teamColor, 0.5);
+            graphics.drawRect(
+                areaData.minX, 
+                -areaData.maxY, // Invert Y for PIXI
+                areaData.maxX - areaData.minX,
+                areaData.maxY - areaData.minY
+            );
+            graphics.endFill();
+            
+            // Add team label
+            const teamLabel = new PIXI.Text(`Team ${teamNum} Base`, {
+                fontSize: 18,
+                fill: teamColor,
+                stroke: 0x000000,
+                strokeThickness: 2,
+                fontWeight: 'bold'
+            });
+            teamLabel.anchor.set(0.5);
+            teamLabel.position.set(areaData.centerX, -areaData.centerY); // Invert Y for PIXI
+            
+            graphics.addChild(teamLabel);
+            graphics.zIndex = -1; // Behind everything else
+            
+            this.backgroundContainer.addChild(graphics);
+        });
     }
 
     handleResize() {

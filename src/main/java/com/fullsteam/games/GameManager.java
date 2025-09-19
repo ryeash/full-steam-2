@@ -17,6 +17,7 @@ import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.StrategicLocation;
+import com.fullsteam.physics.TeamSpawnManager;
 import io.micronaut.websocket.WebSocketSession;
 import lombok.Getter;
 import org.dyn4j.collision.AxisAlignedBounds;
@@ -61,6 +62,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     protected final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     @Getter
     protected final AIPlayerManager aiPlayerManager = new AIPlayerManager();
+    @Getter
+    protected final TeamSpawnManager teamSpawnManager;
 
     protected long gameStartTime;
     protected boolean gameRunning = false;
@@ -88,6 +91,13 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         this.minAIFillPercentage = gameConfig.getMinAIFillPercentage();
         this.maxAIFillPercentage = gameConfig.getMaxAIFillPercentage();
         this.aiCheckIntervalMs = gameConfig.getAiCheckIntervalMs();
+        
+        // Initialize team spawn manager
+        this.teamSpawnManager = new TeamSpawnManager(
+            gameConfig.getWorldWidth(), 
+            gameConfig.getWorldHeight(), 
+            gameConfig.getTeamCount()
+        );
 
         this.world = new World<>();
         Settings settings = new Settings();
@@ -192,8 +202,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             return false;
         }
 
-        Vector2 spawnPoint = findSpawnPoint();
         int assignedTeam = assignPlayerToTeam();
+        Vector2 spawnPoint = findSpawnPointForTeam(assignedTeam);
         AIPlayer aiPlayer = AIPlayerManager.createRandomAIPlayer(Config.nextId(), spawnPoint.x, spawnPoint.y, assignedTeam);
 
         // Add to game entities
@@ -218,8 +228,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             return false;
         }
 
-        Vector2 spawnPoint = findSpawnPoint();
         int assignedTeam = assignPlayerToTeam();
+        Vector2 spawnPoint = findSpawnPointForTeam(assignedTeam);
         AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithPersonality(Config.nextId(), spawnPoint.x, spawnPoint.y, personalityType, assignedTeam);
 
         // Add to game entities
@@ -482,8 +492,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     }
 
     protected void onPlayerJoined(PlayerSession playerSession) {
-        Vector2 spawnPoint = findSpawnPoint();
         int assignedTeam = assignPlayerToTeam();
+        Vector2 spawnPoint = findSpawnPointForTeam(assignedTeam);
         log.info("Player {} joining game {} at spawn point ({}, {}) on team {}",
                 playerSession.getPlayerId(), gameId, spawnPoint.x, spawnPoint.y, assignedTeam);
 
@@ -703,7 +713,46 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         broadcast(gameState);
     }
 
-    private Vector2 findSpawnPoint() {
+    /**
+     * Find a spawn point for a specific team.
+     * Uses team-based spawn areas if team mode is enabled, otherwise FFA spawning.
+     *
+     * @param team Team number (0 for FFA)
+     * @return Spawn point for the team
+     */
+    private Vector2 findSpawnPointForTeam(int team) {
+        if (gameConfig.isFreeForAll() || team == 0) {
+            return findFFASpawnPoint();
+        }
+        
+        if (teamSpawnManager.isTeamSpawningEnabled()) {
+            return teamSpawnManager.getSafeTeamSpawnPoint(team, gameEntities.getAllPlayers(), 100.0);
+        }
+        
+        // Fallback to FFA spawning
+        return findFFASpawnPoint();
+    }
+    
+    /**
+     * Find a safe spawn point for Free For All mode.
+     * 
+     * @return FFA spawn point
+     */
+    private Vector2 findFFASpawnPoint() {
+        if (teamSpawnManager != null) {
+            return teamSpawnManager.getSafeFFASpawnPoint(gameEntities.getAllPlayers(), 100.0);
+        }
+        
+        // Fallback to legacy spawn logic
+        return findLegacySpawnPoint();
+    }
+    
+    /**
+     * Legacy spawn point logic for backward compatibility.
+     * 
+     * @return Legacy spawn point
+     */
+    private Vector2 findLegacySpawnPoint() {
         for (int attempts = 0; attempts < 10; attempts++) {
             double x = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldWidth() - 100);
             double y = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldHeight() - 100);
@@ -734,6 +783,11 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         state.put("worldHeight", gameConfig.getWorldHeight());
         state.put("teamCount", gameConfig.getTeamCount());
         state.put("teamMode", gameConfig.isTeamMode());
+        
+        // Add team spawn area information
+        if (teamSpawnManager.isTeamSpawningEnabled()) {
+            state.put("teamAreas", teamSpawnManager.getTeamAreaInfo());
+        }
 
         List<Map<String, Object>> locations = new ArrayList<>();
         for (StrategicLocation location : gameEntities.getAllStrategicLocations()) {
