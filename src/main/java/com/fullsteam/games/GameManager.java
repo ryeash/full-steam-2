@@ -1,6 +1,9 @@
 package com.fullsteam.games;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fullsteam.Config;
+import com.fullsteam.model.GameInfo;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
@@ -9,6 +12,9 @@ import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.StrategicLocation;
+import io.micronaut.context.annotation.Prototype;
+import io.micronaut.websocket.WebSocketSession;
+import lombok.Getter;
 import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.Settings;
@@ -19,75 +25,251 @@ import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.PhysicsWorld;
 import org.dyn4j.world.World;
 import org.dyn4j.world.listener.StepListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
-public class BattleRoyaleGame extends AbstractGameStateManager implements CollisionProcessor.CollisionHandler, StepListener<Body> {
+public class GameManager implements CollisionProcessor.CollisionHandler, StepListener<Body> {
+    protected static final Logger log = LoggerFactory.getLogger(GameManager.class);
+
+    @Getter
+    protected final String gameId;
+    @Getter
+    protected final String gameType;
+    protected final GameEntities gameEntities = new GameEntities();
+    protected final ObjectMapper objectMapper = new ObjectMapper();
+    protected final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+
+    protected long gameStartTime;
+    protected boolean gameRunning = false;
+
     private final World<Body> world;
-    private final GameEntities gameEntities = new GameEntities();
-
+    private final Queue<Body> bodiesToAdd = new ConcurrentLinkedQueue<>();
+    private final Queue<Body> bodiesToRemove = new ConcurrentLinkedQueue<>();
     private double lastUpdateTime = System.nanoTime() / 1e9;
 
-    public BattleRoyaleGame(String gameId, String gameType) {
-        super(gameId, gameType);
+    public GameManager(String gameId, String gameType) {
+        this.gameId = gameId;
+        this.gameType = gameType;
+        this.gameStartTime = System.currentTimeMillis();
+        scheduler.scheduleAtFixedRate(this::update, 0, 16, TimeUnit.MILLISECONDS);
 
-        // Initialize physics world
         this.world = new World<>();
         Settings settings = new Settings();
-        // Increase the maximum translation to allow for high-speed projectiles
-        // Max speed: 17000, time step: 1/60s => 17000 * 0.0166 = 282.2
-        settings.setMaximumTranslation(300.0); // Default is 2.0
+        settings.setMaximumTranslation(300.0);
         this.world.setSettings(settings);
-        this.world.setGravity(new Vector2(0, 0)); // Top-down game, no gravity
-        this.world.setBounds(new AxisAlignedBounds(2000, 2000));
+        this.world.setGravity(new Vector2(0, 0));
+        this.world.setBounds(new AxisAlignedBounds(Config.WORLD_WIDTH, Config.WORLD_HEIGHT));
 
-        // Initialize collision processor and add it as collision listener
-        CollisionProcessor collisionProcessor = new CollisionProcessor(gameEntities, this);
+        CollisionProcessor collisionProcessor = new CollisionProcessor(this.gameEntities, this);
         this.world.addCollisionListener(collisionProcessor);
-        this.world.addStepListener(this); // Add this class as a step listener
+        this.world.addStepListener(this);
 
         createWorldBoundaries();
         createStrategicLocations();
     }
 
-    private void createWorldBoundaries() {
-        double halfWidth = Config.WORLD_WIDTH / 2;
-        double halfHeight = Config.WORLD_HEIGHT / 2;
-        double wallThickness = 50;
+    public boolean addPlayer(PlayerSession playerSession) {
+        if (gameEntities.getPlayerSessions().size() >= getMaxPlayers()) {
+            return false;
+        }
+        gameEntities.addPlayerSession(playerSession);
+        onPlayerJoined(playerSession);
+        return true;
+    }
 
-        // Top wall
+    public void removePlayer(int playerId) {
+        PlayerSession removed = gameEntities.getPlayerSessions().remove(playerId);
+        if (removed != null) {
+            onPlayerLeft(removed);
+        }
+    }
+
+    public void acceptPlayerInput(int playerId, PlayerInput input) {
+        if (input != null) {
+            gameEntities.getPlayerInput().put(playerId, input);
+        }
+    }
+
+    public void handlePlayerConfigChange(int playerId, PlayerConfigRequest request) {
+        PlayerSession playerSession = gameEntities.getPlayerSession(playerId);
+        if (playerSession != null) {
+            if (request.getPlayerName() != null) {
+                playerSession.setPlayerName(request.getPlayerName());
+            }
+            processPlayerConfigChange(playerSession, request);
+        }
+    }
+
+    public void send(WebSocketSession session, Object message) {
+        try {
+            String json = objectMapper.writeValueAsString(message);
+            session.sendSync(json);
+        } catch (JsonProcessingException e) {
+            log.error("Error serializing message", e);
+        }
+    }
+
+    public void broadcast(Object message) {
+        gameEntities.getPlayerSessions().values().forEach(player -> {
+            if (player.getSession().isOpen()) {
+                send(player.getSession(), message);
+            }
+        });
+    }
+
+    public GameInfo getGameInfo() {
+        return new GameInfo(
+                gameId,
+                gameType,
+                gameEntities.getPlayerSessions().size(),
+                getMaxPlayers(),
+                gameStartTime,
+                gameRunning ? "running" : "waiting"
+        );
+    }
+
+    public int getPlayerCount() {
+        return gameEntities.getPlayerSessions().size();
+    }
+
+    public void shutdown() {
+        scheduler.shutdown();
+    }
+
+    protected void update() {
+        try {
+            double currentTime = System.nanoTime() / 1e9;
+            double deltaTime = currentTime - lastUpdateTime;
+            lastUpdateTime = currentTime;
+
+            gameEntities.getPlayerInput().forEach(this::processPlayerInput);
+
+            gameEntities.getAllPlayers().forEach(player -> player.update(deltaTime));
+
+            gameEntities.getProjectiles().entrySet().removeIf(entry -> {
+                Projectile projectile = entry.getValue();
+                projectile.update(deltaTime);
+                if (!projectile.isActive()) {
+                    bodiesToRemove.add(projectile.getBody());
+                    return true;
+                }
+                return false;
+            });
+
+            updateStrategicLocations(deltaTime);
+
+            synchronized (world) {
+                Body bodyToAdd;
+                while ((bodyToAdd = bodiesToAdd.poll()) != null) {
+                    world.addBody(bodyToAdd);
+                }
+
+                Body bodyToRemove;
+                while ((bodyToRemove = bodiesToRemove.poll()) != null) {
+                    world.removeBody(bodyToRemove);
+                }
+
+                world.updatev(deltaTime);
+            }
+
+            sendGameState();
+        } catch (Throwable t) {
+            log.error("Error in update loop", t);
+        }
+    }
+
+    protected void onPlayerJoined(PlayerSession playerSession) {
+        Vector2 spawnPoint = findSpawnPoint();
+        log.info("Player {} joining game {} at spawn point ({}, {})", playerSession.getPlayerId(), gameId, spawnPoint.x, spawnPoint.y);
+
+        Player player = new Player(playerSession.getPlayerId(), playerSession.getPlayerName(), spawnPoint.x, spawnPoint.y);
+        gameEntities.addPlayer(player);
+        bodiesToAdd.add(player.getBody());
+
+        send(playerSession.getSession(), createInitialGameState());
+        log.info("Player {} ({}) joined game {} successfully. Total players: {}, Total sessions: {}",
+                playerSession.getPlayerId(), playerSession.getPlayerName(), gameId, gameEntities.getPlayers().size(), gameEntities.getPlayerSessions().size());
+    }
+
+    protected void onPlayerLeft(PlayerSession playerSession) {
+        gameEntities.getPlayerInput().remove(playerSession.getPlayerId());
+        Player player = gameEntities.getPlayer(playerSession.getPlayerId());
+        if (player != null) {
+            bodiesToRemove.add(player.getBody());
+            gameEntities.removePlayer(player.getId());
+        }
+        log.info("Player {} left game {}", playerSession.getPlayerId(), gameId);
+    }
+
+    protected void processPlayerInput(Integer playerId, PlayerInput input) {
+        Player player = gameEntities.getPlayer(playerId);
+        if (player != null && input != null) {
+            player.processInput(input);
+            if (input.isLeft()) {
+                Projectile projectile = player.shoot();
+                if (projectile != null) {
+                    gameEntities.addProjectile(projectile);
+                    bodiesToAdd.add(projectile.getBody());
+                }
+            }
+        }
+    }
+
+    protected void processPlayerConfigChange(PlayerSession playerSession, PlayerConfigRequest request) {
+        Player player = gameEntities.getPlayer(playerSession.getPlayerId());
+        if (player != null) {
+            if (request.getPlayerName() != null) {
+                player.setPlayerName(request.getPlayerName());
+            }
+            player.applyWeaponConfig(request.getPrimaryWeapon(), request.getSecondaryWeapon());
+        }
+    }
+
+    protected int getMaxPlayers() {
+        return Config.MAX_PLAYERS_PER_GAME;
+    }
+
+    private void createWorldBoundaries() {
+        double halfWidth = Config.WORLD_WIDTH / 2.0;
+        double halfHeight = Config.WORLD_HEIGHT / 2.0;
+        double wallThickness = 50.0;
+
         Body topWall = new Body();
         topWall.addFixture(new Rectangle(Config.WORLD_WIDTH + wallThickness * 2, wallThickness));
         topWall.setMass(MassType.INFINITE);
-        topWall.getTransform().setTranslation(0, halfHeight + wallThickness / 2);
-        world.addBody(topWall);
+        topWall.getTransform().setTranslation(0, halfHeight + wallThickness / 2.0);
+        bodiesToAdd.add(topWall);
 
-        // Bottom wall
         Body bottomWall = new Body();
         bottomWall.addFixture(new Rectangle(Config.WORLD_WIDTH + wallThickness * 2, wallThickness));
         bottomWall.setMass(MassType.INFINITE);
-        bottomWall.getTransform().setTranslation(0, -halfHeight - wallThickness / 2);
-        world.addBody(bottomWall);
+        bottomWall.getTransform().setTranslation(0, -halfHeight - wallThickness / 2.0);
+        bodiesToAdd.add(bottomWall);
 
-        // Left wall
         Body leftWall = new Body();
         leftWall.addFixture(new Rectangle(wallThickness, Config.WORLD_HEIGHT));
         leftWall.setMass(MassType.INFINITE);
-        leftWall.getTransform().setTranslation(-halfWidth - wallThickness / 2, 0);
-        world.addBody(leftWall);
+        leftWall.getTransform().setTranslation(-halfWidth - wallThickness / 2.0, 0);
+        bodiesToAdd.add(leftWall);
 
-        // Right wall
         Body rightWall = new Body();
         rightWall.addFixture(new Rectangle(wallThickness, Config.WORLD_HEIGHT));
         rightWall.setMass(MassType.INFINITE);
-        rightWall.getTransform().setTranslation(halfWidth + wallThickness / 2, 0);
-        world.addBody(rightWall);
+        rightWall.getTransform().setTranslation(halfWidth + wallThickness / 2.0, 0);
+        bodiesToAdd.add(rightWall);
     }
 
     private void createStrategicLocations() {
@@ -100,46 +282,7 @@ public class BattleRoyaleGame extends AbstractGameStateManager implements Collis
 
             StrategicLocation location = new StrategicLocation(locationNames[i], x, y);
             gameEntities.addStrategicLocation(location);
-            world.addBody(location.getBody());
-        }
-    }
-
-    @Override
-    protected void update() {
-        try {
-            double currentTime = System.nanoTime() / 1e9;
-            double deltaTime = currentTime - lastUpdateTime;
-            lastUpdateTime = currentTime;
-
-            gameEntities.getAllPlayers().forEach(player -> {
-                processPlayerInput(player, gameEntities.getPlayerInput().get(player.getId()));
-                player.update(deltaTime);
-            });
-
-            // Update projectiles and queue inactive ones for removal
-            gameEntities.getProjectiles().entrySet().removeIf(entry -> {
-                Projectile projectile = entry.getValue();
-                projectile.update(deltaTime);
-                if (!projectile.isActive()) {
-                    world.removeBody(projectile.getBody());
-                    return true;
-                }
-                return false;
-            });
-
-            // Update strategic locations
-            updateStrategicLocations(deltaTime);
-
-            // Safely modify the physics world
-            synchronized (world) {
-                // Update the physics world
-                world.updatev(deltaTime);
-            }
-
-            // Send game state to clients
-            sendGameState();
-        } catch (Throwable t) {
-            log.error("Error in update loop", t);
+            bodiesToAdd.add(location.getBody());
         }
     }
 
@@ -220,62 +363,6 @@ public class BattleRoyaleGame extends AbstractGameStateManager implements Collis
         gameState.put("locations", locationStates);
 
         broadcast(gameState);
-    }
-
-    @Override
-    protected void onPlayerJoined(PlayerSession playerSession) {
-        Vector2 spawnPoint = findSpawnPoint();
-        log.info("Player {} joining game {} at spawn point ({}, {})", playerSession.getPlayerId(), gameId, spawnPoint.x, spawnPoint.y);
-
-        Player player = new Player(playerSession.getPlayerId(), playerSession.getPlayerName(), spawnPoint.x, spawnPoint.y);
-        gameEntities.addPlayer(player);
-        world.addBody(player.getBody());
-
-        send(playerSession.getSession(), createInitialGameState());
-        log.info("Player {} ({}) joined game {} successfully. Total players: {}, Total sessions: {}",
-                playerSession.getPlayerId(), playerSession.getPlayerName(), gameId, gameEntities.getPlayers().size(), gameEntities.getPlayerSessions().size());
-    }
-
-    @Override
-    protected void onPlayerLeft(PlayerSession playerSession) {
-        gameEntities.getPlayerInput().remove(playerSession.getPlayerId());
-        Player player = gameEntities.getPlayer(playerSession.getPlayerId());
-        if (player != null) {
-            world.removeBody(player.getBody());
-            gameEntities.removePlayer(playerSession.getPlayerId());
-        }
-        log.info("Player {} left game {}", playerSession.getPlayerId(), gameId);
-    }
-
-    @Override
-    protected void processPlayerInput(Player player, PlayerInput input) {
-        if (player != null) {
-            player.processInput(input);
-            if (input.isLeft()) {
-                Projectile projectile = player.shoot();
-                if (projectile != null) {
-                    gameEntities.addProjectile(projectile);
-                    world.addBody(projectile.getBody());
-                }
-            }
-        }
-    }
-
-    @Override
-    protected void processPlayerConfigChange(PlayerSession playerSession, PlayerConfigRequest request) {
-        Player player = gameEntities.getPlayer(playerSession.getPlayerId());
-        if (player != null) {
-            if (request.getPlayerName() != null) {
-                player.setPlayerName(request.getPlayerName());
-                playerSession.setPlayerName(request.getPlayerName());
-            }
-            player.applyWeaponConfig(request.getPrimaryWeapon(), request.getSecondaryWeapon());
-        }
-    }
-
-    @Override
-    protected int getMaxPlayers() {
-        return Config.MAX_PLAYERS_PER_GAME;
     }
 
     private Vector2 findSpawnPoint() {
@@ -360,8 +447,6 @@ public class BattleRoyaleGame extends AbstractGameStateManager implements Collis
     public void onPlayerExitLocation(Player player, StrategicLocation location) {
         log.debug("Player {} exited strategic location {}", player.getId(), location.getLocationName());
     }
-
-    // ===== StepListener Implementation =====
 
     @Override
     public void begin(TimeStep step, PhysicsWorld<Body, ?> world) {

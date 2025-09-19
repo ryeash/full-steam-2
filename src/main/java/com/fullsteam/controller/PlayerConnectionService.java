@@ -1,7 +1,7 @@
 package com.fullsteam.controller;
 
 import com.fullsteam.GameLobby;
-import com.fullsteam.games.AbstractGameStateManager;
+import com.fullsteam.games.GameManager;
 import com.fullsteam.model.PlayerSession;
 import io.micronaut.websocket.WebSocketSession;
 import jakarta.inject.Inject;
@@ -30,7 +30,7 @@ public class PlayerConnectionService {
             PlayerSession playerSession = new PlayerSession(playerId, session);
 
             // Get or create game
-            AbstractGameStateManager game = gameLobby.getGame(gameId);
+            GameManager game = gameLobby.getGame(gameId);
             if (game == null) {
                 game = gameLobby.createGame(gameType);
                 gameId = game.getGameId();
@@ -57,7 +57,7 @@ public class PlayerConnectionService {
     public void disconnectPlayer(WebSocketSession session) {
         PlayerSession playerSession = session.get(SESSION_KEY, PlayerSession.class).orElse(null);
         if (playerSession != null) {
-            AbstractGameStateManager game = playerSession.getGame();
+            GameManager game = playerSession.getGame();
             if (game != null) {
                 game.removePlayer(playerSession.getPlayerId());
 

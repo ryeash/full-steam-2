@@ -1,6 +1,6 @@
 package com.fullsteam.model;
 
-import com.fullsteam.games.AbstractGameStateManager;
+import com.fullsteam.games.GameManager;
 import io.micronaut.websocket.WebSocketSession;
 import lombok.Data;
 
@@ -8,7 +8,7 @@ import lombok.Data;
 public class PlayerSession {
     private final int playerId;
     private final WebSocketSession session;
-    private AbstractGameStateManager game;
+    private GameManager game;
     private String playerName;
     private boolean isSpectator;
 

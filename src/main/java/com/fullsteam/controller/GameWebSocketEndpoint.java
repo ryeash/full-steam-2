@@ -2,7 +2,7 @@ package com.fullsteam.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fullsteam.games.AbstractGameStateManager;
+import com.fullsteam.games.GameManager;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
@@ -52,7 +52,7 @@ public class GameWebSocketEndpoint {
             return; // No player session found
         }
 
-        AbstractGameStateManager game = playerSession.getGame();
+        GameManager game = playerSession.getGame();
         int playerId = playerSession.getPlayerId();
 
         if (game == null) {
