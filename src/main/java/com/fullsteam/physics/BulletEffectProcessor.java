@@ -3,6 +3,7 @@ package com.fullsteam.physics;
 import com.fullsteam.Config;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Ordinance;
 import org.dyn4j.geometry.Vector2;
 
@@ -104,7 +105,7 @@ public class BulletEffectProcessor {
         
         FieldEffect explosion = new FieldEffect(
             Config.nextId(),
-            FieldEffect.FieldEffectType.EXPLOSION,
+            FieldEffectType.EXPLOSION,
             position,
             explosionRadius,
             explosionDamage,
@@ -121,7 +122,7 @@ public class BulletEffectProcessor {
         
         FieldEffect fire = new FieldEffect(
             Config.nextId(),
-            FieldEffect.FieldEffectType.FIRE,
+            FieldEffectType.FIRE,
             position,
             fireRadius,
             fireDamage,
@@ -138,11 +139,11 @@ public class BulletEffectProcessor {
         
         FieldEffect electric = new FieldEffect(
             Config.nextId(),
-            FieldEffect.FieldEffectType.ELECTRIC,
+            FieldEffectType.ELECTRIC,
             position,
             electricRadius,
             electricDamage,
-            1.0, // 1 second of electric damage
+            0.4, // 0.4 seconds of electric damage - quick chain effect
             projectile.getOwnerTeam()
         );
         
@@ -155,7 +156,7 @@ public class BulletEffectProcessor {
         
         FieldEffect freeze = new FieldEffect(
             Config.nextId(),
-            FieldEffect.FieldEffectType.FREEZE,
+            FieldEffectType.FREEZE,
             position,
             freezeRadius,
             freezeDamage,
@@ -170,7 +171,7 @@ public class BulletEffectProcessor {
         // Create visual fragmentation effect first
         FieldEffect fragmentation = new FieldEffect(
             Config.nextId(),
-            FieldEffect.FieldEffectType.FRAGMENTATION,
+            FieldEffectType.FRAGMENTATION,
             position,
             60.0, // Fragmentation radius
             0.0, // No damage from the visual effect itself

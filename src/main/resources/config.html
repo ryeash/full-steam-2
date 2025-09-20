@@ -463,6 +463,7 @@
                 const value = parseInt(e.target.value);
                 valueSpan.textContent = value;
                 currentWeapon.attributes[key] = value;
+                console.log('DEBUG: Slider changed - key:', key, 'value:', value, 'currentWeapon.attributes:', currentWeapon.attributes);
                 updatePointDisplay();
             });
         });
@@ -687,12 +688,41 @@
     }
 
     function getPlayerConfig() {
+        console.log('DEBUG: currentWeapon.attributes:', currentWeapon.attributes);
+        console.log('DEBUG: currentWeapon.effects:', currentWeapon.effects);
+        console.log('DEBUG: currentWeapon.ordinance:', currentWeapon.ordinance);
+        
+        // Map enum names to Java field names
+        const attributeMapping = {
+            'DAMAGE': 'damage',
+            'FIRE_RATE': 'fireRate',
+            'RANGE': 'range',
+            'ACCURACY': 'accuracy',
+            'MAGAZINE_SIZE': 'magazineSize',
+            'RELOAD_TIME': 'reloadTime',
+            'PROJECTILE_SPEED': 'projectileSpeed',
+            'BULLETS_PER_SHOT': 'bulletsPerShot',
+            'LINEAR_DAMPING': 'linearDamping'
+        };
+        
+        // Convert attribute names
+        const mappedAttributes = {};
+        Object.entries(currentWeapon.attributes).forEach(([enumName, value]) => {
+            const fieldName = attributeMapping[enumName];
+            if (fieldName) {
+                mappedAttributes[fieldName] = value;
+            }
+        });
+        
         const weaponConfig = {
             type: 'Custom Weapon',
-            ...currentWeapon.attributes,
             bulletEffects: currentWeapon.effects,
-            ordinance: currentWeapon.ordinance
+            ordinance: currentWeapon.ordinance,
+            ...mappedAttributes  // Put mapped attributes last to ensure they override any conflicts
         };
+        
+        console.log('DEBUG: Mapped attributes:', mappedAttributes);
+        console.log('DEBUG: Final weaponConfig:', weaponConfig);
         
         return {
             playerName: document.getElementById('player-name').value || 'Player',

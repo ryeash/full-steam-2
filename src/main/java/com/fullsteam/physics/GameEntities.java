@@ -105,7 +105,7 @@ public class GameEntities {
 
         // Remove inactive strategic locations (unlikely but for completeness)
         strategicLocations.entrySet().removeIf(entry -> !entry.getValue().isActive());
-        
+
         // Remove expired field effects
         fieldEffects.entrySet().removeIf(entry -> entry.getValue().isExpired());
     }
@@ -124,7 +124,7 @@ public class GameEntities {
 
         // Update all strategic locations
         strategicLocations.values().forEach(location -> location.update(deltaTime));
-        
+
         // Update all field effects
         fieldEffects.values().forEach(effect -> effect.update(deltaTime));
     }

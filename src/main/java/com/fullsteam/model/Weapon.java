@@ -250,11 +250,16 @@ public class Weapon {
         this.bulletsPerShot = (int) WeaponAttribute.BULLETS_PER_SHOT.compute(points);
         this.linearDamping = WeaponAttribute.LINEAR_DAMPING.compute(points);
         this.currentAmmo = magazineSize;
+        
+        // Debug logging
+        System.out.println("DEBUG: Created weapon '" + name + "' with magazineSize: " + magazineSize + ", currentAmmo: " + currentAmmo);
     }
 
     public void fire() {
         if (currentAmmo > 0) {
-            currentAmmo--;
+            // Reduce ammo by the number of bullets fired per shot
+            int bulletsToFire = Math.min(bulletsPerShot, currentAmmo);
+            currentAmmo -= bulletsToFire;
         }
     }
 
