@@ -71,88 +71,9 @@
             z-index: 100;
         }
         
-        #hud {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            right: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            pointer-events: none;
-        }
+        /* Old HUD styles removed - now using PIXI-based consolidated HUD */
         
-        #health-bar {
-            background: rgba(0,0,0,0.7);
-            padding: 10px;
-            border-radius: 5px;
-            min-width: 200px;
-        }
-        
-        .bar-container {
-            position: relative;
-            width: 200px;
-            height: 30px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 15px;
-            overflow: hidden;
-        }
-        
-        .bar-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #e74c3c, #f39c12, #2ecc71);
-            transition: width 0.3s ease;
-            width: 100%;
-        }
-        
-        .bar-text {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-weight: bold;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
-        }
-        
-        #weapon-info {
-            background: rgba(0,0,0,0.7);
-            padding: 10px;
-            border-radius: 5px;
-            text-align: center;
-            color: white;
-        }
-        
-        #weapon-name {
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        
-        #ammo-display {
-            font-size: 18px;
-        }
-        
-        #reload-indicator {
-            color: #f39c12;
-            font-weight: bold;
-            animation: pulse 1s infinite;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        #minimap {
-            background: rgba(0,0,0,0.8);
-            border-radius: 5px;
-            padding: 5px;
-        }
-        
-        #minimap-canvas {
-            border: 1px solid #555;
-            border-radius: 3px;
-        }
+        /* Additional old HUD styles removed */
         
         #scoreboard {
             position: absolute;
@@ -272,26 +193,7 @@
     
     <!-- Game UI Overlay -->
     <div id="game-ui" style="display: none;">
-        <div id="hud">
-            <div id="health-bar">
-                <div class="bar-container">
-                    <div class="bar-fill" id="health-fill"></div>
-                    <span class="bar-text" id="health-text">100</span>
-                </div>
-            </div>
-            
-            <div id="weapon-info">
-                <div id="weapon-name">Assault Rifle</div>
-                <div id="ammo-display">
-                    <span id="ammo-current">30</span>/<span id="ammo-max">30</span>
-                </div>
-                <div id="reload-indicator" style="display: none;">RELOADING...</div>
-            </div>
-            
-            <div id="minimap">
-                <canvas id="minimap-canvas" width="200" height="200"></canvas>
-            </div>
-        </div>
+        <!-- Old HUD removed - now using consolidated PIXI-based HUD -->
         
         <div id="scoreboard" style="display: none;">
             <div class="scoreboard-header">

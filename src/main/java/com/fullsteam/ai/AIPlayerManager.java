@@ -84,6 +84,8 @@ public class AIPlayerManager {
             // Generate input for this AI player
             PlayerInput input = generatePlayerInput(aiPlayer, gameEntities, deltaTime);
             if (input != null) {
+                // Apply movement smoothing for continuous motion
+                aiPlayer.smoothMovement(input);
                 generatedInputs.put(aiPlayer.getId(), input);
             }
         }

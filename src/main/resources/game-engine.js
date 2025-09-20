@@ -12,6 +12,7 @@ class GameEngine {
         this.projectiles = new Map();
         this.strategicLocations = new Map();
         this.obstacles = new Map();
+        this.fieldEffects = new Map();
         this.myPlayerId = null;
         this.gameState = null;
         this.websocket = null;
@@ -36,10 +37,11 @@ class GameEngine {
             this.setupCamera();
             
             this.updateLoadingProgress(30, "Initializing input system...");
-            this.setupInput();
-            
-            this.updateLoadingProgress(40, "Setting up UI...");
-            this.setupUI();
+        this.setupInput();
+        
+        this.updateLoadingProgress(40, "Setting up UI...");
+        this.setupUI();
+        this.createConsolidatedHUD();
             
             this.updateLoadingProgress(60, "Loading assets...");
             await this.loadAssets();
@@ -93,6 +95,140 @@ class GameEngine {
 
         // Handle window resize
         window.addEventListener('resize', () => this.handleResize());
+    }
+    
+    /**
+     * Create consolidated HUD in top-left corner.
+     */
+    createConsolidatedHUD() {
+        // Create main HUD container
+        this.hudContainer = new PIXI.Container();
+        this.hudContainer.zIndex = 200; // Above everything else
+        
+        // HUD background (smaller without health section)
+        const hudBg = new PIXI.Graphics();
+        hudBg.beginFill(0x000000, 0.7);
+        hudBg.drawRoundedRect(10, 10, 280, 170, 8);
+        hudBg.endFill();
+        hudBg.lineStyle(2, 0x444444, 0.8);
+        hudBg.drawRoundedRect(10, 10, 280, 170, 8);
+        this.hudContainer.addChild(hudBg);
+        
+        // Minimap (top portion)
+        this.createHUDMinimap();
+        
+        // Player info (bottom portion)
+        this.createHUDPlayerInfo();
+        
+        this.uiContainer.addChild(this.hudContainer);
+    }
+    
+    /**
+     * Create minimap section of HUD.
+     */
+    createHUDMinimap() {
+        // Minimap container
+        const minimapContainer = new PIXI.Container();
+        minimapContainer.position.set(20, 20);
+        
+        // Minimap background
+        const minimapBg = new PIXI.Graphics();
+        minimapBg.beginFill(0x1a3d1f, 0.8);
+        minimapBg.drawRoundedRect(0, 0, 120, 120, 4);
+        minimapBg.endFill();
+        minimapBg.lineStyle(1, 0x2ecc71, 0.6);
+        minimapBg.drawRoundedRect(0, 0, 120, 120, 4);
+        minimapContainer.addChild(minimapBg);
+        
+        // Minimap title
+        const minimapTitle = new PIXI.Text('MAP', {
+            fontSize: 10,
+            fill: 0xffffff,
+            fontWeight: 'bold'
+        });
+        minimapTitle.position.set(2, 2);
+        minimapContainer.addChild(minimapTitle);
+        
+        // Store references for updates
+        this.hudMinimap = minimapContainer;
+        this.hudMinimapBg = minimapBg;
+        
+        this.hudContainer.addChild(minimapContainer);
+    }
+    
+    /**
+     * Create player info section of HUD.
+     */
+    createHUDPlayerInfo() {
+        const infoContainer = new PIXI.Container();
+        infoContainer.position.set(20, 150);
+        
+        // Weapon section
+        const weaponLabel = new PIXI.Text('WEAPON', {
+            fontSize: 10,
+            fill: 0xffffff,
+            fontWeight: 'bold'
+        });
+        weaponLabel.position.set(0, 0);
+        infoContainer.addChild(weaponLabel);
+        
+        const weaponText = new PIXI.Text('Primary', {
+            fontSize: 9,
+            fill: 0xffffff
+        });
+        weaponText.position.set(50, 0);
+        infoContainer.addChild(weaponText);
+        
+        // Ammo section
+        const ammoLabel = new PIXI.Text('AMMO', {
+            fontSize: 10,
+            fill: 0xffffff,
+            fontWeight: 'bold'
+        });
+        ammoLabel.position.set(0, 15);
+        infoContainer.addChild(ammoLabel);
+        
+        const ammoText = new PIXI.Text('30/30', {
+            fontSize: 9,
+            fill: 0xffffff
+        });
+        ammoText.position.set(40, 15);
+        infoContainer.addChild(ammoText);
+        
+        // Reload indicator
+        const reloadText = new PIXI.Text('RELOADING...', {
+            fontSize: 9,
+            fill: 0xff4444,
+            fontWeight: 'bold'
+        });
+        reloadText.position.set(90, 15);
+        reloadText.visible = false;
+        infoContainer.addChild(reloadText);
+        
+        // Team indicator
+        const teamLabel = new PIXI.Text('TEAM', {
+            fontSize: 10,
+            fill: 0xffffff,
+            fontWeight: 'bold'
+        });
+        teamLabel.position.set(150, 0);
+        infoContainer.addChild(teamLabel);
+        
+        const teamText = new PIXI.Text('1', {
+            fontSize: 12,
+            fill: 0xff4444,
+            fontWeight: 'bold'
+        });
+        teamText.position.set(185, 0);
+        infoContainer.addChild(teamText);
+        
+        // Store references for updates (removed health references)
+        this.hudWeaponText = weaponText;
+        this.hudAmmoText = ammoText;
+        this.hudReloadText = reloadText;
+        this.hudTeamText = teamText;
+        
+        this.hudContainer.addChild(infoContainer);
     }
     
     /**
@@ -336,6 +472,9 @@ class GameEngine {
         this.teamCount = data.teamCount || 0;
         this.teamAreas = data.teamAreas || null;
         
+        // Store terrain information
+        this.terrainData = data.terrain || null;
+        
         if (data.locations) {
             data.locations.forEach(location => {
                 this.createStrategicLocation(location);
@@ -346,6 +485,11 @@ class GameEngine {
             data.obstacles.forEach(obstacle => {
                 this.createObstacle(obstacle);
             });
+        }
+        
+        // Create procedural terrain background
+        if (this.terrainData) {
+            this.createProceduralTerrain();
         }
         
         // Draw team spawn areas if in team mode
@@ -439,6 +583,25 @@ class GameEngine {
             }
         }
         
+        // Handle field effects
+        if (data.fieldEffects) {
+            const currentFieldEffectIds = new Set();
+            data.fieldEffects.forEach(effectData => {
+                currentFieldEffectIds.add(effectData.id);
+                if (this.fieldEffects.has(effectData.id)) {
+                    this.updateFieldEffect(effectData);
+                } else {
+                    this.createFieldEffect(effectData);
+                }
+            });
+
+            for (let [effectId, effect] of this.fieldEffects) {
+                if (!currentFieldEffectIds.has(effectId)) {
+                    this.removeFieldEffect(effectId);
+                }
+            }
+        }
+        
         this.updateUI(data);
     }
     
@@ -465,17 +628,9 @@ class GameEngine {
         sprite.alpha = 1.0; // Ensure full opacity
         sprite.visible = true; // Explicitly set visible
         
-        // Create health bar in separate container so it doesn't rotate
-        const healthBar = this.createHealthBar();
-        
-        // Position health bar above player
-        healthBar.position.set(isoPos.x, isoPos.y - 35);
-        
-        // Store reference to health bar on sprite for easy access
-        sprite.healthBar = healthBar;
-        
-        // Add health bar to separate container
-        this.nameContainer.addChild(healthBar);
+        // Create health bar above player
+    const healthBarContainer = this.createHealthBar(playerData);
+    sprite.healthBar = healthBarContainer;
         
         // Create name label in separate container so it doesn't rotate
         const nameLabel = new PIXI.Text(playerData.name || `Player ${playerData.id}`, {
@@ -486,8 +641,8 @@ class GameEngine {
         });
         nameLabel.anchor.set(0.5);
         
-        // Position name label above health bar
-        nameLabel.position.set(isoPos.x, isoPos.y - 50);
+        // Position name label below health bar
+        nameLabel.position.set(isoPos.x, isoPos.y - 25);
         
         // Store reference to name label on sprite for easy access
         sprite.nameLabel = nameLabel;
@@ -519,15 +674,13 @@ class GameEngine {
 
         // Update name label position (doesn't rotate with player)
         if (sprite.nameLabel) {
-            sprite.nameLabel.position.set(isoPos.x, isoPos.y - 50);
+            sprite.nameLabel.position.set(isoPos.x, isoPos.y - 25);
             sprite.nameLabel.visible = playerData.active;
         }
 
-        // Update health bar position (doesn't rotate with player)
+        // Update health bar
         if (sprite.healthBar) {
-            sprite.healthBar.position.set(isoPos.x, isoPos.y - 35);
-            sprite.healthBar.visible = playerData.active;
-            this.updateHealthBar(sprite.healthBar, playerData.health);
+            this.updateHealthBar(sprite.healthBar, playerData);
         }
 
         sprite.playerData = playerData;
@@ -553,6 +706,69 @@ class GameEngine {
         }
     }
     
+    /**
+     * Create health bar for a player.
+     */
+    createHealthBar(playerData) {
+        const healthBarContainer = new PIXI.Container();
+        
+        // Health bar background
+        const healthBg = new PIXI.Graphics();
+        healthBg.beginFill(0x333333);
+        healthBg.drawRoundedRect(-25, 0, 50, 6, 2);
+        healthBg.endFill();
+        healthBarContainer.addChild(healthBg);
+        
+        // Health bar fill
+        const healthFill = new PIXI.Graphics();
+        healthFill.beginFill(0x2ecc71);
+        healthFill.drawRoundedRect(-25, 0, 50, 6, 2);
+        healthFill.endFill();
+        healthBarContainer.addChild(healthFill);
+        
+        // Store references for updates
+        healthBarContainer.healthBg = healthBg;
+        healthBarContainer.healthFill = healthFill;
+        
+        // Position above player (will be updated in updatePlayer)
+        const isoPos = this.worldToIsometric(playerData.x, playerData.y);
+        healthBarContainer.position.set(isoPos.x, isoPos.y - 35);
+        
+        // Add to name container so it doesn't rotate with player
+        this.nameContainer.addChild(healthBarContainer);
+        
+        return healthBarContainer;
+    }
+    
+    /**
+     * Update health bar appearance and position.
+     */
+    updateHealthBar(healthBarContainer, playerData) {
+        if (!healthBarContainer || !healthBarContainer.healthFill) return;
+        
+        // Update position above player
+        const isoPos = this.worldToIsometric(playerData.x, playerData.y);
+        healthBarContainer.position.set(isoPos.x, isoPos.y - 35);
+        healthBarContainer.visible = playerData.active;
+        
+        // Update health bar fill
+        const healthPercent = Math.max(0, Math.min(100, playerData.health)) / 100;
+        
+        healthBarContainer.healthFill.clear();
+        
+        // Color based on health level
+        let healthColor = 0x2ecc71; // Green
+        if (healthPercent < 0.3) {
+            healthColor = 0xe74c3c; // Red
+        } else if (healthPercent < 0.6) {
+            healthColor = 0xf39c12; // Orange
+        }
+        
+        healthBarContainer.healthFill.beginFill(healthColor);
+        healthBarContainer.healthFill.drawRoundedRect(-25, 0, 50 * healthPercent, 6, 2);
+        healthBarContainer.healthFill.endFill();
+    }
+    
     createProjectile(projectileData) {
         const sprite = new PIXI.Sprite(this.projectileTexture);
         sprite.anchor.set(0.5);
@@ -560,12 +776,90 @@ class GameEngine {
         const isoPos = this.worldToIsometric(projectileData.x, projectileData.y);
         sprite.position.set(isoPos.x, isoPos.y);
         
+        // Customize projectile appearance based on ordinance type
+        this.customizeProjectileAppearance(sprite, projectileData);
+        
         // Set projectile z-index above players
         sprite.zIndex = 15;
         
         sprite.projectileData = projectileData;
         this.projectiles.set(projectileData.id, sprite);
         this.gameContainer.addChild(sprite);
+    }
+    
+    /**
+     * Customize projectile appearance based on ordinance type and effects
+     */
+    customizeProjectileAppearance(sprite, projectileData) {
+        const ordinance = projectileData.ordinance || 'BULLET';
+        const effects = projectileData.bulletEffects || [];
+        
+        // Set size based on ordinance
+        switch (ordinance) {
+            case 'ROCKET':
+                sprite.scale.set(2.0);
+                sprite.tint = 0xff4444; // Red for rockets
+                break;
+            case 'GRENADE':
+                sprite.scale.set(1.5);
+                sprite.tint = 0x44aa44; // Green for grenades
+                break;
+            case 'PLASMA':
+                sprite.scale.set(1.2);
+                sprite.tint = 0x4444ff; // Blue for plasma
+                break;
+            case 'LASER':
+                sprite.scale.set(0.8);
+                sprite.tint = 0xff44ff; // Magenta for laser
+                break;
+            case 'CANNONBALL':
+                sprite.scale.set(3.0);
+                sprite.tint = 0x444444; // Dark gray for cannonball
+                break;
+            case 'DART':
+                sprite.scale.set(0.5);
+                sprite.tint = 0xffaa44; // Orange for darts
+                break;
+            case 'FLAMETHROWER':
+                sprite.scale.set(1.8);
+                sprite.tint = 0xff8844; // Fire orange
+                break;
+            case 'BULLET':
+            default:
+                sprite.scale.set(1.0);
+                sprite.tint = 0xf39c12; // Default bullet color
+                break;
+        }
+        
+        // Add visual effects for special bullet effects
+        if (effects.includes('HOMING')) {
+            // Add a subtle glow for homing projectiles
+            const glow = new PIXI.Graphics();
+            glow.beginFill(0xffffff, 0.3);
+            glow.drawCircle(0, 0, 8);
+            glow.endFill();
+            sprite.addChild(glow);
+        }
+        
+        if (effects.includes('ELECTRIC')) {
+            // Add electric sparks
+            sprite.tint = this.blendColors(sprite.tint, 0x88aaff, 0.5);
+        }
+        
+        if (effects.includes('INCENDIARY')) {
+            // Add fire tint
+            sprite.tint = this.blendColors(sprite.tint, 0xff4444, 0.3);
+        }
+        
+        if (effects.includes('FREEZING')) {
+            // Add ice tint
+            sprite.tint = this.blendColors(sprite.tint, 0x88ccff, 0.3);
+        }
+        
+        if (effects.includes('PIERCING')) {
+            // Make piercing projectiles slightly transparent
+            sprite.alpha = 0.8;
+        }
     }
     
     updateProjectile(projectileData) {
@@ -651,71 +945,538 @@ class GameEngine {
         }
     }
     
-    createHealthBar() {
-        const container = new PIXI.Container();
-        container.isHealthBar = true;
+    /**
+     * Create a field effect (explosion, fire, electric, etc.)
+     */
+    createFieldEffect(effectData) {
+        const effectContainer = new PIXI.Container();
+        const isoPos = this.worldToIsometric(effectData.x, effectData.y);
+        effectContainer.position.set(isoPos.x, isoPos.y);
         
-        const bg = new PIXI.Graphics();
-        bg.beginFill(0x000000, 0.5);
-        bg.drawRect(-20, -35, 40, 6);
-        bg.endFill();
+        // Set z-index above players but below UI
+        effectContainer.zIndex = 20;
         
-        const fill = new PIXI.Graphics();
-        fill.beginFill(0x2ecc71);
-        fill.drawRect(-20, -35, 40, 6);
-        fill.endFill();
+        // Create the main effect visual based on type
+        const effectGraphics = this.createEffectGraphics(effectData);
+        effectContainer.addChild(effectGraphics);
         
-        container.addChild(bg);
-        container.addChild(fill);
-        container.healthFill = fill;
+        // Add animated elements for certain effects
+        this.addEffectAnimation(effectContainer, effectData);
         
-        return container;
+        // Store effect data and add to containers
+        effectContainer.effectData = effectData;
+        effectContainer.effectGraphics = effectGraphics;
+        this.fieldEffects.set(effectData.id, effectContainer);
+        this.gameContainer.addChild(effectContainer);
+        
+        // Enable sorting for proper z-index handling
+        this.gameContainer.sortableChildren = true;
     }
     
-    updateHealthBar(healthBar, health) {
-        const healthPercent = Math.max(0, Math.min(1, health / 100));
-        const healthFill = healthBar.healthFill;
+    /**
+     * Update a field effect (mainly for animation and fade-out)
+     */
+    updateFieldEffect(effectData) {
+        const effectContainer = this.fieldEffects.get(effectData.id);
+        if (!effectContainer) return;
         
-        healthFill.clear();
+        // Update position (in case effect moves)
+        const isoPos = this.worldToIsometric(effectData.x, effectData.y);
+        effectContainer.position.set(isoPos.x, isoPos.y);
         
-        let color = 0x2ecc71;
-        if (healthPercent < 0.3) color = 0xe74c3c;
-        else if (healthPercent < 0.6) color = 0xf39c12;
+        // Update visual based on effect progress/intensity
+        this.updateEffectVisual(effectContainer, effectData);
         
-        healthFill.beginFill(color);
-        healthFill.drawRect(-20, -35, 40 * healthPercent, 6);
-        healthFill.endFill();
+        effectContainer.effectData = effectData;
     }
+    
+    /**
+     * Remove a field effect
+     */
+    removeFieldEffect(effectId) {
+        const effectContainer = this.fieldEffects.get(effectId);
+        if (effectContainer) {
+            // Add fade-out animation before removal
+            this.fadeOutEffect(effectContainer, () => {
+                this.gameContainer.removeChild(effectContainer);
+                this.fieldEffects.delete(effectId);
+            });
+        }
+    }
+    
+    /**
+     * Create the main graphics for a field effect based on its type
+     */
+    createEffectGraphics(effectData) {
+        const graphics = new PIXI.Graphics();
+        const radius = effectData.radius || 50;
+        
+        switch (effectData.type) {
+            case 'EXPLOSION':
+                return this.createExplosionGraphics(graphics, radius, effectData);
+            case 'FIRE':
+                return this.createFireGraphics(graphics, radius, effectData);
+            case 'ELECTRIC':
+                return this.createElectricGraphics(graphics, radius, effectData);
+            case 'FREEZE':
+                return this.createFreezeGraphics(graphics, radius, effectData);
+            case 'FRAGMENTATION':
+                return this.createFragmentationGraphics(graphics, radius, effectData);
+            case 'POISON':
+                return this.createPoisonGraphics(graphics, radius, effectData);
+            default:
+                return this.createGenericEffectGraphics(graphics, radius, effectData);
+        }
+    }
+    
+    /**
+     * Create explosion effect graphics
+     */
+    createExplosionGraphics(graphics, radius, effectData) {
+        // Outer blast ring
+        graphics.beginFill(0xff4444, 0.6);
+        graphics.drawCircle(0, 0, radius);
+        graphics.endFill();
+        
+        // Inner core
+        graphics.beginFill(0xffaa44, 0.8);
+        graphics.drawCircle(0, 0, radius * 0.6);
+        graphics.endFill();
+        
+        // Bright center
+        graphics.beginFill(0xffffff, 0.9);
+        graphics.drawCircle(0, 0, radius * 0.3);
+        graphics.endFill();
+        
+        return graphics;
+    }
+    
+    /**
+     * Create fire effect graphics
+     */
+    createFireGraphics(graphics, radius, effectData) {
+        // Base fire area
+        graphics.beginFill(0xff4444, 0.4);
+        graphics.drawCircle(0, 0, radius);
+        graphics.endFill();
+        
+        // Inner flames
+        graphics.beginFill(0xff8844, 0.6);
+        graphics.drawCircle(0, 0, radius * 0.7);
+        graphics.endFill();
+        
+        // Hot center
+        graphics.beginFill(0xffaa44, 0.8);
+        graphics.drawCircle(0, 0, radius * 0.4);
+        graphics.endFill();
+        
+        // Add flame particles
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const distance = radius * (0.6 + Math.random() * 0.4);
+            const x = Math.cos(angle) * distance;
+            const y = Math.sin(angle) * distance;
+            const size = 3 + Math.random() * 5;
+            
+            graphics.beginFill(0xff6644, 0.7);
+            graphics.drawCircle(x, y, size);
+            graphics.endFill();
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create electric effect graphics
+     */
+    createElectricGraphics(graphics, radius, effectData) {
+        // Electric field base
+        graphics.beginFill(0x4444ff, 0.3);
+        graphics.drawCircle(0, 0, radius);
+        graphics.endFill();
+        
+        // Electric arcs
+        graphics.lineStyle(2, 0x88aaff, 0.8);
+        
+        for (let i = 0; i < 6; i++) {
+            const startAngle = (i / 6) * Math.PI * 2;
+            const endAngle = startAngle + (Math.random() - 0.5) * Math.PI;
+            
+            const startX = Math.cos(startAngle) * radius * 0.2;
+            const startY = Math.sin(startAngle) * radius * 0.2;
+            const endX = Math.cos(endAngle) * radius * 0.9;
+            const endY = Math.sin(endAngle) * radius * 0.9;
+            
+            // Draw zigzag lightning
+            graphics.moveTo(startX, startY);
+            
+            const steps = 5;
+            for (let j = 1; j <= steps; j++) {
+                const t = j / steps;
+                const x = startX + (endX - startX) * t + (Math.random() - 0.5) * 10;
+                const y = startY + (endY - startY) * t + (Math.random() - 0.5) * 10;
+                graphics.lineTo(x, y);
+            }
+        }
+        
+        // Bright electric center
+        graphics.beginFill(0xaaffff, 0.9);
+        graphics.drawCircle(0, 0, radius * 0.2);
+        graphics.endFill();
+        
+        return graphics;
+    }
+    
+    /**
+     * Create freeze effect graphics
+     */
+    createFreezeGraphics(graphics, radius, effectData) {
+        // Freeze field base
+        graphics.beginFill(0x88ccff, 0.4);
+        graphics.drawCircle(0, 0, radius);
+        graphics.endFill();
+        
+        // Ice crystals
+        graphics.lineStyle(2, 0xaaffff, 0.8);
+        
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const length = radius * (0.6 + Math.random() * 0.3);
+            
+            // Main crystal line
+            graphics.moveTo(0, 0);
+            graphics.lineTo(Math.cos(angle) * length, Math.sin(angle) * length);
+            
+            // Crystal branches
+            const branchLength = length * 0.3;
+            const branchX = Math.cos(angle) * length * 0.7;
+            const branchY = Math.sin(angle) * length * 0.7;
+            
+            graphics.moveTo(branchX, branchY);
+            graphics.lineTo(
+                branchX + Math.cos(angle + Math.PI/4) * branchLength,
+                branchY + Math.sin(angle + Math.PI/4) * branchLength
+            );
+            
+            graphics.moveTo(branchX, branchY);
+            graphics.lineTo(
+                branchX + Math.cos(angle - Math.PI/4) * branchLength,
+                branchY + Math.sin(angle - Math.PI/4) * branchLength
+            );
+        }
+        
+        // Frozen center
+        graphics.beginFill(0xffffff, 0.7);
+        graphics.drawCircle(0, 0, radius * 0.2);
+        graphics.endFill();
+        
+        return graphics;
+    }
+    
+    /**
+     * Create fragmentation effect graphics
+     */
+    createFragmentationGraphics(graphics, radius, effectData) {
+        // Fragmentation burst
+        graphics.beginFill(0xffaa44, 0.5);
+        graphics.drawCircle(0, 0, radius);
+        graphics.endFill();
+        
+        // Fragment trails
+        graphics.lineStyle(2, 0xff8844, 0.7);
+        
+        for (let i = 0; i < 12; i++) {
+            const angle = (i / 12) * Math.PI * 2 + Math.random() * 0.2;
+            const length = radius * (0.8 + Math.random() * 0.4);
+            
+            graphics.moveTo(0, 0);
+            graphics.lineTo(Math.cos(angle) * length, Math.sin(angle) * length);
+            
+            // Fragment at end of trail
+            graphics.beginFill(0xffcc44, 0.8);
+            graphics.drawCircle(Math.cos(angle) * length, Math.sin(angle) * length, 2);
+            graphics.endFill();
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create poison effect graphics
+     */
+    createPoisonGraphics(graphics, radius, effectData) {
+        // Poison cloud base
+        graphics.beginFill(0x44aa44, 0.4);
+        graphics.drawCircle(0, 0, radius);
+        graphics.endFill();
+        
+        // Toxic bubbles
+        for (let i = 0; i < 10; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.random() * radius * 0.8;
+            const x = Math.cos(angle) * distance;
+            const y = Math.sin(angle) * distance;
+            const size = 2 + Math.random() * 4;
+            
+            graphics.beginFill(0x66cc66, 0.6);
+            graphics.drawCircle(x, y, size);
+            graphics.endFill();
+        }
+        
+        // Poison center
+        graphics.beginFill(0x88ff88, 0.8);
+        graphics.drawCircle(0, 0, radius * 0.3);
+        graphics.endFill();
+        
+        return graphics;
+    }
+    
+    /**
+     * Create generic effect graphics
+     */
+    createGenericEffectGraphics(graphics, radius, effectData) {
+        graphics.beginFill(0x888888, 0.5);
+        graphics.drawCircle(0, 0, radius);
+        graphics.endFill();
+        
+        graphics.beginFill(0xcccccc, 0.7);
+        graphics.drawCircle(0, 0, radius * 0.5);
+        graphics.endFill();
+        
+        return graphics;
+    }
+    
+    /**
+     * Add animation to field effects
+     */
+    addEffectAnimation(container, effectData) {
+        const animationSpeed = this.getEffectAnimationSpeed(effectData.type);
+        
+        // Store animation properties
+        container.animationTime = 0;
+        container.animationSpeed = animationSpeed;
+        container.originalScale = container.scale.x;
+        
+        // Add to ticker for animation updates
+        this.app.ticker.add(() => this.animateEffect(container));
+    }
+    
+    /**
+     * Animate field effects
+     */
+    animateEffect(container) {
+        if (!container.effectData || !container.parent) {
+            // Effect has been removed, stop animating
+            this.app.ticker.remove(() => this.animateEffect(container));
+            return;
+        }
+        
+        container.animationTime += container.animationSpeed;
+        const effectData = container.effectData;
+        
+        switch (effectData.type) {
+            case 'EXPLOSION':
+                this.animateExplosion(container);
+                break;
+            case 'FIRE':
+                this.animateFire(container);
+                break;
+            case 'ELECTRIC':
+                this.animateElectric(container);
+                break;
+            case 'FREEZE':
+                this.animateFreeze(container);
+                break;
+            case 'FRAGMENTATION':
+                this.animateFragmentation(container);
+                break;
+            case 'POISON':
+                this.animatePoison(container);
+                break;
+        }
+    }
+    
+    /**
+     * Animate explosion effects
+     */
+    animateExplosion(container) {
+        const time = container.animationTime;
+        const progress = container.effectData.progress || 0;
+        
+        // Rapid expansion in first 0.1 seconds, then shrink slightly
+        let scale;
+        if (time < 0.1) {
+            scale = 0.3 + (time / 0.1) * 1.2; // Expand from 0.3 to 1.5
+        } else {
+            scale = 1.5 - progress * 0.3; // Shrink based on server progress
+        }
+        container.scale.set(Math.max(0.1, scale));
+        
+        // Quick fade out after initial flash
+        if (time < 0.05) {
+            container.alpha = 1.0; // Full brightness for first 0.05 seconds
+        } else {
+            container.alpha = Math.max(0, 1.0 - progress); // Fade based on server progress
+        }
+        
+        // Slight rotation for dynamic feel
+        container.rotation = time * 2.0;
+    }
+    
+    /**
+     * Animate fire effects
+     */
+    animateFire(container) {
+        const time = container.animationTime;
+        
+        // Flickering effect
+        const flicker = 0.8 + Math.sin(time * 15) * 0.2;
+        container.alpha = flicker;
+        
+        // Slight scale variation
+        const scale = 0.9 + Math.sin(time * 8) * 0.1;
+        container.scale.set(scale);
+        
+        // Subtle rotation
+        container.rotation = Math.sin(time * 3) * 0.1;
+    }
+    
+    /**
+     * Animate electric effects
+     */
+    animateElectric(container) {
+        const time = container.animationTime;
+        
+        // Rapid flickering
+        const flicker = Math.random() > 0.3 ? 1.0 : 0.6;
+        container.alpha = flicker;
+        
+        // Electrical pulsing
+        const pulse = 0.9 + Math.sin(time * 20) * 0.1;
+        container.scale.set(pulse);
+        
+        // Random rotation for chaotic effect
+        if (Math.random() > 0.9) {
+            container.rotation = Math.random() * Math.PI * 2;
+        }
+    }
+    
+    /**
+     * Animate freeze effects
+     */
+    animateFreeze(container) {
+        const time = container.animationTime;
+        
+        // Slow, steady pulse
+        const pulse = 0.95 + Math.sin(time * 5) * 0.05;
+        container.scale.set(pulse);
+        
+        // Gradual rotation
+        container.rotation = time * 0.2;
+        
+        // Stable alpha
+        container.alpha = 0.8;
+    }
+    
+    /**
+     * Animate fragmentation effects
+     */
+    animateFragmentation(container) {
+        const time = container.animationTime;
+        const progress = container.effectData.progress || 0;
+        
+        // Rapid expansion throughout the effect
+        const scale = 0.3 + progress * 1.2;
+        container.scale.set(scale);
+        
+        // Quick fade after brief visibility
+        if (time < 0.05) {
+            container.alpha = 1.0; // Full brightness briefly
+        } else {
+            container.alpha = Math.max(0, 1.0 - progress); // Fade based on server progress
+        }
+        
+        // Fast spinning fragments
+        container.rotation = time * 8;
+    }
+    
+    /**
+     * Animate poison effects
+     */
+    animatePoison(container) {
+        const time = container.animationTime;
+        
+        // Slow bubbling effect
+        const bubble = 0.9 + Math.sin(time * 6) * 0.1;
+        container.scale.set(bubble);
+        
+        // Gentle swaying
+        container.rotation = Math.sin(time * 2) * 0.05;
+        
+        // Consistent alpha with slight variation
+        container.alpha = 0.7 + Math.sin(time * 4) * 0.1;
+    }
+    
+    /**
+     * Get animation speed for different effect types
+     */
+    getEffectAnimationSpeed(effectType) {
+        switch (effectType) {
+            case 'EXPLOSION':
+            case 'FRAGMENTATION':
+                return 0.3; // Fast animation
+            case 'ELECTRIC':
+                return 0.2; // Very fast animation
+            case 'FIRE':
+            case 'POISON':
+                return 0.1; // Medium animation
+            case 'FREEZE':
+                return 0.05; // Slow animation
+            default:
+                return 0.1;
+        }
+    }
+    
+    /**
+     * Update effect visual based on current state
+     */
+    updateEffectVisual(container, effectData) {
+        const progress = effectData.progress || 0;
+        const intensity = effectData.intensity || 1.0;
+        
+        // All effects now use server progress since server handles proper timing
+        // The animation methods will override alpha as needed for visual polish
+        if (effectData.type === 'EXPLOSION' || effectData.type === 'FRAGMENTATION') {
+            // Let animation handle these for visual polish, but server controls lifetime
+        } else {
+            // Duration effects use server progress
+            container.alpha = Math.max(0.3, intensity * (1.0 - progress * 0.5));
+        }
+    }
+    
+    /**
+     * Fade out effect before removal
+     */
+    fadeOutEffect(container, callback) {
+        const fadeSpeed = 0.05;
+        const fadeOut = () => {
+            container.alpha -= fadeSpeed;
+            if (container.alpha <= 0) {
+                this.app.ticker.remove(fadeOut);
+                callback();
+            }
+        };
+        this.app.ticker.add(fadeOut);
+    }
+    
+    // Health bar methods removed - health now shown in consolidated HUD
     
     updateUI(gameState) {
         const myPlayer = gameState.players?.find(p => p.id === this.myPlayerId);
         if (!myPlayer) return;
         
-        const healthFill = document.getElementById('health-fill');
-        const healthText = document.getElementById('health-text');
-        if (healthFill && healthText) {
-            const healthPercent = Math.max(0, myPlayer.health);
-            healthFill.style.width = `${healthPercent}%`;
-            healthText.textContent = Math.round(healthPercent);
-        }
-        
-        const weaponName = document.getElementById('weapon-name');
-        const ammoCurrent = document.getElementById('ammo-current');
-        const ammoMax = document.getElementById('ammo-max');
-        const reloadIndicator = document.getElementById('reload-indicator');
-        
-        if (weaponName) {
-            weaponName.textContent = myPlayer.weapon === 0 ? 'Primary' : 'Secondary';
-        }
-        
-        if (ammoCurrent && ammoMax) {
-            ammoCurrent.textContent = myPlayer.ammo || 0;
-            ammoMax.textContent = 30;
-        }
-        
-        if (reloadIndicator) {
-            reloadIndicator.style.display = myPlayer.reloading ? 'block' : 'none';
-        }
+        // Update consolidated HUD
+        this.updateConsolidatedHUD(myPlayer);
         
         if (!myPlayer.active && myPlayer.respawnTime > 0) {
             this.showRespawnTimer(myPlayer.respawnTime);
@@ -724,6 +1485,42 @@ class GameEngine {
         }
         
         this.updateScoreboard(gameState.players);
+    }
+    
+    /**
+     * Update the consolidated HUD with player information.
+     */
+    updateConsolidatedHUD(myPlayer) {
+        if (!this.hudContainer) return;
+        
+        // Update weapon info
+        if (this.hudWeaponText) {
+            this.hudWeaponText.text = myPlayer.weapon === 0 ? 'Primary' : 'Secondary';
+        }
+        
+        // Update ammo info
+        if (this.hudAmmoText) {
+            const currentAmmo = myPlayer.ammo || 0;
+            const maxAmmo = 30; // Could be dynamic based on weapon
+            this.hudAmmoText.text = `${currentAmmo}/${maxAmmo}`;
+        }
+        
+        // Update reload indicator
+        if (this.hudReloadText) {
+            this.hudReloadText.visible = myPlayer.reloading || false;
+        }
+        
+        // Update team info
+        if (this.hudTeamText) {
+            const teamNumber = myPlayer.team || 0;
+            if (teamNumber === 0) {
+                this.hudTeamText.text = 'FFA';
+                this.hudTeamText.style.fill = 0x808080; // Gray for FFA
+            } else {
+                this.hudTeamText.text = teamNumber.toString();
+                this.hudTeamText.style.fill = this.getTeamColor(teamNumber); // Team color
+            }
+        }
     }
     
     updateScoreboard(players) {
@@ -817,30 +1614,39 @@ class GameEngine {
     }
     
     updateMinimap() {
-        const canvas = document.getElementById('minimap-canvas');
-        if (!canvas) return;
+        if (!this.hudMinimap) return;
         
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Clear previous minimap content (keep background and title)
+        if (this.minimapContent) {
+            this.hudMinimap.removeChild(this.minimapContent);
+        }
         
-        ctx.strokeStyle = '#555';
-        ctx.strokeRect(0, 0, canvas.width, canvas.height);
+        // Create new minimap content container
+        this.minimapContent = new PIXI.Container();
+        this.minimapContent.position.set(2, 16); // Below title, within border
         
-        const scaleX = canvas.width / this.worldBounds.width;
-        const scaleY = canvas.height / this.worldBounds.height;
+        const mapWidth = 116; // Available width within minimap
+        const mapHeight = 100; // Available height within minimap
         
+        const scaleX = mapWidth / this.worldBounds.width;
+        const scaleY = mapHeight / this.worldBounds.height;
+        
+        // Draw strategic locations
         this.strategicLocations.forEach(location => {
             const data = location.locationData;
             const x = (data.x + this.worldBounds.width / 2) * scaleX;
             const y = ((-data.y) + this.worldBounds.height / 2) * scaleY; // Invert Y for minimap
             
-            ctx.fillStyle = data.controllingPlayer === this.myPlayerId ? '#2ecc71' : 
-                           data.controllingPlayer ? '#e74c3c' : '#8e44ad';
-            ctx.beginPath();
-            ctx.arc(x, y, 8, 0, Math.PI * 2);
-            ctx.fill();
+            const locationDot = new PIXI.Graphics();
+            locationDot.beginFill(data.controllingPlayer === this.myPlayerId ? 0x2ecc71 : 
+                                 data.controllingPlayer ? 0xe74c3c : 0x8e44ad);
+            locationDot.drawCircle(x, y, 3);
+            locationDot.endFill();
+            
+            this.minimapContent.addChild(locationDot);
         });
         
+        // Draw players
         this.players.forEach(player => {
             const data = player.playerData;
             if (!data.active) return;
@@ -848,23 +1654,27 @@ class GameEngine {
             const x = (data.x + this.worldBounds.width / 2) * scaleX;
             const y = ((-data.y) + this.worldBounds.height / 2) * scaleY; // Invert Y for minimap
             
-            // Use team colors on minimap
-            ctx.fillStyle = this.getTeamColorCSS(data.team || 0);
+            const playerDot = new PIXI.Graphics();
+            
+            // Use team colors
+            const teamColor = this.getTeamColor(data.team || 0);
+            playerDot.beginFill(teamColor);
             
             // Make current player slightly larger
-            const radius = data.id === this.myPlayerId ? 4 : 3;
+            const radius = data.id === this.myPlayerId ? 2.5 : 1.5;
+            playerDot.drawCircle(x, y, radius);
+            playerDot.endFill();
             
-            ctx.beginPath();
-            ctx.arc(x, y, radius, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Add a white border for current player
+            // Add white border for current player
             if (data.id === this.myPlayerId) {
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 1;
-                ctx.stroke();
+                playerDot.lineStyle(1, 0xffffff);
+                playerDot.drawCircle(x, y, radius);
             }
+            
+            this.minimapContent.addChild(playerDot);
         });
+        
+        this.hudMinimap.addChild(this.minimapContent);
     }
     
     showCaptureProgress(locationData) {
@@ -928,25 +1738,53 @@ class GameEngine {
     
     sendPlayerConfiguration() {
         const params = new URLSearchParams(window.location.search);
-        const playerName = params.get('playerName') || `Player${Math.floor(Math.random() * 1000)}`;
-        const primaryWeaponType = params.get('primaryWeapon') || 'assault';
-        const secondaryWeaponType = params.get('secondaryWeapon') || 'pistol';
+        
+        // Try to decode Base64 encoded config first
+        let playerConfig = null;
+        const encodedConfig = params.get('config');
+        
+        if (encodedConfig) {
+            try {
+                const decodedString = decodeURIComponent(escape(atob(encodedConfig)));
+                playerConfig = JSON.parse(decodedString);
+                console.log('Decoded player config:', playerConfig);
+            } catch (error) {
+                console.error('Failed to decode player config:', error);
+                playerConfig = null;
+            }
+        }
+        
+        // Use decoded config or fall back to legacy URL params
+        let playerName, weaponConfig;
+        
+        if (playerConfig && playerConfig.playerName && playerConfig.weaponConfig) {
+            playerName = playerConfig.playerName;
+            weaponConfig = playerConfig.weaponConfig;
+            console.log('Using custom weapon config:', weaponConfig);
+        } else {
+            // Legacy fallback for old URL format
+            playerName = params.get('playerName') || `Player${Math.floor(Math.random() * 1000)}`;
+            const primaryWeaponType = params.get('primaryWeapon') || 'assault';
+            const secondaryWeaponType = params.get('secondaryWeapon') || 'pistol';
 
-        const weaponPresets = {
-            assault: { type: 'Assault Rifle', damage: 25, fireRate: 8, range: 300, accuracy: 0.9, magazineSize: 30, reloadTime: 2.0, projectileSpeed: 800 },
-            sniper: { type: 'Sniper Rifle', damage: 80, fireRate: 1.5, range: 600, accuracy: 0.99, magazineSize: 5, reloadTime: 3.0, projectileSpeed: 1200 },
-            shotgun: { type: 'Shotgun', damage: 60, fireRate: 2, range: 150, accuracy: 0.7, magazineSize: 8, reloadTime: 2.5, projectileSpeed: 400 },
-            smg: { type: 'SMG', damage: 18, fireRate: 12, range: 200, accuracy: 0.8, magazineSize: 40, reloadTime: 1.5, projectileSpeed: 600 },
-            pistol: { type: 'Pistol', damage: 35, fireRate: 4, range: 200, accuracy: 0.95, magazineSize: 12, reloadTime: 1.5, projectileSpeed: 600 },
-            magnum: { type: 'Magnum', damage: 65, fireRate: 2, range: 250, accuracy: 0.98, magazineSize: 6, reloadTime: 2.0, projectileSpeed: 800 },
-            'auto-pistol': { type: 'Auto Pistol', damage: 22, fireRate: 8, range: 180, accuracy: 0.85, magazineSize: 20, reloadTime: 1.8, projectileSpeed: 650 }
-        };
+            const weaponPresets = {
+                assault: { type: 'Assault Rifle', damage: 25, fireRate: 8, range: 300, accuracy: 0.9, magazineSize: 30, reloadTime: 2.0, projectileSpeed: 800 },
+                sniper: { type: 'Sniper Rifle', damage: 80, fireRate: 1.5, range: 600, accuracy: 0.99, magazineSize: 5, reloadTime: 3.0, projectileSpeed: 1200 },
+                shotgun: { type: 'Shotgun', damage: 60, fireRate: 2, range: 150, accuracy: 0.7, magazineSize: 8, reloadTime: 2.5, projectileSpeed: 400 },
+                smg: { type: 'SMG', damage: 18, fireRate: 12, range: 200, accuracy: 0.8, magazineSize: 40, reloadTime: 1.5, projectileSpeed: 600 },
+                pistol: { type: 'Pistol', damage: 35, fireRate: 4, range: 200, accuracy: 0.95, magazineSize: 12, reloadTime: 1.5, projectileSpeed: 600 },
+                magnum: { type: 'Magnum', damage: 65, fireRate: 2, range: 250, accuracy: 0.98, magazineSize: 6, reloadTime: 2.0, projectileSpeed: 800 },
+                'auto-pistol': { type: 'Auto Pistol', damage: 22, fireRate: 8, range: 180, accuracy: 0.85, magazineSize: 20, reloadTime: 1.8, projectileSpeed: 650 }
+            };
+            
+            weaponConfig = weaponPresets[primaryWeaponType];
+            console.log('Using legacy weapon config:', weaponConfig);
+        }
 
         const message = {
             type: 'configChange',
             playerName: playerName,
-            primaryWeapon: weaponPresets[primaryWeaponType],
-            secondaryWeapon: weaponPresets[secondaryWeaponType]
+            weaponConfig: weaponConfig
         };
 
         this.websocket.send(JSON.stringify(message));
@@ -1053,6 +1891,479 @@ class GameEngine {
             
             this.backgroundContainer.addChild(graphics);
         });
+    }
+    
+    /**
+     * Create procedural terrain background and features.
+     */
+    createProceduralTerrain() {
+        if (!this.terrainData || !this.terrainData.metadata) return;
+        
+        const metadata = this.terrainData.metadata;
+        const features = this.terrainData.features || [];
+        const compoundObstacles = this.terrainData.compoundObstacles || [];
+        
+        // Update background color based on terrain type
+        this.updateBackgroundForTerrain(metadata);
+        
+        // Create terrain features
+        features.forEach(feature => {
+            this.createTerrainFeature(feature);
+        });
+        
+        // Create compound obstacles (complex structures)
+        compoundObstacles.forEach(compound => {
+            this.createCompoundObstacle(compound);
+        });
+        
+        // Add atmospheric effects
+        this.createAtmosphericEffects(metadata);
+        
+        // Log terrain info
+        console.log(`Generated ${metadata.displayName} terrain with ${features.length} features and ${compoundObstacles.length} compound structures (seed: ${metadata.seed})`);
+    }
+    
+    /**
+     * Update background appearance based on terrain type.
+     */
+    updateBackgroundForTerrain(metadata) {
+        // Parse color strings to hex values
+        const primaryColor = parseInt(metadata.primaryColor.substring(1), 16);
+        const secondaryColor = parseInt(metadata.secondaryColor.substring(1), 16);
+        
+        // Update app background
+        this.app.renderer.backgroundColor = secondaryColor;
+        
+        // Create terrain-specific background pattern
+        this.createTerrainBackground(primaryColor, secondaryColor, metadata.terrainType);
+    }
+    
+    /**
+     * Create terrain-specific background patterns.
+     */
+    createTerrainBackground(primaryColor, secondaryColor, terrainType) {
+        const graphics = new PIXI.Graphics();
+        
+        switch (terrainType) {
+            case 'FOREST':
+                this.createForestBackground(graphics, primaryColor, secondaryColor);
+                break;
+            case 'DESERT':
+                this.createDesertBackground(graphics, primaryColor, secondaryColor);
+                break;
+            case 'URBAN':
+                this.createUrbanBackground(graphics, primaryColor, secondaryColor);
+                break;
+            case 'TUNDRA':
+                this.createTundraBackground(graphics, primaryColor, secondaryColor);
+                break;
+            case 'VOLCANIC':
+                this.createVolcanicBackground(graphics, primaryColor, secondaryColor);
+                break;
+            case 'GRASSLAND':
+                this.createGrasslandBackground(graphics, primaryColor, secondaryColor);
+                break;
+            default:
+                this.createGenericBackground(graphics, primaryColor, secondaryColor);
+                break;
+        }
+        
+        graphics.zIndex = -10; // Far background
+        this.backgroundContainer.addChild(graphics);
+    }
+    
+    createForestBackground(graphics, primary, secondary) {
+        // Create scattered patches of darker forest areas
+        for (let i = 0; i < 20; i++) {
+            const x = (Math.random() - 0.5) * this.worldBounds.width;
+            const y = (Math.random() - 0.5) * this.worldBounds.height;
+            const size = 50 + Math.random() * 100;
+            
+            graphics.beginFill(primary, 0.3);
+            graphics.drawCircle(x, y, size);
+            graphics.endFill();
+        }
+    }
+    
+    createDesertBackground(graphics, primary, secondary) {
+        // Create sand dune patterns
+        for (let i = 0; i < 15; i++) {
+            const x = (Math.random() - 0.5) * this.worldBounds.width;
+            const y = (Math.random() - 0.5) * this.worldBounds.height;
+            const width = 80 + Math.random() * 120;
+            const height = 30 + Math.random() * 40;
+            
+            graphics.beginFill(primary, 0.2);
+            graphics.drawEllipse(x, y, width, height);
+            graphics.endFill();
+        }
+    }
+    
+    createUrbanBackground(graphics, primary, secondary) {
+        // Create grid pattern for urban areas
+        graphics.lineStyle(1, primary, 0.2);
+        
+        for (let x = -this.worldBounds.width/2; x <= this.worldBounds.width/2; x += 150) {
+            graphics.moveTo(x, -this.worldBounds.height/2);
+            graphics.lineTo(x, this.worldBounds.height/2);
+        }
+        
+        for (let y = -this.worldBounds.height/2; y <= this.worldBounds.height/2; y += 150) {
+            graphics.moveTo(-this.worldBounds.width/2, y);
+            graphics.lineTo(this.worldBounds.width/2, y);
+        }
+    }
+    
+    createTundraBackground(graphics, primary, secondary) {
+        // Create ice formations
+        for (let i = 0; i < 12; i++) {
+            const x = (Math.random() - 0.5) * this.worldBounds.width;
+            const y = (Math.random() - 0.5) * this.worldBounds.height;
+            const size = 60 + Math.random() * 80;
+            
+            graphics.beginFill(0xffffff, 0.3);
+            graphics.drawCircle(x, y, size);
+            graphics.endFill();
+        }
+    }
+    
+    createVolcanicBackground(graphics, primary, secondary) {
+        // Create lava flow patterns
+        graphics.lineStyle(3, 0xff4444, 0.4);
+        
+        for (let i = 0; i < 8; i++) {
+            const startX = (Math.random() - 0.5) * this.worldBounds.width;
+            const startY = (Math.random() - 0.5) * this.worldBounds.height;
+            
+            graphics.moveTo(startX, startY);
+            
+            let x = startX;
+            let y = startY;
+            
+            for (let j = 0; j < 10; j++) {
+                x += (Math.random() - 0.5) * 100;
+                y += (Math.random() - 0.5) * 100;
+                graphics.lineTo(x, y);
+            }
+        }
+    }
+    
+    createGrasslandBackground(graphics, primary, secondary) {
+        // Create subtle grass patterns
+        for (let i = 0; i < 25; i++) {
+            const x = (Math.random() - 0.5) * this.worldBounds.width;
+            const y = (Math.random() - 0.5) * this.worldBounds.height;
+            const size = 20 + Math.random() * 30;
+            
+            graphics.beginFill(primary, 0.2);
+            graphics.drawCircle(x, y, size);
+            graphics.endFill();
+        }
+    }
+    
+    createGenericBackground(graphics, primary, secondary) {
+        // Simple scattered elements
+        for (let i = 0; i < 15; i++) {
+            const x = (Math.random() - 0.5) * this.worldBounds.width;
+            const y = (Math.random() - 0.5) * this.worldBounds.height;
+            const size = 30 + Math.random() * 50;
+            
+            graphics.beginFill(primary, 0.2);
+            graphics.drawCircle(x, y, size);
+            graphics.endFill();
+        }
+    }
+    
+    /**
+     * Create individual terrain features.
+     */
+    createTerrainFeature(feature) {
+        const graphics = new PIXI.Graphics();
+        const color = parseInt(feature.color.substring(1), 16);
+        const opacity = this.getFeatureOpacity(feature.type);
+        
+        graphics.beginFill(color, opacity);
+        
+        // Create different shapes based on feature type
+        switch (feature.type.toLowerCase()) {
+            case 'treecluster':
+                this.drawTreeCluster(graphics, feature);
+                break;
+            case 'building':
+                this.drawBuilding(graphics, feature);
+                break;
+            case 'rockmesa':
+            case 'lavarock':
+                this.drawRockFormation(graphics, feature);
+                break;
+            case 'sanddune':
+                this.drawSandDune(graphics, feature);
+                break;
+            default:
+                this.drawGenericFeature(graphics, feature);
+                break;
+        }
+        
+        graphics.endFill();
+        graphics.position.set(feature.x, -feature.y); // Invert Y for PIXI
+        graphics.zIndex = this.getFeatureZIndex(feature.type);
+        
+        this.backgroundContainer.addChild(graphics);
+    }
+    
+    drawTreeCluster(graphics, feature) {
+        // Draw multiple overlapping circles for tree cluster
+        for (let i = 0; i < 5; i++) {
+            const offsetX = (Math.random() - 0.5) * feature.size * 0.6;
+            const offsetY = (Math.random() - 0.5) * feature.size * 0.6;
+            const treeSize = feature.size * (0.3 + Math.random() * 0.4);
+            graphics.drawCircle(offsetX, offsetY, treeSize);
+        }
+    }
+    
+    drawBuilding(graphics, feature) {
+        // Draw rectangular building
+        const width = feature.size * 0.8;
+        const height = feature.size * 1.2;
+        graphics.drawRect(-width/2, -height/2, width, height);
+    }
+    
+    drawRockFormation(graphics, feature) {
+        // Draw irregular rock shape
+        const points = [];
+        const numPoints = 6 + Math.floor(Math.random() * 4);
+        
+        for (let i = 0; i < numPoints; i++) {
+            const angle = (i / numPoints) * Math.PI * 2;
+            const radius = feature.size * (0.7 + Math.random() * 0.3);
+            points.push(Math.cos(angle) * radius);
+            points.push(Math.sin(angle) * radius);
+        }
+        
+        graphics.drawPolygon(points);
+    }
+    
+    drawSandDune(graphics, feature) {
+        // Draw elliptical sand dune
+        graphics.drawEllipse(0, 0, feature.size, feature.size * 0.6);
+    }
+    
+    drawGenericFeature(graphics, feature) {
+        // Default circular feature
+        graphics.drawCircle(0, 0, feature.size);
+    }
+    
+    getFeatureOpacity(featureType) {
+        switch (featureType.toLowerCase()) {
+            case 'clearing':
+            case 'flowerpatch':
+                return 0.3;
+            case 'thickbrush':
+            case 'tallgrass':
+                return 0.6;
+            default:
+                return 0.8;
+        }
+    }
+    
+    getFeatureZIndex(featureType) {
+        switch (featureType.toLowerCase()) {
+            case 'building':
+                return -3;
+            case 'treecluster':
+            case 'rockmesa':
+                return -5;
+            case 'thickbrush':
+            case 'tallgrass':
+                return -7;
+            default:
+                return -8;
+        }
+    }
+    
+    /**
+     * Create a compound obstacle (complex multi-body structure).
+     */
+    createCompoundObstacle(compound) {
+        const obstacleContainer = new PIXI.Container();
+        obstacleContainer.x = compound.x;
+        obstacleContainer.y = compound.y;
+        obstacleContainer.zIndex = 1;
+        
+        // Get color scheme based on type and biome
+        const colorScheme = this.getCompoundObstacleColors(compound.type, compound.biome);
+        
+        // Render each body in the compound obstacle
+        compound.bodies.forEach((body, index) => {
+            const bodyGraphics = new PIXI.Graphics();
+            
+            // Choose color variation for this body
+            const colorIndex = index % colorScheme.length;
+            const color = colorScheme[colorIndex];
+            
+            bodyGraphics.beginFill(color, 0.8);
+            bodyGraphics.lineStyle(2, this.darkenColor(color), 1);
+            
+            if (body.shape === 'circle') {
+                bodyGraphics.drawCircle(body.x - compound.x, body.y - compound.y, body.width);
+            } else if (body.shape === 'rectangle') {
+                const x = body.x - compound.x - body.width / 2;
+                const y = body.y - compound.y - body.height / 2;
+                bodyGraphics.drawRect(x, y, body.width, body.height);
+            }
+            
+            bodyGraphics.endFill();
+            obstacleContainer.addChild(bodyGraphics);
+        });
+        
+        // Add a subtle shadow/depth effect
+        const shadow = new PIXI.Graphics();
+        shadow.beginFill(0x000000, 0.2);
+        shadow.drawRect(-compound.width/2 + 3, -compound.height/2 + 3, compound.width, compound.height);
+        shadow.endFill();
+        shadow.zIndex = -1;
+        obstacleContainer.addChild(shadow);
+        
+        // Add type-specific details
+        this.addCompoundObstacleDetails(obstacleContainer, compound);
+        
+        this.gameContainer.addChild(obstacleContainer);
+    }
+    
+    /**
+     * Get color scheme for compound obstacles based on type and biome.
+     */
+    getCompoundObstacleColors(type, biome) {
+        const baseColors = {
+            'building_complex': [0x8B4513, 0xA0522D, 0x8B7355, 0x696969],
+            'fortification': [0x708090, 0x778899, 0x2F4F4F, 0x696969],
+            'vehicle_wreck': [0x4A4A4A, 0x800000, 0x8B4513, 0x2F4F4F],
+            'rock_formation': [0x696969, 0x708090, 0x2F4F4F, 0x8B7D6B],
+            'industrial_complex': [0x4A4A4A, 0x8B4513, 0x800000, 0x2F4F4F],
+            'ruins': [0x8B7D6B, 0x696969, 0xA0522D, 0x2F4F4F]
+        };
+        
+        // Modify base colors based on biome
+        let colors = baseColors[type] || baseColors['rock_formation'];
+        
+        switch (biome) {
+            case 'DESERT':
+                colors = colors.map(c => this.blendColors(c, 0xD2B48C, 0.3));
+                break;
+            case 'FOREST':
+                colors = colors.map(c => this.blendColors(c, 0x228B22, 0.2));
+                break;
+            case 'TUNDRA':
+                colors = colors.map(c => this.blendColors(c, 0xF0F8FF, 0.3));
+                break;
+            case 'VOLCANIC':
+                colors = colors.map(c => this.blendColors(c, 0x8B0000, 0.2));
+                break;
+            case 'URBAN':
+                colors = colors.map(c => this.blendColors(c, 0x696969, 0.2));
+                break;
+        }
+        
+        return colors;
+    }
+    
+    /**
+     * Add type-specific visual details to compound obstacles.
+     */
+    addCompoundObstacleDetails(container, compound) {
+        const detailGraphics = new PIXI.Graphics();
+        
+        switch (compound.type) {
+            case 'building_complex':
+                // Add windows
+                detailGraphics.beginFill(0x87CEEB, 0.6);
+                for (let i = 0; i < 3; i++) {
+                    for (let j = 0; j < 2; j++) {
+                        detailGraphics.drawRect(-40 + i * 25, -20 + j * 20, 8, 12);
+                    }
+                }
+                detailGraphics.endFill();
+                break;
+                
+            case 'fortification':
+                // Add battlements
+                detailGraphics.lineStyle(2, 0x696969, 1);
+                detailGraphics.moveTo(-60, -60);
+                for (let i = 0; i < 6; i++) {
+                    detailGraphics.lineTo(-60 + i * 20, i % 2 === 0 ? -60 : -55);
+                }
+                break;
+                
+            case 'vehicle_wreck':
+                // Add scorch marks
+                detailGraphics.beginFill(0x2F2F2F, 0.5);
+                detailGraphics.drawCircle(10, 5, 15);
+                detailGraphics.drawCircle(-15, -10, 12);
+                detailGraphics.endFill();
+                break;
+                
+            case 'industrial_complex':
+                // Add pipes and vents
+                detailGraphics.lineStyle(4, 0x4A4A4A, 1);
+                detailGraphics.moveTo(-30, -25);
+                detailGraphics.lineTo(-30, 25);
+                detailGraphics.moveTo(30, -25);
+                detailGraphics.lineTo(30, 25);
+                break;
+                
+            case 'ruins':
+                // Add vegetation growing through cracks
+                detailGraphics.beginFill(0x228B22, 0.4);
+                for (let i = 0; i < 5; i++) {
+                    const x = (Math.random() - 0.5) * compound.width * 0.8;
+                    const y = (Math.random() - 0.5) * compound.height * 0.8;
+                    detailGraphics.drawCircle(x, y, 3 + Math.random() * 5);
+                }
+                detailGraphics.endFill();
+                break;
+        }
+        
+        container.addChild(detailGraphics);
+    }
+    
+    /**
+     * Blend two colors together.
+     */
+    blendColors(color1, color2, factor) {
+        const r1 = (color1 >> 16) & 0xFF;
+        const g1 = (color1 >> 8) & 0xFF;
+        const b1 = color1 & 0xFF;
+        
+        const r2 = (color2 >> 16) & 0xFF;
+        const g2 = (color2 >> 8) & 0xFF;
+        const b2 = color2 & 0xFF;
+        
+        const r = Math.round(r1 * (1 - factor) + r2 * factor);
+        const g = Math.round(g1 * (1 - factor) + g2 * factor);
+        const b = Math.round(b1 * (1 - factor) + b2 * factor);
+        
+        return (r << 16) | (g << 8) | b;
+    }
+    
+    /**
+     * Darken a color for outlines.
+     */
+    darkenColor(color) {
+        const r = Math.max(0, ((color >> 16) & 0xFF) - 40);
+        const g = Math.max(0, ((color >> 8) & 0xFF) - 40);
+        const b = Math.max(0, (color & 0xFF) - 40);
+        return (r << 16) | (g << 8) | b;
+    }
+    
+    /**
+     * Create atmospheric effects based on terrain.
+     */
+    createAtmosphericEffects(metadata) {
+        const particles = metadata.particles || {};
+        
+        // For now, just log the atmospheric data
+        // Future implementation could add particle systems
+        console.log(`Atmospheric effects: ${particles.type} particles, fog: ${metadata.fogDensity}, temp: ${metadata.temperature}°C`);
     }
 
     handleResize() {

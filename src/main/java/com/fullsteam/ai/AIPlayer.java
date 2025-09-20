@@ -1,8 +1,10 @@
 package com.fullsteam.ai;
 
+import com.fullsteam.model.PlayerInput;
 import com.fullsteam.physics.Player;
 import lombok.Getter;
 import lombok.Setter;
+import org.dyn4j.geometry.Vector2;
 
 /**
  * AIPlayer extends Player with AI-specific properties and behavior management.
@@ -15,10 +17,15 @@ public class AIPlayer extends Player {
     private AIBehavior currentBehavior;
     private AIMemory memory;
     private double lastDecisionTime = 0;
-    private double decisionCooldown = 0.3; // Make decisions every 300ms for smoother behavior
+    private double decisionCooldown = 0.05; // Make decisions every 50ms for truly continuous movement
     private int targetPlayerId = -1;
     private int targetLocationId = -1;
     private boolean isHuman = false; // Always false for AI players
+    
+    // Movement smoothing state
+    private Vector2 lastMoveDirection = new Vector2(0, 0);
+    private Vector2 targetMoveDirection = new Vector2(0, 0);
+    private double movementSmoothingFactor = 0.7; // How much to blend between old and new movement
 
     public AIPlayer(int id, String playerName, double x, double y, AIPersonality personality) {
         this(id, playerName, x, y, personality, 0); // Default to FFA team
@@ -62,6 +69,40 @@ public class AIPlayer extends Player {
 
     public void resetDecisionTimer() {
         lastDecisionTime = 0;
+    }
+    
+    /**
+     * Apply movement smoothing to reduce jerky AI movement.
+     */
+    public void smoothMovement(PlayerInput input) {
+        // Get the new target movement direction
+        targetMoveDirection.set(input.getMoveX(), input.getMoveY());
+        
+        // Smooth transition between last and target movement
+        double smoothing = movementSmoothingFactor;
+        double newX = lastMoveDirection.x * (1.0 - smoothing) + targetMoveDirection.x * smoothing;
+        double newY = lastMoveDirection.y * (1.0 - smoothing) + targetMoveDirection.y * smoothing;
+        
+        // Update the input with smoothed movement
+        input.setMoveX(newX);
+        input.setMoveY(newY);
+        
+        // Store current movement for next frame
+        lastMoveDirection.set(newX, newY);
+    }
+    
+    /**
+     * Get current movement direction for continuous motion.
+     */
+    public Vector2 getCurrentMovementDirection() {
+        return lastMoveDirection.copy();
+    }
+    
+    /**
+     * Set movement smoothing factor (0.0 = no smoothing, 1.0 = maximum smoothing).
+     */
+    public void setMovementSmoothingFactor(double factor) {
+        this.movementSmoothingFactor = Math.max(0.0, Math.min(1.0, factor));
     }
 
     public double getTimeSinceLastDecision() {

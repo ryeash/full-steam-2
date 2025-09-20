@@ -2,6 +2,7 @@ package com.fullsteam.physics;
 
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
+import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.BroadphaseCollisionData;
 import org.dyn4j.world.ManifoldCollisionData;
 import org.dyn4j.world.NarrowphaseCollisionData;
@@ -12,10 +13,12 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
     private final GameEntities gameEntities;
     private final CollisionHandler collisionHandler;
+    private final BulletEffectProcessor bulletEffectProcessor;
 
     public CollisionProcessor(GameEntities gameEntities, CollisionHandler collisionHandler) {
         this.gameEntities = gameEntities;
         this.collisionHandler = collisionHandler;
+        this.bulletEffectProcessor = new BulletEffectProcessor(gameEntities);
     }
 
     @Override
@@ -60,6 +63,11 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     }
 
     private boolean handleEntityCollision(GameEntity entity1, GameEntity entity2) {
+        // Prevent projectile-to-projectile collisions - let them pass through each other
+        if (entity1 instanceof Projectile && entity2 instanceof Projectile) {
+            return false; // Disable collision resolution between projectiles
+        }
+        
         if (entity1 instanceof Player && entity2 instanceof Projectile) {
             handlePlayerProjectileCollision((Player) entity1, (Projectile) entity2);
             return false; // Prevent physics resolution for projectile hits
@@ -92,8 +100,19 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             return; // Can't damage self or teammates
         }
         
+        // Process bullet effects before handling the hit
+        bulletEffectProcessor.processEffectsOnPlayerHit(projectile, player);
+        
+        // Check if projectile should pierce through the target
+        boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, player);
+        
         if (collisionHandler != null) {
             collisionHandler.onPlayerHitByProjectile(player, projectile);
+        }
+        
+        // Deactivate projectile unless it pierces
+        if (!shouldPierce) {
+            projectile.setActive(false);
         }
     }
 
@@ -102,11 +121,26 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             return true;
         }
 
-        if (projectile.isBounces()) {
-            return true;
+        // Get hit position for effects
+        org.dyn4j.geometry.Vector2 hitPos = projectile.getBody().getTransform().getTranslation();
+        Vector2 hitPosition = new Vector2(hitPos.x, hitPos.y);
+        
+        // Process bullet effects on obstacle hit
+        bulletEffectProcessor.processEffectsOnObstacleHit(projectile, hitPosition);
+        
+        // Check if projectile should bounce
+        boolean shouldBounce = bulletEffectProcessor.shouldBounceOffObstacle(projectile, obstacle);
+        
+        // Check if projectile should pierce through obstacles
+        boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, obstacle);
+        
+        if (shouldPierce) {
+            return false; // Don't resolve collision, let projectile pass through
+        } else if (shouldBounce) {
+            return true; // Let physics handle the bounce
         } else {
             projectile.setActive(false);
-            return false;
+            return false; // Stop the projectile
         }
     }
 
@@ -114,6 +148,13 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         if (collisionHandler != null) {
             collisionHandler.onPlayerStayInLocation(player, location);
         }
+    }
+
+    /**
+     * Get the bullet effect processor for accessing pending effects and projectiles
+     */
+    public BulletEffectProcessor getBulletEffectProcessor() {
+        return bulletEffectProcessor;
     }
 
     public interface CollisionHandler {

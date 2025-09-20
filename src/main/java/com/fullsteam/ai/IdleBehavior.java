@@ -12,7 +12,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * AI will wander around and look for opportunities.
  */
 public class IdleBehavior implements AIBehavior {
-    private static final double WANDER_CHANGE_INTERVAL = 5.0; // Change direction every 5 seconds for smoother movement
+    private static final double WANDER_CHANGE_INTERVAL = 2.0; // Change direction every 2 seconds for more dynamic movement
     private Vector2 wanderTarget;
     private double wanderChangeTime = 0;
 
@@ -30,12 +30,15 @@ public class IdleBehavior implements AIBehavior {
         // Move towards wander target
         Vector2 playerPos = aiPlayer.getPosition();
         Vector2 direction = wanderTarget.copy().subtract(playerPos);
-
-        if (direction.getMagnitude() > 20) { // Increased threshold for smoother movement
-            direction.normalize();
-            input.setMoveX(direction.x * 0.6); // Slower idle movement
-            input.setMoveY(direction.y * 0.6);
-        }
+        
+        // Always move towards target, but slow down as we approach
+        double distance = direction.getMagnitude();
+        direction.normalize();
+        
+        // Speed scales with distance, but never goes to zero
+        double moveSpeed = Math.max(0.3, Math.min(0.8, distance / 100.0));
+        input.setMoveX(direction.x * moveSpeed);
+        input.setMoveY(direction.y * moveSpeed);
 
         // First priority: Look for nearby enemies
         com.fullsteam.physics.Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
@@ -44,10 +47,18 @@ public class IdleBehavior implements AIBehavior {
             input.setWorldX(enemyPos.x);
             input.setWorldY(enemyPos.y);
 
-            // Shoot at enemies if they're reasonably close
+            // More aggressive enemy engagement in idle mode
             double enemyDistance = playerPos.distance(enemyPos);
-            if (enemyDistance < 300 && aiPlayer.canShoot()) {
+            if (enemyDistance < 400 && aiPlayer.canShoot()) {
                 input.setLeft(true);
+                
+                // Move towards enemy if they're within reasonable range
+                if (enemyDistance > 150 && enemyDistance < 350) {
+                    Vector2 toEnemy = enemyPos.copy().subtract(playerPos);
+                    toEnemy.normalize();
+                    input.setMoveX(toEnemy.x * 0.7);
+                    input.setMoveY(toEnemy.y * 0.7);
+                }
             }
         } else {
             // Second priority: Look for nearby strategic locations
@@ -90,9 +101,9 @@ public class IdleBehavior implements AIBehavior {
     private void generateNewWanderTarget(AIPlayer aiPlayer) {
         Vector2 playerPos = aiPlayer.getPosition();
 
-        // Generate a random point within reasonable distance
+        // Generate a random point within reasonable distance - ensure minimum distance to keep moving
         double angle = ThreadLocalRandom.current().nextDouble() * 2 * Math.PI;
-        double distance = 100 + ThreadLocalRandom.current().nextDouble() * 200; // 100-300 units away
+        double distance = 150 + ThreadLocalRandom.current().nextDouble() * 250; // 150-400 units away (increased min)
 
         wanderTarget = new Vector2(
                 playerPos.x + Math.cos(angle) * distance,
@@ -102,6 +113,14 @@ public class IdleBehavior implements AIBehavior {
         // Keep within world bounds (rough approximation)
         wanderTarget.x = Math.max(-900, Math.min(900, wanderTarget.x));
         wanderTarget.y = Math.max(-900, Math.min(900, wanderTarget.y));
+        
+        // If target is too close to current position, extend it
+        double actualDistance = playerPos.distance(wanderTarget);
+        if (actualDistance < 100) {
+            Vector2 direction = wanderTarget.copy().subtract(playerPos);
+            direction.normalize();
+            wanderTarget = playerPos.copy().add(direction.multiply(150));
+        }
     }
 
     private com.fullsteam.physics.Player findNearestEnemy(AIPlayer aiPlayer, GameEntities gameEntities) {

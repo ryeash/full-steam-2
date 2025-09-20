@@ -2,6 +2,7 @@ package com.fullsteam.physics;
 
 import com.fullsteam.Config;
 import com.fullsteam.model.PlayerInput;
+import com.fullsteam.model.Weapon;
 import com.fullsteam.model.WeaponConfig;
 import lombok.Getter;
 import lombok.Setter;
@@ -119,10 +120,40 @@ public class Player extends GameEntity {
 
     public void applyWeaponConfig(WeaponConfig primary, WeaponConfig secondary) {
         if (primary != null) {
-            primaryWeapon = new Weapon(primary.type != null ? primary.type : "Custom Primary", primary.buildPoints());
+            try {
+                // Use the enhanced buildWeapon() method that includes effects and ordinance
+                primaryWeapon = primary.buildWeapon();
+                if (primaryWeapon.getName() == null || primaryWeapon.getName().equals("null")) {
+                    // Fallback name if not set
+                    primaryWeapon = new Weapon(
+                        primary.type != null ? primary.type : "Custom Primary", 
+                        primary.buildPoints(), 
+                        primary.buildBulletEffects(), 
+                        primary.buildOrdinance()
+                    );
+                }
+            } catch (Exception e) {
+                // Fallback to legacy method if new method fails
+                primaryWeapon = new Weapon(primary.type != null ? primary.type : "Custom Primary", primary.buildPoints());
+            }
         }
         if (secondary != null) {
-            secondaryWeapon = new Weapon(secondary.type != null ? secondary.type : "Custom Secondary", secondary.buildPoints());
+            try {
+                // Use the enhanced buildWeapon() method that includes effects and ordinance
+                secondaryWeapon = secondary.buildWeapon();
+                if (secondaryWeapon.getName() == null || secondaryWeapon.getName().equals("null")) {
+                    // Fallback name if not set
+                    secondaryWeapon = new Weapon(
+                        secondary.type != null ? secondary.type : "Custom Secondary", 
+                        secondary.buildPoints(), 
+                        secondary.buildBulletEffects(), 
+                        secondary.buildOrdinance()
+                    );
+                }
+            } catch (Exception e) {
+                // Fallback to legacy method if new method fails
+                secondaryWeapon = new Weapon(secondary.type != null ? secondary.type : "Custom Secondary", secondary.buildPoints());
+            }
         }
     }
 
@@ -162,8 +193,10 @@ public class Player extends GameEntity {
                 velocity.y,
                 weapon.getDamage(),
                 weapon.getRange(),
-                false, // bounces
-                team   // pass team information
+                team,   // pass team information
+                weapon.getLinearDamping(),
+                weapon.getBulletEffects(),
+                weapon.getOrdinance()
         );
     }
 

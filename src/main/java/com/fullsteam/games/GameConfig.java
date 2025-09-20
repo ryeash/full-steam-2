@@ -26,39 +26,29 @@ public class GameConfig {
     private double captureRadius = 50.0;
     @Builder.Default
     private double captureTime = 3.0; // seconds
-    
+
     // AI Management Settings
     @Builder.Default
     private boolean autoFillWithAI = true;
     @Builder.Default
-    private double minAIFillPercentage = 0.4; // 40%
+    private double minAIFillPercentage = 1.0; // 40%
     @Builder.Default
-    private double maxAIFillPercentage = 0.8; // 80%
+    private double maxAIFillPercentage = 1.0; // 80%
     @Builder.Default
     private long aiCheckIntervalMs = 10000; // 10 seconds
-    
-    /**
-     * Validate and normalize team count.
-     * @param teamCount Raw team count
-     * @return Validated team count (0 for FFA, 2-4 for teams)
-     */
-    public static int validateTeamCount(int teamCount) {
-        if (teamCount < 0) return 0; // Negative becomes FFA
-        if (teamCount == 1) return 2; // Single team becomes 2 teams
-        if (teamCount > 4) return 4; // Cap at 4 teams
-        return teamCount;
-    }
-    
+
     /**
      * Check if this configuration uses teams.
+     *
      * @return true if team-based, false if FFA
      */
     public boolean isTeamMode() {
         return teamCount >= 2;
     }
-    
+
     /**
      * Check if this configuration is Free For All mode.
+     *
      * @return true if FFA, false if team-based
      */
     public boolean isFreeForAll() {

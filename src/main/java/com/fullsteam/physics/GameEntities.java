@@ -1,5 +1,6 @@
 package com.fullsteam.physics;
 
+import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
 import lombok.Getter;
@@ -23,6 +24,7 @@ public class GameEntities {
     private final Map<Integer, Projectile> projectiles = new ConcurrentSkipListMap<>();
     private final Map<Integer, StrategicLocation> strategicLocations = new ConcurrentSkipListMap<>();
     private final Map<Integer, Obstacle> obstacles = new ConcurrentSkipListMap<>();
+    private final Map<Integer, FieldEffect> fieldEffects = new ConcurrentSkipListMap<>();
 
     public void addPlayerSession(PlayerSession playerSession) {
         playerSessions.put(playerSession.getPlayerId(), playerSession);
@@ -103,6 +105,9 @@ public class GameEntities {
 
         // Remove inactive strategic locations (unlikely but for completeness)
         strategicLocations.entrySet().removeIf(entry -> !entry.getValue().isActive());
+        
+        // Remove expired field effects
+        fieldEffects.entrySet().removeIf(entry -> entry.getValue().isExpired());
     }
 
     /**
@@ -119,10 +124,30 @@ public class GameEntities {
 
         // Update all strategic locations
         strategicLocations.values().forEach(location -> location.update(deltaTime));
+        
+        // Update all field effects
+        fieldEffects.values().forEach(effect -> effect.update(deltaTime));
     }
 
     public PlayerSession removePlayerSession(int playerId) {
         return playerSessions.remove(playerId);
+    }
+
+    // Field Effect management methods
+    public void addFieldEffect(FieldEffect fieldEffect) {
+        fieldEffects.put(fieldEffect.getId(), fieldEffect);
+    }
+
+    public FieldEffect getFieldEffect(int id) {
+        return fieldEffects.get(id);
+    }
+
+    public FieldEffect removeFieldEffect(int id) {
+        return fieldEffects.remove(id);
+    }
+
+    public Collection<FieldEffect> getAllFieldEffects() {
+        return fieldEffects.values();
     }
 
 }

@@ -10,14 +10,18 @@ import com.fullsteam.model.GameInfo;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
-import com.fullsteam.physics.Boulder;
+import com.fullsteam.physics.BulletEffectProcessor;
 import com.fullsteam.physics.CollisionProcessor;
+import com.fullsteam.model.FieldEffect;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.StrategicLocation;
 import com.fullsteam.physics.TeamSpawnManager;
+import com.fullsteam.physics.TeamSpawnArea;
+import com.fullsteam.terrain.TerrainGenerator;
+import com.fullsteam.physics.CompoundObstacle;
 import io.micronaut.websocket.WebSocketSession;
 import lombok.Getter;
 import org.dyn4j.collision.AxisAlignedBounds;
@@ -64,6 +68,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     protected final AIPlayerManager aiPlayerManager = new AIPlayerManager();
     @Getter
     protected final TeamSpawnManager teamSpawnManager;
+    @Getter
+    protected final TerrainGenerator terrainGenerator;
 
     protected long gameStartTime;
     protected boolean gameRunning = false;
@@ -97,6 +103,12 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             gameConfig.getWorldWidth(), 
             gameConfig.getWorldHeight(), 
             gameConfig.getTeamCount()
+        );
+        
+        // Initialize procedural terrain generator
+        this.terrainGenerator = new TerrainGenerator(
+            gameConfig.getWorldWidth(),
+            gameConfig.getWorldHeight()
         );
 
         this.world = new World<>();
@@ -457,11 +469,9 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
 
             gameEntities.getPlayerInputs().forEach(this::processPlayerInput);
 
-            gameEntities.getAllPlayers().forEach(player -> player.update(deltaTime));
-
+            gameEntities.updateAll(deltaTime);
             gameEntities.getProjectiles().entrySet().removeIf(entry -> {
                 Projectile projectile = entry.getValue();
-                projectile.update(deltaTime);
                 if (!projectile.isActive()) {
                     bodiesToRemove.add(projectile.getBody());
                     return true;
@@ -551,7 +561,17 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             if (request.getPlayerName() != null) {
                 player.setPlayerName(request.getPlayerName());
             }
-            player.applyWeaponConfig(request.getPrimaryWeapon(), request.getSecondaryWeapon());
+            
+            // Handle new unified weapon config or legacy separate weapons
+            if (request.getWeaponConfig() != null) {
+                // New unified weapon config - use for both primary and secondary
+                log.info("Applying custom weapon config for player {}: {}", player.getPlayerName(), request.getWeaponConfig().type);
+                player.applyWeaponConfig(request.getWeaponConfig(), request.getWeaponConfig());
+            } else {
+                // Legacy support for separate primary/secondary weapons
+                log.info("Applying legacy weapon config for player {}", player.getPlayerName());
+                player.applyWeaponConfig(request.getPrimaryWeapon(), request.getSecondaryWeapon());
+            }
         }
     }
 
@@ -596,27 +616,63 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     private void createStrategicLocations() {
         String[] locationNames = {"Alpha", "Beta", "Gamma", "Delta", "Echo"};
         for (int i = 0; i < gameConfig.getStrategicLocationsCount(); i++) {
-            double x = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldWidth() - 200);
-            double y = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldHeight() - 200);
-
-            StrategicLocation location = new StrategicLocation(locationNames[i], x, y);
+            Vector2 locationPosition = findSafeLocationPosition();
+            
+            StrategicLocation location = new StrategicLocation(locationNames[i], locationPosition.x, locationPosition.y);
             gameEntities.addStrategicLocation(location);
             bodiesToAdd.add(location.getBody());
         }
     }
-
-    private void createObstacles() {
-        int obstacleCount = 5 + ThreadLocalRandom.current().nextInt(6); // 5 to 10 obstacles
-
-        for (int i = 0; i < obstacleCount; i++) {
+    
+    /**
+     * Find a safe position for strategic locations that avoids obstacles.
+     */
+    private Vector2 findSafeLocationPosition() {
+        for (int attempts = 0; attempts < 20; attempts++) {
             double x = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldWidth() - 200);
             double y = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldHeight() - 200);
-            double radius = 10 + ThreadLocalRandom.current().nextInt(21); // 10 to 30 radius
-
-            Boulder boulder = new Boulder(x, y, radius);
-            gameEntities.addObstacle(boulder);
-            bodiesToAdd.add(boulder.getBody());
+            Vector2 candidate = new Vector2(x, y);
+            
+            // Check if position is clear of terrain obstacles (larger radius for strategic locations)
+            if (terrainGenerator.isPositionClear(candidate, 80.0)) {
+                // Also check against existing strategic locations
+                boolean tooCloseToOther = false;
+                for (StrategicLocation existing : gameEntities.getAllStrategicLocations()) {
+                    if (candidate.distance(existing.getPosition()) < 150.0) {
+                        tooCloseToOther = true;
+                        break;
+                    }
+                }
+                
+                if (!tooCloseToOther) {
+                    return candidate;
+                }
+            }
         }
+        
+        // Fallback to terrain generator's safe spawn method
+        return terrainGenerator.getSafeSpawnPosition(80.0);
+    }
+
+    private void createObstacles() {
+        // Use procedurally generated simple obstacles from terrain generator
+        for (Obstacle obstacle : terrainGenerator.getGeneratedObstacles()) {
+            gameEntities.addObstacle(obstacle);
+            bodiesToAdd.add(obstacle.getBody());
+        }
+        
+        // Add compound obstacles (complex multi-body structures)
+        for (CompoundObstacle compoundObstacle : terrainGenerator.getCompoundObstacles()) {
+            // Add all bodies from the compound obstacle to the physics world
+            for (org.dyn4j.dynamics.Body body : compoundObstacle.getBodies()) {
+                bodiesToAdd.add(body);
+            }
+        }
+        
+        log.info("Created {} simple obstacles and {} compound structures for {} terrain", 
+            terrainGenerator.getGeneratedObstacles().size(),
+            terrainGenerator.getCompoundObstacles().size(),
+            terrainGenerator.getTerrainType().getDisplayName());
     }
 
     private void updateStrategicLocations(double deltaTime) {
@@ -677,6 +733,15 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             projState.put("x", pos.x);
             projState.put("y", pos.y);
             projState.put("ownerId", projectile.getOwnerId());
+            projState.put("ownerTeam", projectile.getOwnerTeam());
+            projState.put("ordinance", projectile.getOrdinance().name());
+            
+            // Convert bullet effects to string list for JSON serialization
+            List<String> effectNames = projectile.getBulletEffects().stream()
+                .map(effect -> effect.name())
+                .collect(java.util.stream.Collectors.toList());
+            projState.put("bulletEffects", effectNames);
+            
             projectileStates.add(projState);
         }
         gameState.put("projectiles", projectileStates);
@@ -710,6 +775,26 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         }
         gameState.put("obstacles", obstacleStates);
 
+        // Add field effects to game state
+        List<Map<String, Object>> fieldEffectStates = new ArrayList<>();
+        for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
+            Vector2 pos = effect.getPosition();
+            Map<String, Object> effectState = new HashMap<>();
+            effectState.put("id", effect.getId());
+            effectState.put("type", effect.getType().name());
+            effectState.put("x", pos.x);
+            effectState.put("y", pos.y);
+            effectState.put("radius", effect.getRadius());
+            effectState.put("damage", effect.getDamage());
+            effectState.put("duration", effect.getDuration());
+            effectState.put("timeRemaining", effect.getTimeRemaining());
+            effectState.put("progress", effect.getProgress());
+            effectState.put("active", effect.isActive());
+            effectState.put("ownerTeam", effect.getOwnerTeam());
+            fieldEffectStates.add(effectState);
+        }
+        gameState.put("fieldEffects", fieldEffectStates);
+
         broadcast(gameState);
     }
 
@@ -726,7 +811,24 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         }
         
         if (teamSpawnManager.isTeamSpawningEnabled()) {
-            return teamSpawnManager.getSafeTeamSpawnPoint(team, gameEntities.getAllPlayers(), 100.0);
+            // Try to get a team spawn point that avoids obstacles
+            Vector2 teamSpawnPoint = teamSpawnManager.getSafeTeamSpawnPoint(team, gameEntities.getAllPlayers(), 100.0);
+            
+            // Verify it's clear of terrain obstacles using TerrainGenerator
+            if (terrainGenerator.isPositionClear(teamSpawnPoint, 50.0)) {
+                return teamSpawnPoint;
+            }
+            
+            // If team spawn point is blocked, try to find a safe position near the team area
+            TeamSpawnArea teamArea = teamSpawnManager.getTeamArea(team);
+            if (teamArea != null) {
+                for (int attempts = 0; attempts < 10; attempts++) {
+                    Vector2 candidate = teamArea.generateSpawnPoint();
+                    if (terrainGenerator.isPositionClear(candidate, 50.0)) {
+                        return candidate;
+                    }
+                }
+            }
         }
         
         // Fallback to FFA spawning
@@ -740,11 +842,26 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
      */
     private Vector2 findFFASpawnPoint() {
         if (teamSpawnManager != null) {
-            return teamSpawnManager.getSafeFFASpawnPoint(gameEntities.getAllPlayers(), 100.0);
+            Vector2 ffaSpawnPoint = teamSpawnManager.getSafeFFASpawnPoint(gameEntities.getAllPlayers(), 100.0);
+            
+            // Verify it's clear of terrain obstacles
+            if (terrainGenerator.isPositionClear(ffaSpawnPoint, 50.0)) {
+                return ffaSpawnPoint;
+            }
         }
         
-        // Fallback to legacy spawn logic
-        return findLegacySpawnPoint();
+        // Use terrain generator's safe spawn position method
+        Vector2 terrainSafeSpawn = terrainGenerator.getSafeSpawnPosition(50.0);
+        
+        // Double-check it's not too close to existing players
+        for (Player player : gameEntities.getAllPlayers()) {
+            if (player.isActive() && terrainSafeSpawn.distance(player.getPosition()) < 100.0) {
+                // Try legacy spawn as final fallback
+                return findLegacySpawnPoint();
+            }
+        }
+        
+        return terrainSafeSpawn;
     }
     
     /**
@@ -788,6 +905,9 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         if (teamSpawnManager.isTeamSpawningEnabled()) {
             state.put("teamAreas", teamSpawnManager.getTeamAreaInfo());
         }
+        
+        // Add procedural terrain data
+        state.put("terrain", terrainGenerator.getTerrainData());
 
         List<Map<String, Object>> locations = new ArrayList<>();
         for (StrategicLocation location : gameEntities.getAllStrategicLocations()) {
@@ -856,6 +976,115 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         log.debug("Player {} exited strategic location {}", player.getId(), location.getLocationName());
     }
 
+    /**
+     * Process field effects and apply damage to players in range
+     */
+    private void processFieldEffects(double deltaTime) {
+        for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
+            if (!effect.isActive()) continue;
+            
+            // Apply damage to players in range
+            for (Player player : gameEntities.getAllPlayers()) {
+                if (!player.isActive()) continue;
+                if (!effect.canAffect(player)) continue;
+                
+                double damage = effect.getDamageAtPosition(player.getPosition());
+                if (damage > 0) {
+                    // Apply damage based on effect type
+                    if (effect.getType().isInstantaneous()) {
+                        // Instant damage (explosions)
+                        player.takeDamage(damage);
+                        effect.markAsAffected(player);
+                    } else {
+                        // Damage over time (fire, electric, etc.)
+                        player.takeDamage(damage * deltaTime);
+                        
+                        // Apply special effects
+                        switch (effect.getType()) {
+                            case FREEZE:
+                                // TODO: Apply slowing effect
+                                break;
+                            case FIRE:
+                            case ELECTRIC:
+                            case POISON:
+                                // Damage already applied above
+                                break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * Apply homing behavior to projectiles with homing effect
+     */
+    private void processHomingProjectiles(double deltaTime) {
+        CollisionProcessor collisionProcessor = getCollisionProcessor();
+        if (collisionProcessor != null) {
+            for (Projectile projectile : gameEntities.getAllProjectiles()) {
+                if (projectile.isActive()) {
+                    collisionProcessor.getBulletEffectProcessor().applyHomingBehavior(projectile, deltaTime);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Add pending field effects and projectiles from bullet effect processing
+     */
+    private void processPendingEffects() {
+        CollisionProcessor collisionProcessor = getCollisionProcessor();
+        if (collisionProcessor != null) {
+            BulletEffectProcessor effectProcessor = collisionProcessor.getBulletEffectProcessor();
+            
+            // Add pending field effects
+            for (FieldEffect effect : effectProcessor.getPendingFieldEffects()) {
+                gameEntities.addFieldEffect(effect);
+            }
+            
+            // Add pending projectiles (from fragmentation, etc.)
+            for (Projectile projectile : effectProcessor.getPendingProjectiles()) {
+                gameEntities.addProjectile(projectile);
+                bodiesToAdd.add(projectile.getBody());
+            }
+        }
+    }
+    
+    /**
+     * Process physics body additions and removals
+     */
+    private void processPhysicsBodies() {
+        // Add new bodies
+        while (!bodiesToAdd.isEmpty()) {
+            Body body = bodiesToAdd.poll();
+            if (body != null) {
+                world.addBody(body);
+            }
+        }
+        
+        // Remove old bodies
+        while (!bodiesToRemove.isEmpty()) {
+            Body body = bodiesToRemove.poll();
+            if (body != null) {
+                world.removeBody(body);
+            }
+        }
+    }
+    
+    /**
+     * Get the collision processor from the world's collision listeners
+     */
+    private CollisionProcessor getCollisionProcessor() {
+        // This is a bit of a hack, but we need access to the collision processor
+        // In a real implementation, we'd store a reference to it
+        return world.getCollisionListeners().stream()
+            .filter(listener -> listener instanceof CollisionProcessor)
+            .map(listener -> (CollisionProcessor) listener)
+            .findFirst()
+            .orElse(null);
+    }
+
     @Override
     public void begin(TimeStep step, PhysicsWorld<Body, ?> world) {
 
@@ -873,6 +1102,20 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
 
     @Override
     public void end(TimeStep step, PhysicsWorld<Body, ?> world) {
+        double deltaTime = step.getDeltaTime();
+        
+        // Process field effects and apply damage
+        processFieldEffects(deltaTime);
+        
+        // Apply homing behavior to projectiles
+        processHomingProjectiles(deltaTime);
+        
+        // Add pending field effects and projectiles from bullet effects
+        processPendingEffects();
+        
+        // Add/remove bodies from physics world
+        processPhysicsBodies();
+        
 //        for (Projectile projectile : gameEntities.getAllProjectiles()) {
 //            if (projectile.isActive()) {
 //                Vector2 position = projectile.getPosition();
