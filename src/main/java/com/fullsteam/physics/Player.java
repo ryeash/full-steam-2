@@ -11,7 +11,7 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
-import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 
 @Getter
@@ -30,12 +30,11 @@ public class Player extends GameEntity {
     private int deaths = 0;
     private double respawnTime = 0;
     private Vector2 respawnPoint;
-    private List<Projectile> additionalProjectiles = new ArrayList<>();
 
     public Player(int id, String playerName, double x, double y) {
         this(id, playerName, x, y, 0); // Default to no team (FFA)
     }
-    
+
     public Player(int id, String playerName, double x, double y, int team) {
         super(id, createPlayerBody(x, y), 100.0);
         this.playerName = playerName != null ? playerName : "Player " + id;
@@ -43,8 +42,8 @@ public class Player extends GameEntity {
         this.respawnPoint = new Vector2(x, y);
 
         // Default weapons
-        this.primaryWeapon = new Weapon("Assault Rifle", Weapon.ASSAULT_RIFLE_PRESET);
-        this.secondaryWeapon = new Weapon("Pistol", Weapon.HAND_CANNON_PRESET);
+        this.primaryWeapon = WeaponConfig.ASSAULT_RIFLE_PRESET.buildWeapon();
+        this.secondaryWeapon = WeaponConfig.HAND_CANNON_PRESET.buildWeapon();
     }
 
     private static Body createPlayerBody(double x, double y) {
@@ -125,30 +124,25 @@ public class Player extends GameEntity {
     public void applyWeaponConfig(WeaponConfig primary, WeaponConfig secondary) {
         if (primary != null) {
             try {
-                System.out.println("DEBUG: Building primary weapon from config: " + primary.type + 
-                                  ", bulletsPerShot points: " + primary.bulletsPerShot +
-                                  ", damage points: " + primary.damage +
-                                  ", fireRate points: " + primary.fireRate);
+                System.out.println("DEBUG: Building primary weapon from config: " + primary.type +
+                                   ", bulletsPerShot points: " + primary.bulletsPerShot +
+                                   ", damage points: " + primary.damage +
+                                   ", fireRate points: " + primary.fireRate);
                 // Use the enhanced buildWeapon() method that includes effects and ordinance
                 primaryWeapon = primary.buildWeapon();
-                System.out.println("DEBUG: Built primary weapon: " + primaryWeapon.getName() + 
-                                  ", bulletsPerShot: " + primaryWeapon.getBulletsPerShot() +
-                                  ", damage: " + primaryWeapon.getDamage() +
-                                  ", fireRate: " + primaryWeapon.getFireRate());
+                System.out.println("DEBUG: Built primary weapon: " + primaryWeapon.getName() +
+                                   ", bulletsPerShot: " + primaryWeapon.getBulletsPerShot() +
+                                   ", damage: " + primaryWeapon.getDamage() +
+                                   ", fireRate: " + primaryWeapon.getFireRate());
                 if (primaryWeapon.getName() == null || primaryWeapon.getName().equals("null")) {
                     // Fallback name if not set
-                    primaryWeapon = new Weapon(
-                        primary.type != null ? primary.type : "Custom Primary", 
-                        primary.buildPoints(), 
-                        primary.buildBulletEffects(), 
-                        primary.buildOrdinance()
-                    );
+                    primaryWeapon = primary.buildWeapon();
                 }
             } catch (Exception e) {
                 System.err.println("DEBUG: Exception building weapon: " + e.getMessage());
                 e.printStackTrace();
                 // Fallback to legacy method if new method fails
-                primaryWeapon = new Weapon(primary.type != null ? primary.type : "Custom Primary", primary.buildPoints());
+                primaryWeapon = WeaponConfig.ASSAULT_RIFLE_PRESET.buildWeapon();
             }
         }
         if (secondary != null) {
@@ -157,16 +151,11 @@ public class Player extends GameEntity {
                 secondaryWeapon = secondary.buildWeapon();
                 if (secondaryWeapon.getName() == null || secondaryWeapon.getName().equals("null")) {
                     // Fallback name if not set
-                    secondaryWeapon = new Weapon(
-                        secondary.type != null ? secondary.type : "Custom Secondary", 
-                        secondary.buildPoints(), 
-                        secondary.buildBulletEffects(), 
-                        secondary.buildOrdinance()
-                    );
+                    secondaryWeapon = secondary.buildWeapon();
                 }
             } catch (Exception e) {
                 // Fallback to legacy method if new method fails
-                secondaryWeapon = new Weapon(secondary.type != null ? secondary.type : "Custom Secondary", secondary.buildPoints());
+                secondaryWeapon = WeaponConfig.HAND_CANNON_PRESET.buildWeapon();
             }
         }
     }
@@ -179,12 +168,12 @@ public class Player extends GameEntity {
         return !isReloading && weapon.getAmmo() > 0 && (now - lastShotTime) >= fireInterval;
     }
 
-    public Projectile shoot() {
+    public List<Projectile> shoot() {
         if (!canShoot()) {
             if (getCurrentWeapon().getAmmo() == 0) {
                 startReload();
             }
-            return null;
+            return List.of();
         }
 
         Weapon weapon = getCurrentWeapon();
@@ -194,81 +183,60 @@ public class Player extends GameEntity {
         Vector2 pos = getPosition();
         Vector2 baseDirection = aimDirection.copy();
         double baseAngle = Math.atan2(baseDirection.y, baseDirection.x);
-        
+
         // For multi-shot weapons, we'll return the first projectile and let GameManager handle the rest
         // This maintains compatibility with existing code while supporting multi-shot
         int bulletsPerShot = weapon.getBulletsPerShot();
-        
+
         // Limit bullets to available ammo (weapon.fire() will handle the ammo reduction)
         int actualBulletsToFire = Math.min(bulletsPerShot, weapon.getAmmo());
-        
+
         // Debug logging
-        System.out.println("DEBUG: Player " + id + " shooting with weapon: " + weapon.getName() + 
-                          ", bulletsPerShot: " + bulletsPerShot + 
-                          ", currentAmmo: " + weapon.getAmmo() +
-                          ", actualBulletsToFire: " + actualBulletsToFire +
-                          ", damage: " + weapon.getDamage() + 
-                          ", fireRate: " + weapon.getFireRate());
-        
+        System.out.println("DEBUG: Player " + id + " shooting with weapon: " + weapon.getName() +
+                           ", bulletsPerShot: " + bulletsPerShot +
+                           ", currentAmmo: " + weapon.getAmmo() +
+                           ", actualBulletsToFire: " + actualBulletsToFire +
+                           ", damage: " + weapon.getDamage() +
+                           ", fireRate: " + weapon.getFireRate());
+
         // Calculate spread pattern for multi-shot
         double totalSpread = actualBulletsToFire > 1 ? 0.3 : 0.0; // 0.3 radians total spread for multi-shot
         double spreadStep = actualBulletsToFire > 1 ? totalSpread / (actualBulletsToFire - 1) : 0.0;
         double startAngle = baseAngle - (totalSpread / 2.0);
-        
+
         // Create the first projectile (this one gets returned)
-        Vector2 direction = new Vector2();
-        double angle = startAngle;
-        
+
         // Add accuracy-based spread to each bullet
         double accuracySpread = (1.0 - weapon.getAccuracy()) * 0.1; // Reduced from 0.2 for multi-shot
-        angle += (Math.random() - 0.5) * accuracySpread;
-        
-        direction.set(Math.cos(angle), Math.sin(angle));
-        Vector2 velocity = direction.multiply(weapon.getProjectileSpeed());
-        
-        Projectile firstProjectile = new Projectile(
-                id,
-                pos.x,
-                pos.y,
-                velocity.x,
-                velocity.y,
-                weapon.getDamage(),
-                weapon.getRange(),
-                team,
-                weapon.getLinearDamping(),
-                weapon.getBulletEffects(),
-                weapon.getOrdinance()
-        );
-        
+
+        List<Projectile> toFire = new LinkedList<>();
         // Store additional projectiles for GameManager to retrieve
-        if (actualBulletsToFire > 1) {
-            additionalProjectiles.clear();
-            for (int i = 1; i < actualBulletsToFire; i++) {
-                angle = startAngle + (i * spreadStep);
-                angle += (Math.random() - 0.5) * accuracySpread;
-                
-                direction.set(Math.cos(angle), Math.sin(angle));
-                velocity = direction.multiply(weapon.getProjectileSpeed());
-                
-                Projectile additionalProjectile = new Projectile(
-                        id,
-                        pos.x,
-                        pos.y,
-                        velocity.x,
-                        velocity.y,
-                        weapon.getDamage(),
-                        weapon.getRange(),
-                        team,
-                        weapon.getLinearDamping(),
-                        weapon.getBulletEffects(),
-                        weapon.getOrdinance()
-                );
-                
-                additionalProjectiles.add(additionalProjectile);
-            }
+        double angle;
+        for (int i = 0; i < actualBulletsToFire; i++) {
+            angle = startAngle + (i * spreadStep);
+            angle += (Math.random() - 0.5) * accuracySpread;
+
+            Vector2 direction = new Vector2();
+            direction.set(Math.cos(angle), Math.sin(angle));
+            direction.set(Math.cos(angle), Math.sin(angle));
+            Vector2 velocity = direction.multiply(weapon.getProjectileSpeed());
+
+            toFire.add(new Projectile(
+                    id,
+                    pos.x,
+                    pos.y,
+                    velocity.x,
+                    velocity.y,
+                    weapon.getDamage(),
+                    weapon.getRange(),
+                    team,
+                    weapon.getLinearDamping(),
+                    weapon.getBulletEffects(),
+                    weapon.getOrdinance()
+            ));
+
         }
-        
-        return firstProjectile;
+        return toFire;
     }
 
     private void startReload() {
@@ -295,10 +263,10 @@ public class Player extends GameEntity {
         secondaryWeapon.reload();
         isReloading = false;
     }
-    
+
     /**
      * Respawn at a specific location (for team-based spawning).
-     * 
+     *
      * @param newRespawnPoint New spawn location
      */
     public void respawnAt(Vector2 newRespawnPoint) {
@@ -317,20 +285,10 @@ public class Player extends GameEntity {
     public int getCurrentWeaponIndex() {
         return currentWeapon;
     }
-    
-    /**
-     * Get and clear additional projectiles from multi-shot weapons.
-     * This should be called by GameManager after calling shoot().
-     * @return List of additional projectiles, empty if single-shot weapon
-     */
-    public List<Projectile> getAndClearAdditionalProjectiles() {
-        List<Projectile> result = new ArrayList<>(additionalProjectiles);
-        additionalProjectiles.clear();
-        return result;
-    }
-    
+
     /**
      * Check if this player is on the same team as another player.
+     *
      * @param otherPlayer The other player to check
      * @return true if on same team, false if enemies or FFA
      */
@@ -340,9 +298,10 @@ public class Player extends GameEntity {
         }
         return this.team == otherPlayer.team;
     }
-    
+
     /**
      * Check if this player is an enemy of another player.
+     *
      * @param otherPlayer The other player to check
      * @return true if enemies (different teams or FFA), false if teammates
      */

@@ -22,15 +22,6 @@ public class Projectile extends GameEntity {
     private final Set<BulletEffect> bulletEffects; // Special effects this projectile has
     private final Ordinance ordinance; // Type of projectile (bullet, rocket, grenade, etc.)
     private boolean hasExploded = false; // Track if explosive projectiles have already exploded
-
-    public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange, int ownerTeam) {
-        this(ownerId, x, y, vx, vy, damage, maxRange, ownerTeam, 0.0, new HashSet<>(), Ordinance.BULLET); // Default values
-    }
-
-    public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange,
-                      int ownerTeam, double linearDamping, Set<BulletEffect> bulletEffects) {
-        this(ownerId, x, y, vx, vy, damage, maxRange, ownerTeam, linearDamping, bulletEffects, Ordinance.BULLET); // Default ordinance
-    }
     
     public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange,
                       int ownerTeam, double linearDamping, Set<BulletEffect> bulletEffects, Ordinance ordinance) {

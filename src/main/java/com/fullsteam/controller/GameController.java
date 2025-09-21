@@ -5,7 +5,8 @@ import com.fullsteam.GameLobby;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.LobbyInfo;
 import com.fullsteam.model.Ordinance;
-import com.fullsteam.model.Weapon;
+import com.fullsteam.model.WeaponAttribute;
+import com.fullsteam.model.WeaponConfig;
 import io.micronaut.context.annotation.Context;
 import io.micronaut.core.io.ResourceResolver;
 import io.micronaut.http.HttpRequest;
@@ -24,7 +25,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
 import java.net.URL;
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Singleton
@@ -58,10 +63,10 @@ public class GameController {
     @Produces(MediaType.APPLICATION_JSON)
     public Map<String, Object> getWeaponCustomizationData() {
         Map<String, Object> data = new HashMap<>();
-        
+
         // Weapon attributes with min/max values
         Map<String, Map<String, Object>> attributes = new HashMap<>();
-        for (Weapon.WeaponAttribute attr : Weapon.WeaponAttribute.values()) {
+        for (WeaponAttribute attr : WeaponAttribute.values()) {
             Map<String, Object> attrData = new HashMap<>();
             attrData.put("min", attr.getMin());
             attrData.put("max", attr.getMax());
@@ -70,99 +75,84 @@ public class GameController {
             attributes.put(attr.name(), attrData);
         }
         data.put("attributes", attributes);
-        
+
         // Bullet effects with costs and descriptions
         List<Map<String, Object>> effects = Arrays.stream(BulletEffect.values())
-            .map(effect -> {
-                Map<String, Object> effectData = new HashMap<>();
-                effectData.put("name", effect.name());
-                effectData.put("displayName", formatDisplayName(effect.name()));
-                effectData.put("cost", effect.getPointCost());
-                effectData.put("description", effect.getDescription());
-                return effectData;
-            })
-            .collect(Collectors.toList());
+                .map(effect -> {
+                    Map<String, Object> effectData = new HashMap<>();
+                    effectData.put("name", effect.name());
+                    effectData.put("displayName", formatDisplayName(effect.name()));
+                    effectData.put("cost", effect.getPointCost());
+                    effectData.put("description", effect.getDescription());
+                    return effectData;
+                })
+                .collect(Collectors.toList());
         data.put("effects", effects);
-        
+
         // Ordinance types with costs and properties
         List<Map<String, Object>> ordinances = Arrays.stream(Ordinance.values())
-            .map(ord -> {
-                Map<String, Object> ordData = new HashMap<>();
-                ordData.put("name", ord.name());
-                ordData.put("displayName", formatDisplayName(ord.name()));
-                ordData.put("cost", ord.getPointCost());
-                ordData.put("description", ord.getDescription());
-                ordData.put("size", ord.getSize());
-                ordData.put("speedMultiplier", ord.getSpeedMultiplier());
-                ordData.put("hasTrail", ord.hasTrail());
-                return ordData;
-            })
-            .collect(Collectors.toList());
+                .map(ord -> {
+                    Map<String, Object> ordData = new HashMap<>();
+                    ordData.put("name", ord.name());
+                    ordData.put("displayName", formatDisplayName(ord.name()));
+                    ordData.put("cost", ord.getPointCost());
+                    ordData.put("description", ord.getDescription());
+                    ordData.put("size", ord.getSize());
+                    ordData.put("speedMultiplier", ord.getSpeedMultiplier());
+                    ordData.put("hasTrail", ord.hasTrail());
+                    return ordData;
+                })
+                .collect(Collectors.toList());
         data.put("ordinances", ordinances);
-        
+
         // Preset weapons
         Map<String, Map<String, Object>> presets = new HashMap<>();
-        
-        // Assault Rifle preset
-        presets.put("ASSAULT_RIFLE", createPresetData("Assault Rifle", 
-            Weapon.ASSAULT_RIFLE_PRESET, new HashSet<>(), Ordinance.BULLET));
-        
-        // Hand Cannon preset
-        presets.put("HAND_CANNON", createPresetData("Hand Cannon", 
-            Weapon.HAND_CANNON_PRESET, new HashSet<>(), Ordinance.BULLET));
-        
-        // Explosive Sniper preset
-        presets.put("EXPLOSIVE_SNIPER", createPresetData("Explosive Sniper", 
-            Weapon.EXPLOSIVE_SNIPER_PRESET, Set.of(BulletEffect.EXPLODES_ON_IMPACT), Ordinance.BULLET));
-        
-        // Rocket Launcher preset
-        presets.put("ROCKET_LAUNCHER", createPresetData("Rocket Launcher", 
-            Weapon.ROCKET_LAUNCHER_PRESET, Set.of(BulletEffect.EXPLODES_ON_IMPACT), Ordinance.ROCKET));
-        
-        // Plasma Rifle preset
-        presets.put("PLASMA_RIFLE", createPresetData("Plasma Rifle", 
-            Weapon.PLASMA_RIFLE_PRESET, Set.of(BulletEffect.PIERCING), Ordinance.PLASMA));
-        
-        // Grenade Launcher preset
-        presets.put("GRENADE_LAUNCHER", createPresetData("Grenade Launcher", 
-            Weapon.GRENADE_LAUNCHER_PRESET, Set.of(BulletEffect.FRAGMENTING), Ordinance.GRENADE));
-        
+        presets.put("ASSAULT_RIFLE", createPresetData(WeaponConfig.ASSAULT_RIFLE_PRESET));
+        presets.put("HAND_CANNON", createPresetData(WeaponConfig.HAND_CANNON_PRESET));
+        presets.put("EXPLOSIVE_SNIPER", createPresetData(WeaponConfig.EXPLOSIVE_SNIPER_PRESET));
+        presets.put("ROCKET_LAUNCHER", createPresetData(WeaponConfig.ROCKET_LAUNCHER_PRESET));
+        presets.put("PLASMA_RIFLE", createPresetData(WeaponConfig.PLASMA_RIFLE_PRESET));
+        presets.put("GRENADE_LAUNCHER", createPresetData(WeaponConfig.GRENADE_LAUNCHER_PRESET));
         data.put("presets", presets);
-        
+
         // Point budget
         data.put("maxPoints", 100);
-        
+
         return data;
     }
-    
+
     private String formatDisplayName(String name) {
         return Arrays.stream(name.split("_"))
-            .map(word -> word.charAt(0) + word.substring(1).toLowerCase())
-            .collect(Collectors.joining(" "));
+                .map(word -> word.charAt(0) + word.substring(1).toLowerCase())
+                .collect(Collectors.joining(" "));
     }
-    
-    private Map<String, Object> createPresetData(String displayName, 
-                                               Map<Weapon.WeaponAttribute, Integer> attributes,
-                                               Set<BulletEffect> effects,
-                                               Ordinance ordinance) {
+
+    private Map<String, Object> createPresetData(WeaponConfig weapon) {
         Map<String, Object> preset = new HashMap<>();
-        preset.put("displayName", displayName);
-        preset.put("attributes", attributes.entrySet().stream()
-            .collect(Collectors.toMap(
-                entry -> entry.getKey().name(),
-                Map.Entry::getValue
-            )));
-        preset.put("effects", effects.stream()
-            .map(Enum::name)
-            .collect(Collectors.toList()));
-        preset.put("ordinance", ordinance.name());
-        
+        preset.put("displayName", weapon.getType());
+        Map<String, Integer> attributes = Map.of(
+                WeaponAttribute.DAMAGE.name(), weapon.getDamage(),
+                WeaponAttribute.FIRE_RATE.name(), weapon.getFireRate(),
+                WeaponAttribute.RANGE.name(), weapon.getRange(),
+                WeaponAttribute.ACCURACY.name(), weapon.getAccuracy(),
+                WeaponAttribute.MAGAZINE_SIZE.name(), weapon.getMagazineSize(),
+                WeaponAttribute.RELOAD_TIME.name(), weapon.getReloadTime(),
+                WeaponAttribute.PROJECTILE_SPEED.name(), weapon.getProjectileSpeed(),
+                WeaponAttribute.BULLETS_PER_SHOT.name(), weapon.getBulletsPerShot(),
+                WeaponAttribute.LINEAR_DAMPING.name(), weapon.getLinearDamping()
+        );
+        preset.put("attributes", attributes);
+        preset.put("effects", weapon.getBulletEffects()
+                .stream()
+                .map(Enum::name)
+                .collect(Collectors.toList()));
+        preset.put("ordinance", weapon.getOrdinance().name());
+
         // Calculate total points
-        int attrPoints = attributes.values().stream().mapToInt(Integer::intValue).sum();
-        int effectPoints = effects.stream().mapToInt(BulletEffect::getPointCost).sum();
-        int ordPoints = ordinance.getPointCost();
-        preset.put("totalPoints", attrPoints + effectPoints + ordPoints);
-        
+        int effectPoints = weapon.getBulletEffects().stream().mapToInt(BulletEffect::getPointCost).sum();
+        int ordPoints = weapon.getOrdinance().getPointCost();
+        preset.put("totalPoints", weapon.getAttributePoints() + effectPoints + ordPoints);
+
         return preset;
     }
 

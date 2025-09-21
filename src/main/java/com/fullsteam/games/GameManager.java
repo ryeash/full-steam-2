@@ -548,17 +548,10 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         if (player != null && input != null) {
             player.processInput(input);
             if (input.isLeft()) {
-                Projectile projectile = player.shoot();
-                if (projectile != null) {
-                    // Add the main projectile
-                    gameEntities.addProjectile(projectile);
-                    bodiesToAdd.add(projectile.getBody());
-                    
-                    // Add any additional projectiles from multi-shot weapons
-                    List<Projectile> additionalProjectiles = player.getAndClearAdditionalProjectiles();
-                    for (Projectile additionalProjectile : additionalProjectiles) {
-                        gameEntities.addProjectile(additionalProjectile);
-                        bodiesToAdd.add(additionalProjectile.getBody());
+                for (Projectile projectile : player.shoot()) {
+                    if (projectile != null) {
+                        gameEntities.addProjectile(projectile);
+                        bodiesToAdd.add(projectile.getBody());
                     }
                 }
             }
@@ -674,7 +667,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         // Add compound obstacles (complex multi-body structures)
         for (CompoundObstacle compoundObstacle : terrainGenerator.getCompoundObstacles()) {
             // Add all bodies from the compound obstacle to the physics world
-            for (org.dyn4j.dynamics.Body body : compoundObstacle.getBodies()) {
+            for (Body body : compoundObstacle.getBodies()) {
                 bodiesToAdd.add(body);
             }
         }
@@ -748,7 +741,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
 
             // Convert bullet effects to string list for JSON serialization
             List<String> effectNames = projectile.getBulletEffects().stream()
-                    .map(effect -> effect.name())
+                    .map(Enum::name)
                     .collect(java.util.stream.Collectors.toList());
             projState.put("bulletEffects", effectNames);
 

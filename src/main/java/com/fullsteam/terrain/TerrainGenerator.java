@@ -90,16 +90,16 @@ public class TerrainGenerator {
         terrainMetadata.put("secondaryColor", String.format("#%06X", terrainType.getSecondaryColor()));
         
         // Generate terrain features
-        generateTerrainFeatures();
+//        generateTerrainFeatures();
         
         // Generate obstacles based on terrain type
         generateObstacles();
         
         // Generate compound obstacles (complex structures)
-        generateCompoundObstacles();
+//        generateCompoundObstacles();
         
         // Generate environmental details
-        generateEnvironmentalFeatures();
+//        generateEnvironmentalFeatures();
     }
     
     /**
