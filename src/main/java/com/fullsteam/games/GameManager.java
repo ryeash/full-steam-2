@@ -28,7 +28,6 @@ import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.Settings;
 import org.dyn4j.dynamics.TimeStep;
-import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
@@ -719,9 +718,14 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             obsState.put("id", obstacle.getId());
             obsState.put("x", pos.x);
             obsState.put("y", pos.y);
-            obsState.put("type", obstacle.getType());
-            // This is a bit of a hack, but it's the easiest way to get the radius for now
-            obsState.put("radius", ((Circle) obstacle.getBody().getFixture(0).getShape()).getRadius());
+            obsState.put("type", obstacle.getType().name());
+            obsState.put("shapeCategory", obstacle.getShapeCategory().name());
+            obsState.put("boundingRadius", obstacle.getBoundingRadius());
+            obsState.put("rotation", obstacle.getBody().getTransform().getRotation().toRadians());
+
+            // Add detailed shape data for client rendering
+            obsState.putAll(obstacle.getShapeData());
+
             obstacleStates.add(obsState);
         }
         gameState.put("obstacles", obstacleStates);
@@ -880,8 +884,14 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             obsData.put("id", obstacle.getId());
             obsData.put("x", pos.x);
             obsData.put("y", pos.y);
-            obsData.put("type", obstacle.getType());
-            obsData.put("radius", ((Circle) obstacle.getBody().getFixture(0).getShape()).getRadius());
+            obsData.put("type", obstacle.getType().name());
+            obsData.put("shapeCategory", obstacle.getShapeCategory().name());
+            obsData.put("boundingRadius", obstacle.getBoundingRadius());
+            obsData.put("rotation", obstacle.getBody().getTransform().getRotation().toRadians());
+
+            // Add detailed shape data for client rendering
+            obsData.putAll(obstacle.getShapeData());
+
             obstacles.add(obsData);
         }
         state.put("obstacles", obstacles);

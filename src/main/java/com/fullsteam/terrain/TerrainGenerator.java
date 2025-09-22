@@ -1,7 +1,7 @@
 package com.fullsteam.terrain;
 
-import com.fullsteam.physics.Boulder;
 import com.fullsteam.physics.Obstacle;
+import com.fullsteam.physics.ShapedObstacle;
 import com.fullsteam.physics.CompoundObstacle;
 import lombok.Getter;
 import org.dyn4j.geometry.Circle;
@@ -198,7 +198,15 @@ public class TerrainGenerator {
         int obstacleCount = baseObstacleCount + random.nextInt(6); // Add 0-5 extra
         
         for (int i = 0; i < obstacleCount; i++) {
-            Obstacle obstacle = generateTerrainSpecificObstacle();
+            Obstacle obstacle;
+            
+            // 80% terrain-specific, 20% completely random for variety
+            if (random.nextDouble() < 0.8) {
+                obstacle = generateTerrainSpecificObstacle();
+            } else {
+                obstacle = generateRandomObstacle();
+            }
+            
             if (obstacle != null) {
                 generatedObstacles.add(obstacle);
             }
@@ -221,20 +229,172 @@ public class TerrainGenerator {
         double x = (random.nextDouble() - 0.5) * (worldWidth - 200);
         double y = (random.nextDouble() - 0.5) * (worldHeight - 200);
         
-        double radius = getObstacleRadius();
+        // Generate terrain-appropriate obstacle type
+        Obstacle.ObstacleType obstacleType = selectTerrainAppropriateObstacleType();
         
-        return new Boulder(x, y, radius);
+        return ShapedObstacle.createObstacle(x, y, obstacleType);
     }
     
-    private double getObstacleRadius() {
+    /**
+     * Generate a completely random obstacle for variety.
+     */
+    private Obstacle generateRandomObstacle() {
+        double x = (random.nextDouble() - 0.5) * (worldWidth - 200);
+        double y = (random.nextDouble() - 0.5) * (worldHeight - 200);
+        
+        return ShapedObstacle.createRandomObstacle(x, y);
+    }
+    
+    /**
+     * Select obstacle types appropriate for the current terrain.
+     */
+    private Obstacle.ObstacleType selectTerrainAppropriateObstacleType() {
+        List<Obstacle.ObstacleType> terrainObstacles = getTerrainObstacleTypes();
+        
+        // Add weighted selection for more realistic distribution
+        List<Obstacle.ObstacleType> weightedList = new ArrayList<>();
+        
         switch (terrainType) {
-            case FOREST: return 15 + random.nextInt(25); // 15-39
-            case DESERT: return 20 + random.nextInt(35); // 20-54
-            case URBAN: return 12 + random.nextInt(20); // 12-31
-            case TUNDRA: return 25 + random.nextInt(30); // 25-54
-            case VOLCANIC: return 18 + random.nextInt(28); // 18-45
-            case GRASSLAND: return 10 + random.nextInt(15); // 10-24
-            default: return 15 + random.nextInt(20); // 15-34
+            case FOREST:
+                // Forest: More natural obstacles, some structures
+                addWeighted(weightedList, Obstacle.ObstacleType.BOULDER, 3);
+                addWeighted(weightedList, Obstacle.ObstacleType.TRIANGLE_ROCK, 2);
+                addWeighted(weightedList, Obstacle.ObstacleType.POLYGON_DEBRIS, 2);
+                addWeighted(weightedList, Obstacle.ObstacleType.HOUSE, 1);
+                break;
+                
+            case DESERT:
+                // Desert: Rock formations and ancient structures
+                addWeighted(weightedList, Obstacle.ObstacleType.BOULDER, 2);
+                addWeighted(weightedList, Obstacle.ObstacleType.TRIANGLE_ROCK, 3);
+                addWeighted(weightedList, Obstacle.ObstacleType.DIAMOND_STONE, 2);
+                addWeighted(weightedList, Obstacle.ObstacleType.POLYGON_DEBRIS, 2);
+                addWeighted(weightedList, Obstacle.ObstacleType.WALL_SEGMENT, 1);
+                break;
+                
+            case URBAN:
+                // Urban: Buildings and artificial structures
+                addWeighted(weightedList, Obstacle.ObstacleType.HOUSE, 4);
+                addWeighted(weightedList, Obstacle.ObstacleType.WALL_SEGMENT, 3);
+                addWeighted(weightedList, Obstacle.ObstacleType.L_SHAPED_WALL, 2);
+                addWeighted(weightedList, Obstacle.ObstacleType.CROSS_BARRIER, 2);
+                addWeighted(weightedList, Obstacle.ObstacleType.POLYGON_DEBRIS, 1);
+                break;
+                
+            case TUNDRA:
+                // Tundra: Ice formations and crystals
+                addWeighted(weightedList, Obstacle.ObstacleType.HEXAGON_CRYSTAL, 3);
+                addWeighted(weightedList, Obstacle.ObstacleType.DIAMOND_STONE, 2);
+                addWeighted(weightedList, Obstacle.ObstacleType.TRIANGLE_ROCK, 2);
+                addWeighted(weightedList, Obstacle.ObstacleType.BOULDER, 2);
+                addWeighted(weightedList, Obstacle.ObstacleType.POLYGON_DEBRIS, 1);
+                break;
+                
+            case VOLCANIC:
+                // Volcanic: Jagged rocks and formations
+                addWeighted(weightedList, Obstacle.ObstacleType.TRIANGLE_ROCK, 4);
+                addWeighted(weightedList, Obstacle.ObstacleType.POLYGON_DEBRIS, 3);
+                addWeighted(weightedList, Obstacle.ObstacleType.BOULDER, 2);
+                addWeighted(weightedList, Obstacle.ObstacleType.DIAMOND_STONE, 1);
+                break;
+                
+            case GRASSLAND:
+                // Grassland: Natural obstacles with some structures
+                addWeighted(weightedList, Obstacle.ObstacleType.BOULDER, 4);
+                addWeighted(weightedList, Obstacle.ObstacleType.TRIANGLE_ROCK, 2);
+                addWeighted(weightedList, Obstacle.ObstacleType.HOUSE, 2);
+                addWeighted(weightedList, Obstacle.ObstacleType.WALL_SEGMENT, 1);
+                addWeighted(weightedList, Obstacle.ObstacleType.POLYGON_DEBRIS, 1);
+                break;
+                
+            default:
+                // Default: Mixed selection
+                return terrainObstacles.get(random.nextInt(terrainObstacles.size()));
+        }
+        
+        return weightedList.get(random.nextInt(weightedList.size()));
+    }
+    
+    /**
+     * Get all obstacle types appropriate for the current terrain.
+     */
+    private List<Obstacle.ObstacleType> getTerrainObstacleTypes() {
+        List<Obstacle.ObstacleType> types = new ArrayList<>();
+        
+        switch (terrainType) {
+            case FOREST:
+                types.addAll(Arrays.asList(
+                    Obstacle.ObstacleType.BOULDER,
+                    Obstacle.ObstacleType.TRIANGLE_ROCK,
+                    Obstacle.ObstacleType.POLYGON_DEBRIS,
+                    Obstacle.ObstacleType.HOUSE
+                ));
+                break;
+                
+            case DESERT:
+                types.addAll(Arrays.asList(
+                    Obstacle.ObstacleType.BOULDER,
+                    Obstacle.ObstacleType.TRIANGLE_ROCK,
+                    Obstacle.ObstacleType.DIAMOND_STONE,
+                    Obstacle.ObstacleType.POLYGON_DEBRIS,
+                    Obstacle.ObstacleType.WALL_SEGMENT
+                ));
+                break;
+                
+            case URBAN:
+                types.addAll(Arrays.asList(
+                    Obstacle.ObstacleType.HOUSE,
+                    Obstacle.ObstacleType.WALL_SEGMENT,
+                    Obstacle.ObstacleType.L_SHAPED_WALL,
+                    Obstacle.ObstacleType.CROSS_BARRIER,
+                    Obstacle.ObstacleType.POLYGON_DEBRIS
+                ));
+                break;
+                
+            case TUNDRA:
+                types.addAll(Arrays.asList(
+                    Obstacle.ObstacleType.HEXAGON_CRYSTAL,
+                    Obstacle.ObstacleType.DIAMOND_STONE,
+                    Obstacle.ObstacleType.TRIANGLE_ROCK,
+                    Obstacle.ObstacleType.BOULDER,
+                    Obstacle.ObstacleType.POLYGON_DEBRIS
+                ));
+                break;
+                
+            case VOLCANIC:
+                types.addAll(Arrays.asList(
+                    Obstacle.ObstacleType.TRIANGLE_ROCK,
+                    Obstacle.ObstacleType.POLYGON_DEBRIS,
+                    Obstacle.ObstacleType.BOULDER,
+                    Obstacle.ObstacleType.DIAMOND_STONE
+                ));
+                break;
+                
+            case GRASSLAND:
+                types.addAll(Arrays.asList(
+                    Obstacle.ObstacleType.BOULDER,
+                    Obstacle.ObstacleType.TRIANGLE_ROCK,
+                    Obstacle.ObstacleType.HOUSE,
+                    Obstacle.ObstacleType.WALL_SEGMENT,
+                    Obstacle.ObstacleType.POLYGON_DEBRIS
+                ));
+                break;
+                
+            default:
+                // Include all types for unknown terrain
+                types.addAll(Arrays.asList(Obstacle.ObstacleType.values()));
+                break;
+        }
+        
+        return types;
+    }
+    
+    /**
+     * Add multiple instances of an obstacle type to create weighted selection.
+     */
+    private void addWeighted(List<Obstacle.ObstacleType> list, Obstacle.ObstacleType type, int weight) {
+        for (int i = 0; i < weight; i++) {
+            list.add(type);
         }
     }
     

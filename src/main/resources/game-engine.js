@@ -1286,22 +1286,138 @@ class GameEngine {
     }
 
     createObstacle(obstacleData) {
-        const sprite = new PIXI.Sprite(this.boulderTexture);
-        sprite.anchor.set(0.5);
+        const graphics = this.createObstacleGraphics(obstacleData);
         const isoPos = this.worldToIsometric(obstacleData.x, obstacleData.y);
-        sprite.position.set(isoPos.x, isoPos.y);
-        sprite.width = obstacleData.radius * 2;
-        sprite.height = obstacleData.radius * 2;
-        sprite.zIndex = 5;
-        this.obstacles.set(obstacleData.id, sprite);
-        this.gameContainer.addChild(sprite);
+        graphics.position.set(isoPos.x, isoPos.y);
+        graphics.rotation = -(obstacleData.rotation || 0); // Invert for PIXI
+        graphics.zIndex = 5;
+        this.obstacles.set(obstacleData.id, graphics);
+        this.gameContainer.addChild(graphics);
+    }
+
+    /**
+     * Create graphics for an obstacle based on its shape data.
+     */
+    createObstacleGraphics(obstacleData) {
+        const graphics = new PIXI.Graphics();
+        const shapeCategory = obstacleData.shapeCategory || 'CIRCULAR';
+        const obstacleType = obstacleData.type || 'BOULDER';
+        
+        // Get color based on obstacle type
+        const color = this.getObstacleColor(obstacleType);
+        const outlineColor = this.darkenColor(color);
+        
+        graphics.beginFill(color, 0.8);
+        graphics.lineStyle(2, outlineColor, 1);
+        
+        switch (shapeCategory) {
+            case 'CIRCULAR':
+                this.drawCircularObstacle(graphics, obstacleData);
+                break;
+            case 'RECTANGULAR':
+                this.drawRectangularObstacle(graphics, obstacleData);
+                break;
+            case 'TRIANGULAR':
+                this.drawTriangularObstacle(graphics, obstacleData);
+                break;
+            case 'POLYGONAL':
+                this.drawPolygonalObstacle(graphics, obstacleData);
+                break;
+            case 'COMPOUND':
+                this.drawCompoundObstacle(graphics, obstacleData);
+                break;
+            default:
+                // Fallback to circle
+                graphics.drawCircle(0, 0, obstacleData.boundingRadius || 20);
+                break;
+        }
+        
+        graphics.endFill();
+        return graphics;
+    }
+    
+    /**
+     * Get color for obstacle based on type.
+     */
+    getObstacleColor(obstacleType) {
+        switch (obstacleType) {
+            case 'BOULDER': return 0x808080; // Gray
+            case 'HOUSE': return 0x8B4513; // Brown
+            case 'WALL_SEGMENT': return 0x696969; // Dark gray
+            case 'TRIANGLE_ROCK': return 0x708090; // Slate gray
+            case 'POLYGON_DEBRIS': return 0x654321; // Dark brown
+            case 'HEXAGON_CRYSTAL': return 0x4169E1; // Royal blue
+            case 'DIAMOND_STONE': return 0x9370DB; // Medium purple
+            case 'L_SHAPED_WALL': return 0x2F4F4F; // Dark slate gray
+            case 'CROSS_BARRIER': return 0x8B7D6B; // Light gray
+            default: return 0x808080; // Default gray
+        }
+    }
+    
+    drawCircularObstacle(graphics, obstacleData) {
+        const radius = obstacleData.radius || obstacleData.boundingRadius || 20;
+        graphics.drawCircle(0, 0, radius);
+    }
+    
+    drawRectangularObstacle(graphics, obstacleData) {
+        const width = obstacleData.width || obstacleData.boundingRadius * 1.5 || 30;
+        const height = obstacleData.height || obstacleData.boundingRadius * 1.2 || 25;
+        graphics.drawRect(-width/2, -height/2, width, height);
+    }
+    
+    drawTriangularObstacle(graphics, obstacleData) {
+        if (obstacleData.vertices && obstacleData.vertices.length >= 3) {
+            this.drawPolygonFromVertices(graphics, obstacleData.vertices);
+        } else {
+            // Fallback equilateral triangle
+            const size = obstacleData.boundingRadius || 25;
+            graphics.drawPolygon([
+                0, size * 0.577,           // Top
+                -size * 0.5, -size * 0.289, // Bottom left
+                size * 0.5, -size * 0.289   // Bottom right
+            ]);
+        }
+    }
+    
+    drawPolygonalObstacle(graphics, obstacleData) {
+        if (obstacleData.vertices && obstacleData.vertices.length >= 3) {
+            this.drawPolygonFromVertices(graphics, obstacleData.vertices);
+        } else {
+            // Fallback to hexagon
+            const radius = obstacleData.boundingRadius || 25;
+            const sides = 6;
+            const points = [];
+            for (let i = 0; i < sides; i++) {
+                const angle = (2 * Math.PI * i) / sides;
+                points.push(Math.cos(angle) * radius);
+                points.push(Math.sin(angle) * radius);
+            }
+            graphics.drawPolygon(points);
+        }
+    }
+    
+    drawCompoundObstacle(graphics, obstacleData) {
+        // For now, draw as rectangle - compound shapes would need special handling
+        this.drawRectangularObstacle(graphics, obstacleData);
+    }
+    
+    drawPolygonFromVertices(graphics, vertices) {
+        if (vertices.length < 3) return;
+        
+        const points = [];
+        vertices.forEach(vertex => {
+            points.push(vertex.x);
+            points.push(vertex.y);
+        });
+        graphics.drawPolygon(points);
     }
 
     updateObstacle(obstacleData) {
-        const sprite = this.obstacles.get(obstacleData.id);
-        if (!sprite) return;
+        const graphics = this.obstacles.get(obstacleData.id);
+        if (!graphics) return;
         const isoPos = this.worldToIsometric(obstacleData.x, obstacleData.y);
-        sprite.position.set(isoPos.x, isoPos.y);
+        graphics.position.set(isoPos.x, isoPos.y);
+        graphics.rotation = -(obstacleData.rotation || 0); // Invert for PIXI
     }
 
     removeObstacle(obstacleId) {
