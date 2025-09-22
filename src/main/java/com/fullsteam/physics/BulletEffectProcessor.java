@@ -99,7 +99,7 @@ public class BulletEffectProcessor {
         }
     }
 
-    private void createExplosion(Projectile projectile, Vector2 position) {
+    public void createExplosion(Projectile projectile, Vector2 position) {
         double explosionRadius = 80.0 + (projectile.getDamage() * 0.5); // Scale with damage
         double explosionDamage = projectile.getDamage() * 1.5; // 50% more damage for explosion
         
@@ -116,7 +116,7 @@ public class BulletEffectProcessor {
         pendingFieldEffects.add(explosion);
     }
 
-    private void createFireEffect(Projectile projectile, Vector2 position) {
+    public void createFireEffect(Projectile projectile, Vector2 position) {
         double fireRadius = 40.0;
         double fireDamage = projectile.getDamage() * 0.3; // Lower damage but over time
         
@@ -133,7 +133,7 @@ public class BulletEffectProcessor {
         pendingFieldEffects.add(fire);
     }
 
-    private void createElectricEffect(Projectile projectile, Vector2 position) {
+    public void createElectricEffect(Projectile projectile, Vector2 position) {
         double electricRadius = 60.0;
         double electricDamage = projectile.getDamage() * 0.8; // High damage but shorter duration
         
@@ -150,7 +150,7 @@ public class BulletEffectProcessor {
         pendingFieldEffects.add(electric);
     }
 
-    private void createFreezeEffect(Projectile projectile, Vector2 position) {
+    public void createFreezeEffect(Projectile projectile, Vector2 position) {
         double freezeRadius = 50.0;
         double freezeDamage = projectile.getDamage() * 0.2; // Low damage but slowing effect
         
@@ -228,11 +228,15 @@ public class BulletEffectProcessor {
      * Apply homing behavior to a projectile (called during projectile update)
      */
     public void applyHomingBehavior(Projectile projectile, double deltaTime) {
-        if (!projectile.hasBulletEffect(BulletEffect.HOMING)) return;
+        if (!projectile.hasBulletEffect(BulletEffect.HOMING)) {
+            return;
+        }
         
         // Find nearest enemy player
         Player nearestEnemy = findNearestEnemy(projectile);
-        if (nearestEnemy == null) return;
+        if (nearestEnemy == null) {
+            return;
+        }
         
         Vector2 projectilePos = new Vector2(projectile.getBody().getTransform().getTranslationX(),
                                           projectile.getBody().getTransform().getTranslationY());
@@ -240,7 +244,9 @@ public class BulletEffectProcessor {
         Vector2 direction = targetPos.copy().subtract(projectilePos);
         
         double distance = direction.getMagnitude();
-        if (distance > 200.0) return; // Homing only works within 200 units
+        if (distance > 200.0) {
+            return; // Homing only works within 200 units
+        }
         
         direction.normalize();
         
@@ -263,8 +269,12 @@ public class BulletEffectProcessor {
         double nearestDistance = Double.MAX_VALUE;
         
         for (Player player : gameEntities.getAllPlayers()) {
-            if (!player.isActive()) continue;
-            if (!projectile.canDamage(player)) continue; // Skip teammates and self
+            if (!player.isActive()) {
+                continue;
+            }
+            if (!projectile.canDamage(player)) {
+                continue; // Skip teammates and self
+            }
             
             double distance = projectilePos.distance(player.getPosition());
             if (distance < nearestDistance) {

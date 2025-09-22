@@ -22,6 +22,8 @@ public class Projectile extends GameEntity {
     private final Set<BulletEffect> bulletEffects; // Special effects this projectile has
     private final Ordinance ordinance; // Type of projectile (bullet, rocket, grenade, etc.)
     private boolean hasExploded = false; // Track if explosive projectiles have already exploded
+    private final double minimumVelocity; // Minimum velocity before projectile is dismissed
+    private boolean dismissedByVelocity = false; // Track if dismissed due to low velocity
     
     public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange,
                       int ownerTeam, double linearDamping, Set<BulletEffect> bulletEffects, Ordinance ordinance) {
@@ -32,6 +34,7 @@ public class Projectile extends GameEntity {
         this.linearDamping = linearDamping;
         this.bulletEffects = new HashSet<>(bulletEffects);
         this.ordinance = ordinance;
+        this.minimumVelocity = calculateMinimumVelocity(ordinance);
 
         // Calculate time to live based on range and speed
         double speed = new Vector2(vx, vy).getMagnitude();
@@ -62,6 +65,30 @@ public class Projectile extends GameEntity {
         body.setLinearDamping(linearDamping); // Apply linear damping for bullet slowdown
         return body;
     }
+    
+    /**
+     * Calculate minimum velocity threshold based on ordinance type.
+     * Different projectile types have different minimum velocities before dismissal.
+     */
+    private double calculateMinimumVelocity(Ordinance ordinance) {
+        switch (ordinance) {
+            case ROCKET:
+                return 50.0; // Rockets need higher velocity to maintain thrust
+            case GRENADE:
+                return 20.0; // Grenades explode when they slow down significantly
+            case CANNONBALL:
+                return 30.0; // Heavy projectiles need some momentum
+            case PLASMA:
+                return 40.0; // Energy projectiles dissipate when slowing
+            case FLAMETHROWER:
+                return 10.0; // Fire streams extinguish quickly
+            case BULLET:
+            case DART:
+            case LASER:
+            default:
+                return 5.0; // Standard projectiles have low minimum velocity
+        }
+    }
 
     @Override
     public void update(double deltaTime) {
@@ -69,8 +96,20 @@ public class Projectile extends GameEntity {
             return;
         }
 
+        // Check time to live
         timeToLive -= deltaTime;
         if (timeToLive <= 0) {
+            active = false;
+            return;
+        }
+
+        // Check velocity threshold for dismissal
+        Vector2 velocity = body.getLinearVelocity();
+        double currentSpeed = velocity.getMagnitude();
+        
+        if (currentSpeed < minimumVelocity && !dismissedByVelocity) {
+            // Mark as dismissed by velocity to trigger effects
+            dismissedByVelocity = true;
             active = false;
         }
 
@@ -117,5 +156,55 @@ public class Projectile extends GameEntity {
 
     public void markAsExploded() {
         this.hasExploded = true;
+    }
+    
+    /**
+     * Check if this projectile was dismissed due to low velocity.
+     * This can be used to trigger special effects like explosions.
+     */
+    public boolean wasDismissedByVelocity() {
+        return dismissedByVelocity;
+    }
+    
+    /**
+     * Check if this projectile should trigger effects on dismissal.
+     * This includes explosive effects, electric discharges, etc.
+     */
+    public boolean shouldTriggerEffectsOnDismissal() {
+        if (!wasDismissedByVelocity()) {
+            return false;
+        }
+        
+        // Don't trigger effects if already exploded
+        if (hasExploded) {
+            return false;
+        }
+        
+        // Check if this ordinance type should trigger effects
+        switch (ordinance) {
+            case ROCKET:
+            case GRENADE:
+                return true; // Explosive projectiles explode on low velocity
+            case PLASMA:
+                return hasBulletEffect(BulletEffect.ELECTRIC); // Plasma with electric effect discharges
+            case FLAMETHROWER:
+                return hasBulletEffect(BulletEffect.INCENDIARY); // Flame projectiles with incendiary spread fire
+            default:
+                // Other projectiles only trigger effects if they have special bullet effects
+                return hasBulletEffect(BulletEffect.ELECTRIC) || 
+                       hasBulletEffect(BulletEffect.INCENDIARY) ||
+                       hasBulletEffect(BulletEffect.FREEZING) ||
+                       hasBulletEffect(BulletEffect.EXPLODES_ON_IMPACT);
+        }
+    }
+    
+    /**
+     * Get the current velocity magnitude of this projectile.
+     */
+    public double getCurrentSpeed() {
+        if (body == null) {
+            return 0.0;
+        }
+        return body.getLinearVelocity().getMagnitude();
     }
 }

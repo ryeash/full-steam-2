@@ -200,13 +200,18 @@ public class TerrainGenerator {
         for (int i = 0; i < obstacleCount; i++) {
             Obstacle obstacle;
             
-            // 80% terrain-specific, 20% completely random for variety
-            if (random.nextDouble() < 0.8) {
-                obstacle = generateTerrainSpecificObstacle();
-            } else {
-                obstacle = generateRandomObstacle();
-            }
-            
+            double roll = random.nextDouble();
+//            if (roll < 0.7) {
+//                // 70% terrain-specific obstacles
+//                obstacle = generateTerrainSpecificObstacle();
+//            } else if (roll < 0.9) {
+//                // 20% completely random obstacles
+//                obstacle = generateRandomObstacle();
+//            } else {
+//                // 10% extra chaotic obstacles for maximum variety
+//            }
+                obstacle = generateChaoticObstacle();
+
             if (obstacle != null) {
                 generatedObstacles.add(obstacle);
             }
@@ -243,6 +248,17 @@ public class TerrainGenerator {
         double y = (random.nextDouble() - 0.5) * (worldHeight - 200);
         
         return ShapedObstacle.createRandomObstacle(x, y);
+    }
+    
+    /**
+     * Generate an extra chaotic obstacle with maximum randomization.
+     */
+    private Obstacle generateChaoticObstacle() {
+        // Allow chaotic obstacles to spawn closer to edges for more dramatic placement
+        double x = (random.nextDouble() - 0.5) * (worldWidth - 100);
+        double y = (random.nextDouble() - 0.5) * (worldHeight - 100);
+        
+        return ShapedObstacle.createChaoticObstacle(x, y);
     }
     
     /**

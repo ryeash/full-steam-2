@@ -169,10 +169,10 @@ class PlayerInterpolator {
  * Optimized for performance and accuracy
  */
 class ProjectileInterpolator {
-    constructor(sprite, initialVelocity = { x: 0, y: 0 }) {
-        this.sprite = sprite;
+    constructor(container, initialVelocity = { x: 0, y: 0 }) {
+        this.container = container; // Now works with container instead of sprite
         this.velocity = { ...initialVelocity };
-        this.serverPos = { x: sprite.x, y: sprite.y };
+        this.serverPos = { x: container.x, y: container.y };
         this.lastServerUpdate = performance.now(); // Use high-resolution timer
         this.correctionThreshold = 15; // Reduced from 30 pixels for smoother movement
         this.maxCorrectionSpeed = 500; // pixels/second - limit correction speed to avoid teleporting
@@ -181,6 +181,10 @@ class ProjectileInterpolator {
         this.tempDistance = 0;
         this.tempDx = 0;
         this.tempDy = 0;
+        
+        // Trail tracking
+        this.lastTrailPosition = { x: container.x, y: container.y };
+        this.trailUpdateDistance = 5; // Add trail point every 5 pixels of movement
     }
     
     updateFromServer(x, y, vx = 0, vy = 0) {
@@ -188,8 +192,8 @@ class ProjectileInterpolator {
         const timeSinceLastUpdate = (now - this.lastServerUpdate) / 1000; // Convert to seconds
         
         // Calculate prediction error (difference between predicted and actual server position)
-        this.tempDx = this.sprite.x - x;
-        this.tempDy = this.sprite.y - y;
+        this.tempDx = this.container.x - x;
+        this.tempDy = this.container.y - y;
         this.tempDistance = Math.sqrt(this.tempDx * this.tempDx + this.tempDy * this.tempDy);
         
         // Apply correction based on error magnitude
@@ -197,13 +201,13 @@ class ProjectileInterpolator {
             // For large errors, apply gradual correction to avoid jarring snaps
             if (this.tempDistance > 100) {
                 // Very large error - likely a teleport or major desync, snap immediately
-                this.sprite.x = x;
-                this.sprite.y = y;
+                this.container.x = x;
+                this.container.y = y;
             } else {
                 // Moderate error - apply smooth correction over time
                 const correctionFactor = Math.min(1.0, (this.maxCorrectionSpeed * timeSinceLastUpdate) / this.tempDistance);
-                this.sprite.x += this.tempDx * -correctionFactor;
-                this.sprite.y += this.tempDy * -correctionFactor;
+                this.container.x += this.tempDx * -correctionFactor;
+                this.container.y += this.tempDy * -correctionFactor;
             }
         }
         
@@ -221,19 +225,61 @@ class ProjectileInterpolator {
         const targetFPS = 60;
         const dt = deltaTime / targetFPS; // Convert PIXI deltaTime to seconds
         
+        // Store old position for trail tracking
+        const oldX = this.container.x;
+        const oldY = this.container.y;
+        
         // Apply velocity-based prediction
         // This predicts where the projectile should be based on last known velocity
-        this.sprite.x += this.velocity.x * dt;
-        this.sprite.y += this.velocity.y * dt;
+        this.container.x += this.velocity.x * dt;
+        this.container.y += this.velocity.y * dt;
+        
+        // Update trail if projectile has one
+        this.updateTrail(oldX, oldY);
+    }
+    
+    updateTrail(oldX, oldY) {
+        if (!this.container.trail || !this.container.trailPoints) return;
+        
+        // Check if projectile has moved enough to add a new trail point
+        const dx = this.container.x - this.lastTrailPosition.x;
+        const dy = this.container.y - this.lastTrailPosition.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance >= this.trailUpdateDistance) {
+            // Add new trail point (relative to container position)
+            const relativeX = this.lastTrailPosition.x - this.container.x;
+            const relativeY = this.lastTrailPosition.y - this.container.y;
+            
+            this.container.trailPoints.push({
+                x: relativeX,
+                y: relativeY
+            });
+            
+            // Update last trail position
+            this.lastTrailPosition.x = this.container.x;
+            this.lastTrailPosition.y = this.container.y;
+            
+            // Keep trail points within maximum length
+            while (this.container.trailPoints.length > this.container.maxTrailLength) {
+                this.container.trailPoints.shift();
+            }
+            
+            // Update trail graphics through game engine
+            if (window.gameEngine) {
+                window.gameEngine.updateProjectileTrail(this.container);
+            }
+        }
     }
     
     /**
      * Clean up resources when interpolator is no longer needed
      */
     destroy() {
-        this.sprite = null;
+        this.container = null;
         this.velocity = null;
         this.serverPos = null;
+        this.lastTrailPosition = null;
     }
 }
 
@@ -323,6 +369,13 @@ class GameEngine {
                     localInterpolator.predictMovement(this.lastPlayerInput, dt);
                 }
             }
+            
+            // Animate plasma effects
+            this.projectiles.forEach(projectileContainer => {
+                if (projectileContainer.isPlasma) {
+                    this.animatePlasmaEffects(projectileContainer, deltaTime);
+                }
+            });
         });
 
         // Create main containers
@@ -1103,22 +1156,50 @@ class GameEngine {
     }
     
     createProjectile(projectileData) {
-        const sprite = new PIXI.Sprite(this.projectileTexture);
-        sprite.anchor.set(0.5);
+        // Create main projectile container
+        const projectileContainer = new PIXI.Container();
         
         // Convert world coordinates to screen coordinates once
         const isoPos = this.worldToIsometric(projectileData.x, projectileData.y);
-        sprite.position.set(isoPos.x, isoPos.y);
+        projectileContainer.position.set(isoPos.x, isoPos.y);
+        
+        // Create the main projectile sprite
+        const sprite = new PIXI.Sprite(this.projectileTexture);
+        sprite.anchor.set(0.5);
         
         // Customize projectile appearance based on ordinance type
         this.customizeProjectileAppearance(sprite, projectileData);
         
-        // Set projectile z-index above players
-        sprite.zIndex = 15;
+        // Add sprite to container
+        projectileContainer.addChild(sprite);
         
-        sprite.projectileData = projectileData;
-        this.projectiles.set(projectileData.id, sprite);
-        this.gameContainer.addChild(sprite);
+        // Add special effects for plasma projectiles
+        const ordinance = projectileData.ordinance || 'BULLET';
+        if (ordinance === 'PLASMA') {
+            this.createPlasmaEffects(projectileContainer, sprite);
+        }
+        
+        // Check if this projectile should have a trail
+        const shouldHaveTrail = this.shouldProjectileHaveTrail(ordinance);
+        
+        if (shouldHaveTrail) {
+            // Create trail graphics
+            const trail = this.createProjectileTrail(ordinance);
+            trail.zIndex = -1; // Behind the main projectile
+            projectileContainer.addChildAt(trail, 0); // Add at index 0 to be behind sprite
+            projectileContainer.trail = trail;
+            projectileContainer.trailPoints = []; // Store recent positions for trail
+            projectileContainer.maxTrailLength = this.getTrailLength(ordinance);
+        }
+        
+        // Set projectile z-index above players
+        projectileContainer.zIndex = 15;
+        
+        // Store references
+        projectileContainer.projectileData = projectileData;
+        projectileContainer.sprite = sprite;
+        this.projectiles.set(projectileData.id, projectileContainer);
+        this.gameContainer.addChild(projectileContainer);
         
         // Create interpolator for smooth movement
         // Convert server velocity from world coordinates to isometric screen coordinates
@@ -1126,8 +1207,239 @@ class GameEngine {
         const isoVel = this.worldVelocityToIsometric(worldVel.x, worldVel.y);
         
         // Initialize interpolator with screen coordinates (already converted)
-        const interpolator = new ProjectileInterpolator(sprite, isoVel);
+        const interpolator = new ProjectileInterpolator(projectileContainer, isoVel);
         this.projectileInterpolators.set(projectileData.id, interpolator);
+    }
+    
+    /**
+     * Check if projectile should have a trail based on ordinance type
+     */
+    shouldProjectileHaveTrail(ordinance) {
+        // Based on Ordinance.java hasTrail() property
+        switch (ordinance) {
+            case 'ROCKET':
+            case 'GRENADE':
+                return true;
+            default:
+                return false;
+        }
+    }
+    
+    /**
+     * Create trail graphics for projectiles
+     */
+    createProjectileTrail(ordinance) {
+        const trail = new PIXI.Graphics();
+        
+        switch (ordinance) {
+            case 'ROCKET':
+                // Rocket exhaust trail - bright orange/yellow with flames
+                trail.trailColor = 0xff6600; // Orange
+                trail.trailSecondaryColor = 0xffaa00; // Yellow
+                trail.trailWidth = 8;
+                trail.trailAlpha = 0.8;
+                break;
+            case 'GRENADE':
+                // Grenade trail - dark smoke
+                trail.trailColor = 0x666666; // Dark gray
+                trail.trailSecondaryColor = 0x999999; // Light gray
+                trail.trailWidth = 6;
+                trail.trailAlpha = 0.6;
+                break;
+            default:
+                trail.trailColor = 0xffffff;
+                trail.trailSecondaryColor = 0xcccccc;
+                trail.trailWidth = 4;
+                trail.trailAlpha = 0.5;
+                break;
+        }
+        
+        return trail;
+    }
+    
+    /**
+     * Get trail length based on ordinance type
+     */
+    getTrailLength(ordinance) {
+        switch (ordinance) {
+            case 'ROCKET':
+                return 15; // Long rocket exhaust
+            case 'GRENADE':
+                return 10; // Medium smoke trail
+            default:
+                return 8;
+        }
+    }
+    
+    /**
+     * Create plasma effects for super-heated buzzing/glowing appearance
+     */
+    createPlasmaEffects(projectileContainer, sprite) {
+        // Create multiple layers for plasma effect
+        
+        // Outer electric field
+        const outerGlow = new PIXI.Graphics();
+        outerGlow.beginFill(0x4444ff, 0.3);
+        outerGlow.drawCircle(0, 0, 8);
+        outerGlow.endFill();
+        outerGlow.zIndex = -2;
+        projectileContainer.addChild(outerGlow);
+        
+        // Middle energy field with pulsing
+        const middleGlow = new PIXI.Graphics();
+        middleGlow.beginFill(0x6666ff, 0.5);
+        middleGlow.drawCircle(0, 0, 5);
+        middleGlow.endFill();
+        middleGlow.zIndex = -1;
+        projectileContainer.addChild(middleGlow);
+        
+        // Inner core glow
+        const innerGlow = new PIXI.Graphics();
+        innerGlow.beginFill(0xaaaaff, 0.7);
+        innerGlow.drawCircle(0, 0, 3);
+        innerGlow.endFill();
+        innerGlow.zIndex = 0;
+        projectileContainer.addChild(innerGlow);
+        
+        // Electric arcs around the plasma
+        const electricArcs = new PIXI.Graphics();
+        electricArcs.zIndex = 1;
+        projectileContainer.addChild(electricArcs);
+        
+        // Store references for animation
+        projectileContainer.plasmaEffects = {
+            outerGlow: outerGlow,
+            middleGlow: middleGlow,
+            innerGlow: innerGlow,
+            electricArcs: electricArcs,
+            animationTime: 0,
+            arcUpdateTimer: 0
+        };
+        
+        // Mark for plasma animation
+        projectileContainer.isPlasma = true;
+    }
+    
+    /**
+     * Animate plasma effects for buzzing/glowing appearance
+     */
+    animatePlasmaEffects(projectileContainer, deltaTime) {
+        if (!projectileContainer.plasmaEffects) return;
+        
+        const effects = projectileContainer.plasmaEffects;
+        effects.animationTime += deltaTime * 0.05; // Slow down animation speed
+        effects.arcUpdateTimer += deltaTime;
+        
+        const time = effects.animationTime;
+        
+        // Pulsing glow effects
+        const pulseOuter = 0.8 + Math.sin(time * 8) * 0.3; // Fast pulse
+        const pulseMiddle = 0.9 + Math.sin(time * 12) * 0.2; // Faster pulse
+        const pulseInner = 0.95 + Math.sin(time * 15) * 0.1; // Very fast pulse
+        
+        effects.outerGlow.alpha = pulseOuter * 0.3;
+        effects.middleGlow.alpha = pulseMiddle * 0.5;
+        effects.innerGlow.alpha = pulseInner * 0.7;
+        
+        // Scale pulsing for energy field effect
+        const scaleOuter = 1.0 + Math.sin(time * 6) * 0.2;
+        const scaleMiddle = 1.0 + Math.sin(time * 10) * 0.15;
+        const scaleInner = 1.0 + Math.sin(time * 14) * 0.1;
+        
+        effects.outerGlow.scale.set(scaleOuter);
+        effects.middleGlow.scale.set(scaleMiddle);
+        effects.innerGlow.scale.set(scaleInner);
+        
+        // Update electric arcs every few frames for buzzing effect
+        if (effects.arcUpdateTimer > 0.1) { // Update every 100ms for buzzing
+            this.updatePlasmaArcs(effects.electricArcs);
+            effects.arcUpdateTimer = 0;
+        }
+        
+        // Slight rotation for dynamic feel
+        effects.outerGlow.rotation = time * 2;
+        effects.middleGlow.rotation = -time * 3;
+        effects.innerGlow.rotation = time * 4;
+    }
+    
+    /**
+     * Update electric arcs around plasma for buzzing effect
+     */
+    updatePlasmaArcs(electricArcs) {
+        electricArcs.clear();
+        electricArcs.lineStyle(1, 0xaaaaff, 0.8);
+        
+        // Draw 3-5 random electric arcs
+        const numArcs = 3 + Math.floor(Math.random() * 3);
+        
+        for (let i = 0; i < numArcs; i++) {
+            const startAngle = Math.random() * Math.PI * 2;
+            const arcLength = Math.PI * 0.3 + Math.random() * Math.PI * 0.4; // 54-126 degrees
+            const radius = 6 + Math.random() * 4; // 6-10 pixel radius
+            
+            // Create zigzag electric arc
+            const steps = 5 + Math.floor(Math.random() * 3); // 5-7 steps
+            let currentAngle = startAngle;
+            const angleStep = arcLength / steps;
+            
+            let lastX = Math.cos(currentAngle) * radius;
+            let lastY = Math.sin(currentAngle) * radius;
+            
+            for (let j = 1; j <= steps; j++) {
+                currentAngle += angleStep;
+                
+                // Add random jitter for electric effect
+                const jitterRadius = radius + (Math.random() - 0.5) * 3;
+                const jitterAngle = currentAngle + (Math.random() - 0.5) * 0.3;
+                
+                const x = Math.cos(jitterAngle) * jitterRadius;
+                const y = Math.sin(jitterAngle) * jitterRadius;
+                
+                electricArcs.moveTo(lastX, lastY);
+                electricArcs.lineTo(x, y);
+                
+                lastX = x;
+                lastY = y;
+            }
+        }
+    }
+    
+    /**
+     * Update projectile trail graphics
+     */
+    updateProjectileTrail(projectileContainer) {
+        if (!projectileContainer.trail || !projectileContainer.trailPoints) return;
+        
+        const trail = projectileContainer.trail;
+        const points = projectileContainer.trailPoints;
+        
+        // Clear previous trail
+        trail.clear();
+        
+        if (points.length < 2) return;
+        
+        // Draw trail as a series of connected lines with decreasing width and alpha
+        for (let i = 1; i < points.length; i++) {
+            const progress = i / points.length; // 0 = oldest, 1 = newest
+            const prevPoint = points[i - 1];
+            const currentPoint = points[i];
+            
+            // Calculate trail properties based on progress
+            const width = trail.trailWidth * (0.2 + 0.8 * progress); // Wider at front
+            const alpha = trail.trailAlpha * progress; // More opaque at front
+            
+            // Use gradient effect by drawing multiple lines
+            trail.lineStyle(width, trail.trailColor, alpha);
+            trail.moveTo(prevPoint.x, prevPoint.y);
+            trail.lineTo(currentPoint.x, currentPoint.y);
+            
+            // Add inner bright core for rocket trails
+            if (projectileContainer.projectileData.ordinance === 'ROCKET' && progress > 0.7) {
+                trail.lineStyle(width * 0.4, trail.trailSecondaryColor, alpha * 0.8);
+                trail.moveTo(prevPoint.x, prevPoint.y);
+                trail.lineTo(currentPoint.x, currentPoint.y);
+            }
+        }
     }
     
     /**
@@ -1149,7 +1461,8 @@ class GameEngine {
                 break;
             case 'PLASMA':
                 sprite.scale.set(1.2);
-                sprite.tint = 0x4444ff; // Blue for plasma
+                sprite.tint = 0x8888ff; // Bright blue-white for plasma core
+                sprite.alpha = 0.9; // Slightly transparent for energy effect
                 break;
             case 'LASER':
                 sprite.scale.set(0.8);
@@ -1206,11 +1519,11 @@ class GameEngine {
     }
     
     updateProjectile(projectileData) {
-        const sprite = this.projectiles.get(projectileData.id);
-        if (!sprite) return;
+        const projectileContainer = this.projectiles.get(projectileData.id);
+        if (!projectileContainer) return;
         
         // Update projectile data
-        sprite.projectileData = projectileData;
+        projectileContainer.projectileData = projectileData;
         
         // Use interpolator for smooth movement
         const interpolator = this.projectileInterpolators.get(projectileData.id);
@@ -1227,14 +1540,14 @@ class GameEngine {
             // Fallback to direct position update if no interpolator
             // This should rarely happen, but provides safety
             const isoPos = this.worldToIsometric(projectileData.x, projectileData.y);
-            sprite.position.set(isoPos.x, isoPos.y);
+            projectileContainer.position.set(isoPos.x, isoPos.y);
         }
     }
     
     removeProjectile(projectileId) {
-        const sprite = this.projectiles.get(projectileId);
-        if (sprite) {
-            this.gameContainer.removeChild(sprite);
+        const projectileContainer = this.projectiles.get(projectileId);
+        if (projectileContainer) {
+            this.gameContainer.removeChild(projectileContainer);
             this.projectiles.delete(projectileId);
         }
         

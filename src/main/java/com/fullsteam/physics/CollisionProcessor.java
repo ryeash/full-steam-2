@@ -1,5 +1,6 @@
 package com.fullsteam.physics;
 
+import lombok.Getter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.geometry.Vector2;
@@ -13,6 +14,11 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
     private final GameEntities gameEntities;
     private final CollisionHandler collisionHandler;
+    /**
+     * -- GETTER --
+     *  Get the bullet effect processor for accessing pending effects and projectiles
+     */
+    @Getter
     private final BulletEffectProcessor bulletEffectProcessor;
 
     public CollisionProcessor(GameEntities gameEntities, CollisionHandler collisionHandler) {
@@ -68,24 +74,23 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             return false; // Disable collision resolution between projectiles
         }
         
-        if (entity1 instanceof Player && entity2 instanceof Projectile) {
-            handlePlayerProjectileCollision((Player) entity1, (Projectile) entity2);
+        if (entity1 instanceof Player player && entity2 instanceof Projectile projectile) {
+            handlePlayerProjectileCollision(player, projectile);
             return false; // Prevent physics resolution for projectile hits
-        } else if (entity1 instanceof Projectile && entity2 instanceof Player) {
-            handlePlayerProjectileCollision((Player) entity2, (Projectile) entity1);
+        } else if (entity1 instanceof Projectile projectile && entity2 instanceof Player player) {
+            handlePlayerProjectileCollision(player, projectile);
             return false; // Prevent physics resolution for projectile hits
-        } else if (entity1 instanceof Player && entity2 instanceof StrategicLocation) {
-            handlePlayerLocationInteraction((Player) entity1, (StrategicLocation) entity2);
+        } else if (entity1 instanceof Player player && entity2 instanceof StrategicLocation strategicLocation) {
+            handlePlayerLocationInteraction(player, strategicLocation);
             return true; // Allow physics to handle player-location overlaps (sensors should not resolve anyway)
-        } else if (entity1 instanceof StrategicLocation && entity2 instanceof Player) {
-            handlePlayerLocationInteraction((Player) entity2, (StrategicLocation) entity1);
+        } else if (entity1 instanceof StrategicLocation strategicLocation && entity2 instanceof Player player) {
+            handlePlayerLocationInteraction(player, strategicLocation);
             return true; // Allow physics to handle player-location overlaps (sensors should not resolve anyway)
-        } else if (entity1 instanceof Projectile && entity2 instanceof Obstacle) {
-            return handleProjectileObstacleCollision((Projectile) entity1, (Obstacle) entity2);
-        } else if (entity1 instanceof Obstacle && entity2 instanceof Projectile) {
-            return handleProjectileObstacleCollision((Projectile) entity2, (Obstacle) entity1);
+        } else if (entity1 instanceof Projectile projectile && entity2 instanceof Obstacle obstacle) {
+            return handleProjectileObstacleCollision(projectile, obstacle);
+        } else if (entity1 instanceof Obstacle obstacle && entity2 instanceof Projectile projectile) {
+            return handleProjectileObstacleCollision(projectile, obstacle);
         }
-
         return true;
     }
 
@@ -148,13 +153,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         if (collisionHandler != null) {
             collisionHandler.onPlayerStayInLocation(player, location);
         }
-    }
-
-    /**
-     * Get the bullet effect processor for accessing pending effects and projectiles
-     */
-    public BulletEffectProcessor getBulletEffectProcessor() {
-        return bulletEffectProcessor;
     }
 
     public interface CollisionHandler {

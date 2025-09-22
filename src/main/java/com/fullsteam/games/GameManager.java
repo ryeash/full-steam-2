@@ -6,6 +6,7 @@ import com.fullsteam.Config;
 import com.fullsteam.ai.AIGameHelper;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
+import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.GameInfo;
 import com.fullsteam.model.PlayerConfigRequest;
@@ -165,7 +166,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
 
     public void send(WebSocketSession session, Object message) {
         try {
-            if (session.isWritable()) {
+            if (session.isWritable() && session.isOpen()) {
                 String json = objectMapper.writeValueAsString(message);
                 session.sendSync(json);
             }
@@ -420,6 +421,10 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             gameEntities.getProjectiles().entrySet().removeIf(entry -> {
                 Projectile projectile = entry.getValue();
                 if (!projectile.isActive()) {
+                    // Check if projectile should trigger effects on dismissal
+                    if (projectile.shouldTriggerEffectsOnDismissal()) {
+                        triggerProjectileDismissalEffects(projectile);
+                    }
                     bodiesToRemove.add(projectile.getBody());
                     return true;
                 }
@@ -988,6 +993,57 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
                     collisionProcessor.getBulletEffectProcessor().applyHomingBehavior(projectile, deltaTime);
                 }
             }
+        }
+    }
+
+    /**
+     * Trigger effects when a projectile is dismissed due to low velocity.
+     * This handles explosions, electric discharges, and other effects.
+     */
+    private void triggerProjectileDismissalEffects(Projectile projectile) {
+        CollisionProcessor collisionProcessor = getCollisionProcessor();
+        if (collisionProcessor == null) {
+            return;
+        }
+
+        Vector2 position = projectile.getPosition();
+        BulletEffectProcessor effectProcessor = collisionProcessor.getBulletEffectProcessor();
+
+        // Mark projectile as exploded to prevent duplicate effects
+        projectile.markAsExploded();
+
+        // Trigger effects based on ordinance type and bullet effects
+        switch (projectile.getOrdinance()) {
+            case ROCKET:
+            case GRENADE:
+                // These always create explosions when dismissed by velocity
+                effectProcessor.createExplosion(projectile, position);
+                break;
+
+            case PLASMA:
+                if (projectile.hasBulletEffect(BulletEffect.ELECTRIC)) {
+                    effectProcessor.createElectricEffect(projectile, position);
+                }
+                break;
+
+            case FLAMETHROWER:
+                if (projectile.hasBulletEffect(BulletEffect.INCENDIARY)) {
+                    effectProcessor.createFireEffect(projectile, position);
+                }
+                break;
+
+            default:
+                // Handle special bullet effects for other projectile types
+                if (projectile.hasBulletEffect(BulletEffect.EXPLODES_ON_IMPACT)) {
+                    effectProcessor.createExplosion(projectile, position);
+                } else if (projectile.hasBulletEffect(BulletEffect.ELECTRIC)) {
+                    effectProcessor.createElectricEffect(projectile, position);
+                } else if (projectile.hasBulletEffect(BulletEffect.INCENDIARY)) {
+                    effectProcessor.createFireEffect(projectile, position);
+                } else if (projectile.hasBulletEffect(BulletEffect.FREEZING)) {
+                    effectProcessor.createFreezeEffect(projectile, position);
+                }
+                break;
         }
     }
 
