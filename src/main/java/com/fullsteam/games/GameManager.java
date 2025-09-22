@@ -50,6 +50,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class GameManager implements CollisionProcessor.CollisionHandler, StepListener<Body> {
     protected static final Logger log = LoggerFactory.getLogger(GameManager.class);
@@ -62,7 +63,6 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     protected final GameConfig gameConfig;
     @Getter
     protected final GameEntities gameEntities = new GameEntities();
-    protected final ObjectMapper objectMapper = new ObjectMapper();
     protected final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     @Getter
     protected final AIPlayerManager aiPlayerManager = new AIPlayerManager();
@@ -71,13 +71,12 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     @Getter
     protected final TerrainGenerator terrainGenerator;
 
+    protected final ObjectMapper objectMapper = new ObjectMapper();
+
     protected long gameStartTime;
     protected boolean gameRunning = false;
 
     // AI management settings - initialized from gameConfig
-    private boolean autoFillWithAI;
-    private double minAIFillPercentage;
-    private double maxAIFillPercentage;
     private long aiCheckIntervalMs;
     private long lastAICheckTime = 0;
 
@@ -93,9 +92,6 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         this.gameStartTime = System.currentTimeMillis();
 
         // Initialize AI management settings from config
-        this.autoFillWithAI = gameConfig.isAutoFillWithAI();
-        this.minAIFillPercentage = gameConfig.getMinAIFillPercentage();
-        this.maxAIFillPercentage = gameConfig.getMaxAIFillPercentage();
         this.aiCheckIntervalMs = gameConfig.getAiCheckIntervalMs();
 
         // Initialize team spawn manager
@@ -127,12 +123,10 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         createObstacles();
 
         // Add initial AI players to make the game more interesting from the start
-        if (autoFillWithAI) {
-            int initialAICount = (int) Math.ceil(getMaxPlayers() * minAIFillPercentage);
-            int added = AIGameHelper.addMixedAIPlayers(this, initialAICount);
-            if (added > 0) {
-                log.info("Added {} initial AI players to game {} for better gameplay", added, gameId);
-            }
+        int initialAICount = getMaxPlayers();
+        int added = AIGameHelper.addMixedAIPlayers(this, initialAICount);
+        if (added > 0) {
+            log.info("Added {} initial AI players to game {} for better gameplay", added, gameId);
         }
 
         scheduler.scheduleAtFixedRate(this::update, 0, 16, TimeUnit.MILLISECONDS);
@@ -172,8 +166,10 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
 
     public void send(WebSocketSession session, Object message) {
         try {
-            String json = objectMapper.writeValueAsString(message);
-            session.sendSync(json);
+            if (session.isWritable()) {
+                String json = objectMapper.writeValueAsString(message);
+                session.sendSync(json);
+            }
         } catch (JsonProcessingException e) {
             log.error("Error serializing message", e);
         }
@@ -330,8 +326,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
      *
      * @return Map of team number to player count
      */
-    public java.util.Map<Integer, Integer> getTeamCounts() {
-        java.util.Map<Integer, Integer> teamCounts = new java.util.HashMap<>();
+    public Map<Integer, Integer> getTeamCounts() {
+        Map<Integer, Integer> teamCounts = new HashMap<>();
 
         for (Player player : gameEntities.getAllPlayers()) {
             int team = player.getTeam();
@@ -342,72 +338,28 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     }
 
     /**
-     * Configure automatic AI filling settings.
-     */
-    public void setAutoFillSettings(boolean enabled, double minFillPercentage, double maxFillPercentage) {
-        this.autoFillWithAI = enabled;
-        this.minAIFillPercentage = Math.max(0.0, Math.min(1.0, minFillPercentage));
-        this.maxAIFillPercentage = Math.max(minFillPercentage, Math.min(1.0, maxFillPercentage));
-        log.info("Auto-fill AI settings updated: enabled={}, min={}%, max={}%",
-                enabled, minFillPercentage * 100, maxFillPercentage * 100);
-    }
-
-    /**
-     * Enable automatic AI filling with default settings.
-     */
-    public void enableAutoFillAI() {
-        setAutoFillSettings(true, 0.4, 0.8);
-    }
-
-    /**
-     * Disable automatic AI filling.
-     */
-    public void disableAutoFillAI() {
-        this.autoFillWithAI = false;
-        log.info("Auto-fill AI disabled for game {}", gameId);
-    }
-
-    /**
      * Manually trigger AI player adjustment based on current settings.
      */
     public void adjustAIPlayers() {
-        if (!autoFillWithAI) {
-            return;
-        }
-
         int totalPlayers = gameEntities.getAllPlayers().size();
         int humanPlayers = totalPlayers - getAIPlayerCount();
-        int maxPlayers = getMaxPlayers();
 
         // Calculate target player count
-        int minTargetPlayers = (int) Math.ceil(maxPlayers * minAIFillPercentage);
-        int maxTargetPlayers = (int) Math.floor(maxPlayers * maxAIFillPercentage);
-
         // If we have very few human players, fill up to minimum
-        if (totalPlayers < minTargetPlayers) {
-            int aiToAdd = minTargetPlayers - totalPlayers;
+        if (totalPlayers < getMaxPlayers()) {
+            int aiToAdd = getMaxPlayers() - totalPlayers;
             int added = AIGameHelper.addMixedAIPlayers(this, aiToAdd);
             if (added > 0) {
-                log.info("Auto-filled {} AI players to reach minimum activity level (total: {})",
-                        added, totalPlayers + added);
+                log.info("Auto-filled {} AI players to reach minimum activity level (total: {})", added, totalPlayers + added);
             }
         }
         // If we have too many AI players compared to humans, remove some
-        else if (humanPlayers > 0 && totalPlayers > maxTargetPlayers) {
-            int aiToRemove = totalPlayers - maxTargetPlayers;
+        else if (humanPlayers > 0 && totalPlayers > getMaxPlayers()) {
+            int aiToRemove = totalPlayers - getMaxPlayers();
             int removed = removeExcessAIPlayers(aiToRemove);
             if (removed > 0) {
                 log.info("Removed {} excess AI players (total remaining: {})",
                         removed, totalPlayers - removed);
-            }
-        }
-        // If we have a good number of human players but could use more activity
-        else if (humanPlayers >= 2 && totalPlayers < (minTargetPlayers + maxTargetPlayers) / 2) {
-            int aiToAdd = Math.min(3, maxTargetPlayers - totalPlayers); // Add up to 3 AI
-            int added = AIGameHelper.addMixedAIPlayers(this, aiToAdd);
-            if (added > 0) {
-                log.info("Added {} AI players to increase game activity (total: {})",
-                        added, totalPlayers + added);
             }
         }
     }
@@ -417,7 +369,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
      */
     private int removeExcessAIPlayers(int count) {
         int removed = 0;
-        java.util.List<Integer> aiPlayerIds = new java.util.ArrayList<>();
+        List<Integer> aiPlayerIds = new ArrayList<>();
 
         // Collect all AI player IDs
         for (Player player : gameEntities.getAllPlayers()) {
@@ -439,10 +391,6 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
      * Periodically check and adjust AI player count based on current game state.
      */
     private void checkAndAdjustAIPlayers() {
-        if (!autoFillWithAI) {
-            return;
-        }
-
         long currentTime = System.currentTimeMillis();
         if (currentTime - lastAICheckTime >= aiCheckIntervalMs) {
             adjustAIPlayers();
@@ -518,9 +466,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
                 playerSession.getPlayerId(), playerSession.getPlayerName(), gameId, gameEntities.getPlayers().size(), gameEntities.getPlayerSessions().size());
 
         // Adjust AI players when a human player joins
-        if (autoFillWithAI) {
-            adjustAIPlayers();
-        }
+        adjustAIPlayers();
     }
 
     protected void onPlayerLeft(PlayerSession playerSession) {
@@ -538,7 +484,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         log.info("Player {} left game {}", playerSession.getPlayerId(), gameId);
 
         // Adjust AI players when a human player leaves
-        if (autoFillWithAI && !aiPlayerManager.isAIPlayer(playerSession.getPlayerId())) {
+        if (!aiPlayerManager.isAIPlayer(playerSession.getPlayerId())) {
             adjustAIPlayers();
         }
     }
@@ -667,9 +613,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         // Add compound obstacles (complex multi-body structures)
         for (CompoundObstacle compoundObstacle : terrainGenerator.getCompoundObstacles()) {
             // Add all bodies from the compound obstacle to the physics world
-            for (Body body : compoundObstacle.getBodies()) {
-                bodiesToAdd.add(body);
-            }
+            bodiesToAdd.addAll(compoundObstacle.getBodies());
         }
 
         log.info("Created {} simple obstacles and {} compound structures for {} terrain",
@@ -719,7 +663,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             playerState.put("health", player.getHealth());
             playerState.put("active", player.isActive());
             playerState.put("weapon", player.getCurrentWeaponIndex());
-            playerState.put("ammo", player.getCurrentWeapon().getAmmo());
+            playerState.put("ammo", player.getCurrentWeapon().getCurrentAmmo());
             playerState.put("reloading", player.isReloading());
             playerState.put("kills", player.getKills());
             playerState.put("deaths", player.getDeaths());
@@ -742,7 +686,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             // Convert bullet effects to string list for JSON serialization
             List<String> effectNames = projectile.getBulletEffects().stream()
                     .map(Enum::name)
-                    .collect(java.util.stream.Collectors.toList());
+                    .collect(Collectors.toList());
             projState.put("bulletEffects", effectNames);
 
             projectileStates.add(projState);

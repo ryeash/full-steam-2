@@ -29,12 +29,6 @@ public class GameConfig {
 
     // AI Management Settings
     @Builder.Default
-    private boolean autoFillWithAI = true;
-    @Builder.Default
-    private double minAIFillPercentage = 1.0; // 40%
-    @Builder.Default
-    private double maxAIFillPercentage = 1.0; // 80%
-    @Builder.Default
     private long aiCheckIntervalMs = 10000; // 10 seconds
 
     /**

@@ -13,6 +13,7 @@ import org.dyn4j.geometry.Vector2;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Getter
 @Setter
@@ -165,46 +166,42 @@ public class Player extends GameEntity {
         long now = System.currentTimeMillis();
         double fireInterval = 1000.0 / weapon.getFireRate();
         // Check if we have enough ammo for at least one bullet (partial bursts are allowed)
-        return !isReloading && weapon.getAmmo() > 0 && (now - lastShotTime) >= fireInterval;
+        return !isReloading && weapon.getCurrentAmmo() > 0 && (now - lastShotTime) >= fireInterval;
     }
 
     public List<Projectile> shoot() {
+        Weapon weapon = getCurrentWeapon();
         if (!canShoot()) {
-            if (getCurrentWeapon().getAmmo() == 0) {
+            if (weapon.getCurrentAmmo() <= 0) {
                 startReload();
             }
             return List.of();
         }
 
-        Weapon weapon = getCurrentWeapon();
-        weapon.fire();
         lastShotTime = System.currentTimeMillis();
 
         Vector2 pos = getPosition();
         Vector2 baseDirection = aimDirection.copy();
         double baseAngle = Math.atan2(baseDirection.y, baseDirection.x);
 
-        // For multi-shot weapons, we'll return the first projectile and let GameManager handle the rest
-        // This maintains compatibility with existing code while supporting multi-shot
         int bulletsPerShot = weapon.getBulletsPerShot();
-
-        // Limit bullets to available ammo (weapon.fire() will handle the ammo reduction)
-        int actualBulletsToFire = Math.min(bulletsPerShot, weapon.getAmmo());
+        int actualBulletsToFire = Math.min(bulletsPerShot, weapon.getCurrentAmmo());
+        weapon.setCurrentAmmo(weapon.getCurrentAmmo() - actualBulletsToFire);
 
         // Debug logging
-        System.out.println("DEBUG: Player " + id + " shooting with weapon: " + weapon.getName() +
-                           ", bulletsPerShot: " + bulletsPerShot +
-                           ", currentAmmo: " + weapon.getAmmo() +
-                           ", actualBulletsToFire: " + actualBulletsToFire +
-                           ", damage: " + weapon.getDamage() +
-                           ", fireRate: " + weapon.getFireRate());
+        if (bulletsPerShot > 1) {
+            System.out.println("DEBUG: Player " + id + " shooting with weapon: " + weapon.getName() +
+                               ", bulletsPerShot: " + bulletsPerShot +
+                               ", currentAmmo: " + weapon.getCurrentAmmo() +
+                               ", actualBulletsToFire: " + actualBulletsToFire +
+                               ", damage: " + weapon.getDamage() +
+                               ", fireRate: " + weapon.getFireRate());
+        }
 
         // Calculate spread pattern for multi-shot
         double totalSpread = actualBulletsToFire > 1 ? 0.3 : 0.0; // 0.3 radians total spread for multi-shot
         double spreadStep = actualBulletsToFire > 1 ? totalSpread / (actualBulletsToFire - 1) : 0.0;
         double startAngle = baseAngle - (totalSpread / 2.0);
-
-        // Create the first projectile (this one gets returned)
 
         // Add accuracy-based spread to each bullet
         double accuracySpread = (1.0 - weapon.getAccuracy()) * 0.1; // Reduced from 0.2 for multi-shot
@@ -223,8 +220,8 @@ public class Player extends GameEntity {
 
             toFire.add(new Projectile(
                     id,
-                    pos.x,
-                    pos.y,
+                    pos.x + ThreadLocalRandom.current().nextDouble(-3, 3),
+                    pos.y + ThreadLocalRandom.current().nextDouble(-3, 3),
                     velocity.x,
                     velocity.y,
                     weapon.getDamage(),

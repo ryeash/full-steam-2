@@ -69,14 +69,6 @@ public class Weapon {
         System.out.println("DEBUG: Created weapon '" + name + "' with magazineSize: " + magazineSize + ", currentAmmo: " + currentAmmo);
     }
 
-    public void fire() {
-        if (currentAmmo > 0) {
-            // Reduce ammo by the number of bullets fired per shot
-            int bulletsToFire = Math.min(bulletsPerShot, currentAmmo);
-            currentAmmo -= bulletsToFire;
-        }
-    }
-
     public void reload() {
         currentAmmo = magazineSize;
     }
@@ -85,23 +77,7 @@ public class Weapon {
         return currentAmmo < magazineSize;
     }
 
-    public int getAmmo() {
-        return currentAmmo;
-    }
-
-    public boolean hasBulletEffect(BulletEffect effect) {
-        return bulletEffects.contains(effect);
-    }
-
     public Set<BulletEffect> getBulletEffects() {
         return new HashSet<>(bulletEffects);
-    }
-
-    public int getTotalEffectPoints() {
-        return bulletEffects.stream().mapToInt(BulletEffect::getPointCost).sum();
-    }
-
-    public int getTotalOrdinancePoints() {
-        return ordinance.getPointCost();
     }
 }

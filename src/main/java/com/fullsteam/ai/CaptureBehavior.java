@@ -77,7 +77,7 @@ public class CaptureBehavior implements AIBehavior {
             }
             
             // Reload when safe and necessary
-            if (aiPlayer.getCurrentWeapon().getAmmo() <= 5 && nearestThreat == null && !aiPlayer.isReloading()) {
+            if (aiPlayer.getCurrentWeapon().getCurrentAmmo() <= 5 && nearestThreat == null && !aiPlayer.isReloading()) {
                 input.setReload(true);
             }
         }

@@ -57,7 +57,7 @@ public enum WeaponAttribute {
         @Override
         public double compute(int points) {
             validate(points);
-            return 20 + (points * 15);
+            return 120 + (points * 15);
         }
     },
     // Bullets Per Shot: 1-12 bullets (base 1 + 1 per 3 points, max 15 points)

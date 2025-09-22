@@ -181,7 +181,7 @@ public class CombatBehavior implements AIBehavior {
         }
         
         // Smart reloading
-        int currentAmmo = aiPlayer.getCurrentWeapon().getAmmo();
+        int currentAmmo = aiPlayer.getCurrentWeapon().getCurrentAmmo();
         int magazineSize = aiPlayer.getCurrentWeapon().getMagazineSize();
         
         boolean shouldReload = false;
@@ -428,7 +428,7 @@ public class CombatBehavior implements AIBehavior {
     
     private boolean shouldShootAtTarget(AIPlayer aiPlayer, Player target, double distance) {
         // Don't shoot if reloading or no ammo
-        if (aiPlayer.isReloading() || aiPlayer.getCurrentWeapon().getAmmo() <= 0) {
+        if (aiPlayer.isReloading() || aiPlayer.getCurrentWeapon().getCurrentAmmo() <= 0) {
             return false;
         }
         
