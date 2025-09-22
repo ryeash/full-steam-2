@@ -3,17 +3,254 @@
  * Built with PixiJS for 2.5D isometric rendering
  */
 
+/**
+ * Player Interpolator for smooth movement with client-side prediction
+ * Handles both local player (with prediction) and remote players (with smoothing)
+ */
+class PlayerInterpolator {
+    constructor(sprite, playerId, isLocalPlayer = false) {
+        this.sprite = sprite;
+        this.playerId = playerId;
+        this.isLocalPlayer = isLocalPlayer;
+        
+        // Server state
+        this.serverPos = { x: sprite.x, y: sprite.y };
+        this.serverRotation = 0;
+        this.lastServerUpdate = performance.now();
+        this.isFirstUpdate = true; // Flag to handle initial positioning
+        
+        // Prediction state (for local player)
+        this.predictedPos = { x: sprite.x, y: sprite.y };
+        this.predictedRotation = 0;
+        this.velocity = { x: 0, y: 0 };
+        
+        // Interpolation settings
+        this.smoothingFactor = isLocalPlayer ? 0.3 : 0.15; // Local player needs faster correction
+        this.correctionThreshold = isLocalPlayer ? 25 : 15; // Local player allows more deviation
+        this.maxCorrectionSpeed = 400; // pixels/second
+        this.maxInterpolationDistance = 200; // pixels - beyond this, assume teleport/respawn
+        
+        // Performance optimization
+        this.tempDx = 0;
+        this.tempDy = 0;
+        this.tempDistance = 0;
+    }
+    
+    updateFromServer(x, y, rotation = 0) {
+        const now = performance.now();
+        const timeSinceLastUpdate = (now - this.lastServerUpdate) / 1000;
+        
+        // Calculate distance from current position to server position
+        this.tempDx = this.sprite.x - x;
+        this.tempDy = this.sprite.y - y;
+        this.tempDistance = Math.sqrt(this.tempDx * this.tempDx + this.tempDy * this.tempDy);
+        
+        // Check if this is a teleport/respawn (distance too large for normal movement)
+        // Always snap on first update to avoid initial interpolation from (0,0)
+        if (this.isFirstUpdate || this.tempDistance > this.maxInterpolationDistance) {
+            // Large distance change - assume teleport/respawn, snap immediately
+            this.sprite.x = x;
+            this.sprite.y = y;
+            this.sprite.rotation = -rotation; // Invert for PIXI
+            
+            // Reset prediction state for local player
+            if (this.isLocalPlayer) {
+                this.predictedPos.x = x;
+                this.predictedPos.y = y;
+                this.predictedRotation = rotation;
+                this.velocity.x = 0;
+                this.velocity.y = 0;
+            }
+            
+            // Player teleported/respawned - no logging needed for performance
+            this.isFirstUpdate = false;
+        } else {
+            // Normal movement - use interpolation
+            if (this.isLocalPlayer) {
+                // Local player: Apply server reconciliation
+                this.reconcileWithServer(x, y, rotation, timeSinceLastUpdate);
+            } else {
+                // Remote player: Apply smooth interpolation
+                this.interpolateToServer(x, y, rotation, timeSinceLastUpdate);
+            }
+            this.isFirstUpdate = false;
+        }
+        
+        // Update server reference
+        this.serverPos.x = x;
+        this.serverPos.y = y;
+        this.serverRotation = rotation;
+        this.lastServerUpdate = now;
+    }
+    
+    reconcileWithServer(serverX, serverY, serverRotation, deltaTime) {
+        // For local player: check if server position differs significantly from prediction
+        if (this.tempDistance > this.correctionThreshold) {
+            if (this.tempDistance > 100) {
+                // Major desync - snap to server position
+                this.sprite.x = serverX;
+                this.sprite.y = serverY;
+                this.predictedPos.x = serverX;
+                this.predictedPos.y = serverY;
+            } else {
+                // Minor desync - gradually correct prediction
+                const correctionFactor = Math.min(1.0, (this.maxCorrectionSpeed * deltaTime) / this.tempDistance);
+                const correctionX = this.tempDx * -correctionFactor;
+                const correctionY = this.tempDy * -correctionFactor;
+                
+                this.sprite.x += correctionX;
+                this.sprite.y += correctionY;
+                this.predictedPos.x += correctionX;
+                this.predictedPos.y += correctionY;
+            }
+        }
+        
+        // Always update rotation smoothly
+        this.sprite.rotation = this.lerpAngle(this.sprite.rotation, -serverRotation, this.smoothingFactor);
+        this.predictedRotation = -serverRotation;
+    }
+    
+    interpolateToServer(serverX, serverY, serverRotation, deltaTime) {
+        // For remote players: smooth interpolation to server position
+        const lerpFactor = Math.min(1.0, this.smoothingFactor * (deltaTime * 60)); // Adjust for frame rate
+        
+        this.sprite.x += (serverX - this.sprite.x) * lerpFactor;
+        this.sprite.y += (serverY - this.sprite.y) * lerpFactor;
+        this.sprite.rotation = this.lerpAngle(this.sprite.rotation, -serverRotation, lerpFactor);
+    }
+    
+    predictMovement(input, deltaTime) {
+        if (!this.isLocalPlayer || !input) return;
+        
+        // Client-side prediction for local player
+        const moveSpeed = 200; // Should match server movement speed
+        const sprintMultiplier = input.shift ? 1.5 : 1.0;
+        
+        // Calculate predicted velocity
+        this.velocity.x = input.moveX * moveSpeed * sprintMultiplier;
+        this.velocity.y = input.moveY * moveSpeed * sprintMultiplier;
+        
+        // Apply predicted movement
+        this.predictedPos.x += this.velocity.x * deltaTime;
+        this.predictedPos.y += this.velocity.y * deltaTime;
+        
+        // Update sprite position with prediction
+        this.sprite.x = this.predictedPos.x;
+        this.sprite.y = this.predictedPos.y;
+        
+        // Update rotation based on mouse input
+        if (input.worldX !== undefined && input.worldY !== undefined) {
+            const dx = input.worldX - this.predictedPos.x;
+            const dy = input.worldY - this.predictedPos.y;
+            this.predictedRotation = Math.atan2(dy, dx);
+            this.sprite.rotation = -this.predictedRotation; // Invert for PIXI
+        }
+    }
+    
+    lerpAngle(from, to, factor) {
+        // Handle angle wrapping for smooth rotation
+        let diff = to - from;
+        if (diff > Math.PI) diff -= 2 * Math.PI;
+        if (diff < -Math.PI) diff += 2 * Math.PI;
+        return from + diff * factor;
+    }
+    
+    destroy() {
+        this.sprite = null;
+        this.serverPos = null;
+        this.predictedPos = null;
+        this.velocity = null;
+        this.isFirstUpdate = null;
+    }
+}
+
+/**
+ * Projectile Interpolator for smooth movement between server updates
+ * Optimized for performance and accuracy
+ */
+class ProjectileInterpolator {
+    constructor(sprite, initialVelocity = { x: 0, y: 0 }) {
+        this.sprite = sprite;
+        this.velocity = { ...initialVelocity };
+        this.serverPos = { x: sprite.x, y: sprite.y };
+        this.lastServerUpdate = performance.now(); // Use high-resolution timer
+        this.correctionThreshold = 15; // Reduced from 30 pixels for smoother movement
+        this.maxCorrectionSpeed = 500; // pixels/second - limit correction speed to avoid teleporting
+        
+        // Performance optimization: cache frequently used values
+        this.tempDistance = 0;
+        this.tempDx = 0;
+        this.tempDy = 0;
+    }
+    
+    updateFromServer(x, y, vx = 0, vy = 0) {
+        const now = performance.now();
+        const timeSinceLastUpdate = (now - this.lastServerUpdate) / 1000; // Convert to seconds
+        
+        // Calculate prediction error (difference between predicted and actual server position)
+        this.tempDx = this.sprite.x - x;
+        this.tempDy = this.sprite.y - y;
+        this.tempDistance = Math.sqrt(this.tempDx * this.tempDx + this.tempDy * this.tempDy);
+        
+        // Apply correction based on error magnitude
+        if (this.tempDistance > this.correctionThreshold) {
+            // For large errors, apply gradual correction to avoid jarring snaps
+            if (this.tempDistance > 100) {
+                // Very large error - likely a teleport or major desync, snap immediately
+                this.sprite.x = x;
+                this.sprite.y = y;
+            } else {
+                // Moderate error - apply smooth correction over time
+                const correctionFactor = Math.min(1.0, (this.maxCorrectionSpeed * timeSinceLastUpdate) / this.tempDistance);
+                this.sprite.x += this.tempDx * -correctionFactor;
+                this.sprite.y += this.tempDy * -correctionFactor;
+            }
+        }
+        
+        // Always update server reference and velocity
+        this.serverPos.x = x;
+        this.serverPos.y = y;
+        this.velocity.x = vx;
+        this.velocity.y = vy;
+        this.lastServerUpdate = now;
+    }
+    
+    update(deltaTime) {
+        // PIXI deltaTime is frame-based, but we need consistent time-based movement
+        // Use a fixed timestep approach for more predictable interpolation
+        const targetFPS = 60;
+        const dt = deltaTime / targetFPS; // Convert PIXI deltaTime to seconds
+        
+        // Apply velocity-based prediction
+        // This predicts where the projectile should be based on last known velocity
+        this.sprite.x += this.velocity.x * dt;
+        this.sprite.y += this.velocity.y * dt;
+    }
+    
+    /**
+     * Clean up resources when interpolator is no longer needed
+     */
+    destroy() {
+        this.sprite = null;
+        this.velocity = null;
+        this.serverPos = null;
+    }
+}
+
 class GameEngine {
     constructor() {
         this.app = null;
         this.gameContainer = null;
         this.uiContainer = null;
         this.players = new Map();
+        this.playerInterpolators = new Map();
         this.projectiles = new Map();
+        this.projectileInterpolators = new Map();
         this.strategicLocations = new Map();
         this.obstacles = new Map();
         this.fieldEffects = new Map();
         this.myPlayerId = null;
+        this.lastPlayerInput = null; // Store last input for prediction
         this.gameState = null;
         this.websocket = null;
         this.inputManager = null;
@@ -69,6 +306,24 @@ class GameEngine {
         });
 
         document.getElementById('pixi-container').appendChild(this.app.view);
+
+        // Set up interpolation ticker for smooth movement
+        this.app.ticker.add((deltaTime) => {
+            const dt = deltaTime / 60.0; // Convert to seconds
+            
+            // Update all projectile interpolators every frame
+            this.projectileInterpolators.forEach(interpolator => {
+                interpolator.update(deltaTime);
+            });
+            
+            // Update player predictions (only for local player)
+            if (this.myPlayerId && this.lastPlayerInput) {
+                const localInterpolator = this.playerInterpolators.get(this.myPlayerId);
+                if (localInterpolator) {
+                    localInterpolator.predictMovement(this.lastPlayerInput, dt);
+                }
+            }
+        });
 
         // Create main containers
         this.backgroundContainer = new PIXI.Container();
@@ -301,6 +556,8 @@ class GameEngine {
         
         this.inputManager = new InputManager();
         this.inputManager.onInputChange = (input) => {
+            // Store input for client-side prediction
+            this.lastPlayerInput = input;
             this.sendPlayerInput(input);
         };
     }
@@ -364,6 +621,21 @@ class GameEngine {
         boulderGraphics.drawCircle(0, 0, 20);
         boulderGraphics.endFill();
         this.boulderTexture = this.app.renderer.generateTexture(boulderGraphics);
+        
+        // Death marker - tombstone/X
+        const deathGraphics = new PIXI.Graphics();
+        // Draw a red X
+        deathGraphics.lineStyle(4, 0xff4444, 1);
+        deathGraphics.moveTo(-15, -15);
+        deathGraphics.lineTo(15, 15);
+        deathGraphics.moveTo(15, -15);
+        deathGraphics.lineTo(-15, 15);
+        // Add a circle background
+        deathGraphics.lineStyle(2, 0x444444, 0.8);
+        deathGraphics.beginFill(0x000000, 0.3);
+        deathGraphics.drawCircle(0, 0, 18);
+        deathGraphics.endFill();
+        this.deathTexture = this.app.renderer.generateTexture(deathGraphics);
     }
     
     
@@ -447,6 +719,12 @@ class GameEngine {
         // Simple 2D top-down view with inverted Y axis to match screen coordinates
         // In physics: +Y = up, in screen: +Y = down
         return { x: worldX, y: -worldY };
+    }
+    
+    worldVelocityToIsometric(vx, vy) {
+        // Convert velocity from world coordinates to isometric screen coordinates
+        // Same transformation as position: invert Y axis
+        return { x: vx, y: -vy };
     }
     
     handleServerMessage(data) {
@@ -631,6 +909,18 @@ class GameEngine {
         // Create health bar above player
     const healthBarContainer = this.createHealthBar(playerData);
     sprite.healthBar = healthBarContainer;
+    
+    // Create death marker (initially hidden)
+    if (this.deathTexture) {
+        const deathMarker = new PIXI.Sprite(this.deathTexture);
+        deathMarker.anchor.set(0.5);
+        deathMarker.position.set(isoPos.x, isoPos.y);
+        deathMarker.zIndex = 12; // Above players but below projectiles
+        deathMarker.visible = false;
+        sprite.deathMarker = deathMarker;
+        this.gameContainer.addChild(deathMarker);
+        }
+        // Note: Death texture should be available after loadAssets()
         
         // Create name label in separate container so it doesn't rotate
         const nameLabel = new PIXI.Text(playerData.name || `Player ${playerData.id}`, {
@@ -657,6 +947,11 @@ class GameEngine {
         this.players.set(playerData.id, sprite);
         this.gameContainer.addChild(sprite);
         
+        // Create player interpolator
+        const isLocalPlayer = playerData.id === this.myPlayerId;
+        const interpolator = new PlayerInterpolator(sprite, playerData.id, isLocalPlayer);
+        this.playerInterpolators.set(playerData.id, interpolator);
+        
         // Enable sorting for this container
         this.gameContainer.sortableChildren = true;
     }
@@ -665,22 +960,46 @@ class GameEngine {
         const sprite = this.players.get(playerData.id);
         if (!sprite) return;
 
-        const isoPos = this.worldToIsometric(playerData.x, playerData.y);
-        sprite.position.set(isoPos.x, isoPos.y);
-        // The server calculates rotation in a Y-up world. PIXI operates in a Y-down world.
-        // We must negate the rotation to make it display correctly.
-        sprite.rotation = -(playerData.rotation || 0);
+        // Use interpolator for smooth movement
+        const interpolator = this.playerInterpolators.get(playerData.id);
+        if (interpolator) {
+            // Convert server position from world to screen coordinates
+            const isoPos = this.worldToIsometric(playerData.x, playerData.y);
+            
+            // Update interpolator with server data
+            interpolator.updateFromServer(isoPos.x, isoPos.y, playerData.rotation || 0);
+        } else {
+            // Fallback to direct position update if no interpolator
+            const isoPos = this.worldToIsometric(playerData.x, playerData.y);
+            sprite.position.set(isoPos.x, isoPos.y);
+            sprite.rotation = -(playerData.rotation || 0);
+        }
+        
+        // Handle death marker logic
+        const isDead = !playerData.active && playerData.respawnTime > 0;
+        
+        // Show/hide player sprite and death marker
         sprite.visible = playerData.active;
+        if (sprite.deathMarker) {
+            sprite.deathMarker.visible = isDead;
+            if (isDead) {
+                // Position death marker at death location
+                sprite.deathMarker.position.set(sprite.x, sprite.y);
+            }
+        }
 
         // Update name label position (doesn't rotate with player)
         if (sprite.nameLabel) {
-            sprite.nameLabel.position.set(isoPos.x, isoPos.y - 25);
-            sprite.nameLabel.visible = playerData.active;
+            // Use current sprite position (which may be interpolated)
+            sprite.nameLabel.position.set(sprite.x, sprite.y - 25);
+            // Show name label for active players or dead players with respawn timer
+            sprite.nameLabel.visible = playerData.active || isDead;
         }
 
-        // Update health bar
+        // Update health bar (hide for dead players)
         if (sprite.healthBar) {
             this.updateHealthBar(sprite.healthBar, playerData);
+            sprite.healthBar.visible = playerData.active && playerData.health > 0;
         }
 
         sprite.playerData = playerData;
@@ -702,7 +1021,19 @@ class GameEngine {
                 this.nameContainer.removeChild(sprite.healthBar);
             }
             
+            // Remove death marker from game container
+            if (sprite.deathMarker) {
+                this.gameContainer.removeChild(sprite.deathMarker);
+            }
+            
             this.players.delete(playerId);
+        }
+        
+        // Clean up player interpolator
+        const interpolator = this.playerInterpolators.get(playerId);
+        if (interpolator) {
+            interpolator.destroy();
+            this.playerInterpolators.delete(playerId);
         }
     }
     
@@ -746,9 +1077,11 @@ class GameEngine {
     updateHealthBar(healthBarContainer, playerData) {
         if (!healthBarContainer || !healthBarContainer.healthFill) return;
         
-        // Update position above player
-        const isoPos = this.worldToIsometric(playerData.x, playerData.y);
-        healthBarContainer.position.set(isoPos.x, isoPos.y - 35);
+        // Update position above player using current sprite position (may be interpolated)
+        const sprite = this.players.get(playerData.id);
+        if (sprite) {
+            healthBarContainer.position.set(sprite.x, sprite.y - 35);
+        }
         healthBarContainer.visible = playerData.active;
         
         // Update health bar fill
@@ -773,6 +1106,7 @@ class GameEngine {
         const sprite = new PIXI.Sprite(this.projectileTexture);
         sprite.anchor.set(0.5);
         
+        // Convert world coordinates to screen coordinates once
         const isoPos = this.worldToIsometric(projectileData.x, projectileData.y);
         sprite.position.set(isoPos.x, isoPos.y);
         
@@ -785,6 +1119,15 @@ class GameEngine {
         sprite.projectileData = projectileData;
         this.projectiles.set(projectileData.id, sprite);
         this.gameContainer.addChild(sprite);
+        
+        // Create interpolator for smooth movement
+        // Convert server velocity from world coordinates to isometric screen coordinates
+        const worldVel = { x: projectileData.vx || 0, y: projectileData.vy || 0 };
+        const isoVel = this.worldVelocityToIsometric(worldVel.x, worldVel.y);
+        
+        // Initialize interpolator with screen coordinates (already converted)
+        const interpolator = new ProjectileInterpolator(sprite, isoVel);
+        this.projectileInterpolators.set(projectileData.id, interpolator);
     }
     
     /**
@@ -866,9 +1209,26 @@ class GameEngine {
         const sprite = this.projectiles.get(projectileData.id);
         if (!sprite) return;
         
-        const isoPos = this.worldToIsometric(projectileData.x, projectileData.y);
-        sprite.position.set(isoPos.x, isoPos.y);
+        // Update projectile data
         sprite.projectileData = projectileData;
+        
+        // Use interpolator for smooth movement
+        const interpolator = this.projectileInterpolators.get(projectileData.id);
+        if (interpolator) {
+            // Convert server position and velocity from world to isometric coordinates
+            // Batch coordinate transformations for better performance
+            const isoPos = this.worldToIsometric(projectileData.x, projectileData.y);
+            const worldVel = { x: projectileData.vx || 0, y: projectileData.vy || 0 };
+            const isoVel = this.worldVelocityToIsometric(worldVel.x, worldVel.y);
+            
+            // Update interpolator with converted coordinates
+            interpolator.updateFromServer(isoPos.x, isoPos.y, isoVel.x, isoVel.y);
+        } else {
+            // Fallback to direct position update if no interpolator
+            // This should rarely happen, but provides safety
+            const isoPos = this.worldToIsometric(projectileData.x, projectileData.y);
+            sprite.position.set(isoPos.x, isoPos.y);
+        }
     }
     
     removeProjectile(projectileId) {
@@ -876,6 +1236,13 @@ class GameEngine {
         if (sprite) {
             this.gameContainer.removeChild(sprite);
             this.projectiles.delete(projectileId);
+        }
+        
+        // Clean up interpolator properly to prevent memory leaks
+        const interpolator = this.projectileInterpolators.get(projectileId);
+        if (interpolator) {
+            interpolator.destroy();
+            this.projectileInterpolators.delete(projectileId);
         }
     }
     
@@ -1501,7 +1868,7 @@ class GameEngine {
         // Update ammo info
         if (this.hudAmmoText) {
             const currentAmmo = myPlayer.ammo || 0;
-            const maxAmmo = 30; // Could be dynamic based on weapon
+            const maxAmmo = myPlayer.maxAmmo || 0;
             this.hudAmmoText.text = `${currentAmmo}/${maxAmmo}`;
         }
         
@@ -1747,7 +2114,6 @@ class GameEngine {
             try {
                 const decodedString = decodeURIComponent(escape(atob(encodedConfig)));
                 playerConfig = JSON.parse(decodedString);
-                console.log('Decoded player config:', playerConfig);
             } catch (error) {
                 console.error('Failed to decode player config:', error);
                 playerConfig = null;
@@ -1760,7 +2126,6 @@ class GameEngine {
         if (playerConfig && playerConfig.playerName && playerConfig.weaponConfig) {
             playerName = playerConfig.playerName;
             weaponConfig = playerConfig.weaponConfig;
-            console.log('Using custom weapon config:', weaponConfig);
         } else {
             // Legacy fallback for old URL format
             playerName = params.get('playerName') || `Player${Math.floor(Math.random() * 1000)}`;
@@ -1778,7 +2143,6 @@ class GameEngine {
             };
             
             weaponConfig = weaponPresets[primaryWeaponType];
-            console.log('Using legacy weapon config:', weaponConfig);
         }
 
         const message = {
@@ -1919,8 +2283,7 @@ class GameEngine {
         // Add atmospheric effects
         this.createAtmosphericEffects(metadata);
         
-        // Log terrain info
-        console.log(`Generated ${metadata.displayName} terrain with ${features.length} features and ${compoundObstacles.length} compound structures (seed: ${metadata.seed})`);
+        // Terrain generation complete
     }
     
     /**
@@ -2361,9 +2724,8 @@ class GameEngine {
     createAtmosphericEffects(metadata) {
         const particles = metadata.particles || {};
         
-        // For now, just log the atmospheric data
-        // Future implementation could add particle systems
-        console.log(`Atmospheric effects: ${particles.type} particles, fog: ${metadata.fogDensity}, temp: ${metadata.temperature}°C`);
+        // Atmospheric effects data available for future particle systems
+        // particles.type, metadata.fogDensity, metadata.temperature
     }
 
     handleResize() {

@@ -664,6 +664,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             playerState.put("active", player.isActive());
             playerState.put("weapon", player.getCurrentWeaponIndex());
             playerState.put("ammo", player.getCurrentWeapon().getCurrentAmmo());
+            playerState.put("maxAmmo", player.getCurrentWeapon().getMagazineSize());
             playerState.put("reloading", player.isReloading());
             playerState.put("kills", player.getKills());
             playerState.put("deaths", player.getDeaths());
@@ -675,10 +676,13 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         List<Map<String, Object>> projectileStates = new ArrayList<>();
         for (Projectile projectile : gameEntities.getAllProjectiles()) {
             Vector2 pos = projectile.getPosition();
+            Vector2 vel = projectile.getBody().getLinearVelocity();
             Map<String, Object> projState = new HashMap<>();
             projState.put("id", projectile.getId());
             projState.put("x", pos.x);
             projState.put("y", pos.y);
+            projState.put("vx", vel.x);
+            projState.put("vy", vel.y);
             projState.put("ownerId", projectile.getOwnerId());
             projState.put("ownerTeam", projectile.getOwnerTeam());
             projState.put("ordinance", projectile.getOrdinance().name());
