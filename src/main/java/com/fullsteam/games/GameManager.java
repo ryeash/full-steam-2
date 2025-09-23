@@ -331,13 +331,13 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         }
 
         // Debug logging for team assignment
-        log.info("Team assignment - Game has {} teams. Team counts: {}", 
-                gameConfig.getTeamCount(), 
+        log.info("Team assignment - Game has {} teams. Team counts: {}",
+                gameConfig.getTeamCount(),
                 java.util.Arrays.toString(teamCounts));
-        log.info("Assigning player to team {} (counts: T1={}, T2={}, T3={}, T4={})", 
-                bestTeam, 
+        log.info("Assigning player to team {} (counts: T1={}, T2={}, T3={}, T4={})",
+                bestTeam,
                 teamCounts.length > 1 ? teamCounts[1] : 0,
-                teamCounts.length > 2 ? teamCounts[2] : 0, 
+                teamCounts.length > 2 ? teamCounts[2] : 0,
                 teamCounts.length > 3 ? teamCounts[3] : 0,
                 teamCounts.length > 4 ? teamCounts[4] : 0);
 
@@ -929,26 +929,26 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
 
     @Override
     public void onPlayerHitByProjectile(Player player, Projectile projectile) {
-        player.takeDamage(projectile.getDamage());
         projectile.setActive(false);
-
+        player.takeDamage(projectile.getDamage());
         log.info("Player {} hit by projectile from player {} for {} damage", player.getId(), projectile.getOwnerId(), projectile.getDamage());
-
-        if (!player.isActive()) {
+        if (player.takeDamage(projectile.getDamage())) {
             Player killer = gameEntities.getPlayer(projectile.getOwnerId());
-            if (killer != null) {
-                killer.addKill();
-            }
-            player.die();
-
-            Map<String, Object> deathNotification = new HashMap<>();
-            deathNotification.put("type", "playerKilled");
-            deathNotification.put("victimId", player.getId());
-            deathNotification.put("killerId", projectile.getOwnerId());
-            broadcast(deathNotification);
-
-            log.info("Player {} was killed by player {}", player.getId(), projectile.getOwnerId());
+            killPlayer(player, killer);
         }
+    }
+
+    public void killPlayer(Player victim, Player shooter) {
+        if (shooter != null) {
+            shooter.addKill();
+        }
+        victim.die();
+        Map<String, Object> deathNotification = new HashMap<>();
+        deathNotification.put("type", "playerKilled");
+        deathNotification.put("victimId", victim.getId());
+        deathNotification.put("killerId", shooter != null ? shooter.getId() : null);
+        deathNotification.put("killerName", shooter != null ? shooter.getPlayerName() : null);
+        broadcast(deathNotification);
     }
 
     @Override
@@ -970,23 +970,30 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
      */
     private void processFieldEffects(double deltaTime) {
         for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
-            if (!effect.isActive()) continue;
+            if (!effect.isActive()) {
+                continue;
+            }
 
             // Apply damage to players in range
             for (Player player : gameEntities.getAllPlayers()) {
-                if (!player.isActive()) continue;
-                if (!effect.canAffect(player)) continue;
+                if (!player.isActive()) {
+                    continue;
+                }
+                if (!effect.canAffect(player)) {
+                    continue;
+                }
 
                 double damage = effect.getDamageAtPosition(player.getPosition());
                 if (damage > 0) {
+                    boolean deactivated;
                     // Apply damage based on effect type
                     if (effect.getType().isInstantaneous()) {
                         // Instant damage (explosions)
-                        player.takeDamage(damage);
+                        deactivated = player.takeDamage(damage);
                         effect.markAsAffected(player);
                     } else {
                         // Damage over time (fire, electric, etc.)
-                        player.takeDamage(damage * deltaTime);
+                        deactivated = player.takeDamage(damage * deltaTime);
 
                         // Apply special effects
                         switch (effect.getType()) {
@@ -994,11 +1001,18 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
                                 // TODO: Apply slowing effect
                                 break;
                             case FIRE:
+                                // TODO: applying persistent burning effect?
+                                break;
                             case ELECTRIC:
+                                // TODO: Apply slowing effect or maybe a "confusion" effect that adds an unpredictable velocity
+                                break;
                             case POISON:
                                 // Damage already applied above
                                 break;
                         }
+                    }
+                    if (deactivated) {
+                        killPlayer(player, gameEntities.getPlayer(effect.getOwnerId()));
                     }
                 }
             }

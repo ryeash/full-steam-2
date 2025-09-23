@@ -54,6 +54,8 @@ public class GameLobby {
         GameManager game = new GameManager(gameId, "Battle Royale", GameConfig.builder()
                 .maxPlayers(18)
                 .teamCount(4)
+                .worldHeight(2000)
+                .worldWidth(3000)
                 .build());
         activeGames.put(gameId, game);
         log.info("Created new game: {} ({})", gameId, gameType);

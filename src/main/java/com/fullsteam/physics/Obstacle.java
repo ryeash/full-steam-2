@@ -50,8 +50,8 @@ public class Obstacle extends GameEntity {
     private final Shape primaryShape;
     /**
      * -- GETTER --
-     *  Get the approximate radius for collision detection and positioning.
-     *  This provides a bounding circle radius for the obstacle.
+     * Get the approximate radius for collision detection and positioning.
+     * This provides a bounding circle radius for the obstacle.
      */
     @Getter
     private final double boundingRadius;
@@ -254,7 +254,7 @@ public class Obstacle extends GameEntity {
     }
 
     private static Convex createCircularShape(ThreadLocalRandom random) {
-        double radius = random.nextDouble(120, 220);
+        double radius = random.nextDouble(120, 200);
         return new Circle(radius);
     }
 

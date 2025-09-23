@@ -14,6 +14,7 @@ import java.util.Set;
 @Getter
 public class FieldEffect {
     private final int id;
+    private final int ownerId;
     private final FieldEffectType type;
     private final Vector2 position;
     private final double radius;
@@ -25,8 +26,9 @@ public class FieldEffect {
     private double timeRemaining;
     private boolean active;
 
-    public FieldEffect(int id, FieldEffectType type, Vector2 position, double radius, double damage, double duration, int ownerTeam) {
+    public FieldEffect(int id, int ownerId, FieldEffectType type, Vector2 position, double radius, double damage, double duration, int ownerTeam) {
         this.id = id;
+        this.ownerId = ownerId;
         this.type = type;
         this.position = position.copy();
         this.radius = radius;
@@ -98,7 +100,7 @@ public class FieldEffect {
         }
 
         double distance = position.distance(targetPosition);
-        double intensity = 1.0 - (distance / radius); // Linear falloff
+        double intensity = 0.2 + (0.8 - (distance / radius)); // Linear falloff
         return Math.max(0.0, intensity);
     }
 

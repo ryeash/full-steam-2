@@ -49,11 +49,13 @@ public abstract class GameEntity {
         body.getTransform().setRotation(angle);
     }
 
-    public void takeDamage(double damage) {
+    public boolean takeDamage(double damage) {
+        boolean wasActive = active;
         health -= damage;
         if (health <= 0) {
             active = false;
         }
+        return wasActive && !active; // Return true if entity became inactive
     }
 
     public void heal(double amount) {

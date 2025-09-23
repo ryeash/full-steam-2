@@ -398,8 +398,7 @@ class GameEngine {
         // Enable sorting for proper z-index handling
         this.app.stage.sortableChildren = true;
 
-        // Create crosshatch grid background
-        this.createCrosshatchGrid();
+        // Note: Grid creation moved to handleInitialState() to use correct world dimensions
 
         // Handle window resize
         window.addEventListener('resize', () => this.handleResize());
@@ -422,19 +421,36 @@ class GameEngine {
         hudBg.drawRoundedRect(10, 10, 280, 170, 8);
         this.hudContainer.addChild(hudBg);
         
-        // Minimap (top portion)
-        this.createHUDMinimap();
-        
-        // Player info (bottom portion)
+        // Player info (bottom portion) - minimap will be created after world bounds are received
         this.createHUDPlayerInfo();
         
         this.uiContainer.addChild(this.hudContainer);
     }
     
     /**
-     * Create minimap section of HUD.
+     * Create minimap section of HUD with correct aspect ratio.
      */
     createHUDMinimap() {
+        // Calculate minimap dimensions based on world aspect ratio
+        const worldAspectRatio = this.worldBounds.width / this.worldBounds.height;
+        const maxMinimapSize = 120; // Maximum size for either dimension
+        
+        let minimapWidth, minimapHeight;
+        
+        if (worldAspectRatio > 1) {
+            // World is wider than tall
+            minimapWidth = maxMinimapSize;
+            minimapHeight = maxMinimapSize / worldAspectRatio;
+        } else {
+            // World is taller than wide (or square)
+            minimapHeight = maxMinimapSize;
+            minimapWidth = maxMinimapSize * worldAspectRatio;
+        }
+        
+        // Ensure minimum size for usability
+        minimapWidth = Math.max(minimapWidth, 60);
+        minimapHeight = Math.max(minimapHeight, 60);
+        
         // Minimap container
         const minimapContainer = new PIXI.Container();
         minimapContainer.position.set(20, 20);
@@ -442,10 +458,10 @@ class GameEngine {
         // Minimap background
         const minimapBg = new PIXI.Graphics();
         minimapBg.beginFill(0x1a3d1f, 0.8);
-        minimapBg.drawRoundedRect(0, 0, 120, 120, 4);
+        minimapBg.drawRoundedRect(0, 0, minimapWidth, minimapHeight, 4);
         minimapBg.endFill();
         minimapBg.lineStyle(1, 0x2ecc71, 0.6);
-        minimapBg.drawRoundedRect(0, 0, 120, 120, 4);
+        minimapBg.drawRoundedRect(0, 0, minimapWidth, minimapHeight, 4);
         minimapContainer.addChild(minimapBg);
         
         // Minimap title
@@ -460,8 +476,42 @@ class GameEngine {
         // Store references for updates
         this.hudMinimap = minimapContainer;
         this.hudMinimapBg = minimapBg;
+        this.minimapWidth = minimapWidth;
+        this.minimapHeight = minimapHeight;
         
         this.hudContainer.addChild(minimapContainer);
+    }
+    
+    /**
+     * Update HUD layout after minimap is created with proper dimensions.
+     */
+    updateHUDLayout() {
+        if (!this.hudMinimap || !this.minimapHeight) return;
+        
+        // Adjust HUD background size to accommodate the minimap
+        const hudBg = this.hudContainer.children[0]; // First child is the background
+        if (hudBg) {
+            const totalWidth = Math.max(280, this.minimapWidth + 40); // 20px margins on each side
+            const totalHeight = this.minimapHeight + 90; // Minimap + title + player info section
+            
+            hudBg.clear();
+            hudBg.beginFill(0x000000, 0.7);
+            hudBg.drawRoundedRect(10, 10, totalWidth, totalHeight, 8);
+            hudBg.endFill();
+            hudBg.lineStyle(2, 0x444444, 0.8);
+            hudBg.drawRoundedRect(10, 10, totalWidth, totalHeight, 8);
+        }
+        
+        // Adjust player info position to be below the minimap
+        const playerInfoContainer = this.hudContainer.children.find(child => 
+            child.children && child.children.some(grandchild => 
+                grandchild.text && grandchild.text === 'WEAPON'
+            )
+        );
+        
+        if (playerInfoContainer) {
+            playerInfoContainer.position.set(20, 30 + this.minimapHeight + 10); // Below minimap with padding
+        }
     }
     
     /**
@@ -585,11 +635,6 @@ class GameEngine {
      * Get the base color for a team.
      */
     getTeamColor(teamNumber) {
-        // Debug logging for team color assignment
-        if (teamNumber === 3 || teamNumber === 4) {
-            console.log(`Getting color for team ${teamNumber}: ${teamNumber === 3 ? '0x44ff44 (green)' : '0xffff44 (yellow)'}`);
-        }
-        
         switch (teamNumber) {
             case 0: return 0x808080; // Gray for FFA/no team
             case 1: return 0xff4444; // Red
@@ -863,6 +908,13 @@ class GameEngine {
         if (this.teamMode && this.teamAreas) {
             this.createTeamSpawnAreas();
         }
+        
+        // Create crosshatch grid background with correct world dimensions
+        this.createCrosshatchGrid();
+        
+        // Create minimap with correct aspect ratio
+        this.createHUDMinimap();
+        this.updateHUDLayout();
     }
     
     handleGameState(data) {
@@ -989,7 +1041,6 @@ class GameEngine {
         
         // Color players based on their team
         const playerColor = this.getPlayerColor(playerData);
-        console.log(`Player ${playerData.id} (${playerData.name || 'unnamed'}) assigned to team ${playerData.team || 0}, color: 0x${playerColor.toString(16)}`);
         sprite.tint = playerColor;
         
         // Make sprite visible but normal size
@@ -2465,7 +2516,7 @@ class GameEngine {
     }
     
     updateMinimap() {
-        if (!this.hudMinimap) return;
+        if (!this.hudMinimap || !this.minimapWidth || !this.minimapHeight) return;
         
         // Clear previous minimap content (keep background and title)
         if (this.minimapContent) {
@@ -2476,17 +2527,26 @@ class GameEngine {
         this.minimapContent = new PIXI.Container();
         this.minimapContent.position.set(2, 16); // Below title, within border
         
-        const mapWidth = 116; // Available width within minimap
-        const mapHeight = 100; // Available height within minimap
+        // Use actual minimap dimensions minus borders and title space
+        const mapWidth = this.minimapWidth - 4; // Account for 2px border on each side
+        const mapHeight = this.minimapHeight - 18; // Account for borders and title space
         
-        const scaleX = mapWidth / this.worldBounds.width;
-        const scaleY = mapHeight / this.worldBounds.height;
+        // Use uniform scaling to maintain aspect ratio
+        const scale = Math.min(mapWidth / this.worldBounds.width, mapHeight / this.worldBounds.height);
+        
+        // Calculate actual scaled world dimensions
+        const scaledWorldWidth = this.worldBounds.width * scale;
+        const scaledWorldHeight = this.worldBounds.height * scale;
+        
+        // Calculate offsets to center the scaled world within the available minimap space
+        const offsetX = (mapWidth - scaledWorldWidth) / 2;
+        const offsetY = (mapHeight - scaledWorldHeight) / 2;
         
         // Draw strategic locations
         this.strategicLocations.forEach(location => {
             const data = location.locationData;
-            const x = (data.x + this.worldBounds.width / 2) * scaleX;
-            const y = ((-data.y) + this.worldBounds.height / 2) * scaleY; // Invert Y for minimap
+            const x = (data.x + this.worldBounds.width / 2) * scale + offsetX;
+            const y = ((-data.y) + this.worldBounds.height / 2) * scale + offsetY; // Invert Y for minimap
             
             const locationDot = new PIXI.Graphics();
             locationDot.beginFill(data.controllingPlayer === this.myPlayerId ? 0x2ecc71 : 
@@ -2502,8 +2562,8 @@ class GameEngine {
             const data = player.playerData;
             if (!data.active) return;
             
-            const x = (data.x + this.worldBounds.width / 2) * scaleX;
-            const y = ((-data.y) + this.worldBounds.height / 2) * scaleY; // Invert Y for minimap
+            const x = (data.x + this.worldBounds.width / 2) * scale + offsetX;
+            const y = ((-data.y) + this.worldBounds.height / 2) * scale + offsetY; // Invert Y for minimap
             
             const playerDot = new PIXI.Graphics();
             
@@ -2553,8 +2613,8 @@ class GameEngine {
         
         if (deathScreen && deathInfo) {
             deathScreen.style.display = 'flex';
-            deathInfo.textContent = data.killerId ? 
-                `Eliminated by Player ${data.killerId}` : 
+            deathInfo.textContent = data.killerName ?
+                `Eliminated by Player ${data.killerName}` :
                 'You were eliminated';
         }
     }
