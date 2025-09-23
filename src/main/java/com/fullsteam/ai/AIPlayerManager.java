@@ -92,13 +92,6 @@ public class AIPlayerManager {
     }
 
     /**
-     * Get the generated input for a specific AI player.
-     */
-    public PlayerInput getPlayerInput(int playerId) {
-        return generatedInputs.get(playerId);
-    }
-
-    /**
      * Get all generated inputs for all AI players.
      */
     public Map<Integer, PlayerInput> getAllPlayerInputs() {
@@ -113,20 +106,6 @@ public class AIPlayerManager {
     }
 
     /**
-     * Get an AI player by ID.
-     */
-    public AIPlayer getAIPlayer(int playerId) {
-        return aiPlayers.get(playerId);
-    }
-
-    /**
-     * Create an AI player with a random personality and name (FFA mode).
-     */
-    public static AIPlayer createRandomAIPlayer(int id, double x, double y) {
-        return createRandomAIPlayer(id, x, y, 0); // Default to FFA team
-    }
-    
-    /**
      * Create an AI player with a random personality, name, and specific team.
      */
     public static AIPlayer createRandomAIPlayer(int id, double x, double y, int team) {
@@ -135,35 +114,16 @@ public class AIPlayerManager {
     }
 
     /**
-     * Create an AI player with a specific personality type.
-     */
-    public static AIPlayer createAIPlayerWithPersonality(int id, double x, double y, String personalityType) {
-        return createAIPlayerWithPersonality(id, x, y, personalityType, 0); // Default to FFA team
-    }
-
-    /**
      * Create an AI player with a specific personality type and team.
      */
     public static AIPlayer createAIPlayerWithPersonality(int id, double x, double y, String personalityType, int team) {
-        AIPersonality personality;
-        switch (personalityType.toLowerCase()) {
-            case "aggressive":
-                personality = AIPersonality.createAggressive();
-                break;
-            case "defensive":
-                personality = AIPersonality.createDefensive();
-                break;
-            case "sniper":
-                personality = AIPersonality.createSniper();
-                break;
-            case "rusher":
-                personality = AIPersonality.createRusher();
-                break;
-            case "balanced":
-            default:
-                personality = AIPersonality.createBalanced();
-                break;
-        }
+        AIPersonality personality = switch (personalityType.toLowerCase()) {
+            case "aggressive" -> AIPersonality.createAggressive();
+            case "defensive" -> AIPersonality.createDefensive();
+            case "sniper" -> AIPersonality.createSniper();
+            case "rusher" -> AIPersonality.createRusher();
+            default -> AIPersonality.createBalanced();
+        };
         return new AIPlayer(id, RandomNames.randomName(), x, y, personality, team);
     }
 
@@ -214,9 +174,6 @@ public class AIPlayerManager {
             // Only switch if the other behavior is significantly better
             if (bestOtherPriority > currentPriority + 10) {
                 aiPlayer.setCurrentBehavior(bestOtherBehavior);
-                log.debug("AI player {} switched from {} to {} behavior (priorities: {} -> {})",
-                        aiPlayer.getId(), currentBehavior.getName(), bestOtherBehavior.getName(),
-                        currentPriority - 15, bestOtherPriority);
             }
             return;
         }

@@ -530,11 +530,28 @@ class GameEngine {
         teamText.position.set(185, 0);
         infoContainer.addChild(teamText);
         
+        // Input source indicator
+        const inputLabel = new PIXI.Text('INPUT', {
+            fontSize: 10,
+            fill: 0xffffff,
+            fontWeight: 'bold'
+        });
+        inputLabel.position.set(150, 15);
+        infoContainer.addChild(inputLabel);
+        
+        const inputText = new PIXI.Text('Keyboard', {
+            fontSize: 9,
+            fill: 0xffffff
+        });
+        inputText.position.set(195, 15);
+        infoContainer.addChild(inputText);
+        
         // Store references for updates (removed health references)
         this.hudWeaponText = weaponText;
         this.hudAmmoText = ammoText;
         this.hudReloadText = reloadText;
         this.hudTeamText = teamText;
+        this.hudInputText = inputText;
         
         this.hudContainer.addChild(infoContainer);
     }
@@ -613,6 +630,9 @@ class GameEngine {
             this.lastPlayerInput = input;
             this.sendPlayerInput(input);
         };
+        
+        // Store reference for HUD updates
+        this.inputManager.gameEngine = this;
     }
     
     setupUI() {
@@ -2317,6 +2337,17 @@ class GameEngine {
                 this.hudTeamText.style.fill = this.getTeamColor(teamNumber); // Team color
             }
         }
+        
+        // Update input source info
+        if (this.hudInputText && this.inputManager) {
+            if (this.inputManager.gamepad.connected && this.inputManager.inputSource === 'gamepad') {
+                this.hudInputText.text = 'Gamepad';
+                this.hudInputText.style.fill = 0x44ff44; // Green for gamepad
+            } else {
+                this.hudInputText.text = 'Keyboard';
+                this.hudInputText.style.fill = 0xffffff; // White for keyboard
+            }
+        }
     }
     
     updateScoreboard(players) {
@@ -3163,7 +3194,7 @@ class GameEngine {
 }
 
 /**
- * Input Manager for handling keyboard and mouse input
+ * Input Manager for handling keyboard, mouse, and gamepad input
  */
 class InputManager {
     constructor() {
@@ -3179,10 +3210,43 @@ class InputManager {
             x: 0, y: 0, worldX: 0, worldY: 0,
             left: false, right: false
         };
+        
+        // Gamepad support
+        this.gamepad = {
+            connected: false,
+            index: -1,
+            leftStick: { x: 0, y: 0 },
+            rightStick: { x: 0, y: 0 },
+            buttons: {
+                a: false,        // Fire/Action (Button 0)
+                b: false,        // Secondary action (Button 1)
+                x: false,        // Reload (Button 2)
+                y: false,        // Weapon switch (Button 3)
+                lb: false,       // Left bumper (Button 4)
+                rb: false,       // Right bumper (Button 5)
+                lt: false,       // Left trigger (Button 6)
+                rt: false,       // Right trigger (Button 7)
+                back: false,     // Back/Select (Button 8)
+                start: false,    // Start/Menu (Button 9)
+                ls: false,       // Left stick click (Button 10)
+                rs: false,       // Right stick click (Button 11)
+                up: false,       // D-pad up (Button 12)
+                down: false,     // D-pad down (Button 13)
+                left: false,     // D-pad left (Button 14)
+                right: false     // D-pad right (Button 15)
+            },
+            deadzone: 0.15,      // Deadzone for analog sticks
+            triggerThreshold: 0.1 // Threshold for trigger buttons
+        };
+        
         this.onInputChange = null;
+        this.inputSource = 'keyboard'; // 'keyboard' or 'gamepad'
         
         this.setupEventListeners();
         this.inputInterval = 20; // 50 FPS (20ms intervals)
+        
+        // Start gamepad polling
+        this.pollGamepads();
     }
     
     setupEventListeners() {
@@ -3192,6 +3256,10 @@ class InputManager {
         document.addEventListener('mousedown', (e) => this.handleMouseDown(e));
         document.addEventListener('mouseup', (e) => this.handleMouseUp(e));
         document.addEventListener('contextmenu', (e) => e.preventDefault());
+        
+        // Gamepad connection events
+        window.addEventListener('gamepadconnected', (e) => this.handleGamepadConnected(e));
+        window.addEventListener('gamepaddisconnected', (e) => this.handleGamepadDisconnected(e));
         
         // Send input at fixed 20ms intervals (50 FPS)
         setInterval(() => this.sendInput(), this.inputInterval);
@@ -3278,23 +3346,333 @@ class InputManager {
         if (e.button === 2) this.mouse.right = false;
     }
     
+    /**
+     * Handle gamepad connection
+     */
+    handleGamepadConnected(e) {
+        console.log('Gamepad connected:', e.gamepad.id);
+        this.gamepad.connected = true;
+        this.gamepad.index = e.gamepad.index;
+        this.inputSource = 'gamepad';
+        
+        // Initialize mouse position to center of screen for gamepad aiming
+        this.mouse.x = window.innerWidth / 2;
+        this.mouse.y = window.innerHeight / 2;
+        
+        // Show gamepad connected notification
+        this.showInputSourceNotification('Gamepad Connected: ' + e.gamepad.id);
+        
+        // Update HUD immediately if game engine is available
+        if (this.gameEngine && this.gameEngine.hudInputText) {
+            this.gameEngine.hudInputText.text = 'Gamepad';
+            this.gameEngine.hudInputText.style.fill = 0x44ff44;
+        }
+    }
+    
+    /**
+     * Handle gamepad disconnection
+     */
+    handleGamepadDisconnected(e) {
+        console.log('Gamepad disconnected:', e.gamepad.id);
+        this.gamepad.connected = false;
+        this.gamepad.index = -1;
+        this.inputSource = 'keyboard';
+        
+        // Reset gamepad state
+        this.resetGamepadState();
+        
+        // Show gamepad disconnected notification
+        this.showInputSourceNotification('Gamepad Disconnected - Switched to Keyboard');
+        
+        // Update HUD immediately if game engine is available
+        if (this.gameEngine && this.gameEngine.hudInputText) {
+            this.gameEngine.hudInputText.text = 'Keyboard';
+            this.gameEngine.hudInputText.style.fill = 0xffffff;
+        }
+    }
+    
+    /**
+     * Poll gamepad state (required for consistent gamepad input)
+     */
+    pollGamepads() {
+        if (!this.gamepad.connected) {
+            // Check for newly connected gamepads
+            const gamepads = navigator.getGamepads();
+            for (let i = 0; i < gamepads.length; i++) {
+                if (gamepads[i]) {
+                    this.handleGamepadConnected({ gamepad: gamepads[i] });
+                    break;
+                }
+            }
+        } else {
+            // Update gamepad state
+            this.updateGamepadState();
+        }
+        
+        // Continue polling
+        requestAnimationFrame(() => this.pollGamepads());
+    }
+    
+    /**
+     * Update gamepad input state
+     */
+    updateGamepadState() {
+        const gamepads = navigator.getGamepads();
+        const gamepad = gamepads[this.gamepad.index];
+        
+        if (!gamepad) {
+            this.handleGamepadDisconnected({ gamepad: { id: 'Unknown' } });
+            return;
+        }
+        
+        // Update analog sticks with deadzone
+        this.gamepad.leftStick.x = this.applyDeadzone(gamepad.axes[0] || 0);
+        this.gamepad.leftStick.y = this.applyDeadzone(-(gamepad.axes[1] || 0)); // Invert Y for game coordinates
+        this.gamepad.rightStick.x = this.applyDeadzone(gamepad.axes[2] || 0);
+        this.gamepad.rightStick.y = this.applyDeadzone(-(gamepad.axes[3] || 0)); // Invert Y for game coordinates
+        
+        // Update button states
+        const buttons = this.gamepad.buttons;
+        const gamepadButtons = gamepad.buttons;
+        
+        // Face buttons (Xbox layout)
+        buttons.a = this.isButtonPressed(gamepadButtons[0]);      // A - Fire
+        buttons.b = this.isButtonPressed(gamepadButtons[1]);      // B - Secondary
+        buttons.x = this.isButtonPressed(gamepadButtons[2]);      // X - Reload
+        buttons.y = this.isButtonPressed(gamepadButtons[3]);      // Y - Weapon switch
+        
+        // Shoulder buttons
+        buttons.lb = this.isButtonPressed(gamepadButtons[4]);     // Left bumper
+        buttons.rb = this.isButtonPressed(gamepadButtons[5]);     // Right bumper
+        buttons.lt = this.isTriggerPressed(gamepadButtons[6]);    // Left trigger
+        buttons.rt = this.isTriggerPressed(gamepadButtons[7]);    // Right trigger
+        
+        // System buttons
+        buttons.back = this.isButtonPressed(gamepadButtons[8]);   // Back/Select
+        buttons.start = this.isButtonPressed(gamepadButtons[9]);  // Start/Menu
+        
+        // Stick clicks
+        buttons.ls = this.isButtonPressed(gamepadButtons[10]);    // Left stick click
+        buttons.rs = this.isButtonPressed(gamepadButtons[11]);    // Right stick click
+        
+        // D-pad
+        buttons.up = this.isButtonPressed(gamepadButtons[12]);    // D-pad up
+        buttons.down = this.isButtonPressed(gamepadButtons[13]);  // D-pad down
+        buttons.left = this.isButtonPressed(gamepadButtons[14]);  // D-pad left
+        buttons.right = this.isButtonPressed(gamepadButtons[15]); // D-pad right
+        
+        // Update movement from gamepad
+        this.updateGamepadMovement();
+        
+        // Handle gamepad-specific actions
+        this.handleGamepadActions();
+    }
+    
+    /**
+     * Apply deadzone to analog stick values
+     */
+    applyDeadzone(value) {
+        if (Math.abs(value) < this.gamepad.deadzone) {
+            return 0;
+        }
+        // Scale the value to account for deadzone
+        const sign = Math.sign(value);
+        const scaledValue = (Math.abs(value) - this.gamepad.deadzone) / (1 - this.gamepad.deadzone);
+        return sign * scaledValue;
+    }
+    
+    /**
+     * Check if a button is pressed (handles both digital and analog buttons)
+     */
+    isButtonPressed(button) {
+        if (typeof button === 'object') {
+            return button.pressed || button.value > 0.5;
+        }
+        return button > 0.5;
+    }
+    
+    /**
+     * Check if a trigger is pressed (with threshold)
+     */
+    isTriggerPressed(button) {
+        if (typeof button === 'object') {
+            return button.value > this.gamepad.triggerThreshold;
+        }
+        return button > this.gamepad.triggerThreshold;
+    }
+    
+    /**
+     * Update movement from gamepad input
+     */
+    updateGamepadMovement() {
+        if (!this.gamepad.connected) return;
+        
+        // Use left stick for movement
+        this.movement.moveX = this.gamepad.leftStick.x;
+        this.movement.moveY = this.gamepad.leftStick.y;
+        
+        // Alternative: D-pad movement (digital)
+        if (Math.abs(this.movement.moveX) < 0.1 && Math.abs(this.movement.moveY) < 0.1) {
+            this.movement.moveX = 0;
+            this.movement.moveY = 0;
+            
+            if (this.gamepad.buttons.left) this.movement.moveX -= 1.0;
+            if (this.gamepad.buttons.right) this.movement.moveX += 1.0;
+            if (this.gamepad.buttons.down) this.movement.moveY -= 1.0;
+            if (this.gamepad.buttons.up) this.movement.moveY += 1.0;
+        }
+    }
+    
+    /**
+     * Handle gamepad-specific actions
+     */
+    handleGamepadActions() {
+        if (!this.gamepad.connected) return;
+        
+        // Handle weapon switching (Y button)
+        if (this.gamepad.buttons.y && !this.gamepad.buttons.y_prev) {
+            this.sendWeaponSwitch(1); // Switch to secondary weapon
+        }
+        
+        // Handle reload (X button)
+        if (this.gamepad.buttons.x && !this.gamepad.buttons.x_prev) {
+            this.sendReload();
+        }
+        
+        // Store previous button states for edge detection
+        this.gamepad.buttons.y_prev = this.gamepad.buttons.y;
+        this.gamepad.buttons.x_prev = this.gamepad.buttons.x;
+    }
+    
+    /**
+     * Update mouse position from gamepad right stick
+     */
+    updateGamepadAiming() {
+        if (!this.gamepad.connected || !window.gameEngine) return;
+        
+        const gameEngine = window.gameEngine;
+        const sensitivity = 300; // Pixels per second at full stick deflection
+        const deltaTime = this.inputInterval / 1000; // Convert to seconds
+        
+        // Update mouse position based on right stick
+        if (Math.abs(this.gamepad.rightStick.x) > 0.1 || Math.abs(this.gamepad.rightStick.y) > 0.1) {
+            this.mouse.x += this.gamepad.rightStick.x * sensitivity * deltaTime;
+            this.mouse.y += this.gamepad.rightStick.y * sensitivity * deltaTime;
+            
+            // Clamp to screen bounds
+            this.mouse.x = Math.max(0, Math.min(window.innerWidth, this.mouse.x));
+            this.mouse.y = Math.max(0, Math.min(window.innerHeight, this.mouse.y));
+            
+            // Update world coordinates
+            if (gameEngine.gameContainer) {
+                const screenPos = new PIXI.Point(this.mouse.x, this.mouse.y);
+                const worldPos = gameEngine.gameContainer.toLocal(screenPos);
+                this.mouse.worldX = worldPos.x;
+                this.mouse.worldY = -worldPos.y; // Invert Y for physics engine
+            }
+        }
+    }
+    
+    /**
+     * Reset gamepad state
+     */
+    resetGamepadState() {
+        this.gamepad.leftStick.x = 0;
+        this.gamepad.leftStick.y = 0;
+        this.gamepad.rightStick.x = 0;
+        this.gamepad.rightStick.y = 0;
+        
+        Object.keys(this.gamepad.buttons).forEach(key => {
+            if (!key.endsWith('_prev')) {
+                this.gamepad.buttons[key] = false;
+            }
+        });
+    }
+    
+    /**
+     * Show input source notification
+     */
+    showInputSourceNotification(message) {
+        // Create or update notification element
+        let notification = document.getElementById('input-notification');
+        if (!notification) {
+            notification = document.createElement('div');
+            notification.id = 'input-notification';
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: rgba(0, 0, 0, 0.8);
+                color: white;
+                padding: 10px 15px;
+                border-radius: 5px;
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+                z-index: 1000;
+                transition: opacity 0.3s ease;
+            `;
+            document.body.appendChild(notification);
+        }
+        
+        notification.textContent = message;
+        notification.style.opacity = '1';
+        
+        // Auto-hide after 3 seconds
+        setTimeout(() => {
+            if (notification) {
+                notification.style.opacity = '0';
+                setTimeout(() => {
+                    if (notification && notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }
+        }, 3000);
+    }
+    
     sendInput() {
         if (this.onInputChange) {
-            // Always send input at fixed intervals - no change detection needed
+            // Update gamepad aiming if connected
+            if (this.gamepad.connected) {
+                this.updateGamepadAiming();
+            }
+            
+            // Determine input values based on active input source
+            let moveX, moveY, fire, secondary, sprint, jump;
+            
+            if (this.gamepad.connected && this.inputSource === 'gamepad') {
+                // Use gamepad input
+                moveX = this.movement.moveX; // Already updated by updateGamepadMovement
+                moveY = this.movement.moveY;
+                fire = this.gamepad.buttons.rt || this.gamepad.buttons.a; // Right trigger or A button
+                secondary = this.gamepad.buttons.lt || this.gamepad.buttons.b; // Left trigger or B button
+                sprint = this.gamepad.buttons.ls || this.gamepad.buttons.rb; // Left stick click or right bumper
+                jump = this.gamepad.buttons.lb; // Left bumper for jump/space
+            } else {
+                // Use keyboard/mouse input
+                moveX = this.movement.moveX;
+                moveY = this.movement.moveY;
+                fire = this.mouse.left;
+                secondary = this.mouse.right;
+                sprint = this.keys.shift;
+                jump = this.keys.space;
+            }
+            
             const input = {
                 type: 'playerInput',
-                moveX: this.movement.moveX,
-                moveY: this.movement.moveY,
-                shift: !!this.keys.shift,
-                space: !!this.keys.space,
+                moveX: moveX,
+                moveY: moveY,
+                shift: !!sprint,
+                space: !!jump,
                 mouseX: this.mouse.x || 0,
                 mouseY: this.mouse.y || 0,
                 worldX: this.mouse.worldX || 0,
                 worldY: this.mouse.worldY || 0,
-                left: !!this.mouse.left,
-                right: !!this.mouse.right,
+                left: !!fire,
+                right: !!secondary,
                 weaponSwitch: null,
-                reload: null
+                reload: null,
+                inputSource: this.inputSource // Let server know input source
             };
             
             this.onInputChange(input);
@@ -3303,12 +3681,22 @@ class InputManager {
     
     sendWeaponSwitch(weaponIndex) {
         if (this.onInputChange) {
+            // Determine sprint/jump state based on input source
+            let sprint, jump;
+            if (this.gamepad.connected && this.inputSource === 'gamepad') {
+                sprint = this.gamepad.buttons.ls || this.gamepad.buttons.rb;
+                jump = this.gamepad.buttons.lb;
+            } else {
+                sprint = this.keys.shift;
+                jump = this.keys.space;
+            }
+            
             const input = {
                 type: 'playerInput',
                 moveX: this.movement.moveX,
                 moveY: this.movement.moveY,
-                shift: !!this.keys.shift,
-                space: !!this.keys.space,
+                shift: !!sprint,
+                space: !!jump,
                 mouseX: this.mouse.x || 0,
                 mouseY: this.mouse.y || 0,
                 worldX: this.mouse.worldX || 0,
@@ -3316,7 +3704,8 @@ class InputManager {
                 left: false, // Don't accidentally shoot when switching weapons
                 right: false,
                 weaponSwitch: weaponIndex,
-                reload: null
+                reload: null,
+                inputSource: this.inputSource
             };
             
             this.onInputChange(input);
@@ -3325,12 +3714,22 @@ class InputManager {
     
     sendReload() {
         if (this.onInputChange) {
+            // Determine sprint/jump state based on input source
+            let sprint, jump;
+            if (this.gamepad.connected && this.inputSource === 'gamepad') {
+                sprint = this.gamepad.buttons.ls || this.gamepad.buttons.rb;
+                jump = this.gamepad.buttons.lb;
+            } else {
+                sprint = this.keys.shift;
+                jump = this.keys.space;
+            }
+            
             const input = {
                 type: 'playerInput',
                 moveX: this.movement.moveX,
                 moveY: this.movement.moveY,
-                shift: !!this.keys.shift,
-                space: !!this.keys.space,
+                shift: !!sprint,
+                space: !!jump,
                 mouseX: this.mouse.x || 0,
                 mouseY: this.mouse.y || 0,
                 worldX: this.mouse.worldX || 0,
@@ -3338,7 +3737,8 @@ class InputManager {
                 left: false, // Don't accidentally shoot when reloading
                 right: false,
                 weaponSwitch: null,
-                reload: true
+                reload: true,
+                inputSource: this.inputSource
             };
             
             this.onInputChange(input);

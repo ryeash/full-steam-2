@@ -47,8 +47,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -64,7 +63,6 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     protected final GameConfig gameConfig;
     @Getter
     protected final GameEntities gameEntities = new GameEntities();
-    protected final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     @Getter
     protected final AIPlayerManager aiPlayerManager = new AIPlayerManager();
     @Getter
@@ -74,6 +72,11 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
 
     protected final ObjectMapper objectMapper = new ObjectMapper();
 
+    /**
+     * -- GETTER --
+     *  Get the game start time.
+     */
+    @Getter
     protected long gameStartTime;
     protected boolean gameRunning = false;
 
@@ -84,6 +87,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     private final World<Body> world;
     private final Queue<Body> bodiesToAdd = new ConcurrentLinkedQueue<>();
     private final Queue<Body> bodiesToRemove = new ConcurrentLinkedQueue<>();
+    private final ScheduledFuture<?> shutdownHook;
     private double lastUpdateTime = System.nanoTime() / 1e9;
 
     public GameManager(String gameId, String gameType, GameConfig gameConfig) {
@@ -120,7 +124,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         this.world.addStepListener(this);
 
         createWorldBoundaries();
-        createStrategicLocations();
+//        createStrategicLocations();
         createObstacles();
 
         // Add initial AI players to make the game more interesting from the start
@@ -130,7 +134,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             log.info("Added {} initial AI players to game {} for better gameplay", added, gameId);
         }
 
-        scheduler.scheduleAtFixedRate(this::update, 0, 16, TimeUnit.MILLISECONDS);
+        this.shutdownHook = Config.EXECUTOR.scheduleAtFixedRate(this::update, 0, 16, TimeUnit.MILLISECONDS);
     }
 
     public boolean addPlayer(PlayerSession playerSession) {
@@ -200,7 +204,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     }
 
     public void shutdown() {
-        scheduler.shutdown();
+        shutdownHook.cancel(true);
     }
 
     /**
@@ -288,6 +292,15 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
      */
     public boolean isAIPlayer(int playerId) {
         return aiPlayerManager.isAIPlayer(playerId);
+    }
+
+    /**
+     * Check if the game has any human players currently.
+     */
+    public boolean hasHumanPlayers() {
+        int totalPlayers = getPlayerCount();
+        int aiPlayers = getAIPlayerCount();
+        return (totalPlayers - aiPlayers) > 0;
     }
 
     /**

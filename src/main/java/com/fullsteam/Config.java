@@ -1,5 +1,7 @@
 package com.fullsteam;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Config {
@@ -13,6 +15,8 @@ public class Config {
         }
         return i;
     }
+
+    public static final ScheduledExecutorService EXECUTOR = Executors.newScheduledThreadPool(8);
 
     public static final int MAX_GLOBAL_PLAYERS = 100;
     public static final double PLAYER_SPEED = 150.0; // pixels per second
