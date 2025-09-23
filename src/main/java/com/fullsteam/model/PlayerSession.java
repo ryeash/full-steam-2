@@ -1,5 +1,6 @@
 package com.fullsteam.model;
 
+import com.fullsteam.RandomNames;
 import com.fullsteam.games.GameManager;
 import io.micronaut.websocket.WebSocketSession;
 import lombok.Data;
@@ -16,6 +17,7 @@ public class PlayerSession {
         this.playerId = playerId;
         this.session = session;
         this.isSpectator = false;
+        this.playerName = RandomNames.randomName();
     }
 }
 

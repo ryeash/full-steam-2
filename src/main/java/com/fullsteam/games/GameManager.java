@@ -25,6 +25,7 @@ import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.terrain.TerrainGenerator;
 import io.micronaut.websocket.WebSocketSession;
 import lombok.Getter;
+import org.apache.commons.lang3.StringUtils;
 import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.Settings;
@@ -511,8 +512,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     protected void processPlayerConfigChange(PlayerSession playerSession, PlayerConfigRequest request) {
         Player player = gameEntities.getPlayer(playerSession.getPlayerId());
         if (player != null) {
-            if (request.getPlayerName() != null) {
-                player.setPlayerName(request.getPlayerName());
+            if (StringUtils.isNotEmpty(request.getPlayerName())) {
+                player.setPlayerName(StringUtils.abbreviate(request.getPlayerName(), 26));
             }
 
             // Handle new unified weapon config or legacy separate weapons

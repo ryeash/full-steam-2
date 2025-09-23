@@ -1,6 +1,6 @@
 package com.fullsteam.model;
 
-import java.util.Map;
+import com.fullsteam.Config;
 
 public enum WeaponAttribute {
     // Damage: 10-50 (base 10 + 1 per point, max 40 points)
@@ -57,10 +57,10 @@ public enum WeaponAttribute {
         @Override
         public double compute(int points) {
             validate(points);
-            return 120 + (points * 15);
+            return Config.PLAYER_SPEED + 20 + (points * 20);
         }
     },
-    // Bullets Per Shot: 1-12 bullets (base 1 + 1 per 3 points, max 15 points)
+    // Bullets Per Shot: 1-12 bullets (base 1 + 1 per 3 points, max 33 points)
     BULLETS_PER_SHOT(0, 33) {
         @Override
         public double compute(int points) {

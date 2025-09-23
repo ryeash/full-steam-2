@@ -1,7 +1,6 @@
 package com.fullsteam.terrain;
 
 import com.fullsteam.physics.Obstacle;
-import com.fullsteam.physics.ShapedObstacle;
 import com.fullsteam.physics.CompoundObstacle;
 import lombok.Getter;
 import org.dyn4j.geometry.Circle;
@@ -31,12 +30,12 @@ public class TerrainGenerator {
     private final Map<String, Object> terrainMetadata = new HashMap<>();
     
     public enum TerrainType {
-        FOREST("Forest", 0x2d5a3d, 0x1a3d1f),
-        DESERT("Desert", 0xd4a574, 0xa67c52),
-        URBAN("Urban", 0x606060, 0x404040),
-        TUNDRA("Tundra", 0x7fb8d4, 0x5a9bc4),
-        VOLCANIC("Volcanic", 0x4a2c2a, 0x2d1b19),
-        GRASSLAND("Grassland", 0x4a7c59, 0x2d5a3d);
+        FOREST("Forest", 0x3d6b4d, 0x2a4d35),        // Lighter, more muted green - better contrast with green projectiles
+        DESERT("Desert", 0xd4a574, 0xa67c52),        // Keep desert - good contrast with most projectiles
+        URBAN("Urban", 0x7a7a7a, 0x5a5a5a),          // Lighter gray - better contrast with dark cannonballs
+        TUNDRA("Tundra", 0x9fc8e4, 0x7aa8c4),        // Lighter, less saturated blue - better contrast with plasma
+        VOLCANIC("Volcanic", 0x6b4c3a, 0x4a3529),    // Lighter brown - better visibility for dark projectiles
+        GRASSLAND("Grassland", 0x5a8c69, 0x3d6b4d);  // Lighter, more blue-green - better contrast with green projectiles
         
         private final String displayName;
         private final int primaryColor;
@@ -123,29 +122,22 @@ public class TerrainGenerator {
      * Generate terrain feature appropriate for the current terrain type.
      */
     private TerrainFeature generateFeatureForTerrain(double x, double y) {
-        switch (terrainType) {
-            case FOREST:
-                return generateForestFeature(x, y);
-            case DESERT:
-                return generateDesertFeature(x, y);
-            case URBAN:
-                return generateUrbanFeature(x, y);
-            case TUNDRA:
-                return generateTundraFeature(x, y);
-            case VOLCANIC:
-                return generateVolcanicFeature(x, y);
-            case GRASSLAND:
-                return generateGrasslandFeature(x, y);
-            default:
-                return generateGenericFeature(x, y);
-        }
+        return switch (terrainType) {
+            case FOREST -> generateForestFeature(x, y);
+            case DESERT -> generateDesertFeature(x, y);
+            case URBAN -> generateUrbanFeature(x, y);
+            case TUNDRA -> generateTundraFeature(x, y);
+            case VOLCANIC -> generateVolcanicFeature(x, y);
+            case GRASSLAND -> generateGrasslandFeature(x, y);
+            default -> generateGenericFeature(x, y);
+        };
     }
     
     private TerrainFeature generateForestFeature(double x, double y) {
         String[] forestFeatures = {"TreeCluster", "Clearing", "ThickBrush", "FallenLog", "RockOutcrop"};
         String featureType = forestFeatures[random.nextInt(forestFeatures.length)];
         double size = 30 + random.nextDouble() * 80;
-        return new TerrainFeature(featureType, x, y, size, 0x2d5a3d);
+        return new TerrainFeature(featureType, x, y, size, 0x3d6b4d);
     }
     
     private TerrainFeature generateDesertFeature(double x, double y) {
@@ -159,28 +151,28 @@ public class TerrainGenerator {
         String[] urbanFeatures = {"Building", "Rubble", "CarWreck", "Alley", "Plaza"};
         String featureType = urbanFeatures[random.nextInt(urbanFeatures.length)];
         double size = 25 + random.nextDouble() * 70;
-        return new TerrainFeature(featureType, x, y, size, 0x606060);
+        return new TerrainFeature(featureType, x, y, size, 0x7a7a7a);
     }
     
     private TerrainFeature generateTundraFeature(double x, double y) {
         String[] tundraFeatures = {"IceSheet", "Snowdrift", "FrozenPond", "IceRock", "WindSculpture"};
         String featureType = tundraFeatures[random.nextInt(tundraFeatures.length)];
         double size = 35 + random.nextDouble() * 85;
-        return new TerrainFeature(featureType, x, y, size, 0x7fb8d4);
+        return new TerrainFeature(featureType, x, y, size, 0x9fc8e4);
     }
     
     private TerrainFeature generateVolcanicFeature(double x, double y) {
         String[] volcanicFeatures = {"LavaRock", "CrystalFormation", "SteamVent", "ObsidianField", "LavaTube"};
         String featureType = volcanicFeatures[random.nextInt(volcanicFeatures.length)];
         double size = 30 + random.nextDouble() * 75;
-        return new TerrainFeature(featureType, x, y, size, 0x4a2c2a);
+        return new TerrainFeature(featureType, x, y, size, 0x6b4c3a);
     }
     
     private TerrainFeature generateGrasslandFeature(double x, double y) {
         String[] grasslandFeatures = {"FlowerPatch", "SmallHill", "StreamBed", "RockCircle", "TallGrass"};
         String featureType = grasslandFeatures[random.nextInt(grasslandFeatures.length)];
         double size = 25 + random.nextDouble() * 60;
-        return new TerrainFeature(featureType, x, y, size, 0x4a7c59);
+        return new TerrainFeature(featureType, x, y, size, 0x5a8c69);
     }
     
     private TerrainFeature generateGenericFeature(double x, double y) {
@@ -194,41 +186,66 @@ public class TerrainGenerator {
      * Generate obstacles appropriate for the terrain type.
      */
     private void generateObstacles() {
-        int baseObstacleCount = getBaseObstacleCount();
-        int obstacleCount = baseObstacleCount + random.nextInt(6); // Add 0-5 extra
+        ObstacleDensity density = getRandomObstacleDensity();
+        int obstacleCount = calculateObstacleCountForWorldSize(density);
+        
+        // Store density info in metadata for client reference
+        terrainMetadata.put("obstacleDensity", density.name());
+        terrainMetadata.put("obstacleCount", obstacleCount);
         
         for (int i = 0; i < obstacleCount; i++) {
-            Obstacle obstacle;
-            
-            double roll = random.nextDouble();
-//            if (roll < 0.7) {
-//                // 70% terrain-specific obstacles
-//                obstacle = generateTerrainSpecificObstacle();
-//            } else if (roll < 0.9) {
-//                // 20% completely random obstacles
-//                obstacle = generateRandomObstacle();
-//            } else {
-//                // 10% extra chaotic obstacles for maximum variety
-//            }
-                obstacle = generateChaoticObstacle();
-
-            if (obstacle != null) {
-                generatedObstacles.add(obstacle);
-            }
+            generatedObstacles.add(generateChaoticObstacle());
         }
     }
     
-    private int getBaseObstacleCount() {
-        switch (terrainType) {
-            case FOREST: return 6; // Reduced - compound obstacles will fill the rest
-            case DESERT: return 4;  // Reduced - compound obstacles will fill the rest
-            case URBAN: return 5;  // Reduced significantly - lots of compound structures
-            case TUNDRA: return 3;  // Reduced - compound obstacles will fill the rest
-            case VOLCANIC: return 5; // Reduced - compound obstacles will fill the rest
-            case GRASSLAND: return 3; // Reduced - mostly compound natural features
-            default: return 4;
-        }
+    public enum ObstacleDensity {
+        SPARSE,   // Fewer obstacles, more open space
+        DENSE,    // Normal obstacle density
+        CHOKED    // Many obstacles, cramped battlefield
     }
+    
+    private ObstacleDensity getRandomObstacleDensity() {
+        ObstacleDensity[] densities = ObstacleDensity.values();
+        return densities[random.nextInt(densities.length)];
+    }
+    
+    private int calculateObstacleCountForWorldSize(ObstacleDensity density) {
+        // Calculate base count based on world area
+        double worldArea = worldWidth * worldHeight;
+        double baseObstaclesPerUnit = 0.000008; // Base density per square unit
+        
+        // Adjust density multiplier based on selected density
+        double densityMultiplier = switch (density) {
+            case SPARSE -> 0.4 + random.nextDouble() * 0.3;  // 0.4-0.7x
+            case DENSE -> 1.2 + random.nextDouble() * 0.6;   // 1.2-1.8x
+            case CHOKED -> 2.0 + random.nextDouble() * 1.0;  // 2.0-3.0x
+        };
+        
+        // Apply terrain-specific modifier
+        double terrainModifier = getTerrainObstacleModifier();
+        
+        int baseCount = (int) (worldArea * baseObstaclesPerUnit * densityMultiplier * terrainModifier);
+        
+        // Add some randomness (±20%)
+        int variation = (int) (baseCount * 0.2);
+        int finalCount = baseCount + random.nextInt(variation * 2 + 1) - variation;
+        
+        // Ensure minimum and maximum bounds
+        return Math.max(3, Math.min(finalCount, (int) (worldArea * 0.0001))); // Max 1 obstacle per 10,000 square units
+    }
+    
+    private double getTerrainObstacleModifier() {
+        return switch (terrainType) {
+            case FOREST -> 1.3;      // More natural obstacles
+            case DESERT -> 0.8;      // Fewer obstacles, more open
+            case URBAN -> 1.5;       // Lots of buildings and debris
+            case TUNDRA -> 0.6;      // Sparse, mostly ice formations
+            case VOLCANIC -> 1.2;    // Rock formations and lava obstacles
+            case GRASSLAND -> 0.7;   // Open plains with scattered obstacles
+            default -> 1.0;
+        };
+    }
+    
     
     private Obstacle generateTerrainSpecificObstacle() {
         double x = (random.nextDouble() - 0.5) * (worldWidth - 200);
@@ -237,17 +254,7 @@ public class TerrainGenerator {
         // Generate terrain-appropriate obstacle type
         Obstacle.ObstacleType obstacleType = selectTerrainAppropriateObstacleType();
         
-        return ShapedObstacle.createObstacle(x, y, obstacleType);
-    }
-    
-    /**
-     * Generate a completely random obstacle for variety.
-     */
-    private Obstacle generateRandomObstacle() {
-        double x = (random.nextDouble() - 0.5) * (worldWidth - 200);
-        double y = (random.nextDouble() - 0.5) * (worldHeight - 200);
-        
-        return ShapedObstacle.createRandomObstacle(x, y);
+        return Obstacle.createObstacle(x, y, obstacleType);
     }
     
     /**
@@ -258,7 +265,7 @@ public class TerrainGenerator {
         double x = (random.nextDouble() - 0.5) * (worldWidth - 100);
         double y = (random.nextDouble() - 0.5) * (worldHeight - 100);
         
-        return ShapedObstacle.createChaoticObstacle(x, y);
+        return Obstacle.createChaoticObstacle(x, y);
     }
     
     /**
@@ -429,15 +436,15 @@ public class TerrainGenerator {
     }
     
     private int getCompoundObstacleCount() {
-        switch (terrainType) {
-            case FOREST: return 2; // Rock formations, fallen tree clusters
-            case DESERT: return 2; // Mesa formations, ancient ruins
-            case URBAN: return 4;  // Buildings, vehicle wrecks, industrial complexes
-            case TUNDRA: return 1; // Ice formations
-            case VOLCANIC: return 2; // Rock formations, volcanic structures
-            case GRASSLAND: return 1; // Natural rock formations
-            default: return 2;
-        }
+        return switch (terrainType) {
+            case FOREST -> 2; // Rock formations, fallen tree clusters
+            case DESERT -> 2; // Mesa formations, ancient ruins
+            case URBAN -> 4;  // Buildings, vehicle wrecks, industrial complexes
+            case TUNDRA -> 1; // Ice formations
+            case VOLCANIC -> 2; // Rock formations, volcanic structures
+            case GRASSLAND -> 1; // Natural rock formations
+            default -> 2;
+        };
     }
     
     private CompoundObstacle generateTerrainSpecificCompoundObstacle() {
@@ -466,29 +473,36 @@ public class TerrainGenerator {
     }
     
     private String getCompoundObstacleType() {
-        switch (terrainType) {
-            case FOREST:
+        return switch (terrainType) {
+            case FOREST -> {
                 String[] forestTypes = {"rock_formation", "ruins"};
-                return forestTypes[random.nextInt(forestTypes.length)];
-            case DESERT:
+                yield forestTypes[random.nextInt(forestTypes.length)];
+            }
+            case DESERT -> {
                 String[] desertTypes = {"rock_formation", "ruins", "fortification"};
-                return desertTypes[random.nextInt(desertTypes.length)];
-            case URBAN:
+                yield desertTypes[random.nextInt(desertTypes.length)];
+            }
+            case URBAN -> {
                 String[] urbanTypes = {"building_complex", "vehicle_wreck", "industrial_complex", "ruins"};
-                return urbanTypes[random.nextInt(urbanTypes.length)];
-            case TUNDRA:
+                yield urbanTypes[random.nextInt(urbanTypes.length)];
+            }
+            case TUNDRA -> {
                 String[] tundraTypes = {"rock_formation", "fortification"};
-                return tundraTypes[random.nextInt(tundraTypes.length)];
-            case VOLCANIC:
+                yield tundraTypes[random.nextInt(tundraTypes.length)];
+            }
+            case VOLCANIC -> {
                 String[] volcanicTypes = {"rock_formation", "ruins", "industrial_complex"};
-                return volcanicTypes[random.nextInt(volcanicTypes.length)];
-            case GRASSLAND:
+                yield volcanicTypes[random.nextInt(volcanicTypes.length)];
+            }
+            case GRASSLAND -> {
                 String[] grasslandTypes = {"rock_formation", "ruins"};
-                return grasslandTypes[random.nextInt(grasslandTypes.length)];
-            default:
+                yield grasslandTypes[random.nextInt(grasslandTypes.length)];
+            }
+            default -> {
                 String[] defaultTypes = {"rock_formation", "ruins", "vehicle_wreck"};
-                return defaultTypes[random.nextInt(defaultTypes.length)];
-        }
+                yield defaultTypes[random.nextInt(defaultTypes.length)];
+            }
+        };
     }
     
     private boolean isCompoundObstaclePositionClear(CompoundObstacle compoundObstacle) {
@@ -540,51 +554,51 @@ public class TerrainGenerator {
     }
     
     private double getFogDensity() {
-        switch (terrainType) {
-            case FOREST: return 0.3;
-            case DESERT: return 0.1;
-            case URBAN: return 0.4;
-            case TUNDRA: return 0.2;
-            case VOLCANIC: return 0.6;
-            case GRASSLAND: return 0.1;
-            default: return 0.2;
-        }
+        return switch (terrainType) {
+            case FOREST -> 0.3;
+            case DESERT -> 0.1;
+            case URBAN -> 0.4;
+            case TUNDRA -> 0.2;
+            case VOLCANIC -> 0.6;
+            case GRASSLAND -> 0.1;
+            default -> 0.2;
+        };
     }
     
     private double getAmbientLight() {
-        switch (terrainType) {
-            case FOREST: return 0.7;
-            case DESERT: return 1.0;
-            case URBAN: return 0.6;
-            case TUNDRA: return 0.8;
-            case VOLCANIC: return 0.5;
-            case GRASSLAND: return 0.9;
-            default: return 0.8;
-        }
+        return switch (terrainType) {
+            case FOREST -> 0.7;
+            case DESERT -> 1.0;
+            case URBAN -> 0.6;
+            case TUNDRA -> 0.8;
+            case VOLCANIC -> 0.5;
+            case GRASSLAND -> 0.9;
+            default -> 0.8;
+        };
     }
     
     private int getTemperature() {
-        switch (terrainType) {
-            case FOREST: return 18 + random.nextInt(10); // 18-27°C
-            case DESERT: return 35 + random.nextInt(15); // 35-49°C
-            case URBAN: return 20 + random.nextInt(12); // 20-31°C
-            case TUNDRA: return -15 + random.nextInt(10); // -15 to -6°C
-            case VOLCANIC: return 45 + random.nextInt(20); // 45-64°C
-            case GRASSLAND: return 15 + random.nextInt(15); // 15-29°C
-            default: return 20;
-        }
+        return switch (terrainType) {
+            case FOREST -> 18 + random.nextInt(10); // 18-27°C
+            case DESERT -> 35 + random.nextInt(15); // 35-49°C
+            case URBAN -> 20 + random.nextInt(12); // 20-31°C
+            case TUNDRA -> -15 + random.nextInt(10); // -15 to -6°C
+            case VOLCANIC -> 45 + random.nextInt(20); // 45-64°C
+            case GRASSLAND -> 15 + random.nextInt(15); // 15-29°C
+            default -> 20;
+        };
     }
     
     private String getParticleType() {
-        switch (terrainType) {
-            case FOREST: return "leaves";
-            case DESERT: return "sand";
-            case URBAN: return "dust";
-            case TUNDRA: return "snow";
-            case VOLCANIC: return "ash";
-            case GRASSLAND: return "pollen";
-            default: return "dust";
-        }
+        return switch (terrainType) {
+            case FOREST -> "leaves";
+            case DESERT -> "sand";
+            case URBAN -> "dust";
+            case TUNDRA -> "snow";
+            case VOLCANIC -> "ash";
+            case GRASSLAND -> "pollen";
+            default -> "dust";
+        };
     }
     
     private double getParticleDensity() {
@@ -592,15 +606,15 @@ public class TerrainGenerator {
     }
     
     private String getParticleColor() {
-        switch (terrainType) {
-            case FOREST: return "#4a7c59";
-            case DESERT: return "#d4a574";
-            case URBAN: return "#888888";
-            case TUNDRA: return "#ffffff";
-            case VOLCANIC: return "#666666";
-            case GRASSLAND: return "#ffff88";
-            default: return "#cccccc";
-        }
+        return switch (terrainType) {
+            case FOREST -> "#4a7c59";
+            case DESERT -> "#d4a574";
+            case URBAN -> "#888888";
+            case TUNDRA -> "#ffffff";
+            case VOLCANIC -> "#666666";
+            case GRASSLAND -> "#ffff88";
+            default -> "#cccccc";
+        };
     }
     
     /**

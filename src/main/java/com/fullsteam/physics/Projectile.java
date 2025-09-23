@@ -71,23 +71,14 @@ public class Projectile extends GameEntity {
      * Different projectile types have different minimum velocities before dismissal.
      */
     private double calculateMinimumVelocity(Ordinance ordinance) {
-        switch (ordinance) {
-            case ROCKET:
-                return 50.0; // Rockets need higher velocity to maintain thrust
-            case GRENADE:
-                return 20.0; // Grenades explode when they slow down significantly
-            case CANNONBALL:
-                return 30.0; // Heavy projectiles need some momentum
-            case PLASMA:
-                return 40.0; // Energy projectiles dissipate when slowing
-            case FLAMETHROWER:
-                return 10.0; // Fire streams extinguish quickly
-            case BULLET:
-            case DART:
-            case LASER:
-            default:
-                return 5.0; // Standard projectiles have low minimum velocity
-        }
+        return switch (ordinance) {
+            case ROCKET -> 50.0; // Rockets need higher velocity to maintain thrust
+            case GRENADE -> 20.0; // Grenades explode when they slow down significantly
+            case CANNONBALL -> 30.0; // Heavy projectiles need some momentum
+            case PLASMA -> 40.0; // Energy projectiles dissipate when slowing
+            case FLAMETHROWER -> 10.0; // Fire streams extinguish quickly
+            default -> 5.0; // Standard projectiles have low minimum velocity
+        };
     }
 
     @Override
