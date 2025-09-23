@@ -573,16 +573,32 @@ class GameEngine {
     }
     
     /**
+     * Get the current player's data for gamepad aiming
+     */
+    getMyPlayer() {
+        if (!this.myPlayerId) return null;
+        const sprite = this.players.get(this.myPlayerId);
+        return sprite ? sprite.playerData : null;
+    }
+    
+    /**
      * Get the base color for a team.
      */
     getTeamColor(teamNumber) {
+        // Debug logging for team color assignment
+        if (teamNumber === 3 || teamNumber === 4) {
+            console.log(`Getting color for team ${teamNumber}: ${teamNumber === 3 ? '0x44ff44 (green)' : '0xffff44 (yellow)'}`);
+        }
+        
         switch (teamNumber) {
             case 0: return 0x808080; // Gray for FFA/no team
             case 1: return 0xff4444; // Red
             case 2: return 0x4444ff; // Blue  
             case 3: return 0x44ff44; // Green
             case 4: return 0xffff44; // Yellow
-            default: return 0xff44ff; // Magenta for unexpected teams
+            default: 
+                console.warn(`Unexpected team number: ${teamNumber}, using magenta`);
+                return 0xff44ff; // Magenta for unexpected teams
         }
     }
     
@@ -661,7 +677,7 @@ class GameEngine {
         
         // Player sprite - clean circular design
         const playerGraphics = new PIXI.Graphics();
-        playerGraphics.beginFill(0x3498db);
+        playerGraphics.beginFill(0x8c8c8c);
         playerGraphics.drawCircle(0, 0, 20);
         playerGraphics.endFill();
         
@@ -972,7 +988,9 @@ class GameEngine {
         sprite.rotation = playerData.rotation || 0;
         
         // Color players based on their team
-        sprite.tint = this.getPlayerColor(playerData);
+        const playerColor = this.getPlayerColor(playerData);
+        console.log(`Player ${playerData.id} (${playerData.name || 'unnamed'}) assigned to team ${playerData.team || 0}, color: 0x${playerColor.toString(16)}`);
+        sprite.tint = playerColor;
         
         // Make sprite visible but normal size
         sprite.scale.set(1.0); // Normal size
@@ -980,18 +998,18 @@ class GameEngine {
         sprite.visible = true; // Explicitly set visible
         
         // Create health bar above player
-    const healthBarContainer = this.createHealthBar(playerData);
-    sprite.healthBar = healthBarContainer;
+        const healthBarContainer = this.createHealthBar(playerData);
+        sprite.healthBar = healthBarContainer;
     
-    // Create death marker (initially hidden)
-    if (this.deathTexture) {
-        const deathMarker = new PIXI.Sprite(this.deathTexture);
-        deathMarker.anchor.set(0.5);
-        deathMarker.position.set(isoPos.x, isoPos.y);
-        deathMarker.zIndex = 12; // Above players but below projectiles
-        deathMarker.visible = false;
-        sprite.deathMarker = deathMarker;
-        this.gameContainer.addChild(deathMarker);
+        // Create death marker (initially hidden)
+        if (this.deathTexture) {
+            const deathMarker = new PIXI.Sprite(this.deathTexture);
+            deathMarker.anchor.set(0.5);
+            deathMarker.position.set(isoPos.x, isoPos.y);
+            deathMarker.zIndex = 12; // Above players and projectiles
+            deathMarker.visible = false;
+            sprite.deathMarker = deathMarker;
+            this.gameContainer.addChild(deathMarker);
         }
         // Note: Death texture should be available after loadAssets()
         
@@ -1212,8 +1230,8 @@ class GameEngine {
             projectileContainer.maxTrailLength = this.getTrailLength(ordinance);
         }
         
-        // Set projectile z-index above players
-        projectileContainer.zIndex = 15;
+        // Set projectile z-index below players but above obstacles
+        projectileContainer.zIndex = 8;
         
         // Store references
         projectileContainer.projectileData = projectileData;
@@ -1622,7 +1640,9 @@ class GameEngine {
         const graphics = this.createObstacleGraphics(obstacleData);
         const isoPos = this.worldToIsometric(obstacleData.x, obstacleData.y);
         graphics.position.set(isoPos.x, isoPos.y);
-        graphics.rotation = -(obstacleData.rotation || 0); // Invert for PIXI
+        // Since we're inverting Y coordinates in vertices, we need to also invert rotation
+        // to maintain the correct orientation
+        graphics.rotation = -(obstacleData.rotation || 0);
         graphics.zIndex = 5;
         this.obstacles.set(obstacleData.id, graphics);
         this.gameContainer.addChild(graphics);
@@ -1705,9 +1725,9 @@ class GameEngine {
             // Fallback equilateral triangle
             const size = obstacleData.boundingRadius || 25;
             graphics.drawPolygon([
-                0, size * 0.577,           // Top
-                -size * 0.5, -size * 0.289, // Bottom left
-                size * 0.5, -size * 0.289   // Bottom right
+                0, -size * 0.577,          // Top (inverted Y)
+                -size * 0.5, size * 0.289, // Bottom left (inverted Y)
+                size * 0.5, size * 0.289   // Bottom right (inverted Y)
             ]);
         }
     }
@@ -1723,7 +1743,7 @@ class GameEngine {
             for (let i = 0; i < sides; i++) {
                 const angle = (2 * Math.PI * i) / sides;
                 points.push(Math.cos(angle) * radius);
-                points.push(Math.sin(angle) * radius);
+                points.push(-Math.sin(angle) * radius);  // Invert Y for PIXI coordinate system
             }
             graphics.drawPolygon(points);
         }
@@ -1739,8 +1759,11 @@ class GameEngine {
         
         const points = [];
         vertices.forEach(vertex => {
+            // Transform from physics coordinates (Y-up) to PIXI coordinates (Y-down)
+            // The obstacle's rotation is handled by the graphics.rotation property,
+            // so we just need to invert the Y coordinate here
             points.push(vertex.x);
-            points.push(vertex.y);
+            points.push(-vertex.y);  // Invert Y for PIXI coordinate system
         });
         graphics.drawPolygon(points);
     }
@@ -1750,7 +1773,8 @@ class GameEngine {
         if (!graphics) return;
         const isoPos = this.worldToIsometric(obstacleData.x, obstacleData.y);
         graphics.position.set(isoPos.x, isoPos.y);
-        graphics.rotation = -(obstacleData.rotation || 0); // Invert for PIXI
+        // Consistent with createObstacle - invert rotation for PIXI coordinate system
+        graphics.rotation = -(obstacleData.rotation || 0);
     }
 
     removeObstacle(obstacleId) {
@@ -3545,30 +3569,49 @@ class InputManager {
     }
     
     /**
-     * Update mouse position from gamepad right stick
+     * Update aiming from gamepad right stick
      */
     updateGamepadAiming() {
         if (!this.gamepad.connected || !window.gameEngine) return;
         
         const gameEngine = window.gameEngine;
-        const sensitivity = 300; // Pixels per second at full stick deflection
-        const deltaTime = this.inputInterval / 1000; // Convert to seconds
         
-        // Update mouse position based on right stick
+        // For gamepad, use right stick to directly control aiming direction
         if (Math.abs(this.gamepad.rightStick.x) > 0.1 || Math.abs(this.gamepad.rightStick.y) > 0.1) {
-            this.mouse.x += this.gamepad.rightStick.x * sensitivity * deltaTime;
-            this.mouse.y += this.gamepad.rightStick.y * sensitivity * deltaTime;
-            
-            // Clamp to screen bounds
-            this.mouse.x = Math.max(0, Math.min(window.innerWidth, this.mouse.x));
-            this.mouse.y = Math.max(0, Math.min(window.innerHeight, this.mouse.y));
-            
-            // Update world coordinates
-            if (gameEngine.gameContainer) {
-                const screenPos = new PIXI.Point(this.mouse.x, this.mouse.y);
-                const worldPos = gameEngine.gameContainer.toLocal(screenPos);
-                this.mouse.worldX = worldPos.x;
-                this.mouse.worldY = -worldPos.y; // Invert Y for physics engine
+            // Get player position in world coordinates
+            const myPlayer = gameEngine.getMyPlayer();
+            if (myPlayer) {
+                // Calculate aim direction relative to player position
+                const aimRange = 200; // Distance to aim point from player
+                const aimX = myPlayer.x + (this.gamepad.rightStick.x * aimRange);
+                const aimY = myPlayer.y + (this.gamepad.rightStick.y * aimRange);
+                
+                // Convert to screen coordinates for mouse position
+                const worldPos = new PIXI.Point(aimX, aimY);
+                const screenPos = gameEngine.gameContainer.toGlobal(worldPos);
+                
+                // Update mouse position for aiming
+                this.mouse.x = screenPos.x;
+                this.mouse.y = screenPos.y;
+                this.mouse.worldX = aimX;
+                this.mouse.worldY = aimY;
+            }
+        } else {
+            // When right stick is neutral, aim forward relative to player
+            const myPlayer = gameEngine.getMyPlayer();
+            if (myPlayer) {
+                // Default aim direction (forward/up in world coordinates)
+                const aimRange = 100;
+                const aimX = myPlayer.x;
+                const aimY = myPlayer.y + aimRange; // Aim upward by default
+                
+                const worldPos = new PIXI.Point(aimX, aimY);
+                const screenPos = gameEngine.gameContainer.toGlobal(worldPos);
+                
+                this.mouse.x = screenPos.x;
+                this.mouse.y = screenPos.y;
+                this.mouse.worldX = aimX;
+                this.mouse.worldY = aimY;
             }
         }
     }

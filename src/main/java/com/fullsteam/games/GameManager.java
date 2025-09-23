@@ -330,6 +330,17 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             }
         }
 
+        // Debug logging for team assignment
+        log.info("Team assignment - Game has {} teams. Team counts: {}", 
+                gameConfig.getTeamCount(), 
+                java.util.Arrays.toString(teamCounts));
+        log.info("Assigning player to team {} (counts: T1={}, T2={}, T3={}, T4={})", 
+                bestTeam, 
+                teamCounts.length > 1 ? teamCounts[1] : 0,
+                teamCounts.length > 2 ? teamCounts[2] : 0, 
+                teamCounts.length > 3 ? teamCounts[3] : 0,
+                teamCounts.length > 4 ? teamCounts[4] : 0);
+
         return bestTeam;
     }
 

@@ -166,13 +166,16 @@ public class Player extends GameEntity {
         long now = System.currentTimeMillis();
         double fireInterval = 1000.0 / weapon.getFireRate();
         // Check if we have enough ammo for at least one bullet (partial bursts are allowed)
-        return !isReloading && weapon.getCurrentAmmo() > 0 && (now - lastShotTime) >= fireInterval;
+        return isActive()
+               && !isReloading
+               && weapon.getCurrentAmmo() > 0
+               && (now - lastShotTime) >= fireInterval;
     }
 
     public List<Projectile> shoot() {
         Weapon weapon = getCurrentWeapon();
         if (!canShoot()) {
-            if (weapon.getCurrentAmmo() <= 0) {
+            if (!isReloading && weapon.getCurrentAmmo() <= 0) {
                 startReload();
             }
             return List.of();

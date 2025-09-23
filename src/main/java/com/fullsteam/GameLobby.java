@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class GameLobby {
     private static final Logger log = LoggerFactory.getLogger(GameLobby.class);
 
-    private final Map<String, GameManager> activeGames = new ConcurrentHashMap<>();
+    private final Map<String, GameManager> activeGames = new ConcurrentSkipListMap<>();
     private final AtomicLong globalPlayerCount = new AtomicLong(0);
     private final AtomicLong gameIdCounter = new AtomicLong(1);
 
@@ -47,8 +47,14 @@ public class GameLobby {
     }
 
     public GameManager createGame(String gameType) {
+        if (activeGames.size() >= Config.MAX_GLOBAL_GAMES) {
+            throw new IllegalStateException("Maximum number of games reached");
+        }
         String gameId = "game_" + gameIdCounter.getAndIncrement();
-        GameManager game = new GameManager(gameId, "Battle Royale", GameConfig.builder().build());
+        GameManager game = new GameManager(gameId, "Battle Royale", GameConfig.builder()
+                .maxPlayers(18)
+                .teamCount(4)
+                .build());
         activeGames.put(gameId, game);
         log.info("Created new game: {} ({})", gameId, gameType);
         return game;

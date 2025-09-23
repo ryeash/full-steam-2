@@ -237,6 +237,14 @@ public class AIPlayerManager {
                 input.setLeft(false);
             }
         }
+        
+        // Force reload if completely out of ammo - safety net
+        if (aiPlayer.getCurrentWeapon().getCurrentAmmo() == 0 && !aiPlayer.isReloading()) {
+            input.setReload(true);
+            // Don't try to shoot when out of ammo
+            input.setLeft(false);
+            input.setRight(false);
+        }
 
         // Apply reaction speed delays (not implemented in this simple version)
         // Could add input delays based on reaction speed trait

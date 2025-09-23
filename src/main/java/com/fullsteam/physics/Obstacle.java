@@ -310,7 +310,7 @@ public class Obstacle extends GameEntity {
 
     private static Convex createIrregularPolygon(ThreadLocalRandom random) {
         int sides = random.nextInt(4, 12); // 4-11 sided for more variety
-        double baseRadius = random.nextDouble(15, 50);
+        double baseRadius = random.nextDouble(15, 100);
 
         // 15% chance for massive irregular formations
         if (random.nextDouble() < 0.15) {
@@ -342,7 +342,7 @@ public class Obstacle extends GameEntity {
     }
 
     private static Convex createRegularPolygon(int sides, ThreadLocalRandom random) {
-        double radius = random.nextDouble(18, 55);
+        double radius = random.nextDouble(18, 120);
 
         // 12% chance for massive crystal formations
         if (random.nextDouble() < 0.12) {
@@ -367,8 +367,8 @@ public class Obstacle extends GameEntity {
     }
 
     private static Convex createDiamondShape(ThreadLocalRandom random) {
-        double width = random.nextDouble(20, 60);
-        double height = random.nextDouble(20, 60);
+        double width = random.nextDouble(20, 120);
+        double height = random.nextDouble(20, 120);
 
         // 18% chance for massive diamond formations
         if (random.nextDouble() < 0.18) {

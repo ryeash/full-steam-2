@@ -73,6 +73,24 @@ public class IdleBehavior implements AIBehavior {
                 input.setWorldY(playerPos.y + direction.y * 100);
             }
         }
+        
+        // Always check for reload when idle - this is the missing piece!
+        int currentAmmo = aiPlayer.getCurrentWeapon().getCurrentAmmo();
+        int magazineSize = aiPlayer.getCurrentWeapon().getMagazineSize();
+        
+        // Reload if out of ammo or if ammo is low and we're not in immediate danger
+        boolean shouldReload = false;
+        if (currentAmmo == 0) {
+            shouldReload = true; // Must reload when completely out
+        } else if (currentAmmo <= 5 && nearestEnemy == null) {
+            shouldReload = true; // Reload when safe and low on ammo
+        } else if (currentAmmo < magazineSize * 0.4 && nearestEnemy == null) {
+            shouldReload = true; // Reload when safe and less than 40% ammo
+        }
+        
+        if (shouldReload && !aiPlayer.isReloading()) {
+            input.setReload(true);
+        }
 
         return input;
     }

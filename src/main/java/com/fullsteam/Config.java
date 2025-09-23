@@ -19,6 +19,7 @@ public class Config {
     public static final ScheduledExecutorService EXECUTOR = Executors.newScheduledThreadPool(8);
 
     public static final int MAX_GLOBAL_PLAYERS = 100;
+    public static final int MAX_GLOBAL_GAMES = 10;
     public static final double PLAYER_SPEED = 150.0; // pixels per second
     public static final double PLAYER_RADIUS = 20.0;
     public static final double CAPTURE_RADIUS = 50.0;
