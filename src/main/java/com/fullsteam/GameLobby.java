@@ -25,7 +25,7 @@ public class GameLobby {
     private final AtomicLong gameIdCounter = new AtomicLong(1);
 
     // Game cleanup settings
-    private static final long CLEANUP_CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
+    private static final long CLEANUP_CHECK_INTERVAL_MS = 12 * 1000; // 12 seconds
 
     @Inject
     public GameLobby() {

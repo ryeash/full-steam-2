@@ -74,7 +74,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
 
     /**
      * -- GETTER --
-     *  Get the game start time.
+     * Get the game start time.
      */
     @Getter
     protected long gameStartTime;
@@ -298,9 +298,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
      * Check if the game has any human players currently.
      */
     public boolean hasHumanPlayers() {
-        int totalPlayers = getPlayerCount();
-        int aiPlayers = getAIPlayerCount();
-        return (totalPlayers - aiPlayers) > 0;
+        return getPlayerCount() > 0;
     }
 
     /**
