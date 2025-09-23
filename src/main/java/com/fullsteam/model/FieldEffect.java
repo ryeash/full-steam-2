@@ -3,6 +3,10 @@ package com.fullsteam.model;
 import com.fullsteam.physics.GameEntity;
 import com.fullsteam.physics.Player;
 import lombok.Getter;
+import org.dyn4j.dynamics.Body;
+import org.dyn4j.dynamics.BodyFixture;
+import org.dyn4j.geometry.Circle;
+import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
 import java.util.HashSet;
@@ -10,13 +14,12 @@ import java.util.Set;
 
 /**
  * Represents a temporary field effect in the game world (explosions, fire, electric fields, etc.)
+ * Now uses physics bodies with sensor fixtures for optimized collision detection.
  */
 @Getter
-public class FieldEffect {
-    private final int id;
+public class FieldEffect extends GameEntity {
     private final int ownerId;
     private final FieldEffectType type;
-    private final Vector2 position;
     private final double radius;
     private final double damage;
     private final double duration;
@@ -27,10 +30,9 @@ public class FieldEffect {
     private boolean active;
 
     public FieldEffect(int id, int ownerId, FieldEffectType type, Vector2 position, double radius, double damage, double duration, int ownerTeam) {
-        this.id = id;
+        super(id, createFieldEffectBody(position, radius), Double.POSITIVE_INFINITY); // Field effects are indestructible
         this.ownerId = ownerId;
         this.type = type;
-        this.position = position.copy();
         this.radius = radius;
         this.damage = damage;
         this.duration = duration;
@@ -38,6 +40,17 @@ public class FieldEffect {
         this.ownerTeam = ownerTeam;
         this.affectedEntities = new HashSet<>();
         this.active = true;
+        getBody().setUserData(this);
+    }
+
+    private static Body createFieldEffectBody(Vector2 position, double radius) {
+        Body body = new Body();
+        Circle circle = new Circle(radius);
+        BodyFixture fixture = body.addFixture(circle);
+        fixture.setSensor(true);
+        body.setMass(MassType.INFINITE); // Make it static
+        body.getTransform().setTranslation(position.x, position.y);
+        return body;
     }
 
     public void update(double deltaTime) {
@@ -52,7 +65,7 @@ public class FieldEffect {
     }
 
     public boolean isInRange(Vector2 targetPosition) {
-        return position.distance(targetPosition) <= radius;
+        return getPosition().distance(targetPosition) <= radius;
     }
 
     public boolean canAffect(GameEntity entity) {
@@ -99,7 +112,7 @@ public class FieldEffect {
             return 0.0;
         }
 
-        double distance = position.distance(targetPosition);
+        double distance = getPosition().distance(targetPosition);
         double intensity = 0.2 + (0.8 - (distance / radius)); // Linear falloff
         return Math.max(0.0, intensity);
     }

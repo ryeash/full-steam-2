@@ -52,7 +52,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-public class GameManager implements CollisionProcessor.CollisionHandler, StepListener<Body> {
+public class GameManager implements CollisionProcessor.CollisionHandler, CollisionProcessor.FieldEffectCollisionHandler, StepListener<Body> {
     protected static final Logger log = LoggerFactory.getLogger(GameManager.class);
 
     @Getter
@@ -216,7 +216,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         }
 
         int assignedTeam = assignPlayerToTeam();
-        Vector2 spawnPoint = findSpawnPointForTeam(assignedTeam);
+        Vector2 spawnPoint = findVariedSpawnPointForTeam(assignedTeam);
         AIPlayer aiPlayer = AIPlayerManager.createRandomAIPlayer(Config.nextId(), spawnPoint.x, spawnPoint.y, assignedTeam);
 
         // Add to game entities
@@ -242,7 +242,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         }
 
         int assignedTeam = assignPlayerToTeam();
-        Vector2 spawnPoint = findSpawnPointForTeam(assignedTeam);
+        Vector2 spawnPoint = findVariedSpawnPointForTeam(assignedTeam);
         AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithPersonality(Config.nextId(), spawnPoint.x, spawnPoint.y, personalityType, assignedTeam);
 
         // Add to game entities
@@ -470,7 +470,15 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
                 world.updatev(deltaTime);
             }
 
-            gameEntities.getFieldEffects().values().removeIf(FieldEffect::isExpired);
+            // Remove expired field effects and their physics bodies
+            gameEntities.getFieldEffects().entrySet().removeIf(entry -> {
+                FieldEffect effect = entry.getValue();
+                if (effect.isExpired()) {
+                    bodiesToRemove.add(effect.getBody());
+                    return true;
+                }
+                return false;
+            });
 
             sendGameState();
         } catch (Throwable t) {
@@ -480,7 +488,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
 
     protected void onPlayerJoined(PlayerSession playerSession) {
         int assignedTeam = assignPlayerToTeam();
-        Vector2 spawnPoint = findSpawnPointForTeam(assignedTeam);
+        Vector2 spawnPoint = findVariedSpawnPointForTeam(assignedTeam);
         log.info("Player {} joining game {} at spawn point ({}, {}) on team {}",
                 playerSession.getPlayerId(), gameId, spawnPoint.x, spawnPoint.y, assignedTeam);
 
@@ -782,6 +790,45 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     }
 
     /**
+     * Find a varied spawn point for a specific team that avoids clustering.
+     * Tries multiple locations to avoid spawning too close to other players.
+     *
+     * @param team Team number (0 for FFA)
+     * @return Spawn point for the team with good spacing
+     */
+    private Vector2 findVariedSpawnPointForTeam(int team) {
+        Vector2 bestSpawnPoint = null;
+        double bestMinDistance = 0;
+        
+        // Try multiple spawn attempts to find the best one
+        for (int attempt = 0; attempt < 15; attempt++) {
+            Vector2 candidateSpawn = findSpawnPointForTeam(team);
+            
+            // Calculate minimum distance to any active player
+            double minDistanceToPlayer = Double.MAX_VALUE;
+            for (Player player : gameEntities.getAllPlayers()) {
+                if (player.isActive()) {
+                    double distance = candidateSpawn.distance(player.getPosition());
+                    minDistanceToPlayer = Math.min(minDistanceToPlayer, distance);
+                }
+            }
+            
+            // Keep the spawn point with the best (largest) minimum distance
+            if (minDistanceToPlayer > bestMinDistance) {
+                bestMinDistance = minDistanceToPlayer;
+                bestSpawnPoint = candidateSpawn;
+            }
+            
+            // If we found a spawn point with good spacing, use it
+            if (bestMinDistance > 150.0) { // Minimum desired spacing
+                break;
+            }
+        }
+        
+        return bestSpawnPoint != null ? bestSpawnPoint : findSpawnPointForTeam(team);
+    }
+    
+    /**
      * Find a spawn point for a specific team.
      * Uses team-based spawn areas if team mode is enabled, otherwise FFA spawning.
      *
@@ -943,6 +990,13 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             shooter.addKill();
         }
         victim.die();
+        
+        // Assign a new spawn point for the victim when they respawn
+        Vector2 newSpawnPoint = findVariedSpawnPointForTeam(victim.getTeam());
+        victim.setRespawnPoint(newSpawnPoint);
+        log.debug("Player {} will respawn at new location ({}, {}) on team {}", 
+                victim.getId(), newSpawnPoint.x, newSpawnPoint.y, victim.getTeam());
+        
         Map<String, Object> deathNotification = new HashMap<>();
         deathNotification.put("type", "playerKilled");
         deathNotification.put("victimId", victim.getId());
@@ -965,56 +1019,51 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
         log.debug("Player {} exited strategic location {}", player.getId(), location.getLocationName());
     }
 
-    /**
-     * Process field effects and apply damage to players in range
-     */
-    private void processFieldEffects(double deltaTime) {
-        for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
-            if (!effect.isActive()) {
-                continue;
+    @Override
+    public void onPlayerEnterFieldEffect(Player player, FieldEffect fieldEffect) {
+        if (!player.isActive() || !fieldEffect.isActive()) {
+            return;
+        }
+
+        // Field effect collision detected - apply damage based on effect type
+        double damage = fieldEffect.getDamageAtPosition(player.getPosition());
+        if (damage > 0) {
+            boolean deactivated;
+
+            // Apply damage based on effect type
+            if (fieldEffect.getType().isInstantaneous()) {
+                // Instant damage (explosions) - only apply once per effect
+                if (!fieldEffect.getAffectedEntities().contains(player.getId())) {
+                    deactivated = player.takeDamage(damage);
+                    fieldEffect.markAsAffected(player);
+                } else {
+                    return; // Already affected by this instantaneous effect
+                }
+            } else {
+                // Damage over time (fire, electric, etc.) - apply continuously
+                // Note: This will be called multiple times per frame while player is in range
+                // We need to scale damage per physics timestep
+                deactivated = player.takeDamage(damage * 0.016); // Assuming ~60 FPS physics TODO: somehow get the delta into this
+
+                // Apply special effects
+                switch (fieldEffect.getType()) {
+                    case FREEZE:
+                        // TODO: Apply slowing effect
+                        break;
+                    case FIRE:
+                        // TODO: Apply persistent burning effect?
+                        break;
+                    case ELECTRIC:
+                        // TODO: Apply slowing effect or confusion effect
+                        break;
+                    case POISON:
+                        // Damage already applied above
+                        break;
+                }
             }
 
-            // Apply damage to players in range
-            for (Player player : gameEntities.getAllPlayers()) {
-                if (!player.isActive()) {
-                    continue;
-                }
-                if (!effect.canAffect(player)) {
-                    continue;
-                }
-
-                double damage = effect.getDamageAtPosition(player.getPosition());
-                if (damage > 0) {
-                    boolean deactivated;
-                    // Apply damage based on effect type
-                    if (effect.getType().isInstantaneous()) {
-                        // Instant damage (explosions)
-                        deactivated = player.takeDamage(damage);
-                        effect.markAsAffected(player);
-                    } else {
-                        // Damage over time (fire, electric, etc.)
-                        deactivated = player.takeDamage(damage * deltaTime);
-
-                        // Apply special effects
-                        switch (effect.getType()) {
-                            case FREEZE:
-                                // TODO: Apply slowing effect
-                                break;
-                            case FIRE:
-                                // TODO: applying persistent burning effect?
-                                break;
-                            case ELECTRIC:
-                                // TODO: Apply slowing effect or maybe a "confusion" effect that adds an unpredictable velocity
-                                break;
-                            case POISON:
-                                // Damage already applied above
-                                break;
-                        }
-                    }
-                    if (deactivated) {
-                        killPlayer(player, gameEntities.getPlayer(effect.getOwnerId()));
-                    }
-                }
+            if (deactivated) {
+                killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
             }
         }
     }
@@ -1095,6 +1144,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
             // Add pending field effects
             for (FieldEffect effect : effectProcessor.getPendingFieldEffects()) {
                 gameEntities.addFieldEffect(effect);
+                bodiesToAdd.add(effect.getBody()); // Add physics body to world
             }
 
             // Add pending projectiles (from fragmentation, etc.)
@@ -1158,8 +1208,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, StepLis
     public void end(TimeStep step, PhysicsWorld<Body, ?> world) {
         double deltaTime = step.getDeltaTime();
 
-        // Process field effects and apply damage
-        processFieldEffects(deltaTime);
+        // Field effects now handled via physics collision detection
 
         // Apply homing behavior to projectiles
         processHomingProjectiles(deltaTime);

@@ -1,5 +1,6 @@
 package com.fullsteam.physics;
 
+import com.fullsteam.model.FieldEffect;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
@@ -90,6 +91,12 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             return handleProjectileObstacleCollision(projectile, obstacle);
         } else if (entity1 instanceof Obstacle obstacle && entity2 instanceof Projectile projectile) {
             return handleProjectileObstacleCollision(projectile, obstacle);
+        } else if (entity1 instanceof Player player && entity2 instanceof FieldEffect fieldEffect) {
+            handlePlayerFieldEffectCollision(player, fieldEffect);
+            return true; // Allow physics to handle overlaps (sensors should not resolve anyway)
+        } else if (entity1 instanceof FieldEffect fieldEffect && entity2 instanceof Player player) {
+            handlePlayerFieldEffectCollision(player, fieldEffect);
+            return true; // Allow physics to handle overlaps (sensors should not resolve anyway)
         }
         return true;
     }
@@ -155,10 +162,30 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         }
     }
 
+    private void handlePlayerFieldEffectCollision(Player player, FieldEffect fieldEffect) {
+        if (!player.isActive() || !fieldEffect.isActive()) {
+            return;
+        }
+        
+        // Check if the field effect can affect this player (team rules, etc.)
+        if (!fieldEffect.canAffect(player)) {
+            return;
+        }
+        
+        // Delegate to collision handler if available
+        if (collisionHandler instanceof FieldEffectCollisionHandler fieldEffectHandler) {
+            fieldEffectHandler.onPlayerEnterFieldEffect(player, fieldEffect);
+        }
+    }
+
     public interface CollisionHandler {
         void onPlayerHitByProjectile(Player player, Projectile projectile);
         void onPlayerEnterLocation(Player player, StrategicLocation location);
         void onPlayerStayInLocation(Player player, StrategicLocation location);
         void onPlayerExitLocation(Player player, StrategicLocation location);
+    }
+
+    public interface FieldEffectCollisionHandler {
+        void onPlayerEnterFieldEffect(Player player, FieldEffect fieldEffect);
     }
 }
