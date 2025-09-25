@@ -2096,28 +2096,64 @@ class GameEngine {
      * Create poison effect graphics
      */
     createPoisonGraphics(graphics, radius, effectData) {
-        // Poison cloud base
-        graphics.beginFill(0x44aa44, 0.4);
+        // Outer poison cloud - darker green
+        graphics.beginFill(0x2e7d32, 0.3);
         graphics.drawCircle(0, 0, radius);
         graphics.endFill();
         
-        // Toxic bubbles
-        for (let i = 0; i < 10; i++) {
+        // Middle poison cloud - medium green
+        graphics.beginFill(0x388e3c, 0.5);
+        graphics.drawCircle(0, 0, radius * 0.7);
+        graphics.endFill();
+        
+        // Inner poison cloud - brighter green
+        graphics.beginFill(0x4caf50, 0.6);
+        graphics.drawCircle(0, 0, radius * 0.4);
+        graphics.endFill();
+        
+        // Toxic bubbles scattered throughout
+        for (let i = 0; i < 15; i++) {
             const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * radius * 0.8;
+            const distance = Math.random() * radius * 0.9;
             const x = Math.cos(angle) * distance;
             const y = Math.sin(angle) * distance;
-            const size = 2 + Math.random() * 4;
+            const size = 1.5 + Math.random() * 3;
             
-            graphics.beginFill(0x66cc66, 0.6);
+            // Vary bubble colors for more realistic poison effect
+            const bubbleColors = [0x66bb6a, 0x81c784, 0x9ccc65, 0x8bc34a];
+            const bubbleColor = bubbleColors[Math.floor(Math.random() * bubbleColors.length)];
+            
+            graphics.beginFill(bubbleColor, 0.7);
             graphics.drawCircle(x, y, size);
             graphics.endFill();
         }
         
-        // Poison center
-        graphics.beginFill(0x88ff88, 0.8);
-        graphics.drawCircle(0, 0, radius * 0.3);
+        // Poison center - most concentrated
+        graphics.beginFill(0x76ff03, 0.8);
+        graphics.drawCircle(0, 0, radius * 0.2);
         graphics.endFill();
+        
+        // Add some swirling lines for gas effect
+        graphics.lineStyle(1, 0x689f38, 0.4);
+        for (let i = 0; i < 5; i++) {
+            const startAngle = (i / 5) * Math.PI * 2;
+            const spiralRadius = radius * 0.6;
+            
+            graphics.moveTo(
+                Math.cos(startAngle) * spiralRadius * 0.3,
+                Math.sin(startAngle) * spiralRadius * 0.3
+            );
+            
+            // Create spiral effect
+            for (let j = 1; j <= 8; j++) {
+                const angle = startAngle + (j / 8) * Math.PI * 0.5;
+                const currentRadius = spiralRadius * (0.3 + (j / 8) * 0.7);
+                graphics.lineTo(
+                    Math.cos(angle) * currentRadius,
+                    Math.sin(angle) * currentRadius
+                );
+            }
+        }
         
         return graphics;
     }
@@ -2297,15 +2333,32 @@ class GameEngine {
     animatePoison(container) {
         const time = container.animationTime;
         
-        // Slow bubbling effect
-        const bubble = 0.9 + Math.sin(time * 6) * 0.1;
-        container.scale.set(bubble);
+        // Slow bubbling effect with multiple frequencies for organic feel
+        const bubble1 = Math.sin(time * 4) * 0.05;
+        const bubble2 = Math.sin(time * 6.5) * 0.03;
+        const bubble3 = Math.sin(time * 8.2) * 0.02;
+        const totalBubble = 0.95 + bubble1 + bubble2 + bubble3;
+        container.scale.set(totalBubble);
         
-        // Gentle swaying
-        container.rotation = Math.sin(time * 2) * 0.05;
+        // Gentle swaying with multiple wave components for more natural movement
+        const sway1 = Math.sin(time * 1.8) * 0.03;
+        const sway2 = Math.sin(time * 2.7) * 0.02;
+        container.rotation = sway1 + sway2;
         
-        // Consistent alpha with slight variation
-        container.alpha = 0.7 + Math.sin(time * 4) * 0.1;
+        // Pulsing alpha to simulate gas density changes
+        const pulse1 = Math.sin(time * 3) * 0.08;
+        const pulse2 = Math.sin(time * 5.3) * 0.05;
+        container.alpha = 0.75 + pulse1 + pulse2;
+        
+        // Add subtle position drift to simulate gas movement
+        if (!container.originalX) {
+            container.originalX = container.x;
+            container.originalY = container.y;
+        }
+        
+        const drift = time * 0.3;
+        container.x = container.originalX + Math.sin(drift) * 2;
+        container.y = container.originalY + Math.cos(drift * 1.3) * 1.5;
     }
     
     /**

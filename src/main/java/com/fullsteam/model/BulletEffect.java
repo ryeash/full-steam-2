@@ -8,6 +8,7 @@ public enum BulletEffect {
     FRAGMENTING(22, "Projectiles split into multiple smaller projectiles on impact"),
     HOMING(30, "Projectiles slightly track towards nearby enemies"),
     ELECTRIC(16, "Projectiles chain lightning damage to nearby enemies"),
+    POISON(18, "Projectiles release poison gas, dealing area damage over time"),
     FREEZING(14, "Projectiles slow down hit targets temporarily");
 
     private final int pointCost;

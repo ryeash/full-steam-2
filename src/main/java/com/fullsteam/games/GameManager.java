@@ -338,7 +338,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
                 java.util.Arrays.toString(teamCounts));
         log.info("Assigning player to team {} (counts: T1={}, T2={}, T3={}, T4={})",
                 bestTeam,
-                teamCounts.length > 1 ? teamCounts[1] : 0,
+                teamCounts[1],
                 teamCounts.length > 2 ? teamCounts[2] : 0,
                 teamCounts.length > 3 ? teamCounts[3] : 0,
                 teamCounts.length > 4 ? teamCounts[4] : 0);
@@ -1054,13 +1054,18 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
                                 Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse(""));
                         break;
                     case FIRE:
-                        StatusEffects.applyBurning(this, player, 6, 9, fieldEffect.getOwnerId());
                         break;
                     case ELECTRIC:
                         // TODO: Apply slowing effect or confusion effect
                         break;
                     case POISON:
                         // Damage already applied above
+                        break;
+                    case EXPLOSION:
+                        // Explosion effects are instantaneous, handled above
+                        break;
+                    case FRAGMENTATION:
+                        // Fragmentation effects are instantaneous, handled above
                         break;
                 }
             }
@@ -1131,6 +1136,8 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
                     effectProcessor.createFireEffect(projectile, position);
                 } else if (projectile.hasBulletEffect(BulletEffect.FREEZING)) {
                     effectProcessor.createFreezeEffect(projectile, position);
+                } else if (projectile.hasBulletEffect(BulletEffect.POISON)) {
+                    effectProcessor.createPoisonEffect(projectile, position);
                 }
                 break;
         }
@@ -1210,9 +1217,6 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
     @Override
     public void end(TimeStep step, PhysicsWorld<Body, ?> world) {
         double deltaTime = step.getDeltaTime();
-
-        // Field effects now handled via physics collision detection
-
         // Apply homing behavior to projectiles
         processHomingProjectiles(deltaTime);
 
@@ -1221,19 +1225,5 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
 
         // Add/remove bodies from physics world
         processPhysicsBodies();
-
-//        for (Projectile projectile : gameEntities.getAllProjectiles()) {
-//            if (projectile.isActive()) {
-//                Vector2 position = projectile.getPosition();
-//                Vector2 velocity = projectile.getBody().getLinearVelocity();
-//                log.info(String.format("Projectile %d - Position: (%.2f, %.2f), Velocity: (%.2f, %.2f), Speed: %.2f",
-//                        projectile.getId(),
-//                        position.x,
-//                        position.y,
-//                        velocity.x,
-//                        velocity.y,
-//                        velocity.getMagnitude()));
-//            }
-//        }
     }
 }

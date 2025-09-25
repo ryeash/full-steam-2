@@ -50,6 +50,9 @@ public class BulletEffectProcessor {
                 case FRAGMENTING:
                     createFragmentation(projectile, hitPosition);
                     break;
+                case POISON:
+                    createPoisonEffect(projectile, hitPosition);
+                    break;
                 case PIERCING:
                     // Piercing is handled in collision detection - projectile continues
                     break;
@@ -86,6 +89,9 @@ public class BulletEffectProcessor {
                 case FREEZING:
                     createFreezeEffect(projectile, hitPosition);
                     break;
+                case POISON:
+                    createPoisonEffect(projectile, hitPosition);
+                    break;
                 case PIERCING:
                     // Piercing allows projectile to continue through obstacles
                     break;
@@ -101,7 +107,7 @@ public class BulletEffectProcessor {
 
     public void createExplosion(Projectile projectile, Vector2 position) {
         // Base explosion radius scales with damage
-        double baseRadius = 50.0 + (projectile.getDamage() * 0.4);
+        double baseRadius = 50.0 + (projectile.getDamage() * 0.5);
 
         // Apply ordinance-specific scaling to prevent small projectiles from having huge explosions
         double ordinanceMultiplier = getOrdinanceExplosionMultiplier(projectile.getOrdinance());
@@ -142,8 +148,9 @@ public class BulletEffectProcessor {
     }
 
     public void createFireEffect(Projectile projectile, Vector2 position) {
-        double fireRadius = 40.0;
         double fireDamage = projectile.getDamage() * 0.3; // Lower damage but over time
+        double ordinanceMultiplier = getOrdinanceExplosionMultiplier(projectile.getOrdinance());
+        double fireRadius = (40.0 + (projectile.getDamage() * 0.4)) * ordinanceMultiplier;
 
         FieldEffect fire = new FieldEffect(
                 Config.nextId(),
@@ -193,6 +200,25 @@ public class BulletEffectProcessor {
         );
 
         pendingFieldEffects.add(freeze);
+    }
+
+    public void createPoisonEffect(Projectile projectile, Vector2 position) {
+        double poisonDamage = projectile.getDamage() * 0.25; // Lower damage but longer duration
+        double ordinanceMultiplier = getOrdinanceExplosionMultiplier(projectile.getOrdinance());
+        double poisonRadius = (50.0 + (projectile.getDamage() * 0.3)) * ordinanceMultiplier;
+
+        FieldEffect poison = new FieldEffect(
+                Config.nextId(),
+                projectile.getOwnerId(),
+                FieldEffectType.POISON,
+                position,
+                poisonRadius,
+                poisonDamage,
+                4.0, // 4 seconds of poison damage - longest duration
+                projectile.getOwnerTeam()
+        );
+
+        pendingFieldEffects.add(poison);
     }
 
     private void createFragmentation(Projectile projectile, Vector2 position) {
