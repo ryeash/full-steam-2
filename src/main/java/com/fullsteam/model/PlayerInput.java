@@ -9,6 +9,7 @@ public class PlayerInput {
     private double moveY = 0.0; // -1.0 = down, +1.0 = up
     private Integer weaponSwitch;
     private Boolean reload;
+    @Deprecated
     private boolean shift = false;
     private boolean space = false;
     private double mouseX = 0;

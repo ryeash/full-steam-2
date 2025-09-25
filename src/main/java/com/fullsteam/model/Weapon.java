@@ -69,6 +69,24 @@ public class Weapon {
         System.out.println("DEBUG: Created weapon '" + name + "' with magazineSize: " + magazineSize + ", currentAmmo: " + currentAmmo);
     }
 
+    // clone constructor
+    public Weapon(Weapon other) {
+        this.name = other.name;
+        this.damage = other.damage;
+        this.fireRate = other.fireRate;
+        this.range = other.range;
+        this.accuracy = other.accuracy;
+        this.magazineSize = other.magazineSize;
+        this.reloadTime = other.reloadTime;
+        this.projectileSpeed = other.projectileSpeed;
+        this.bulletsPerShot = other.bulletsPerShot;
+        this.linearDamping = other.linearDamping;
+        this.currentAmmo = this.magazineSize;
+        this.bulletEffects = new HashSet<>(other.bulletEffects);
+        this.ordinance = other.ordinance;
+        this.attributePoints = other.attributePoints;
+    }
+
     public void reload() {
         currentAmmo = magazineSize;
     }

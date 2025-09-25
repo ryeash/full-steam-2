@@ -12,6 +12,7 @@ import com.fullsteam.model.GameInfo;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
+import com.fullsteam.model.StatusEffects;
 import com.fullsteam.physics.BulletEffectProcessor;
 import com.fullsteam.physics.CollisionProcessor;
 import com.fullsteam.physics.CompoundObstacle;
@@ -44,6 +45,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -799,11 +801,11 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
     private Vector2 findVariedSpawnPointForTeam(int team) {
         Vector2 bestSpawnPoint = null;
         double bestMinDistance = 0;
-        
+
         // Try multiple spawn attempts to find the best one
         for (int attempt = 0; attempt < 15; attempt++) {
             Vector2 candidateSpawn = findSpawnPointForTeam(team);
-            
+
             // Calculate minimum distance to any active player
             double minDistanceToPlayer = Double.MAX_VALUE;
             for (Player player : gameEntities.getAllPlayers()) {
@@ -812,22 +814,22 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
                     minDistanceToPlayer = Math.min(minDistanceToPlayer, distance);
                 }
             }
-            
+
             // Keep the spawn point with the best (largest) minimum distance
             if (minDistanceToPlayer > bestMinDistance) {
                 bestMinDistance = minDistanceToPlayer;
                 bestSpawnPoint = candidateSpawn;
             }
-            
+
             // If we found a spawn point with good spacing, use it
             if (bestMinDistance > 150.0) { // Minimum desired spacing
                 break;
             }
         }
-        
+
         return bestSpawnPoint != null ? bestSpawnPoint : findSpawnPointForTeam(team);
     }
-    
+
     /**
      * Find a spawn point for a specific team.
      * Uses team-based spawn areas if team mode is enabled, otherwise FFA spawning.
@@ -990,13 +992,13 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
             shooter.addKill();
         }
         victim.die();
-        
+
         // Assign a new spawn point for the victim when they respawn
         Vector2 newSpawnPoint = findVariedSpawnPointForTeam(victim.getTeam());
         victim.setRespawnPoint(newSpawnPoint);
-        log.debug("Player {} will respawn at new location ({}, {}) on team {}", 
+        log.debug("Player {} will respawn at new location ({}, {}) on team {}",
                 victim.getId(), newSpawnPoint.x, newSpawnPoint.y, victim.getTeam());
-        
+
         Map<String, Object> deathNotification = new HashMap<>();
         deathNotification.put("type", "playerKilled");
         deathNotification.put("victimId", victim.getId());
@@ -1048,10 +1050,11 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
                 // Apply special effects
                 switch (fieldEffect.getType()) {
                     case FREEZE:
-                        // TODO: Apply slowing effect
+                        StatusEffects.applySlowEffect(player, 0.6, 3,
+                                Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse(""));
                         break;
                     case FIRE:
-                        // TODO: Apply persistent burning effect?
+                        StatusEffects.applyBurning(this, player, 6, 9, fieldEffect.getOwnerId());
                         break;
                     case ELECTRIC:
                         // TODO: Apply slowing effect or confusion effect

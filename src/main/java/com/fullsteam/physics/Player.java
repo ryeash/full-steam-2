@@ -1,6 +1,7 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.Config;
+import com.fullsteam.model.AttributeModification;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.Weapon;
 import com.fullsteam.model.WeaponConfig;
@@ -11,8 +12,10 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Getter
@@ -31,6 +34,8 @@ public class Player extends GameEntity {
     private int deaths = 0;
     private double respawnTime = 0;
     private Vector2 respawnPoint;
+    private double maxSpeed = Config.PLAYER_SPEED;
+    private final Set<AttributeModification> attributeModifications = new HashSet<>();
 
     public Player(int id, String playerName, double x, double y) {
         this(id, playerName, x, y, 0); // Default to no team (FFA)
@@ -64,6 +69,15 @@ public class Player extends GameEntity {
 
     @Override
     public void update(double deltaTime) {
+        attributeModifications.removeIf(am -> {
+            if (am.isExpired()) {
+                am.revert(this);
+                return false;
+            }
+            am.update(this, deltaTime);
+            return false;
+        });
+
         // Handle reloading
         if (isReloading) {
             reloadTimeRemaining -= deltaTime;
@@ -92,7 +106,7 @@ public class Player extends GameEntity {
         Vector2 moveVector = new Vector2(input.getMoveX(), input.getMoveY());
         if (moveVector.getMagnitude() > 0) {
             moveVector.normalize();
-            double speed = input.isShift() ? Config.PLAYER_SPEED * 1.5 : Config.PLAYER_SPEED;
+            double speed = maxSpeed;
             setVelocity(moveVector.x * speed, moveVector.y * speed);
         } else {
             setVelocity(0, 0);
@@ -191,16 +205,6 @@ public class Player extends GameEntity {
         int actualBulletsToFire = Math.min(bulletsPerShot, weapon.getCurrentAmmo());
         weapon.setCurrentAmmo(weapon.getCurrentAmmo() - actualBulletsToFire);
 
-        // Debug logging
-        if (bulletsPerShot > 1) {
-            System.out.println("DEBUG: Player " + id + " shooting with weapon: " + weapon.getName() +
-                               ", bulletsPerShot: " + bulletsPerShot +
-                               ", currentAmmo: " + weapon.getCurrentAmmo() +
-                               ", actualBulletsToFire: " + actualBulletsToFire +
-                               ", damage: " + weapon.getDamage() +
-                               ", fireRate: " + weapon.getFireRate());
-        }
-
         // Calculate spread pattern for multi-shot
         double totalSpread = actualBulletsToFire > 1 ? 0.3 : 0.0; // 0.3 radians total spread for multi-shot
         double spreadStep = actualBulletsToFire > 1 ? totalSpread / (actualBulletsToFire - 1) : 0.0;
@@ -254,16 +258,6 @@ public class Player extends GameEntity {
         health = 0;
     }
 
-    public void respawn() {
-        active = true;
-        health = 100.0;
-        setPosition(respawnPoint.x, respawnPoint.y);
-        setVelocity(0, 0);
-        primaryWeapon.reload();
-        secondaryWeapon.reload();
-        isReloading = false;
-    }
-
     /**
      * Respawn at a specific location (for team-based spawning).
      *
@@ -279,7 +273,11 @@ public class Player extends GameEntity {
     }
 
     public Weapon getCurrentWeapon() {
-        return currentWeapon == 0 ? primaryWeapon : secondaryWeapon;
+        Weapon w = currentWeapon == 0 ? primaryWeapon : secondaryWeapon;
+        for (AttributeModification attributeModification : attributeModifications) {
+            w = attributeModification.update(w);
+        }
+        return w;
     }
 
     public int getCurrentWeaponIndex() {
@@ -307,5 +305,35 @@ public class Player extends GameEntity {
      */
     public boolean isEnemy(Player otherPlayer) {
         return !isTeammate(otherPlayer) && otherPlayer != null && otherPlayer.getId() != this.getId();
+    }
+
+    /**
+     * Override damage handling to account for damage resistance.
+     */
+    @Override
+    public boolean takeDamage(double damage) {
+        if (!active) {
+            return false;
+        }
+
+        double modifiedDamage = damage;
+        for (AttributeModification attributeModification : attributeModifications) {
+            modifiedDamage = attributeModification.modifyDamageReceived(modifiedDamage);
+        }
+
+        return super.takeDamage(modifiedDamage);
+    }
+
+    /**
+     * Respawn the player with proper health and state reset.
+     */
+    public void respawn() {
+        active = true;
+        health = 100;
+        setPosition(respawnPoint.x, respawnPoint.y);
+        setVelocity(0, 0);
+        primaryWeapon.reload();
+        secondaryWeapon.reload();
+        isReloading = false;
     }
 }
