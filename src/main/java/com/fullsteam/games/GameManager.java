@@ -46,9 +46,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -87,8 +85,6 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
     private long lastAICheckTime = 0;
 
     private final World<Body> world;
-    private final Queue<Body> bodiesToAdd = new ConcurrentLinkedQueue<>();
-    private final Queue<Body> bodiesToRemove = new ConcurrentLinkedQueue<>();
     private final ScheduledFuture<?> shutdownHook;
     private double lastUpdateTime = System.nanoTime() / 1e9;
 
@@ -223,7 +219,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
 
         // Add to game entities
         gameEntities.addPlayer(aiPlayer);
-        bodiesToAdd.add(aiPlayer.getBody());
+        world.addBody(aiPlayer.getBody());
 
         // Add to AI manager
         aiPlayerManager.addAIPlayer(aiPlayer);
@@ -249,7 +245,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
 
         // Add to game entities
         gameEntities.addPlayer(aiPlayer);
-        bodiesToAdd.add(aiPlayer.getBody());
+        world.addBody(aiPlayer.getBody());
 
         // Add to AI manager
         aiPlayerManager.addAIPlayer(aiPlayer);
@@ -268,7 +264,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
         if (aiPlayerManager.isAIPlayer(playerId)) {
             Player player = gameEntities.getPlayer(playerId);
             if (player != null) {
-                bodiesToRemove.add(player.getBody());
+                world.removeBody(player.getBody());
                 gameEntities.removePlayer(playerId);
             }
             aiPlayerManager.removeAIPlayer(playerId);
@@ -450,33 +446,20 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
                     if (projectile.shouldTriggerEffectsOnDismissal()) {
                         triggerProjectileDismissalEffects(projectile);
                     }
-                    bodiesToRemove.add(projectile.getBody());
+                    world.removeBody(projectile.getBody());
                     return true;
                 }
                 return false;
             });
 
             updateStrategicLocations(deltaTime);
-
-            synchronized (world) {
-                Body bodyToAdd;
-                while ((bodyToAdd = bodiesToAdd.poll()) != null) {
-                    world.addBody(bodyToAdd);
-                }
-
-                Body bodyToRemove;
-                while ((bodyToRemove = bodiesToRemove.poll()) != null) {
-                    world.removeBody(bodyToRemove);
-                }
-
-                world.updatev(deltaTime);
-            }
+            world.updatev(deltaTime);
 
             // Remove expired field effects and their physics bodies
             gameEntities.getFieldEffects().entrySet().removeIf(entry -> {
                 FieldEffect effect = entry.getValue();
                 if (effect.isExpired()) {
-                    bodiesToRemove.add(effect.getBody());
+                    world.removeBody(effect.getBody());
                     return true;
                 }
                 return false;
@@ -496,7 +479,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
 
         Player player = new Player(playerSession.getPlayerId(), playerSession.getPlayerName(), spawnPoint.x, spawnPoint.y, assignedTeam);
         gameEntities.addPlayer(player);
-        bodiesToAdd.add(player.getBody());
+        world.addBody(player.getBody());
 
         send(playerSession.getSession(), createInitialGameState());
         log.info("Player {} ({}) joined game {} successfully. Total players: {}, Total sessions: {}",
@@ -510,7 +493,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
         gameEntities.getPlayerInputs().remove(playerSession.getPlayerId());
         Player player = gameEntities.getPlayer(playerSession.getPlayerId());
         if (player != null) {
-            bodiesToRemove.add(player.getBody());
+            world.removeBody(player.getBody());
             gameEntities.removePlayer(player.getId());
 
             // Remove from AI manager if it's an AI player
@@ -534,7 +517,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
                 for (Projectile projectile : player.shoot()) {
                     if (projectile != null) {
                         gameEntities.addProjectile(projectile);
-                        bodiesToAdd.add(projectile.getBody());
+                        world.addBody(projectile.getBody());
                     }
                 }
             }
@@ -575,28 +558,28 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
         topWall.setMass(MassType.INFINITE);
         topWall.getTransform().setTranslation(0, halfHeight + wallThickness / 2.0);
         topWall.setUserData("boundary");
-        bodiesToAdd.add(topWall);
+        world.addBody(topWall);
 
         Body bottomWall = new Body();
         bottomWall.addFixture(new Rectangle(gameConfig.getWorldWidth() + wallThickness * 2, wallThickness));
         bottomWall.setMass(MassType.INFINITE);
         bottomWall.getTransform().setTranslation(0, -halfHeight - wallThickness / 2.0);
         bottomWall.setUserData("boundary");
-        bodiesToAdd.add(bottomWall);
+        world.addBody(bottomWall);
 
         Body leftWall = new Body();
         leftWall.addFixture(new Rectangle(wallThickness, gameConfig.getWorldHeight()));
         leftWall.setMass(MassType.INFINITE);
         leftWall.getTransform().setTranslation(-halfWidth - wallThickness / 2.0, 0);
         leftWall.setUserData("boundary");
-        bodiesToAdd.add(leftWall);
+        world.addBody(leftWall);
 
         Body rightWall = new Body();
         rightWall.addFixture(new Rectangle(wallThickness, gameConfig.getWorldHeight()));
         rightWall.setMass(MassType.INFINITE);
         rightWall.getTransform().setTranslation(halfWidth + wallThickness / 2.0, 0);
         rightWall.setUserData("boundary");
-        bodiesToAdd.add(rightWall);
+        world.addBody(rightWall);
     }
 
     private void createStrategicLocations() {
@@ -606,7 +589,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
 
             StrategicLocation location = new StrategicLocation(locationNames[i], locationPosition.x, locationPosition.y);
             gameEntities.addStrategicLocation(location);
-            bodiesToAdd.add(location.getBody());
+            world.addBody(location.getBody());
         }
     }
 
@@ -644,13 +627,13 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
         // Use procedurally generated simple obstacles from terrain generator
         for (Obstacle obstacle : terrainGenerator.getGeneratedObstacles()) {
             gameEntities.addObstacle(obstacle);
-            bodiesToAdd.add(obstacle.getBody());
+            world.addBody(obstacle.getBody());
         }
 
         // Add compound obstacles (complex multi-body structures)
         for (CompoundObstacle compoundObstacle : terrainGenerator.getCompoundObstacles()) {
             // Add all bodies from the compound obstacle to the physics world
-            bodiesToAdd.addAll(compoundObstacle.getBodies());
+            compoundObstacle.getBodies().forEach(world::addBody);
         }
 
         log.info("Created {} simple obstacles and {} compound structures for {} terrain",
@@ -1154,34 +1137,13 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
             // Add pending field effects
             for (FieldEffect effect : effectProcessor.getPendingFieldEffects()) {
                 gameEntities.addFieldEffect(effect);
-                bodiesToAdd.add(effect.getBody()); // Add physics body to world
+                world.addBody(effect.getBody()); // Add physics body to world
             }
 
             // Add pending projectiles (from fragmentation, etc.)
             for (Projectile projectile : effectProcessor.getPendingProjectiles()) {
                 gameEntities.addProjectile(projectile);
-                bodiesToAdd.add(projectile.getBody());
-            }
-        }
-    }
-
-    /**
-     * Process physics body additions and removals
-     */
-    private void processPhysicsBodies() {
-        // Add new bodies
-        while (!bodiesToAdd.isEmpty()) {
-            Body body = bodiesToAdd.poll();
-            if (body != null) {
-                world.addBody(body);
-            }
-        }
-
-        // Remove old bodies
-        while (!bodiesToRemove.isEmpty()) {
-            Body body = bodiesToRemove.poll();
-            if (body != null) {
-                world.removeBody(body);
+                world.addBody(projectile.getBody());
             }
         }
     }
@@ -1219,11 +1181,7 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
         double deltaTime = step.getDeltaTime();
         // Apply homing behavior to projectiles
         processHomingProjectiles(deltaTime);
-
         // Add pending field effects and projectiles from bullet effects
         processPendingEffects();
-
-        // Add/remove bodies from physics world
-        processPhysicsBodies();
     }
 }
