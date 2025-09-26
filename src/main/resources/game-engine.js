@@ -1089,11 +1089,11 @@ class GameEngine {
             position: fixed;
             top: 20px;
             right: 20px;
-            width: 280px;
-            max-width: 25vw;
+            width: 380px;
+            max-width: 35vw;
             z-index: 1000;
             pointer-events: none;
-            font-family: 'Orbitron', monospace;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
         `;
         
         document.body.appendChild(this.eventContainer);

@@ -198,7 +198,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
                 }
             }
         }
-        // Note: Damage-over-time effects (FIRE, POISON, ELECTRIC, FREEZE) are now handled
+        // Note: Damage-over-time effects (FIRE, POISON, ELECTRIC, FREEZE) are handled
         // continuously in updateFieldEffects() method for proper timing and damage application
     }
 

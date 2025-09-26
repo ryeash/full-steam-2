@@ -426,25 +426,17 @@ public class GameManager implements StepListener<Body> {
             double currentTime = System.nanoTime() / 1e9;
             double deltaTime = currentTime - lastUpdateTime;
             lastUpdateTime = currentTime;
-
-            // Update AI players and generate their inputs
             aiPlayerManager.update(gameEntities, deltaTime);
-
-            // Add AI inputs to the main input queue
             aiPlayerManager.getAllPlayerInputs().forEach((playerId, input) -> {
                 gameEntities.getPlayerInputs().put(playerId, input);
             });
-
-            // Periodically check and adjust AI player count
             checkAndAdjustAIPlayers();
 
             gameEntities.getPlayerInputs().forEach(this::processPlayerInput);
-
             gameEntities.updateAll(deltaTime);
             gameEntities.getProjectiles().entrySet().removeIf(entry -> {
                 Projectile projectile = entry.getValue();
                 if (!projectile.isActive()) {
-                    // Check if projectile should trigger effects on dismissal
                     if (projectile.shouldTriggerEffectsOnDismissal()) {
                         triggerProjectileDismissalEffects(projectile);
                     }
@@ -455,13 +447,8 @@ public class GameManager implements StepListener<Body> {
             });
 
             updateStrategicLocations(deltaTime);
-
-            // Update field effects and apply continuous damage
             updateFieldEffects(deltaTime);
-
             world.updatev(deltaTime);
-
-            // Remove expired field effects and their physics bodies
             gameEntities.getFieldEffects().entrySet().removeIf(entry -> {
                 FieldEffect effect = entry.getValue();
                 if (effect.isExpired()) {
@@ -470,7 +457,6 @@ public class GameManager implements StepListener<Body> {
                 }
                 return false;
             });
-
             sendGameState();
         } catch (Throwable t) {
             log.error("Error in update loop", t);
@@ -486,23 +472,12 @@ public class GameManager implements StepListener<Body> {
             if (!fieldEffect.isActive()) {
                 continue;
             }
-
-            // Update the field effect itself
             fieldEffect.update(deltaTime);
-
-            // Skip instantaneous effects (they apply damage only once on collision)
             if (fieldEffect.getType().isInstantaneous()) {
                 continue;
             }
-
-            // Check all active players for overlap with this field effect
             for (Player player : gameEntities.getAllPlayers()) {
-                if (!player.isActive()) {
-                    continue;
-                }
-
-                // Check if player is in range and can be affected by this field effect
-                if (fieldEffect.canAffect(player)) {
+                if (player.isActive() && fieldEffect.canAffect(player)) {
                     applyFieldEffectDamageOverTime(player, fieldEffect, deltaTime);
                 }
             }

@@ -121,7 +121,7 @@ public class GameEvent {
      */
     public static GameEvent createKillEvent(String killerName, String victimName, String weaponName) {
         return GameEvent.builder()
-                .message(String.format("%s eliminated %s with %s", killerName, victimName, weaponName))
+                .message(String.format("[%s] x [%s]  %s", killerName, victimName, weaponName))
                 .category(EventCategory.KILL)
                 .color(EventCategory.KILL.getDefaultColor())
                 .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())

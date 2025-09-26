@@ -200,13 +200,13 @@ public class WeaponConfig {
     // Piercing Effect Showcase - Sniper that goes through enemies
     public static final WeaponConfig PIERCING_RIFLE_PRESET = new WeaponConfig(
             "Piercing Rifle",
-            30,     // High damage
+            25,     // High damage
             8,      // Slow fire rate
             20,     // Long range
             0,     // Good accuracy
             5,      // Small magazine
-            17,     // Medium reload
-            0,      // Base speed
+            10,     // Medium reload
+            12,      // Base speed
             0,      // Single shot
             0,      // No damping
             Set.of(BulletEffect.PIERCING),  // 20 points

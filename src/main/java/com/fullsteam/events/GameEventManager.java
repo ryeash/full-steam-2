@@ -46,14 +46,11 @@ public class GameEventManager {
             if (playerSession != null && playerSession.getSession().isOpen()) {
                 try {
                     messageSender.accept(playerSession.getSession(), event);
-                    log.debug("Sent event to player {}: {}", playerId, event.getMessage());
                 } catch (Exception e) {
                     log.error("Failed to send event to player {}: {}", playerId, e.getMessage());
                 }
             }
         }
-        
-        log.info("Broadcasted event to {} players: {}", targetPlayerIds.size(), event.getMessage());
     }
     
     /**
