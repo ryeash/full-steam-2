@@ -57,15 +57,15 @@ public enum WeaponAttribute {
         @Override
         public double compute(int points) {
             validate(points);
-            return Config.PLAYER_SPEED + 50 + (points * 20);
+            return Config.PLAYER_SPEED + 50 + (points * 10);
         }
     },
-    // Bullets Per Shot: 1-12 bullets (base 1 + 1 per 3 points, max 33 points)
-    BULLETS_PER_SHOT(0, 33) {
+    // Bullets Per Shot: 1-8 bullets (base 1 + 1 per 5 points, max 35 points)
+    BULLETS_PER_SHOT(0, 35) {
         @Override
         public double compute(int points) {
             validate(points);
-            return 1 + ((double) points / 3);
+            return 1 + ((double) points / 5);
         }
     },
     // Linear Damping: 0.0-0.8 (base 0.0 + 0.04 per point, max 20 points)

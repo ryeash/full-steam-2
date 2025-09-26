@@ -896,10 +896,6 @@
     }
 
     function getPlayerConfig() {
-        console.log('DEBUG: currentWeapon.attributes:', currentWeapon.attributes);
-        console.log('DEBUG: currentWeapon.effects:', currentWeapon.effects);
-        console.log('DEBUG: currentWeapon.ordinance:', currentWeapon.ordinance);
-        
         // Map enum names to Java field names
         const attributeMapping = {
             'DAMAGE': 'damage',
@@ -928,10 +924,7 @@
             ordinance: currentWeapon.ordinance,
             ...mappedAttributes  // Put mapped attributes last to ensure they override any conflicts
         };
-        
-        console.log('DEBUG: Mapped attributes:', mappedAttributes);
-        console.log('DEBUG: Final weaponConfig:', weaponConfig);
-        
+
         return {
             playerName: document.getElementById('player-name').value || 'Player',
             weaponConfig: weaponConfig,

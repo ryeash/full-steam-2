@@ -1,14 +1,14 @@
 package com.fullsteam.model;
 
 public enum Ordinance {
-    BULLET(0, "Standard projectile", 2.0, 1.0, false, 0.4),
-    ROCKET(20, "High-speed explosive projectile", 4.0, 1.5, true, 1.4),
+    BULLET(0, "Standard projectile", 2.0, 1.0, false, 0.3),
+    ROCKET(20, "High-speed explosive projectile", 4.0, 1.2, true, 1.4),
     GRENADE(10, "Arcing explosive projectile", 3.0, 0.6, true, 1.2),
-    PLASMA(15, "Energy-based projectile", 2.5, 1.2, false, 0.8),
+    PLASMA(15, "Energy-based projectile", 2.5, 1.1, false, 0.8),
     //    LASER(25, "Instant-hit beam weapon", 1.0, 2.0, false),
     CANNONBALL(12, "Heavy, slow projectile", 6.0, 0.4, false, 1.0),
-    DART(5, "Small, fast projectile", 1.5, 1.8, false, 0.3),
-    FLAMETHROWER(8, "Short-range fire stream", 3.5, 0.8, false, 0.6);
+    DART(5, "Small, fast projectile", 1.5, 1.4, false, 0.1),
+    FLAMETHROWER(8, "Short-range fire stream", 3.5, 0.8, false, 0.4);
 
     private final int pointCost;
     private final String description;

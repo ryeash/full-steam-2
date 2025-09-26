@@ -2720,26 +2720,11 @@ class GameEngine {
         // Use decoded config or fall back to legacy URL params
         let playerName, weaponConfig;
         
-        if (playerConfig && playerConfig.playerName && playerConfig.weaponConfig) {
-            playerName = playerConfig.playerName;
+        if (playerConfig && playerConfig.weaponConfig) {
+            playerName = playerConfig.playerName || "Player";
             weaponConfig = playerConfig.weaponConfig;
         } else {
-            // Legacy fallback for old URL format
-            playerName = params.get('playerName') || `Player${Math.floor(Math.random() * 1000)}`;
-            const primaryWeaponType = params.get('primaryWeapon') || 'assault';
-            const secondaryWeaponType = params.get('secondaryWeapon') || 'pistol';
-
-            const weaponPresets = {
-                assault: { type: 'Assault Rifle', damage: 25, fireRate: 8, range: 300, accuracy: 0.9, magazineSize: 30, reloadTime: 2.0, projectileSpeed: 800 },
-                sniper: { type: 'Sniper Rifle', damage: 80, fireRate: 1.5, range: 600, accuracy: 0.99, magazineSize: 5, reloadTime: 3.0, projectileSpeed: 1200 },
-                shotgun: { type: 'Shotgun', damage: 60, fireRate: 2, range: 150, accuracy: 0.7, magazineSize: 8, reloadTime: 2.5, projectileSpeed: 400 },
-                smg: { type: 'SMG', damage: 18, fireRate: 12, range: 200, accuracy: 0.8, magazineSize: 40, reloadTime: 1.5, projectileSpeed: 600 },
-                pistol: { type: 'Pistol', damage: 35, fireRate: 4, range: 200, accuracy: 0.95, magazineSize: 12, reloadTime: 1.5, projectileSpeed: 600 },
-                magnum: { type: 'Magnum', damage: 65, fireRate: 2, range: 250, accuracy: 0.98, magazineSize: 6, reloadTime: 2.0, projectileSpeed: 800 },
-                'auto-pistol': { type: 'Auto Pistol', damage: 22, fireRate: 8, range: 180, accuracy: 0.85, magazineSize: 20, reloadTime: 1.8, projectileSpeed: 650 }
-            };
-            
-            weaponConfig = weaponPresets[primaryWeaponType];
+            throw Error("missing configuration")
         }
 
         const message = {
@@ -2748,6 +2733,7 @@ class GameEngine {
             weaponConfig: weaponConfig
         };
 
+        console.log('Sending player configuration:', message);
         this.websocket.send(JSON.stringify(message));
     }
     

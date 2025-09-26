@@ -161,9 +161,6 @@ public class GameManager implements StepListener<Body> {
     public void handlePlayerConfigChange(int playerId, PlayerConfigRequest request) {
         PlayerSession playerSession = gameEntities.getPlayerSession(playerId);
         if (playerSession != null) {
-            if (request.getPlayerName() != null) {
-                playerSession.setPlayerName(request.getPlayerName());
-            }
             processPlayerConfigChange(playerSession, request);
         }
     }
@@ -608,8 +605,12 @@ public class GameManager implements StepListener<Body> {
     protected void processPlayerConfigChange(PlayerSession playerSession, PlayerConfigRequest request) {
         Player player = gameEntities.getPlayer(playerSession.getPlayerId());
         if (player != null) {
+            // Handle player name update
             if (StringUtils.isNotEmpty(request.getPlayerName())) {
-                player.setPlayerName(StringUtils.abbreviate(request.getPlayerName(), 26));
+                String newName = StringUtils.abbreviate(request.getPlayerName(), 26);
+                player.setPlayerName(newName);
+                playerSession.setPlayerName(newName);
+                log.info("Updated player {} name to: {}", playerSession.getPlayerId(), newName);
             }
 
             // Handle new unified weapon config or legacy separate weapons
