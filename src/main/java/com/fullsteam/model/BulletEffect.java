@@ -11,7 +11,7 @@ public enum BulletEffect {
     // Special
     BOUNCY(15, "Projectiles bounce off obstacles instead of stopping", 0, 1.0, 1.0),
     PIERCING(20, "Projectiles pass through enemies, hitting multiple targets", 0, 1.0, 1.0),
-    FRAGMENTING(22, "Projectiles split into multiple smaller projectiles on impact", 60, 0.0, 0.0),
+    FRAGMENTING(22, "Projectiles split into multiple smaller projectiles on impact", 20, 0.0, 0.0),
     HOMING(30, "Projectiles slightly track towards nearby enemies", 0, 1.0, 1.0),
     ;
 

@@ -1,5 +1,6 @@
 package com.fullsteam;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.games.GameManager;
 import com.fullsteam.model.GameInfo;
@@ -27,8 +28,11 @@ public class GameLobby {
     // Game cleanup settings
     private static final long CLEANUP_CHECK_INTERVAL_MS = 12 * 1000; // 12 seconds
 
+    private final ObjectMapper objectMapper;
+
     @Inject
-    public GameLobby() {
+    public GameLobby(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
         Config.EXECUTOR.scheduleAtFixedRate(this::cleanupAIOnlyGames, CLEANUP_CHECK_INTERVAL_MS, CLEANUP_CHECK_INTERVAL_MS, TimeUnit.MILLISECONDS);
     }
 
@@ -56,7 +60,8 @@ public class GameLobby {
                 .teamCount(4)
                 .worldHeight(2000)
                 .worldWidth(3000)
-                .build());
+                .build(),
+                objectMapper);
         activeGames.put(gameId, game);
         log.info("Created new game: {} ({})", gameId, gameType);
         return game;

@@ -123,12 +123,11 @@ class PlayerInterpolator {
         if (!this.isLocalPlayer || !input) return;
         
         // Client-side prediction for local player
-        const moveSpeed = 200; // Should match server movement speed
-        const sprintMultiplier = input.shift ? 1.5 : 1.0;
+        const moveSpeed = 150; // Should match server movement speed
         
         // Calculate predicted velocity
-        this.velocity.x = input.moveX * moveSpeed * sprintMultiplier;
-        this.velocity.y = input.moveY * moveSpeed * sprintMultiplier;
+        this.velocity.x = input.moveX * moveSpeed;
+        this.velocity.y = input.moveY * moveSpeed;
         
         // Apply predicted movement
         this.predictedPos.x += this.velocity.x * deltaTime;
@@ -345,7 +344,7 @@ class GameEngine {
         this.app = new PIXI.Application({
             width: window.innerWidth,
             height: window.innerHeight,
-            backgroundColor: 0x1a3d1f, // Darker green for better contrast with grid
+            backgroundColor: 0x1a1a1a, // Dark grey for better ordinance visibility
             antialias: true,
             resolution: window.devicePixelRatio || 1,
             autoDensity: true
@@ -872,6 +871,9 @@ class GameEngine {
             case 'playerKilled':
                 this.handlePlayerKilled(data);
                 break;
+            case 'gameEvent':
+                this.handleGameEvent(data);
+                break;
         }
     }
     
@@ -1027,6 +1029,139 @@ class GameEngine {
     handlePlayerKilled(data) {
         if (data.victimId === this.myPlayerId) {
             this.showDeathScreen(data);
+        }
+    }
+    
+    handleGameEvent(data) {
+        this.displayGameEvent(data);
+    }
+    
+    displayGameEvent(event) {
+        // Create the event display container if it doesn't exist
+        if (!this.eventContainer) {
+            this.createEventDisplay();
+        }
+        
+        // Create the event element
+        const eventElement = document.createElement('div');
+        eventElement.className = 'game-event';
+        eventElement.style.color = event.color || '#FFFFFF';
+        eventElement.textContent = event.message;
+        
+        // Add category-specific styling
+        if (event.category) {
+            eventElement.classList.add('event-' + event.category.toLowerCase());
+        }
+        
+        // Add to container (prepend so newest events appear at top)
+        this.eventContainer.prepend(eventElement);
+        
+        // Animate in from the right
+        eventElement.style.opacity = '0';
+        eventElement.style.transform = 'translateX(20px)';
+        requestAnimationFrame(() => {
+            eventElement.style.transition = 'all 0.3s ease-out';
+            eventElement.style.opacity = '1';
+            eventElement.style.transform = 'translateX(0)';
+        });
+        
+        // Auto-remove after display duration (or default 3 seconds)
+        const displayDuration = event.displayDuration || 3000;
+        setTimeout(() => {
+            this.removeGameEvent(eventElement);
+        }, displayDuration);
+        
+        // Limit the number of visible events
+        const maxEvents = 6;
+        const events = this.eventContainer.children;
+        if (events.length > maxEvents) {
+            for (let i = maxEvents; i < events.length; i++) {
+                this.removeGameEvent(events[i]);
+            }
+        }
+    }
+    
+    createEventDisplay() {
+        // Create the event container
+        this.eventContainer = document.createElement('div');
+        this.eventContainer.id = 'game-events';
+        this.eventContainer.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 280px;
+            max-width: 25vw;
+            z-index: 1000;
+            pointer-events: none;
+            font-family: 'Orbitron', monospace;
+        `;
+        
+        document.body.appendChild(this.eventContainer);
+        
+        // Add CSS styles for events
+        const style = document.createElement('style');
+        style.textContent = `
+            .game-event {
+                background: rgba(0, 0, 0, 0.85);
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                border-radius: 4px;
+                padding: 6px 10px;
+                margin-bottom: 4px;
+                font-weight: 500;
+                text-align: left;
+                font-size: 12px;
+                line-height: 1.3;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+                backdrop-filter: blur(3px);
+                -webkit-backdrop-filter: blur(3px);
+                max-width: 100%;
+                word-wrap: break-word;
+            }
+            
+            .game-event.event-kill {
+                border-left: 3px solid #FF4444;
+                border-color: rgba(255, 68, 68, 0.6);
+            }
+            
+            .game-event.event-capture {
+                border-left: 3px solid #00FF88;
+                border-color: rgba(0, 255, 136, 0.6);
+            }
+            
+            .game-event.event-system {
+                border-left: 3px solid #FFAA00;
+                border-color: rgba(255, 170, 0, 0.6);
+            }
+            
+            .game-event.event-achievement {
+                border-left: 3px solid #FFD700;
+                border-color: rgba(255, 215, 0, 0.6);
+                background: linear-gradient(135deg, rgba(255, 215, 0, 0.05), rgba(0, 0, 0, 0.85));
+            }
+            
+            .game-event.event-warning {
+                border-left: 3px solid #FF8800;
+                border-color: rgba(255, 136, 0, 0.6);
+            }
+            
+            .game-event.event-info {
+                border-left: 3px solid #00AAFF;
+                border-color: rgba(0, 170, 255, 0.6);
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    removeGameEvent(eventElement) {
+        if (eventElement && eventElement.parentNode) {
+            eventElement.style.transition = 'all 0.3s ease-in';
+            eventElement.style.opacity = '0';
+            eventElement.style.transform = 'translateX(30px) scale(0.95)';
+            setTimeout(() => {
+                if (eventElement.parentNode) {
+                    eventElement.parentNode.removeChild(eventElement);
+                }
+            }, 300);
         }
     }
     
@@ -2821,19 +2956,6 @@ class GameEngine {
                 areaData.maxY - areaData.minY
             );
             graphics.endFill();
-            
-            // Add team label
-            const teamLabel = new PIXI.Text(`Team ${teamNum} Base`, {
-                fontSize: 18,
-                fill: teamColor,
-                stroke: 0x000000,
-                strokeThickness: 2,
-                fontWeight: 'bold'
-            });
-            teamLabel.anchor.set(0.5);
-            teamLabel.position.set(areaData.centerX, -areaData.centerY); // Invert Y for PIXI
-            
-            graphics.addChild(teamLabel);
             graphics.zIndex = -1; // Behind everything else
             
             this.backgroundContainer.addChild(graphics);
@@ -2841,435 +2963,39 @@ class GameEngine {
     }
     
     /**
-     * Create procedural terrain background and features.
+     * Create simple dark background (terrain features disabled for better visibility).
      */
     createProceduralTerrain() {
         if (!this.terrainData || !this.terrainData.metadata) return;
-        
         const metadata = this.terrainData.metadata;
-        const features = this.terrainData.features || [];
-        const compoundObstacles = this.terrainData.compoundObstacles || [];
-        
-        // Update background color based on terrain type
         this.updateBackgroundForTerrain(metadata);
-        
-        // Create terrain features
-        features.forEach(feature => {
-            this.createTerrainFeature(feature);
-        });
-        
-        // Create compound obstacles (complex structures)
-        compoundObstacles.forEach(compound => {
-            this.createCompoundObstacle(compound);
-        });
-        
-        // Add atmospheric effects
-        this.createAtmosphericEffects(metadata);
-        
-        // Terrain generation complete
     }
     
     /**
-     * Update background appearance based on terrain type.
+     * Update background to simple dark color for better visibility.
      */
     updateBackgroundForTerrain(metadata) {
-        // Parse color strings to hex values
-        const primaryColor = parseInt(metadata.primaryColor.substring(1), 16);
-        const secondaryColor = parseInt(metadata.secondaryColor.substring(1), 16);
-        
-        // Update app background
-        this.app.renderer.backgroundColor = secondaryColor;
-        
-        // Create terrain-specific background pattern
-        this.createTerrainBackground(primaryColor, secondaryColor, metadata.terrainType);
+        const darkBackground = 0x1a1a1a; // Dark grey
+        this.app.renderer.backgroundColor = darkBackground;
+        this.createSimpleDarkBackground();
     }
     
     /**
-     * Create terrain-specific background patterns.
+     * Create simple dark background for better visibility.
      */
-    createTerrainBackground(primaryColor, secondaryColor, terrainType) {
+    createSimpleDarkBackground() {
+        this.backgroundContainer.removeChildren();
         const graphics = new PIXI.Graphics();
-        
-        switch (terrainType) {
-            case 'FOREST':
-                this.createForestBackground(graphics, primaryColor, secondaryColor);
-                break;
-            case 'DESERT':
-                this.createDesertBackground(graphics, primaryColor, secondaryColor);
-                break;
-            case 'URBAN':
-                this.createUrbanBackground(graphics, primaryColor, secondaryColor);
-                break;
-            case 'TUNDRA':
-                this.createTundraBackground(graphics, primaryColor, secondaryColor);
-                break;
-            case 'VOLCANIC':
-                this.createVolcanicBackground(graphics, primaryColor, secondaryColor);
-                break;
-            case 'GRASSLAND':
-                this.createGrasslandBackground(graphics, primaryColor, secondaryColor);
-                break;
-            default:
-                this.createGenericBackground(graphics, primaryColor, secondaryColor);
-                break;
-        }
-        
+        graphics.beginFill(0x1a1a1a); // Dark grey
+        graphics.drawRect(
+            -this.worldBounds.width / 2, 
+            -this.worldBounds.height / 2, 
+            this.worldBounds.width, 
+            this.worldBounds.height
+        );
+        graphics.endFill();
         graphics.zIndex = -10; // Far background
         this.backgroundContainer.addChild(graphics);
-    }
-    
-    createForestBackground(graphics, primary, secondary) {
-        // Create scattered patches of darker forest areas
-        for (let i = 0; i < 20; i++) {
-            const x = (Math.random() - 0.5) * this.worldBounds.width;
-            const y = (Math.random() - 0.5) * this.worldBounds.height;
-            const size = 50 + Math.random() * 100;
-            
-            graphics.beginFill(primary, 0.3);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
-        }
-    }
-    
-    createDesertBackground(graphics, primary, secondary) {
-        // Create sand dune patterns
-        for (let i = 0; i < 15; i++) {
-            const x = (Math.random() - 0.5) * this.worldBounds.width;
-            const y = (Math.random() - 0.5) * this.worldBounds.height;
-            const width = 80 + Math.random() * 120;
-            const height = 30 + Math.random() * 40;
-            
-            graphics.beginFill(primary, 0.2);
-            graphics.drawEllipse(x, y, width, height);
-            graphics.endFill();
-        }
-    }
-    
-    createUrbanBackground(graphics, primary, secondary) {
-        // Create grid pattern for urban areas
-        graphics.lineStyle(1, primary, 0.2);
-        
-        for (let x = -this.worldBounds.width/2; x <= this.worldBounds.width/2; x += 150) {
-            graphics.moveTo(x, -this.worldBounds.height/2);
-            graphics.lineTo(x, this.worldBounds.height/2);
-        }
-        
-        for (let y = -this.worldBounds.height/2; y <= this.worldBounds.height/2; y += 150) {
-            graphics.moveTo(-this.worldBounds.width/2, y);
-            graphics.lineTo(this.worldBounds.width/2, y);
-        }
-    }
-    
-    createTundraBackground(graphics, primary, secondary) {
-        // Create ice formations
-        for (let i = 0; i < 12; i++) {
-            const x = (Math.random() - 0.5) * this.worldBounds.width;
-            const y = (Math.random() - 0.5) * this.worldBounds.height;
-            const size = 60 + Math.random() * 80;
-            
-            graphics.beginFill(0xffffff, 0.3);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
-        }
-    }
-    
-    createVolcanicBackground(graphics, primary, secondary) {
-        // Create lava flow patterns
-        graphics.lineStyle(3, 0xff4444, 0.4);
-        
-        for (let i = 0; i < 8; i++) {
-            const startX = (Math.random() - 0.5) * this.worldBounds.width;
-            const startY = (Math.random() - 0.5) * this.worldBounds.height;
-            
-            graphics.moveTo(startX, startY);
-            
-            let x = startX;
-            let y = startY;
-            
-            for (let j = 0; j < 10; j++) {
-                x += (Math.random() - 0.5) * 100;
-                y += (Math.random() - 0.5) * 100;
-                graphics.lineTo(x, y);
-            }
-        }
-    }
-    
-    createGrasslandBackground(graphics, primary, secondary) {
-        // Create subtle grass patterns
-        for (let i = 0; i < 25; i++) {
-            const x = (Math.random() - 0.5) * this.worldBounds.width;
-            const y = (Math.random() - 0.5) * this.worldBounds.height;
-            const size = 20 + Math.random() * 30;
-            
-            graphics.beginFill(primary, 0.2);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
-        }
-    }
-    
-    createGenericBackground(graphics, primary, secondary) {
-        // Simple scattered elements
-        for (let i = 0; i < 15; i++) {
-            const x = (Math.random() - 0.5) * this.worldBounds.width;
-            const y = (Math.random() - 0.5) * this.worldBounds.height;
-            const size = 30 + Math.random() * 50;
-            
-            graphics.beginFill(primary, 0.2);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
-        }
-    }
-    
-    /**
-     * Create individual terrain features.
-     */
-    createTerrainFeature(feature) {
-        const graphics = new PIXI.Graphics();
-        const color = parseInt(feature.color.substring(1), 16);
-        const opacity = this.getFeatureOpacity(feature.type);
-        
-        graphics.beginFill(color, opacity);
-        
-        // Create different shapes based on feature type
-        switch (feature.type.toLowerCase()) {
-            case 'treecluster':
-                this.drawTreeCluster(graphics, feature);
-                break;
-            case 'building':
-                this.drawBuilding(graphics, feature);
-                break;
-            case 'rockmesa':
-            case 'lavarock':
-                this.drawRockFormation(graphics, feature);
-                break;
-            case 'sanddune':
-                this.drawSandDune(graphics, feature);
-                break;
-            default:
-                this.drawGenericFeature(graphics, feature);
-                break;
-        }
-        
-        graphics.endFill();
-        graphics.position.set(feature.x, -feature.y); // Invert Y for PIXI
-        graphics.zIndex = this.getFeatureZIndex(feature.type);
-        
-        this.backgroundContainer.addChild(graphics);
-    }
-    
-    drawTreeCluster(graphics, feature) {
-        // Draw multiple overlapping circles for tree cluster
-        for (let i = 0; i < 5; i++) {
-            const offsetX = (Math.random() - 0.5) * feature.size * 0.6;
-            const offsetY = (Math.random() - 0.5) * feature.size * 0.6;
-            const treeSize = feature.size * (0.3 + Math.random() * 0.4);
-            graphics.drawCircle(offsetX, offsetY, treeSize);
-        }
-    }
-    
-    drawBuilding(graphics, feature) {
-        // Draw rectangular building
-        const width = feature.size * 0.8;
-        const height = feature.size * 1.2;
-        graphics.drawRect(-width/2, -height/2, width, height);
-    }
-    
-    drawRockFormation(graphics, feature) {
-        // Draw irregular rock shape
-        const points = [];
-        const numPoints = 6 + Math.floor(Math.random() * 4);
-        
-        for (let i = 0; i < numPoints; i++) {
-            const angle = (i / numPoints) * Math.PI * 2;
-            const radius = feature.size * (0.7 + Math.random() * 0.3);
-            points.push(Math.cos(angle) * radius);
-            points.push(Math.sin(angle) * radius);
-        }
-        
-        graphics.drawPolygon(points);
-    }
-    
-    drawSandDune(graphics, feature) {
-        // Draw elliptical sand dune
-        graphics.drawEllipse(0, 0, feature.size, feature.size * 0.6);
-    }
-    
-    drawGenericFeature(graphics, feature) {
-        // Default circular feature
-        graphics.drawCircle(0, 0, feature.size);
-    }
-    
-    getFeatureOpacity(featureType) {
-        switch (featureType.toLowerCase()) {
-            case 'clearing':
-            case 'flowerpatch':
-                return 0.3;
-            case 'thickbrush':
-            case 'tallgrass':
-                return 0.6;
-            default:
-                return 0.8;
-        }
-    }
-    
-    getFeatureZIndex(featureType) {
-        switch (featureType.toLowerCase()) {
-            case 'building':
-                return -3;
-            case 'treecluster':
-            case 'rockmesa':
-                return -5;
-            case 'thickbrush':
-            case 'tallgrass':
-                return -7;
-            default:
-                return -8;
-        }
-    }
-    
-    /**
-     * Create a compound obstacle (complex multi-body structure).
-     */
-    createCompoundObstacle(compound) {
-        const obstacleContainer = new PIXI.Container();
-        obstacleContainer.x = compound.x;
-        obstacleContainer.y = compound.y;
-        obstacleContainer.zIndex = 1;
-        
-        // Get color scheme based on type and biome
-        const colorScheme = this.getCompoundObstacleColors(compound.type, compound.biome);
-        
-        // Render each body in the compound obstacle
-        compound.bodies.forEach((body, index) => {
-            const bodyGraphics = new PIXI.Graphics();
-            
-            // Choose color variation for this body
-            const colorIndex = index % colorScheme.length;
-            const color = colorScheme[colorIndex];
-            
-            bodyGraphics.beginFill(color, 0.8);
-            bodyGraphics.lineStyle(2, this.darkenColor(color), 1);
-            
-            if (body.shape === 'circle') {
-                bodyGraphics.drawCircle(body.x - compound.x, body.y - compound.y, body.width);
-            } else if (body.shape === 'rectangle') {
-                const x = body.x - compound.x - body.width / 2;
-                const y = body.y - compound.y - body.height / 2;
-                bodyGraphics.drawRect(x, y, body.width, body.height);
-            }
-            
-            bodyGraphics.endFill();
-            obstacleContainer.addChild(bodyGraphics);
-        });
-        
-        // Add a subtle shadow/depth effect
-        const shadow = new PIXI.Graphics();
-        shadow.beginFill(0x000000, 0.2);
-        shadow.drawRect(-compound.width/2 + 3, -compound.height/2 + 3, compound.width, compound.height);
-        shadow.endFill();
-        shadow.zIndex = -1;
-        obstacleContainer.addChild(shadow);
-        
-        // Add type-specific details
-        this.addCompoundObstacleDetails(obstacleContainer, compound);
-        
-        this.gameContainer.addChild(obstacleContainer);
-    }
-    
-    /**
-     * Get color scheme for compound obstacles based on type and biome.
-     */
-    getCompoundObstacleColors(type, biome) {
-        const baseColors = {
-            'building_complex': [0x8B4513, 0xA0522D, 0x8B7355, 0x696969],
-            'fortification': [0x708090, 0x778899, 0x2F4F4F, 0x696969],
-            'vehicle_wreck': [0x4A4A4A, 0x800000, 0x8B4513, 0x2F4F4F],
-            'rock_formation': [0x696969, 0x708090, 0x2F4F4F, 0x8B7D6B],
-            'industrial_complex': [0x4A4A4A, 0x8B4513, 0x800000, 0x2F4F4F],
-            'ruins': [0x8B7D6B, 0x696969, 0xA0522D, 0x2F4F4F]
-        };
-        
-        // Modify base colors based on biome
-        let colors = baseColors[type] || baseColors['rock_formation'];
-        
-        switch (biome) {
-            case 'DESERT':
-                colors = colors.map(c => this.blendColors(c, 0xD2B48C, 0.3));
-                break;
-            case 'FOREST':
-                colors = colors.map(c => this.blendColors(c, 0x228B22, 0.2));
-                break;
-            case 'TUNDRA':
-                colors = colors.map(c => this.blendColors(c, 0xF0F8FF, 0.3));
-                break;
-            case 'VOLCANIC':
-                colors = colors.map(c => this.blendColors(c, 0x8B0000, 0.2));
-                break;
-            case 'URBAN':
-                colors = colors.map(c => this.blendColors(c, 0x696969, 0.2));
-                break;
-        }
-        
-        return colors;
-    }
-    
-    /**
-     * Add type-specific visual details to compound obstacles.
-     */
-    addCompoundObstacleDetails(container, compound) {
-        const detailGraphics = new PIXI.Graphics();
-        
-        switch (compound.type) {
-            case 'building_complex':
-                // Add windows
-                detailGraphics.beginFill(0x87CEEB, 0.6);
-                for (let i = 0; i < 3; i++) {
-                    for (let j = 0; j < 2; j++) {
-                        detailGraphics.drawRect(-40 + i * 25, -20 + j * 20, 8, 12);
-                    }
-                }
-                detailGraphics.endFill();
-                break;
-                
-            case 'fortification':
-                // Add battlements
-                detailGraphics.lineStyle(2, 0x696969, 1);
-                detailGraphics.moveTo(-60, -60);
-                for (let i = 0; i < 6; i++) {
-                    detailGraphics.lineTo(-60 + i * 20, i % 2 === 0 ? -60 : -55);
-                }
-                break;
-                
-            case 'vehicle_wreck':
-                // Add scorch marks
-                detailGraphics.beginFill(0x2F2F2F, 0.5);
-                detailGraphics.drawCircle(10, 5, 15);
-                detailGraphics.drawCircle(-15, -10, 12);
-                detailGraphics.endFill();
-                break;
-                
-            case 'industrial_complex':
-                // Add pipes and vents
-                detailGraphics.lineStyle(4, 0x4A4A4A, 1);
-                detailGraphics.moveTo(-30, -25);
-                detailGraphics.lineTo(-30, 25);
-                detailGraphics.moveTo(30, -25);
-                detailGraphics.lineTo(30, 25);
-                break;
-                
-            case 'ruins':
-                // Add vegetation growing through cracks
-                detailGraphics.beginFill(0x228B22, 0.4);
-                for (let i = 0; i < 5; i++) {
-                    const x = (Math.random() - 0.5) * compound.width * 0.8;
-                    const y = (Math.random() - 0.5) * compound.height * 0.8;
-                    detailGraphics.drawCircle(x, y, 3 + Math.random() * 5);
-                }
-                detailGraphics.endFill();
-                break;
-        }
-        
-        container.addChild(detailGraphics);
     }
     
     /**
@@ -3299,16 +3025,6 @@ class GameEngine {
         const g = Math.max(0, ((color >> 8) & 0xFF) - 40);
         const b = Math.max(0, (color & 0xFF) - 40);
         return (r << 16) | (g << 8) | b;
-    }
-    
-    /**
-     * Create atmospheric effects based on terrain.
-     */
-    createAtmosphericEffects(metadata) {
-        const particles = metadata.particles || {};
-        
-        // Atmospheric effects data available for future particle systems
-        // particles.type, metadata.fogDensity, metadata.temperature
     }
 
     handleResize() {
@@ -3780,7 +3496,7 @@ class InputManager {
             }
             
             // Determine input values based on active input source
-            let moveX, moveY, fire, secondary, sprint, jump;
+            let moveX, moveY, fire, secondary;
             
             if (this.gamepad.connected && this.inputSource === 'gamepad') {
                 // Use gamepad input
@@ -3788,24 +3504,18 @@ class InputManager {
                 moveY = this.movement.moveY;
                 fire = this.gamepad.buttons.rt || this.gamepad.buttons.a; // Right trigger or A button
                 secondary = this.gamepad.buttons.lt || this.gamepad.buttons.b; // Left trigger or B button
-                sprint = this.gamepad.buttons.ls || this.gamepad.buttons.rb; // Left stick click or right bumper
-                jump = this.gamepad.buttons.lb; // Left bumper for jump/space
             } else {
                 // Use keyboard/mouse input
                 moveX = this.movement.moveX;
                 moveY = this.movement.moveY;
                 fire = this.mouse.left;
                 secondary = this.mouse.right;
-                sprint = this.keys.shift;
-                jump = this.keys.space;
             }
             
             const input = {
                 type: 'playerInput',
                 moveX: moveX,
                 moveY: moveY,
-                shift: !!sprint,
-                space: !!jump,
                 mouseX: this.mouse.x || 0,
                 mouseY: this.mouse.y || 0,
                 worldX: this.mouse.worldX || 0,
@@ -3823,22 +3533,10 @@ class InputManager {
     
     sendWeaponSwitch(weaponIndex) {
         if (this.onInputChange) {
-            // Determine sprint/jump state based on input source
-            let sprint, jump;
-            if (this.gamepad.connected && this.inputSource === 'gamepad') {
-                sprint = this.gamepad.buttons.ls || this.gamepad.buttons.rb;
-                jump = this.gamepad.buttons.lb;
-            } else {
-                sprint = this.keys.shift;
-                jump = this.keys.space;
-            }
-            
             const input = {
                 type: 'playerInput',
                 moveX: this.movement.moveX,
                 moveY: this.movement.moveY,
-                shift: !!sprint,
-                space: !!jump,
                 mouseX: this.mouse.x || 0,
                 mouseY: this.mouse.y || 0,
                 worldX: this.mouse.worldX || 0,
@@ -3849,29 +3547,16 @@ class InputManager {
                 reload: null,
                 inputSource: this.inputSource
             };
-            
             this.onInputChange(input);
         }
     }
     
     sendReload() {
         if (this.onInputChange) {
-            // Determine sprint/jump state based on input source
-            let sprint, jump;
-            if (this.gamepad.connected && this.inputSource === 'gamepad') {
-                sprint = this.gamepad.buttons.ls || this.gamepad.buttons.rb;
-                jump = this.gamepad.buttons.lb;
-            } else {
-                sprint = this.keys.shift;
-                jump = this.keys.space;
-            }
-            
             const input = {
                 type: 'playerInput',
                 moveX: this.movement.moveX,
                 moveY: this.movement.moveY,
-                shift: !!sprint,
-                space: !!jump,
                 mouseX: this.mouse.x || 0,
                 mouseY: this.mouse.y || 0,
                 worldX: this.mouse.worldX || 0,

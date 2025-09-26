@@ -6,8 +6,10 @@ import com.fullsteam.Config;
 import com.fullsteam.ai.AIGameHelper;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
+import com.fullsteam.events.GameEventManager;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.GameInfo;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
@@ -69,29 +71,28 @@ public class GameManager implements StepListener<Body> {
     protected final TeamSpawnManager teamSpawnManager;
     @Getter
     protected final TerrainGenerator terrainGenerator;
+    @Getter
+    protected final GameEventManager gameEventManager;
 
-    protected final ObjectMapper objectMapper = new ObjectMapper();
+    protected final ObjectMapper objectMapper;
 
-    /**
-     * -- GETTER --
-     * Get the game start time.
-     */
     @Getter
     protected long gameStartTime;
     protected boolean gameRunning = false;
 
     // AI management settings - initialized from gameConfig
-    private long aiCheckIntervalMs;
+    private final long aiCheckIntervalMs;
     private long lastAICheckTime = 0;
 
     private final World<Body> world;
     private final ScheduledFuture<?> shutdownHook;
     private double lastUpdateTime = System.nanoTime() / 1e9;
 
-    public GameManager(String gameId, String gameType, GameConfig gameConfig) {
+    public GameManager(String gameId, String gameType, GameConfig gameConfig, ObjectMapper objectMapper) {
         this.gameId = gameId;
         this.gameType = gameType;
         this.gameConfig = gameConfig;
+        this.objectMapper = objectMapper;
         this.gameStartTime = System.currentTimeMillis();
 
         // Initialize AI management settings from config
@@ -109,6 +110,9 @@ public class GameManager implements StepListener<Body> {
                 gameConfig.getWorldWidth(),
                 gameConfig.getWorldHeight()
         );
+
+        // Initialize game event manager
+        this.gameEventManager = new GameEventManager(gameEntities, this::send);
 
         this.world = new World<>();
         Settings settings = new Settings();
@@ -563,6 +567,9 @@ public class GameManager implements StepListener<Body> {
         log.info("Player {} ({}) joined game {} successfully. Total players: {}, Total sessions: {}",
                 playerSession.getPlayerId(), playerSession.getPlayerName(), gameId, gameEntities.getPlayers().size(), gameEntities.getPlayerSessions().size());
 
+        // Broadcast player join event
+        gameEventManager.broadcastSystemMessage(playerSession.getPlayerName() + " joined the game");
+
         // Adjust AI players when a human player joins
         adjustAIPlayers();
     }
@@ -580,6 +587,11 @@ public class GameManager implements StepListener<Body> {
             }
         }
         log.info("Player {} left game {}", playerSession.getPlayerId(), gameId);
+
+        // Broadcast player leave event (only for human players)
+        if (!aiPlayerManager.isAIPlayer(playerSession.getPlayerId())) {
+            gameEventManager.broadcastSystemMessage(playerSession.getPlayerName() + " left the game");
+        }
 
         // Adjust AI players when a human player leaves
         if (!aiPlayerManager.isAIPlayer(playerSession.getPlayerId())) {
@@ -1053,12 +1065,65 @@ public class GameManager implements StepListener<Body> {
         log.debug("Player {} will respawn at new location ({}, {}) on team {}",
                 victim.getId(), newSpawnPoint.x, newSpawnPoint.y, victim.getTeam());
 
+        // Broadcast kill event
+        String killerName = shooter != null ? shooter.getPlayerName() : "Unknown";
+        String victimName = victim.getPlayerName();
+        String weaponName = shooter != null ? shooter.getCurrentWeapon().getName() : "Unknown weapon";
+
+        gameEventManager.broadcastKill(killerName, victimName, weaponName);
+
+        // Legacy death notification (keeping for compatibility)
         Map<String, Object> deathNotification = new HashMap<>();
         deathNotification.put("type", "playerKilled");
         deathNotification.put("victimId", victim.getId());
         deathNotification.put("killerId", shooter != null ? shooter.getId() : null);
         deathNotification.put("killerName", shooter != null ? shooter.getPlayerName() : null);
         broadcast(deathNotification);
+    }
+
+    // Game Event Broadcasting Convenience Methods
+
+    /**
+     * Broadcast a system message to all players
+     */
+    public void broadcastSystemMessage(String message) {
+        gameEventManager.broadcastSystemMessage(message);
+    }
+
+    /**
+     * Broadcast a custom message with color to all players
+     */
+    public void broadcastMessage(String message, String color) {
+        gameEventManager.broadcastCustomMessage(message, color,
+                GameEvent.EventTarget.builder().type(GameEvent.EventTarget.TargetType.ALL).build());
+    }
+
+    /**
+     * Broadcast a team-specific message
+     */
+    public void broadcastTeamMessage(String message, int teamId, GameEvent.EventCategory category) {
+        gameEventManager.broadcastTeamMessage(message, teamId, category);
+    }
+
+    /**
+     * Broadcast to a specific player
+     */
+    public void broadcastToPlayer(String message, int playerId, GameEvent.EventCategory category) {
+        gameEventManager.broadcastToPlayer(message, playerId, category);
+    }
+
+    /**
+     * Broadcast an achievement
+     */
+    public void broadcastAchievement(String playerName, String achievement) {
+        gameEventManager.broadcastAchievement(playerName, achievement);
+    }
+
+    /**
+     * Broadcast a custom game event
+     */
+    public void broadcastGameEvent(GameEvent event) {
+        gameEventManager.broadcastEvent(event);
     }
 
     /**
