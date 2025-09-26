@@ -189,7 +189,7 @@ public class Projectile extends GameEntity {
                 return hasBulletEffect(BulletEffect.ELECTRIC) || 
                        hasBulletEffect(BulletEffect.INCENDIARY) ||
                        hasBulletEffect(BulletEffect.FREEZING) ||
-                       hasBulletEffect(BulletEffect.EXPLODES_ON_IMPACT);
+                       hasBulletEffect(BulletEffect.EXPLOSIVE);
         }
     }
     

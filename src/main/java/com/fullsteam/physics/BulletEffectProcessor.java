@@ -10,6 +10,7 @@ import org.dyn4j.geometry.Vector2;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Handles the processing of bullet effects when projectiles hit targets or obstacles
@@ -35,7 +36,7 @@ public class BulletEffectProcessor {
 
         for (BulletEffect effect : effects) {
             switch (effect) {
-                case EXPLODES_ON_IMPACT:
+                case EXPLOSIVE:
                     createExplosion(projectile, hitPosition);
                     break;
                 case INCENDIARY:
@@ -74,7 +75,7 @@ public class BulletEffectProcessor {
 
         for (BulletEffect effect : effects) {
             switch (effect) {
-                case EXPLODES_ON_IMPACT:
+                case EXPLOSIVE:
                     createExplosion(projectile, hitPosition);
                     break;
                 case INCENDIARY:
@@ -106,118 +107,72 @@ public class BulletEffectProcessor {
     }
 
     public void createExplosion(Projectile projectile, Vector2 position) {
-        // Base explosion radius scales with damage
-        double baseRadius = 50.0 + (projectile.getDamage() * 0.5);
-
-        // Apply ordinance-specific scaling to prevent small projectiles from having huge explosions
-        double ordinanceMultiplier = getOrdinanceExplosionMultiplier(projectile.getOrdinance());
-        double explosionRadius = baseRadius * ordinanceMultiplier;
-
-        // Damage scaling remains the same
-        double explosionDamage = projectile.getDamage() * 1.5; // 50% more damage for explosion
-
         FieldEffect explosion = new FieldEffect(
                 Config.nextId(),
                 projectile.getOwnerId(),
                 FieldEffectType.EXPLOSION,
                 position,
-                explosionRadius,
-                explosionDamage,
-                0.5, // Short duration - 0.5 seconds for explosion
+                BulletEffect.EXPLOSIVE.calculateRadius(projectile.getDamage(), projectile.getOrdinance()),
+                BulletEffect.EXPLOSIVE.calculateDamage(projectile.getDamage()),
+                FieldEffectType.EXPLOSION.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-
         pendingFieldEffects.add(explosion);
     }
 
-    /**
-     * Get explosion radius multiplier based on ordinance type.
-     * Prevents small projectiles from having unrealistically large explosions.
-     */
-    private double getOrdinanceExplosionMultiplier(Ordinance ordinance) {
-        return switch (ordinance) {
-            case ROCKET -> 1.4;      // Rockets should have the largest explosions
-            case GRENADE -> 1.2;     // Grenades have moderately large explosions
-            case CANNONBALL -> 1.0;  // Heavy ordinance has standard explosions
-            case PLASMA -> 0.8;      // Energy weapons have smaller, focused explosions
-            case FLAMETHROWER -> 0.6; // Flame weapons have smaller blast radius
-            case BULLET -> 0.4;      // Bullets with explosive effects have small explosions
-            case DART -> 0.3;        // Darts have the smallest explosions
-            default -> 0.7;          // Default for any new ordinance types
-        };
-    }
-
     public void createFireEffect(Projectile projectile, Vector2 position) {
-        double fireDamage = projectile.getDamage() * 0.6;
-        double ordinanceMultiplier = getOrdinanceExplosionMultiplier(projectile.getOrdinance());
-        double fireRadius = (40.0 + (projectile.getDamage() * 0.4)) * ordinanceMultiplier;
-
         FieldEffect fire = new FieldEffect(
                 Config.nextId(),
                 projectile.getOwnerId(),
                 FieldEffectType.FIRE,
                 position,
-                fireRadius,
-                fireDamage,
-                3.0, // 3 seconds of fire
+                BulletEffect.INCENDIARY.calculateRadius(projectile.getDamage(), projectile.getOrdinance()),
+                BulletEffect.INCENDIARY.calculateDamage(projectile.getDamage()),
+                FieldEffectType.FIRE.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-
         pendingFieldEffects.add(fire);
     }
 
     public void createElectricEffect(Projectile projectile, Vector2 position) {
-        double electricRadius = 60.0;
-        double electricDamage = projectile.getDamage() * 0.8; // High damage but shorter duration
-
         FieldEffect electric = new FieldEffect(
                 Config.nextId(),
                 projectile.getOwnerId(),
                 FieldEffectType.ELECTRIC,
                 position,
-                electricRadius,
-                electricDamage,
-                0.4, // 0.4 seconds of electric damage - quick chain effect
+                BulletEffect.ELECTRIC.calculateRadius(projectile.getDamage(), projectile.getOrdinance()),
+                BulletEffect.ELECTRIC.calculateDamage(projectile.getDamage()),
+                FieldEffectType.ELECTRIC.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-
         pendingFieldEffects.add(electric);
     }
 
     public void createFreezeEffect(Projectile projectile, Vector2 position) {
-        double freezeRadius = 50.0;
-        double freezeDamage = projectile.getDamage() * 0.2; // Low damage but slowing effect
-
         FieldEffect freeze = new FieldEffect(
                 Config.nextId(),
                 projectile.getOwnerId(),
                 FieldEffectType.FREEZE,
                 position,
-                freezeRadius,
-                freezeDamage,
-                2.0, // 2 seconds of freeze
+                BulletEffect.FREEZING.calculateRadius(projectile.getDamage(), projectile.getOrdinance()),
+                BulletEffect.FREEZING.calculateDamage(projectile.getDamage()),
+                FieldEffectType.FREEZE.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-
         pendingFieldEffects.add(freeze);
     }
 
     public void createPoisonEffect(Projectile projectile, Vector2 position) {
-        double poisonDamage = projectile.getDamage() * 0.5;
-        double ordinanceMultiplier = getOrdinanceExplosionMultiplier(projectile.getOrdinance());
-        double poisonRadius = (50.0 + (projectile.getDamage() * 0.3)) * ordinanceMultiplier;
-
         FieldEffect poison = new FieldEffect(
                 Config.nextId(),
                 projectile.getOwnerId(),
                 FieldEffectType.POISON,
                 position,
-                poisonRadius,
-                poisonDamage,
-                4.0, // 4 seconds of poison damage - longest duration
+                BulletEffect.POISON.calculateRadius(projectile.getDamage(), projectile.getOrdinance()),
+                BulletEffect.POISON.calculateDamage(projectile.getDamage()),
+                FieldEffectType.POISON.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-
         pendingFieldEffects.add(poison);
     }
 
@@ -228,21 +183,21 @@ public class BulletEffectProcessor {
                 projectile.getOwnerId(),
                 FieldEffectType.FRAGMENTATION,
                 position,
-                60.0, // Fragmentation radius
-                0.0, // No damage from the visual effect itself
-                0.3, // Very short duration - 0.3 seconds for fragmentation visual
+                BulletEffect.FRAGMENTING.calculateRadius(projectile.getDamage(), projectile.getOrdinance()),
+                BulletEffect.FRAGMENTING.calculateDamage(projectile.getDamage()),
+                FieldEffectType.FRAGMENTATION.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-
         pendingFieldEffects.add(fragmentation);
 
         // Create multiple smaller projectiles
         int fragmentCount = 5 + (int) (projectile.getDamage() / 20); // More fragments for higher damage
         double fragmentDamage = projectile.getDamage() * 0.4; // Each fragment does less damage
         double fragmentSpeed = projectile.getBody().getLinearVelocity().getMagnitude() * 0.6;
+        double randomStartAngle = ThreadLocalRandom.current().nextDouble(0, 2 * Math.PI);
 
         for (int i = 0; i < fragmentCount; i++) {
-            double angle = (2 * Math.PI * i) / fragmentCount;
+            double angle = randomStartAngle + ((2 * Math.PI * i) / fragmentCount);
             double vx = Math.cos(angle) * fragmentSpeed;
             double vy = Math.sin(angle) * fragmentSpeed;
 

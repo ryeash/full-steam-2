@@ -1112,7 +1112,7 @@ public class GameManager implements StepListener<Body> {
 
             default:
                 // Handle special bullet effects for other projectile types
-                if (projectile.hasBulletEffect(BulletEffect.EXPLODES_ON_IMPACT)) {
+                if (projectile.hasBulletEffect(BulletEffect.EXPLOSIVE)) {
                     effectProcessor.createExplosion(projectile, position);
                 } else if (projectile.hasBulletEffect(BulletEffect.ELECTRIC)) {
                     effectProcessor.createElectricEffect(projectile, position);

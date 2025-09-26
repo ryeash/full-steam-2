@@ -107,12 +107,32 @@ public class GameController {
 
         // Preset weapons
         Map<String, Map<String, Object>> presets = new HashMap<>();
+        
+        // Basic ordinance showcases
         presets.put("ASSAULT_RIFLE", createPresetData(WeaponConfig.ASSAULT_RIFLE_PRESET));
         presets.put("HAND_CANNON", createPresetData(WeaponConfig.HAND_CANNON_PRESET));
+        presets.put("PLASMA_RIFLE", createPresetData(WeaponConfig.PLASMA_RIFLE_PRESET));
+        
+        // New ordinance showcases
+        presets.put("SIEGE_CANNON", createPresetData(WeaponConfig.SIEGE_CANNON_PRESET));
+        presets.put("PRECISION_DART_GUN", createPresetData(WeaponConfig.PRECISION_DART_GUN_PRESET));
+        presets.put("FLAME_PROJECTOR", createPresetData(WeaponConfig.FLAME_PROJECTOR_PRESET));
+        
+        // Explosive weapons (ordinance + effects)
         presets.put("EXPLOSIVE_SNIPER", createPresetData(WeaponConfig.EXPLOSIVE_SNIPER_PRESET));
         presets.put("ROCKET_LAUNCHER", createPresetData(WeaponConfig.ROCKET_LAUNCHER_PRESET));
-        presets.put("PLASMA_RIFLE", createPresetData(WeaponConfig.PLASMA_RIFLE_PRESET));
         presets.put("GRENADE_LAUNCHER", createPresetData(WeaponConfig.GRENADE_LAUNCHER_PRESET));
+        presets.put("CLUSTER_MORTAR", createPresetData(WeaponConfig.CLUSTER_MORTAR_PRESET));
+        
+        // Special effect showcases
+        presets.put("BOUNCY_SMG", createPresetData(WeaponConfig.BOUNCY_SMG_PRESET));
+        presets.put("PIERCING_RIFLE", createPresetData(WeaponConfig.PIERCING_RIFLE_PRESET));
+        presets.put("INCENDIARY_SHOTGUN", createPresetData(WeaponConfig.INCENDIARY_SHOTGUN_PRESET));
+        presets.put("SEEKER_DART", createPresetData(WeaponConfig.SEEKER_DART_PRESET));
+        presets.put("ARC_PISTOL", createPresetData(WeaponConfig.ARC_PISTOL_PRESET));
+        presets.put("TOXIC_SPRAYER", createPresetData(WeaponConfig.TOXIC_SPRAYER_PRESET));
+        presets.put("ICE_CANNON", createPresetData(WeaponConfig.ICE_CANNON_PRESET));
+        
         data.put("presets", presets);
 
         // Point budget

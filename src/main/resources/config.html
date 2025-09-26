@@ -5,17 +5,66 @@
     <title>Game Configuration</title>
     <link rel="stylesheet" type="text/css" href="unified.css">
     <style>
-        .weapon-customization {
-            max-width: 1200px;
+        .main-container {
+            max-width: 1400px;
             margin: 0 auto;
             padding: 20px;
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 30px;
+            min-height: calc(100vh - 40px);
+        }
+        
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .player-section {
+            background: rgba(0, 0, 0, 0.8);
+            border: 3px solid #00ff88;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .player-section h2 {
+            color: #00ff88;
+            margin: 0 0 15px 0;
+            font-size: 1.3em;
+        }
+        
+        .player-section input {
+            width: 100%;
+            padding: 12px;
+            font-size: 1.1em;
+            border: 2px solid #444;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            margin-bottom: 20px;
+        }
+        
+        .player-section input:focus {
+            border-color: #00ff88;
+            outline: none;
+        }
+        
+        .start-game-section {
+            margin-top: auto;
+        }
+        
+        .weapon-customization {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
         
         .customization-grid {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
-            gap: 30px;
-            margin-bottom: 30px;
+            gap: 20px;
         }
         
         .customization-section {
@@ -218,29 +267,74 @@
             background: rgba(0, 0, 0, 0.7);
             border: 2px solid #444;
             border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
+            padding: 15px;
         }
         
         .preset-section h3 {
             color: #00ff88;
-            margin-top: 0;
-            margin-bottom: 15px;
+            margin: 0 0 15px 0;
             text-align: center;
+            font-size: 1.1em;
+        }
+        
+        .preset-tabs {
+            display: flex;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #444;
+        }
+        
+        .preset-tab {
+            flex: 1;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: none;
+            color: #ccc;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+        }
+        
+        .preset-tab:first-child {
+            border-radius: 5px 0 0 0;
+        }
+        
+        .preset-tab:last-child {
+            border-radius: 0 5px 0 0;
+        }
+        
+        .preset-tab.active {
+            background: #00ff88;
+            color: #000;
+            font-weight: bold;
+        }
+        
+        .preset-tab:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+        
+        .preset-category {
+            display: none;
+        }
+        
+        .preset-category.active {
+            display: block;
         }
         
         .preset-buttons {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 10px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 8px;
+            max-height: 300px;
+            overflow-y: auto;
         }
         
         .preset-button {
             background: linear-gradient(45deg, #333, #555);
             border: 2px solid #666;
-            border-radius: 8px;
+            border-radius: 6px;
             color: #fff;
-            padding: 15px;
+            padding: 10px;
             cursor: pointer;
             transition: all 0.3s ease;
             text-align: center;
@@ -249,18 +343,18 @@
         .preset-button:hover {
             background: linear-gradient(45deg, #444, #666);
             border-color: #00ff88;
-            transform: translateY(-2px);
+            transform: translateY(-1px);
         }
         
         .preset-name {
             font-weight: bold;
-            font-size: 1em;
-            margin-bottom: 5px;
+            font-size: 0.9em;
+            margin-bottom: 3px;
         }
         
         .preset-points {
             color: #ffaa00;
-            font-size: 0.9em;
+            font-size: 0.8em;
         }
         
         .validation-message {
@@ -295,20 +389,22 @@
         
         #start-game {
             width: 100%;
-            padding: 15px;
-            font-size: 1.2em;
+            padding: 18px;
+            font-size: 1.3em;
             font-weight: bold;
             background: linear-gradient(45deg, #00ff88, #00cc66);
             border: none;
-            border-radius: 10px;
+            border-radius: 12px;
             color: #000;
             cursor: pointer;
             transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 255, 136, 0.3);
         }
         
         #start-game:hover:not(:disabled) {
             background: linear-gradient(45deg, #00cc66, #00aa44);
-            transform: translateY(-2px);
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 255, 136, 0.4);
         }
         
         #start-game:disabled {
@@ -316,6 +412,7 @@
             color: #999;
             cursor: not-allowed;
             transform: none;
+            box-shadow: none;
         }
         
         .loading {
@@ -324,77 +421,160 @@
             font-size: 1.2em;
             padding: 50px;
         }
+        
+        /* Responsive design */
+        @media (max-width: 1200px) {
+            .main-container {
+                grid-template-columns: 280px 1fr;
+                gap: 20px;
+            }
+            
+            .customization-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        
+        @media (max-width: 900px) {
+            .main-container {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .left-panel {
+                order: 2;
+            }
+            
+            .weapon-customization {
+                order: 1;
+            }
+            
+            .customization-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .preset-buttons {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            }
+        }
+        
+        @media (max-width: 600px) {
+            .main-container {
+                padding: 10px;
+            }
+            
+            .preset-tabs {
+                flex-wrap: wrap;
+            }
+            
+            .preset-tab {
+                flex: 1 1 50%;
+                min-width: 80px;
+            }
+        }
     </style>
 </head>
 <body>
 <div id="config-wrapper">
     <h1>Game Configuration</h1>
     
-    <div class="config-section">
-        <label for="player-name">Player Name</label>
-        <input type="text" id="player-name" placeholder="Enter your name">
-    </div>
-    
-    <div class="weapon-customization">
-        <div id="loading-message" class="loading">
-            Loading weapon customization data...
+    <div class="main-container">
+        <div class="left-panel">
+            <div class="player-section">
+                <h2>👤 Player Setup</h2>
+                <input type="text" id="player-name" placeholder="Enter your name">
+                
+                <div class="point-tracker">
+                    <div class="point-display">
+                        <span id="points-used">0</span> / <span id="points-max">100</span> Points
+                    </div>
+                    <div id="validation-message" class="validation-message hidden"></div>
+                    <div class="point-breakdown">
+                        <div class="breakdown-item">
+                            <span class="breakdown-label">Attributes</span>
+                            <span class="breakdown-value" id="attr-points">0</span>
+                        </div>
+                        <div class="breakdown-item">
+                            <span class="breakdown-label">Effects</span>
+                            <span class="breakdown-value" id="effect-points">0</span>
+                        </div>
+                        <div class="breakdown-item">
+                            <span class="breakdown-label">Ordinance</span>
+                            <span class="breakdown-value" id="ordinance-points">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="start-game-section">
+                <button id="start-game" disabled>🚀 Start Game</button>
+            </div>
         </div>
         
-        <div id="customization-content" class="hidden">
-            <div class="preset-section">
-                <h3>🎯 Weapon Presets</h3>
-                <div class="preset-buttons" id="preset-buttons">
-                    <!-- Preset buttons will be populated by JavaScript -->
-                </div>
+        <div class="weapon-customization">
+            <div id="loading-message" class="loading">
+                Loading weapon customization data...
             </div>
             
-            <div class="point-tracker">
-                <div class="point-display">
-                    <span id="points-used">0</span> / <span id="points-max">100</span> Points
-                </div>
-                <div id="validation-message" class="validation-message hidden"></div>
-                <div class="point-breakdown">
-                    <div class="breakdown-item">
-                        <span class="breakdown-label">Attributes</span>
-                        <span class="breakdown-value" id="attr-points">0</span>
+            <div id="customization-content" class="hidden">
+                <div class="preset-section">
+                    <h3>🎯 Weapon Presets</h3>
+                    <div class="preset-tabs">
+                        <button class="preset-tab active" data-category="basic">Basic</button>
+                        <button class="preset-tab" data-category="ordinance">Ordinance</button>
+                        <button class="preset-tab" data-category="effects">Effects</button>
+                        <button class="preset-tab" data-category="explosive">Explosive</button>
                     </div>
-                    <div class="breakdown-item">
-                        <span class="breakdown-label">Effects</span>
-                        <span class="breakdown-value" id="effect-points">0</span>
+                    
+                    <div class="preset-category active" id="category-basic">
+                        <div class="preset-buttons" id="preset-buttons-basic">
+                            <!-- Basic preset buttons will be populated by JavaScript -->
+                        </div>
                     </div>
-                    <div class="breakdown-item">
-                        <span class="breakdown-label">Ordinance</span>
-                        <span class="breakdown-value" id="ordinance-points">0</span>
+                    
+                    <div class="preset-category" id="category-ordinance">
+                        <div class="preset-buttons" id="preset-buttons-ordinance">
+                            <!-- Ordinance preset buttons will be populated by JavaScript -->
+                        </div>
                     </div>
-                </div>
-            </div>
-            
-            <div class="customization-grid">
-                <div class="customization-section">
-                    <h3>⚙️ Weapon Attributes</h3>
-                    <div id="attribute-sliders">
-                        <!-- Attribute sliders will be populated by JavaScript -->
+                    
+                    <div class="preset-category" id="category-effects">
+                        <div class="preset-buttons" id="preset-buttons-effects">
+                            <!-- Effect preset buttons will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div class="preset-category" id="category-explosive">
+                        <div class="preset-buttons" id="preset-buttons-explosive">
+                            <!-- Explosive preset buttons will be populated by JavaScript -->
+                        </div>
                     </div>
                 </div>
                 
-                <div class="customization-section">
-                    <h3>💥 Bullet Effects</h3>
-                    <div id="effect-checkboxes">
-                        <!-- Effect checkboxes will be populated by JavaScript -->
+                <div class="customization-grid">
+                    <div class="customization-section">
+                        <h3>⚙️ Weapon Attributes</h3>
+                        <div id="attribute-sliders">
+                            <!-- Attribute sliders will be populated by JavaScript -->
+                        </div>
                     </div>
-                </div>
-                
-                <div class="customization-section">
-                    <h3>🚀 Ordinance Type</h3>
-                    <div id="ordinance-radios">
-                        <!-- Ordinance radio buttons will be populated by JavaScript -->
+                    
+                    <div class="customization-section">
+                        <h3>💥 Bullet Effects</h3>
+                        <div id="effect-checkboxes">
+                            <!-- Effect checkboxes will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div class="customization-section">
+                        <h3>🚀 Ordinance Type</h3>
+                        <div id="ordinance-radios">
+                            <!-- Ordinance radio buttons will be populated by JavaScript -->
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    
-    <button id="start-game" disabled>Start Game</button>
 </div>
 
 <script>
@@ -550,22 +730,50 @@
     }
 
     function createPresetButtons() {
-        const container = document.getElementById('preset-buttons');
-        container.innerHTML = '';
+        // Define preset categories
+        const categories = {
+            basic: ['ASSAULT_RIFLE', 'HAND_CANNON', 'PLASMA_RIFLE'],
+            ordinance: ['SIEGE_CANNON', 'PRECISION_DART_GUN', 'FLAME_PROJECTOR'],
+            effects: ['BOUNCY_SMG', 'PIERCING_RIFLE', 'INCENDIARY_SHOTGUN', 'SEEKER_DART', 'ARC_PISTOL', 'TOXIC_SPRAYER', 'ICE_CANNON'],
+            explosive: ['EXPLOSIVE_SNIPER', 'ROCKET_LAUNCHER', 'GRENADE_LAUNCHER', 'CLUSTER_MORTAR']
+        };
         
-        Object.entries(weaponData.presets).forEach(([key, preset]) => {
-            const button = document.createElement('div');
-            button.className = 'preset-button';
-            button.innerHTML = `
-                <div class="preset-name">${preset.displayName}</div>
-                <div class="preset-points">${preset.totalPoints} / 100 points</div>
-            `;
+        // Create buttons for each category
+        Object.entries(categories).forEach(([categoryName, presetKeys]) => {
+            const container = document.getElementById(`preset-buttons-${categoryName}`);
+            container.innerHTML = '';
             
-            button.addEventListener('click', () => {
-                applyPreset(preset);
+            presetKeys.forEach(key => {
+                const preset = weaponData.presets[key];
+                if (preset) {
+                    const button = document.createElement('div');
+                    button.className = 'preset-button';
+                    button.innerHTML = `
+                        <div class="preset-name">${preset.displayName}</div>
+                        <div class="preset-points">${preset.totalPoints}/100</div>
+                    `;
+                    
+                    button.addEventListener('click', () => {
+                        applyPreset(preset);
+                    });
+                    
+                    container.appendChild(button);
+                }
             });
-            
-            container.appendChild(button);
+        });
+        
+        // Add tab functionality
+        document.querySelectorAll('.preset-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Remove active class from all tabs and categories
+                document.querySelectorAll('.preset-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.preset-category').forEach(c => c.classList.remove('active'));
+                
+                // Add active class to clicked tab and corresponding category
+                tab.classList.add('active');
+                const category = tab.dataset.category;
+                document.getElementById(`category-${category}`).classList.add('active');
+            });
         });
     }
 

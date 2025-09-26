@@ -81,7 +81,7 @@ public class WeaponConfig {
             0,
             0,
             0,
-            Set.of(BulletEffect.EXPLODES_ON_IMPACT),
+            Set.of(BulletEffect.EXPLOSIVE),
             Ordinance.BULLET
     );
 
@@ -113,7 +113,7 @@ public class WeaponConfig {
             0,
             0,
             0,
-            Set.of(BulletEffect.EXPLODES_ON_IMPACT),
+            Set.of(BulletEffect.EXPLOSIVE),
             Ordinance.ROCKET
     );
 
@@ -129,7 +129,7 @@ public class WeaponConfig {
             5,
             0,
             -3,
-            Set.of(BulletEffect.EXPLODES_ON_IMPACT),
+            Set.of(BulletEffect.EXPLOSIVE),
             Ordinance.GRENADE
     );
 
@@ -147,6 +147,166 @@ public class WeaponConfig {
             0,
             Set.of(),
             Ordinance.PLASMA
+    );
+
+    // Cannonball Ordinance Showcase - Heavy, slow, powerful shots
+    public static final WeaponConfig SIEGE_CANNON_PRESET = new WeaponConfig(
+            "Siege Cannon",
+            35,     // High damage
+            1,      // Very slow fire rate
+            15,     // Good range
+            0,      // Neutral accuracy
+            3,      // Small magazine
+            25,     // Long reload
+            5,      // Slow projectile
+            0,      // Single shot
+            0,      // No damping
+            Set.of(),
+            Ordinance.CANNONBALL  // 12 points, total: 84 + 12 = 96
+    );
+
+    // Dart Ordinance Showcase - Fast, precise, low damage
+    public static final WeaponConfig PRECISION_DART_GUN_PRESET = new WeaponConfig(
+            "Precision Dart Gun",
+            10,     // Low damage
+            20,     // Good fire rate
+            12,     // Good range
+            15,     // High accuracy
+            15,     // Decent magazine
+            8,      // Fast reload
+            15,     // Fast projectile
+            0,      // Single shot
+            0,      // No damping
+            Set.of(),
+            Ordinance.DART  // 5 points, total: 95 + 5 = 100
+    );
+
+    // Flamethrower Ordinance Showcase - Short range, area denial
+    public static final WeaponConfig FLAME_PROJECTOR_PRESET = new WeaponConfig(
+            "Flame Projector",
+            23,     // Good damage
+            35,     // High fire rate
+            3,      // Very short range
+            -10,    // Poor accuracy (spread)
+            30,     // Large magazine
+            5,      // Fast reload
+            8,      // Medium speed
+            3,      // Multiple streams
+            -5,     // Negative damping for spread
+            Set.of(),
+            Ordinance.FLAMETHROWER  // 8 points, total: 92 + 8 = 100
+    );
+
+    // Piercing Effect Showcase - Sniper that goes through enemies
+    public static final WeaponConfig PIERCING_RIFLE_PRESET = new WeaponConfig(
+            "Piercing Rifle",
+            30,     // High damage
+            3,      // Slow fire rate
+            20,     // Long range
+            10,     // Good accuracy
+            5,      // Small magazine
+            12,     // Medium reload
+            0,      // Base speed
+            0,      // Single shot
+            0,      // No damping
+            Set.of(BulletEffect.PIERCING),  // 20 points
+            Ordinance.BULLET  // 0 points, total: 80 + 20 = 100
+    );
+
+    // Incendiary Effect Showcase - Sets targets on fire
+    public static final WeaponConfig INCENDIARY_SHOTGUN_PRESET = new WeaponConfig(
+            "Incendiary Shotgun",
+            18,     // Medium damage
+            8,      // Slow fire rate
+            6,      // Short range
+            -8,     // Poor accuracy (shotgun spread)
+            8,      // Small magazine
+            15,     // Long reload
+            12,     // Medium speed
+            5,      // Multiple pellets
+            0,      // No damping
+            Set.of(BulletEffect.INCENDIARY),  // 18 points
+            Ordinance.BULLET  // 0 points, total: 64 + 18 = 82
+    );
+
+    // Fragmenting Effect Showcase - Projectiles split on impact
+    public static final WeaponConfig CLUSTER_MORTAR_PRESET = new WeaponConfig(
+            "Cluster Mortar",
+            20,     // Medium damage
+            4,      // Slow fire rate
+            12,     // Good range
+            -5,     // Poor accuracy (mortar arc)
+            4,      // Small magazine
+            20,     // Long reload
+            6,      // Slow projectile
+            0,      // Single shot
+            -3,     // Negative damping for arc
+            Set.of(BulletEffect.FRAGMENTING),  // 22 points
+            Ordinance.GRENADE  // 10 points, total: 58 + 22 + 10 = 90
+    );
+
+    // Homing Effect Showcase - Tracking projectiles
+    public static final WeaponConfig SEEKER_DART_PRESET = new WeaponConfig(
+            "Seeker Dart",
+            12,     // Low damage
+            8,      // Medium fire rate
+            10,     // Medium range
+            7,      // Good accuracy
+            6,      // Small magazine
+            10,     // Medium reload
+            12,     // Fast projectile
+            0,      // Single shot
+            0,      // No damping
+            Set.of(BulletEffect.HOMING),  // 30 points
+            Ordinance.DART  // 5 points, total: 65 + 30 + 5 = 100
+    );
+
+    // Electric Effect Showcase - Chain lightning
+    public static final WeaponConfig ARC_PISTOL_PRESET = new WeaponConfig(
+            "Arc Pistol",
+            15,     // Medium damage
+            10,     // Medium fire rate
+            8,      // Short-medium range
+            5,      // Decent accuracy
+            8,      // Small magazine
+            8,      // Fast reload
+            12,     // Medium projectile speed
+            0,      // Single shot
+            0,      // No damping
+            Set.of(BulletEffect.ELECTRIC),  // 16 points
+            Ordinance.BULLET  // 0 points, total: 66 + 16 = 82
+    );
+
+    // Poison Effect Showcase - Area denial with gas
+    public static final WeaponConfig TOXIC_SPRAYER_PRESET = new WeaponConfig(
+            "Toxic Sprayer",
+            12,     // Low direct damage
+            25,     // High fire rate
+            6,      // Short range
+            -5,     // Poor accuracy (spray)
+            20,     // Large magazine
+            10,     // Medium reload
+            8,      // Medium speed
+            2,      // Multiple streams
+            -3,     // Negative damping for spread
+            Set.of(BulletEffect.POISON),  // 18 points
+            Ordinance.BULLET  // 0 points, total: 75 + 18 = 93
+    );
+
+    // Freezing Effect Showcase - Slows enemies
+    public static final WeaponConfig ICE_CANNON_PRESET = new WeaponConfig(
+            "Ice Cannon",
+            15,     // Medium damage
+            10,     // Medium fire rate
+            10,     // Medium range
+            8,      // Good accuracy
+            8,      // Small magazine
+            10,     // Medium reload
+            10,     // Medium speed
+            0,      // Single shot
+            0,      // No damping
+            Set.of(BulletEffect.FREEZING),  // 14 points
+            Ordinance.BULLET  // 0 points, total: 71 + 14 = 85
     );
 
     public int getAttributePoints() {
