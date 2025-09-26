@@ -58,8 +58,8 @@ public class WeaponConfig {
             "Hand Cannon",
             40,
             5,
-            20,
-            -5,
+            15,
+            0,
             5,
             15,
             20,
@@ -155,7 +155,7 @@ public class WeaponConfig {
             35,     // High damage
             1,      // Very slow fire rate
             15,     // Good range
-            0,      // Neutral accuracy
+            -2,      // Neutral accuracy
             3,      // Small magazine
             25,     // Long reload
             5,      // Slow projectile
@@ -171,7 +171,7 @@ public class WeaponConfig {
             10,     // Low damage
             20,     // Good fire rate
             12,     // Good range
-            15,     // High accuracy
+            0,     // High accuracy
             15,     // Decent magazine
             8,      // Fast reload
             15,     // Fast projectile
@@ -203,7 +203,7 @@ public class WeaponConfig {
             30,     // High damage
             3,      // Slow fire rate
             20,     // Long range
-            10,     // Good accuracy
+            0,     // Good accuracy
             5,      // Small magazine
             12,     // Medium reload
             0,      // Base speed
@@ -251,7 +251,7 @@ public class WeaponConfig {
             12,     // Low damage
             8,      // Medium fire rate
             10,     // Medium range
-            7,      // Good accuracy
+            0,      // Good accuracy
             6,      // Small magazine
             10,     // Medium reload
             12,     // Fast projectile
@@ -267,7 +267,7 @@ public class WeaponConfig {
             15,     // Medium damage
             10,     // Medium fire rate
             8,      // Short-medium range
-            5,      // Decent accuracy
+            0,      // Decent accuracy
             8,      // Small magazine
             8,      // Fast reload
             12,     // Medium projectile speed
@@ -299,7 +299,7 @@ public class WeaponConfig {
             15,     // Medium damage
             10,     // Medium fire rate
             10,     // Medium range
-            8,      // Good accuracy
+            0,      // Good accuracy
             8,      // Small magazine
             10,     // Medium reload
             10,     // Medium speed

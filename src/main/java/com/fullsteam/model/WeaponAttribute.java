@@ -25,7 +25,7 @@ public enum WeaponAttribute {
         @Override
         public double compute(int points) {
             validate(points);
-            return 300 + points * 300;
+            return 250 + points * 200;
         }
     },
     // Accuracy: 0.5-0.99 (base 0.5 + 0.02 per point, max 25 points)
@@ -57,7 +57,7 @@ public enum WeaponAttribute {
         @Override
         public double compute(int points) {
             validate(points);
-            return Config.PLAYER_SPEED + 20 + (points * 20);
+            return Config.PLAYER_SPEED + 50 + (points * 20);
         }
     },
     // Bullets Per Shot: 1-12 bullets (base 1 + 1 per 3 points, max 33 points)

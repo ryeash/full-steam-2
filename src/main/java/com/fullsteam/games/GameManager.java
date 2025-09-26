@@ -1090,40 +1090,16 @@ public class GameManager implements StepListener<Body> {
         // Mark projectile as exploded to prevent duplicate effects
         projectile.markAsExploded();
 
-        // Trigger effects based on ordinance type and bullet effects
-        switch (projectile.getOrdinance()) {
-            case ROCKET:
-            case GRENADE:
-                // These always create explosions when dismissed by velocity
-                effectProcessor.createExplosion(projectile, position);
-                break;
-
-            case PLASMA:
-                if (projectile.hasBulletEffect(BulletEffect.ELECTRIC)) {
-                    effectProcessor.createElectricEffect(projectile, position);
-                }
-                break;
-
-            case FLAMETHROWER:
-                if (projectile.hasBulletEffect(BulletEffect.INCENDIARY)) {
-                    effectProcessor.createFireEffect(projectile, position);
-                }
-                break;
-
-            default:
-                // Handle special bullet effects for other projectile types
-                if (projectile.hasBulletEffect(BulletEffect.EXPLOSIVE)) {
-                    effectProcessor.createExplosion(projectile, position);
-                } else if (projectile.hasBulletEffect(BulletEffect.ELECTRIC)) {
-                    effectProcessor.createElectricEffect(projectile, position);
-                } else if (projectile.hasBulletEffect(BulletEffect.INCENDIARY)) {
-                    effectProcessor.createFireEffect(projectile, position);
-                } else if (projectile.hasBulletEffect(BulletEffect.FREEZING)) {
-                    effectProcessor.createFreezeEffect(projectile, position);
-                } else if (projectile.hasBulletEffect(BulletEffect.POISON)) {
-                    effectProcessor.createPoisonEffect(projectile, position);
-                }
-                break;
+        if (projectile.hasBulletEffect(BulletEffect.EXPLOSIVE)) {
+            effectProcessor.createExplosion(projectile, position);
+        } else if (projectile.hasBulletEffect(BulletEffect.ELECTRIC)) {
+            effectProcessor.createElectricEffect(projectile, position);
+        } else if (projectile.hasBulletEffect(BulletEffect.INCENDIARY)) {
+            effectProcessor.createFireEffect(projectile, position);
+        } else if (projectile.hasBulletEffect(BulletEffect.FREEZING)) {
+            effectProcessor.createFreezeEffect(projectile, position);
+        } else if (projectile.hasBulletEffect(BulletEffect.POISON)) {
+            effectProcessor.createPoisonEffect(projectile, position);
         }
     }
 

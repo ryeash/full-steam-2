@@ -106,15 +106,25 @@ public class AIPlayerManager {
     }
 
     /**
-     * Create an AI player with a random personality, name, and specific team.
+     * Create an AI player with a random personality, name, specific team, and random weapons.
      */
     public static AIPlayer createRandomAIPlayer(int id, double x, double y, int team) {
         AIPersonality personality = AIPersonality.createRandom();
-        return new AIPlayer(id, RandomNames.randomName(), x, y, personality, team);
+        AIPlayer aiPlayer = new AIPlayer(id, RandomNames.randomName(), x, y, personality, team);
+        
+        // Assign random weapons based on personality
+        com.fullsteam.model.WeaponConfig[] weapons = AIWeaponSelector.selectWeaponLoadoutForPersonality(personality);
+        aiPlayer.applyWeaponConfig(weapons[0], weapons[1]);
+        
+        log.info("Assigned weapons to AI player {} ({}): Primary={}, Secondary={}", 
+                aiPlayer.getId(), aiPlayer.getPersonality().getPersonalityType(),
+                weapons[0].getType(), weapons[1].getType());
+        
+        return aiPlayer;
     }
 
     /**
-     * Create an AI player with a specific personality type and team.
+     * Create an AI player with a specific personality type, team, and personality-appropriate weapons.
      */
     public static AIPlayer createAIPlayerWithPersonality(int id, double x, double y, String personalityType, int team) {
         AIPersonality personality = switch (personalityType.toLowerCase()) {
@@ -124,7 +134,18 @@ public class AIPlayerManager {
             case "rusher" -> AIPersonality.createRusher();
             default -> AIPersonality.createBalanced();
         };
-        return new AIPlayer(id, RandomNames.randomName(), x, y, personality, team);
+        
+        AIPlayer aiPlayer = new AIPlayer(id, RandomNames.randomName(), x, y, personality, team);
+        
+        // Assign weapons based on personality
+        com.fullsteam.model.WeaponConfig[] weapons = AIWeaponSelector.selectWeaponLoadoutForPersonality(personality);
+        aiPlayer.applyWeaponConfig(weapons[0], weapons[1]);
+        
+        log.info("Assigned weapons to AI player {} ({}): Primary={}, Secondary={}", 
+                aiPlayer.getId(), aiPlayer.getPersonality().getPersonalityType(),
+                weapons[0].getType(), weapons[1].getType());
+        
+        return aiPlayer;
     }
 
     private void updateAIMemory(AIPlayer aiPlayer, GameEntities gameEntities) {

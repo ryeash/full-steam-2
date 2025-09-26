@@ -27,7 +27,7 @@ public class Projectile extends GameEntity {
 
     // prevent double hits
     private final Set<Integer> affectedPlayers;
-    
+
     public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange,
                       int ownerTeam, double linearDamping, Set<BulletEffect> bulletEffects, Ordinance ordinance) {
         super(Config.nextId(), createProjectileBody(x, y, vx, vy, linearDamping, ordinance), 1.0);
@@ -56,7 +56,7 @@ public class Projectile extends GameEntity {
     private static Body createProjectileBody(double x, double y, double vx, double vy, double linearDamping) {
         return createProjectileBody(x, y, vx, vy, linearDamping, Ordinance.BULLET);
     }
-    
+
     private static Body createProjectileBody(double x, double y, double vx, double vy, double linearDamping, Ordinance ordinance) {
         Body body = new Body();
         // Use ordinance size for projectile physics
@@ -69,12 +69,13 @@ public class Projectile extends GameEntity {
         body.setLinearDamping(linearDamping); // Apply linear damping for bullet slowdown
         return body;
     }
-    
+
     /**
      * Calculate minimum velocity threshold based on ordinance type.
      * Different projectile types have different minimum velocities before dismissal.
      */
     private double calculateMinimumVelocity(Ordinance ordinance) {
+        // TODO: move into the enum
         return switch (ordinance) {
             case ROCKET -> 50.0; // Rockets need higher velocity to maintain thrust
             case GRENADE -> 20.0; // Grenades explode when they slow down significantly
@@ -101,7 +102,7 @@ public class Projectile extends GameEntity {
         // Check velocity threshold for dismissal
         Vector2 velocity = body.getLinearVelocity();
         double currentSpeed = velocity.getMagnitude();
-        
+
         if (currentSpeed < minimumVelocity && !dismissedByVelocity) {
             // Mark as dismissed by velocity to trigger effects
             dismissedByVelocity = true;
@@ -152,7 +153,7 @@ public class Projectile extends GameEntity {
     public void markAsExploded() {
         this.hasExploded = true;
     }
-    
+
     /**
      * Check if this projectile was dismissed due to low velocity.
      * This can be used to trigger special effects like explosions.
@@ -160,39 +161,16 @@ public class Projectile extends GameEntity {
     public boolean wasDismissedByVelocity() {
         return dismissedByVelocity;
     }
-    
+
     /**
      * Check if this projectile should trigger effects on dismissal.
      * This includes explosive effects, electric discharges, etc.
      */
     public boolean shouldTriggerEffectsOnDismissal() {
-        if (!wasDismissedByVelocity()) {
-            return false;
-        }
-        
         // Don't trigger effects if already exploded
-        if (hasExploded) {
-            return false;
-        }
-        
-        // Check if this ordinance type should trigger effects
-        switch (ordinance) {
-            case ROCKET:
-            case GRENADE:
-                return true; // Explosive projectiles explode on low velocity
-            case PLASMA:
-                return hasBulletEffect(BulletEffect.ELECTRIC); // Plasma with electric effect discharges
-            case FLAMETHROWER:
-                return hasBulletEffect(BulletEffect.INCENDIARY); // Flame projectiles with incendiary spread fire
-            default:
-                // Other projectiles only trigger effects if they have special bullet effects
-                return hasBulletEffect(BulletEffect.ELECTRIC) || 
-                       hasBulletEffect(BulletEffect.INCENDIARY) ||
-                       hasBulletEffect(BulletEffect.FREEZING) ||
-                       hasBulletEffect(BulletEffect.EXPLOSIVE);
-        }
+        return wasDismissedByVelocity() && !hasExploded;
     }
-    
+
     /**
      * Get the current velocity magnitude of this projectile.
      */
