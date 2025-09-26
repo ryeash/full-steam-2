@@ -52,7 +52,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-public class GameManager implements CollisionProcessor.CollisionHandler, CollisionProcessor.FieldEffectCollisionHandler, StepListener<Body> {
+public class GameManager implements StepListener<Body> {
     protected static final Logger log = LoggerFactory.getLogger(GameManager.class);
 
     @Getter
@@ -117,8 +117,9 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
         this.world.setGravity(new Vector2(0, 0));
         this.world.setBounds(new AxisAlignedBounds(gameConfig.getWorldWidth(), gameConfig.getWorldHeight()));
 
-        CollisionProcessor collisionProcessor = new CollisionProcessor(this.gameEntities, this);
+        CollisionProcessor collisionProcessor = new CollisionProcessor(this, this.gameEntities);
         this.world.addCollisionListener(collisionProcessor);
+        this.world.addContactListener(collisionProcessor);
         this.world.addStepListener(this);
 
         createWorldBoundaries();
@@ -453,6 +454,10 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
             });
 
             updateStrategicLocations(deltaTime);
+
+            // Update field effects and apply continuous damage
+            updateFieldEffects(deltaTime);
+
             world.updatev(deltaTime);
 
             // Remove expired field effects and their physics bodies
@@ -468,6 +473,82 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
             sendGameState();
         } catch (Throwable t) {
             log.error("Error in update loop", t);
+        }
+    }
+
+    /**
+     * Update field effects and apply continuous damage over time.
+     * This handles damage-over-time effects like POISON and FIRE.
+     */
+    private void updateFieldEffects(double deltaTime) {
+        for (FieldEffect fieldEffect : gameEntities.getAllFieldEffects()) {
+            if (!fieldEffect.isActive()) {
+                continue;
+            }
+
+            // Update the field effect itself
+            fieldEffect.update(deltaTime);
+
+            // Skip instantaneous effects (they apply damage only once on collision)
+            if (fieldEffect.getType().isInstantaneous()) {
+                continue;
+            }
+
+            // Check all active players for overlap with this field effect
+            for (Player player : gameEntities.getAllPlayers()) {
+                if (!player.isActive()) {
+                    continue;
+                }
+
+                // Check if player is in range and can be affected by this field effect
+                if (fieldEffect.canAffect(player)) {
+                    applyFieldEffectDamageOverTime(player, fieldEffect, deltaTime);
+                }
+            }
+        }
+    }
+
+    /**
+     * Apply damage over time from a field effect to a player.
+     */
+    private void applyFieldEffectDamageOverTime(Player player, FieldEffect fieldEffect, double deltaTime) {
+        double damage = fieldEffect.getDamageAtPosition(player.getPosition());
+        if (damage <= 0) {
+            return;
+        }
+
+        boolean playerKilled = player.takeDamage(damage * deltaTime);
+
+        // Apply special status effects based on field effect type (only when damage is applied)
+        switch (fieldEffect.getType()) {
+            case FIRE:
+                // Fire causes burning effect - additional damage over time
+                StatusEffects.applyBurning(this, player, damage * 0.3, 1.0, fieldEffect.getOwnerId());
+                break;
+            case POISON:
+                // Poison causes poison effect - additional damage over time  
+                StatusEffects.applyPoison(this, player, damage * 0.2, 1.5, fieldEffect.getOwnerId());
+                break;
+            case ELECTRIC:
+                // Electric field causes brief stunning/slowing
+                StatusEffects.applySlowEffect(player, 0.7, 0.5,
+                        Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Electric Field"));
+                break;
+            case FREEZE:
+                // Freeze effect slows movement
+                StatusEffects.applySlowEffect(player, 0.6, 1.0,
+                        Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Freeze Field"));
+                break;
+            case EXPLOSION:
+                // Explosions are instantaneous, shouldn't reach here
+                break;
+            case FRAGMENTATION:
+                // Fragmentation is instantaneous, shouldn't reach here
+                break;
+        }
+
+        if (playerKilled) {
+            killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
         }
     }
 
@@ -959,17 +1040,6 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
         return state;
     }
 
-    @Override
-    public void onPlayerHitByProjectile(Player player, Projectile projectile) {
-        projectile.setActive(false);
-        player.takeDamage(projectile.getDamage());
-        log.info("Player {} hit by projectile from player {} for {} damage", player.getId(), projectile.getOwnerId(), projectile.getDamage());
-        if (player.takeDamage(projectile.getDamage())) {
-            Player killer = gameEntities.getPlayer(projectile.getOwnerId());
-            killPlayer(player, killer);
-        }
-    }
-
     public void killPlayer(Player victim, Player shooter) {
         if (shooter != null) {
             shooter.addKill();
@@ -988,75 +1058,6 @@ public class GameManager implements CollisionProcessor.CollisionHandler, Collisi
         deathNotification.put("killerId", shooter != null ? shooter.getId() : null);
         deathNotification.put("killerName", shooter != null ? shooter.getPlayerName() : null);
         broadcast(deathNotification);
-    }
-
-    @Override
-    public void onPlayerEnterLocation(Player player, StrategicLocation location) {
-        log.debug("Player {} entered strategic location {}", player.getId(), location.getLocationName());
-    }
-
-    @Override
-    public void onPlayerStayInLocation(Player player, StrategicLocation location) {
-    }
-
-    @Override
-    public void onPlayerExitLocation(Player player, StrategicLocation location) {
-        log.debug("Player {} exited strategic location {}", player.getId(), location.getLocationName());
-    }
-
-    @Override
-    public void onPlayerEnterFieldEffect(Player player, FieldEffect fieldEffect) {
-        if (!player.isActive() || !fieldEffect.isActive()) {
-            return;
-        }
-
-        // Field effect collision detected - apply damage based on effect type
-        double damage = fieldEffect.getDamageAtPosition(player.getPosition());
-        if (damage > 0) {
-            boolean deactivated;
-
-            // Apply damage based on effect type
-            if (fieldEffect.getType().isInstantaneous()) {
-                // Instant damage (explosions) - only apply once per effect
-                if (!fieldEffect.getAffectedEntities().contains(player.getId())) {
-                    deactivated = player.takeDamage(damage);
-                    fieldEffect.markAsAffected(player);
-                } else {
-                    return; // Already affected by this instantaneous effect
-                }
-            } else {
-                // Damage over time (fire, electric, etc.) - apply continuously
-                // Note: This will be called multiple times per frame while player is in range
-                // We need to scale damage per physics timestep
-                deactivated = player.takeDamage(damage * 0.016); // Assuming ~60 FPS physics TODO: somehow get the delta into this
-
-                // Apply special effects
-                switch (fieldEffect.getType()) {
-                    case FREEZE:
-                        StatusEffects.applySlowEffect(player, 0.6, 3,
-                                Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse(""));
-                        break;
-                    case FIRE:
-                        break;
-                    case ELECTRIC:
-                        // TODO: Apply slowing effect or confusion effect
-                        break;
-                    case POISON:
-                        // Damage already applied above
-                        break;
-                    case EXPLOSION:
-                        // Explosion effects are instantaneous, handled above
-                        break;
-                    case FRAGMENTATION:
-                        // Fragmentation effects are instantaneous, handled above
-                        break;
-                }
-            }
-
-            if (deactivated) {
-                killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
-            }
-        }
     }
 
     /**

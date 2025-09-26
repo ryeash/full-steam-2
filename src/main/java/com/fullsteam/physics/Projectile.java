@@ -24,6 +24,9 @@ public class Projectile extends GameEntity {
     private boolean hasExploded = false; // Track if explosive projectiles have already exploded
     private final double minimumVelocity; // Minimum velocity before projectile is dismissed
     private boolean dismissedByVelocity = false; // Track if dismissed due to low velocity
+
+    // prevent double hits
+    private final Set<Integer> affectedPlayers;
     
     public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange,
                       int ownerTeam, double linearDamping, Set<BulletEffect> bulletEffects, Ordinance ordinance) {
@@ -43,6 +46,7 @@ public class Projectile extends GameEntity {
         } else {
             this.timeToLive = 0; // Deactivate immediately if speed is zero
         }
+        this.affectedPlayers = new HashSet<>();
     }
 
     private static Body createProjectileBody(double x, double y, double vx, double vy) {

@@ -9,7 +9,9 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -25,6 +27,7 @@ public class FieldEffect extends GameEntity {
     private final double duration;
     private final int ownerTeam;
     private final Set<Integer> affectedEntities; // Track which entities have been affected
+    private final Map<Integer, Long> lastDamageTime; // Track last damage time for each player (in milliseconds)
 
     private double timeRemaining;
     private boolean active;
@@ -39,6 +42,7 @@ public class FieldEffect extends GameEntity {
         this.timeRemaining = duration;
         this.ownerTeam = ownerTeam;
         this.affectedEntities = new HashSet<>();
+        this.lastDamageTime = new HashMap<>();
         this.active = true;
         getBody().setUserData(this);
     }
@@ -111,10 +115,15 @@ public class FieldEffect extends GameEntity {
         if (!isInRange(targetPosition)) {
             return 0.0;
         }
-
-        double distance = getPosition().distance(targetPosition);
-        double intensity = 0.2 + (0.8 - (distance / radius)); // Linear falloff
-        return Math.max(0.0, intensity);
+        return switch (type) {
+            // explosions degrade with distance from center
+            case EXPLOSION -> {
+                double distance = getPosition().distance(targetPosition);
+                double intensity = 0.2 + (0.8 - (distance / radius)); // Linear falloff
+                yield Math.max(0.0, intensity);
+            }
+            default -> 1.0;
+        };
     }
 
     public double getDamageAtPosition(Vector2 targetPosition) {

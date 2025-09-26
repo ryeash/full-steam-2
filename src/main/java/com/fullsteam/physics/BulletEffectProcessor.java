@@ -148,7 +148,7 @@ public class BulletEffectProcessor {
     }
 
     public void createFireEffect(Projectile projectile, Vector2 position) {
-        double fireDamage = projectile.getDamage() * 0.3; // Lower damage but over time
+        double fireDamage = projectile.getDamage() * 0.6;
         double ordinanceMultiplier = getOrdinanceExplosionMultiplier(projectile.getOrdinance());
         double fireRadius = (40.0 + (projectile.getDamage() * 0.4)) * ordinanceMultiplier;
 
@@ -203,7 +203,7 @@ public class BulletEffectProcessor {
     }
 
     public void createPoisonEffect(Projectile projectile, Vector2 position) {
-        double poisonDamage = projectile.getDamage() * 0.25; // Lower damage but longer duration
+        double poisonDamage = projectile.getDamage() * 0.5;
         double ordinanceMultiplier = getOrdinanceExplosionMultiplier(projectile.getOrdinance());
         double poisonRadius = (50.0 + (projectile.getDamage() * 0.3)) * ordinanceMultiplier;
 

@@ -181,6 +181,7 @@ public class Player extends GameEntity {
         double fireInterval = 1000.0 / weapon.getFireRate();
         // Check if we have enough ammo for at least one bullet (partial bursts are allowed)
         return isActive()
+               && health > 0
                && !isReloading
                && weapon.getCurrentAmmo() > 0
                && (now - lastShotTime) >= fireInterval;
