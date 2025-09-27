@@ -72,12 +72,12 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
     }
 
     private boolean handleEntityCollision(GameEntity entity1, GameEntity entity2) {
-        // Prevent projectile-to-projectile collisions - let them pass through each other
+        // let the bouncy bullets interact with bullets
         if (entity1 instanceof Projectile p1 && entity2 instanceof Projectile p2) {
-            // let the bouncy bullets interact with bullets
             return p1.getBulletEffects().contains(BulletEffect.BOUNCY) || p2.getBulletEffects().contains(BulletEffect.BOUNCY);// Disable collision resolution between projectiles
         }
 
+        // Prevent projectile-to-projectile collisions - let them pass through each other
         if (entity1 instanceof Player player && entity2 instanceof Projectile projectile) {
             handlePlayerProjectileCollision(player, projectile);
             return false; // Prevent physics resolution for projectile hits

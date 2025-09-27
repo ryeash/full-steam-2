@@ -140,9 +140,10 @@ public class Player extends GameEntity {
     public void applyWeaponConfig(WeaponConfig primary, WeaponConfig secondary) {
         if (primary != null) {
             try {
-                double percentAmmo = Optional.ofNullable(this.primaryWeapon).map(w -> w.getCurrentAmmo() / w.getMagazineSize()).orElse(100);
+//                double percentAmmo = Optional.ofNullable(this.primaryWeapon).map(w -> w.getCurrentAmmo() / w.getMagazineSize()).orElse(100);
                 primaryWeapon = primary.buildWeapon();
-                primaryWeapon.setCurrentAmmo((int) (primaryWeapon.getMagazineSize() * percentAmmo));
+                // TODO: too naive
+                primaryWeapon.reload();
             } catch (Exception e) {
                 e.printStackTrace();
                 // Fallback to legacy method if new method fails

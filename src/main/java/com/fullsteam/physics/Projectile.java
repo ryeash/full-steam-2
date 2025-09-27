@@ -23,6 +23,7 @@ public class Projectile extends GameEntity {
     private final Ordinance ordinance; // Type of projectile (bullet, rocket, grenade, etc.)
     private boolean hasExploded = false; // Track if explosive projectiles have already exploded
     private boolean dismissedByVelocity = false; // Track if dismissed due to low velocity
+    private boolean dismissedByRange = false; // Track if dismissed due to reaching max range/time
 
     // prevent double hits
     private final Set<Integer> affectedPlayers;
@@ -47,17 +48,8 @@ public class Projectile extends GameEntity {
         this.affectedPlayers = new HashSet<>();
     }
 
-    private static Body createProjectileBody(double x, double y, double vx, double vy) {
-        return createProjectileBody(x, y, vx, vy, 0.0, Ordinance.BULLET);
-    }
-
-    private static Body createProjectileBody(double x, double y, double vx, double vy, double linearDamping) {
-        return createProjectileBody(x, y, vx, vy, linearDamping, Ordinance.BULLET);
-    }
-
     private static Body createProjectileBody(double x, double y, double vx, double vy, double linearDamping, Ordinance ordinance) {
         Body body = new Body();
-        // Use ordinance size for projectile physics
         Circle circle = new Circle(ordinance.getSize());
         body.addFixture(circle);
         body.setMass(MassType.NORMAL);
@@ -77,6 +69,8 @@ public class Projectile extends GameEntity {
         // Check time to live
         timeToLive -= deltaTime;
         if (timeToLive <= 0) {
+            // Mark as dismissed by range to trigger effects
+            dismissedByRange = true;
             active = false;
             return;
         }
@@ -128,31 +122,13 @@ public class Projectile extends GameEntity {
     public void markAsExploded() {
         this.hasExploded = true;
     }
-
-    /**
-     * Check if this projectile was dismissed due to low velocity.
-     * This can be used to trigger special effects like explosions.
-     */
-    public boolean wasDismissedByVelocity() {
-        return dismissedByVelocity;
-    }
-
+    
     /**
      * Check if this projectile should trigger effects on dismissal.
      * This includes explosive effects, electric discharges, etc.
      */
     public boolean shouldTriggerEffectsOnDismissal() {
         // Don't trigger effects if already exploded
-        return wasDismissedByVelocity() && !hasExploded;
-    }
-
-    /**
-     * Get the current velocity magnitude of this projectile.
-     */
-    public double getCurrentSpeed() {
-        if (body == null) {
-            return 0.0;
-        }
-        return body.getLinearVelocity().getMagnitude();
+        return (dismissedByVelocity || dismissedByRange) && !hasExploded;
     }
 }

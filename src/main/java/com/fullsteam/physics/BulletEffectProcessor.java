@@ -8,6 +8,7 @@ import com.fullsteam.model.Ordinance;
 import org.dyn4j.geometry.Vector2;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
@@ -28,6 +29,11 @@ public class BulletEffectProcessor {
     }
 
     public void processEffectHit(Projectile projectile, Vector2 hitPosition) {
+        // for FRAGMENTING rounds, the other effects will be attached to the fragments
+        if (projectile.hasBulletEffect(BulletEffect.FRAGMENTING)) {
+            createFragmentation(projectile, hitPosition);
+            return;
+        }
         for (BulletEffect effect : projectile.getBulletEffects()) {
             switch (effect) {
                 case EXPLOSIVE:
@@ -43,8 +49,7 @@ public class BulletEffectProcessor {
                     createFreezeEffect(projectile, hitPosition);
                     break;
                 case FRAGMENTING:
-                    createFragmentation(projectile, hitPosition);
-                    break;
+                    throw new UnsupportedOperationException();
                 case POISON:
                     createPoisonEffect(projectile, hitPosition);
                     break;
@@ -156,6 +161,9 @@ public class BulletEffectProcessor {
             double vx = Math.cos(angle) * fragmentSpeed;
             double vy = Math.sin(angle) * fragmentSpeed;
 
+            Set<BulletEffect> childEffects = new HashSet<>(projectile.getBulletEffects());
+            childEffects.remove(BulletEffect.FRAGMENTING);
+
             // Create fragment projectile (smaller, shorter range)
             Projectile fragment = new Projectile(
                     projectile.getOwnerId(),
@@ -167,7 +175,7 @@ public class BulletEffectProcessor {
                     100.0, // Short range for fragments
                     projectile.getOwnerTeam(),
                     projectile.getLinearDamping(),
-                    Set.of(), // Fragments don't have effects to prevent infinite recursion
+                    childEffects,
                     Ordinance.DART // Small, fast fragments
             );
 
