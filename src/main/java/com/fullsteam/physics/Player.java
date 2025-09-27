@@ -292,16 +292,6 @@ public class Player extends GameEntity {
     }
 
     /**
-     * Check if this player is an enemy of another player.
-     *
-     * @param otherPlayer The other player to check
-     * @return true if enemies (different teams or FFA), false if teammates
-     */
-    public boolean isEnemy(Player otherPlayer) {
-        return !isTeammate(otherPlayer) && otherPlayer != null && otherPlayer.getId() != this.getId();
-    }
-
-    /**
      * Override damage handling to account for damage resistance.
      */
     @Override
