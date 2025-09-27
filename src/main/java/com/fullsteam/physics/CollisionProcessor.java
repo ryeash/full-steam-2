@@ -1,6 +1,7 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.games.GameManager;
+import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
@@ -72,8 +73,9 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
 
     private boolean handleEntityCollision(GameEntity entity1, GameEntity entity2) {
         // Prevent projectile-to-projectile collisions - let them pass through each other
-        if (entity1 instanceof Projectile && entity2 instanceof Projectile) {
-            return false; // Disable collision resolution between projectiles
+        if (entity1 instanceof Projectile p1 && entity2 instanceof Projectile p2) {
+            // let the bouncy bullets interact with bullets
+            return p1.getBulletEffects().contains(BulletEffect.BOUNCY) || p2.getBulletEffects().contains(BulletEffect.BOUNCY);// Disable collision resolution between projectiles
         }
 
         if (entity1 instanceof Player player && entity2 instanceof Projectile projectile) {

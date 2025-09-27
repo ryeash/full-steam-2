@@ -3148,7 +3148,13 @@ class InputManager {
     handleMouseMove(e) {
         this.mouse.x = e.clientX;
         this.mouse.y = e.clientY;
-
+        this.updateMouseWorldCoordinates();
+    }
+    
+    /**
+     * Update mouse world coordinates based on current screen position
+     */
+    updateMouseWorldCoordinates() {
         const gameEngine = window.gameEngine;
         if (gameEngine && gameEngine.gameContainer) {
             // Use PIXI's built-in transformation to get coordinates relative to the game world
@@ -3490,6 +3496,9 @@ class InputManager {
     
     sendInput() {
         if (this.onInputChange) {
+            // Update mouse world coordinates every time we send input
+            this.updateMouseWorldCoordinates();
+            
             // Update gamepad aiming if connected
             if (this.gamepad.connected) {
                 this.updateGamepadAiming();

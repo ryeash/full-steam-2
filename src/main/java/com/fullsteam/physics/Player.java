@@ -206,30 +206,23 @@ public class Player extends GameEntity {
         int actualBulletsToFire = Math.min(bulletsPerShot, weapon.getCurrentAmmo());
         weapon.setCurrentAmmo(weapon.getCurrentAmmo() - actualBulletsToFire);
 
-        // Calculate spread pattern for multi-shot
-        double totalSpread = actualBulletsToFire > 1 ? 0.3 : 0.0; // 0.3 radians total spread for multi-shot
-        double spreadStep = actualBulletsToFire > 1 ? totalSpread / (actualBulletsToFire - 1) : 0.0;
-        double startAngle = baseAngle - (totalSpread / 2.0);
-
-        // Add accuracy-based spread to each bullet
-        double accuracySpread = (1.0 - weapon.getAccuracy()) * 0.1; // Reduced from 0.2 for multi-shot
+        // Calculate maximum accuracy-based spread for each bullet
+        double maxAccuracySpread = (1.0 - weapon.getAccuracy()) * 0.17; // Reduced from 0.2 for multi-shot
 
         List<Projectile> toFire = new LinkedList<>();
         // Store additional projectiles for GameManager to retrieve
-        double angle;
+        double angle = baseAngle;
         for (int i = 0; i < actualBulletsToFire; i++) {
-            angle = startAngle + (i * spreadStep);
-            angle += (Math.random() - 0.5) * accuracySpread;
+            // Apply random accuracy spread independently for each bullet
+            angle += (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * maxAccuracySpread;
 
-            Vector2 direction = new Vector2();
-            direction.set(Math.cos(angle), Math.sin(angle));
-            direction.set(Math.cos(angle), Math.sin(angle));
+            Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
             Vector2 velocity = direction.multiply(weapon.getProjectileSpeed());
 
             toFire.add(new Projectile(
                     id,
-                    pos.x + ThreadLocalRandom.current().nextDouble(-3, 3),
-                    pos.y + ThreadLocalRandom.current().nextDouble(-3, 3),
+                    pos.x + ((i > 0) ? ThreadLocalRandom.current().nextDouble(-3, 3) : 0),
+                    pos.y + ((i > 0) ? ThreadLocalRandom.current().nextDouble(-3, 3) : 0),
                     velocity.x,
                     velocity.y,
                     weapon.getDamage(),

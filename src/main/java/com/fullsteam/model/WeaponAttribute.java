@@ -33,11 +33,11 @@ public enum WeaponAttribute {
         @Override
         public double compute(int points) {
             validate(points);
-            return 1.0 + (points * 0.02);
+            return 1.0 + (points * 0.1);
         }
     },
     // Magazine Size: 5-35 rounds (base 5 + 1 per point, max 30 points)
-    MAGAZINE_SIZE(0, 30) {
+    MAGAZINE_SIZE(0, 40) {
         @Override
         public double compute(int points) {
             validate(points);
