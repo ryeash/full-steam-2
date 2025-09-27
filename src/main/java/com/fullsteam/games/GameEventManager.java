@@ -1,4 +1,4 @@
-package com.fullsteam.events;
+package com.fullsteam.games;
 
 import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.PlayerSession;

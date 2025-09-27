@@ -22,7 +22,6 @@ public class Projectile extends GameEntity {
     private final Set<BulletEffect> bulletEffects; // Special effects this projectile has
     private final Ordinance ordinance; // Type of projectile (bullet, rocket, grenade, etc.)
     private boolean hasExploded = false; // Track if explosive projectiles have already exploded
-    private final double minimumVelocity; // Minimum velocity before projectile is dismissed
     private boolean dismissedByVelocity = false; // Track if dismissed due to low velocity
 
     // prevent double hits
@@ -37,7 +36,6 @@ public class Projectile extends GameEntity {
         this.linearDamping = linearDamping;
         this.bulletEffects = new HashSet<>(bulletEffects);
         this.ordinance = ordinance;
-        this.minimumVelocity = calculateMinimumVelocity(ordinance);
 
         // Calculate time to live based on range and speed
         double speed = new Vector2(vx, vy).getMagnitude();
@@ -70,22 +68,6 @@ public class Projectile extends GameEntity {
         return body;
     }
 
-    /**
-     * Calculate minimum velocity threshold based on ordinance type.
-     * Different projectile types have different minimum velocities before dismissal.
-     */
-    private double calculateMinimumVelocity(Ordinance ordinance) {
-        // TODO: move into the enum
-        return switch (ordinance) {
-            case ROCKET -> 50.0; // Rockets need higher velocity to maintain thrust
-            case GRENADE -> 20.0; // Grenades explode when they slow down significantly
-            case CANNONBALL -> 30.0; // Heavy projectiles need some momentum
-            case PLASMA -> 40.0; // Energy projectiles dissipate when slowing
-            case FLAMETHROWER -> 10.0; // Fire streams extinguish quickly
-            default -> 5.0; // Standard projectiles have low minimum velocity
-        };
-    }
-
     @Override
     public void update(double deltaTime) {
         if (!active) {
@@ -100,15 +82,12 @@ public class Projectile extends GameEntity {
         }
 
         // Check velocity threshold for dismissal
-        Vector2 velocity = body.getLinearVelocity();
-        double currentSpeed = velocity.getMagnitude();
-
-        if (currentSpeed < minimumVelocity && !dismissedByVelocity) {
+        double currentSpeed = body.getLinearVelocity().getMagnitude();
+        if (currentSpeed < ordinance.getMinimumVelocity() && !dismissedByVelocity) {
             // Mark as dismissed by velocity to trigger effects
             dismissedByVelocity = true;
             active = false;
         }
-
         lastUpdateTime = System.currentTimeMillis();
     }
 
@@ -144,10 +123,6 @@ public class Projectile extends GameEntity {
 
     public Set<BulletEffect> getBulletEffects() {
         return new HashSet<>(bulletEffects);
-    }
-
-    public boolean isBounces() {
-        return hasBulletEffect(BulletEffect.BOUNCY);
     }
 
     public void markAsExploded() {

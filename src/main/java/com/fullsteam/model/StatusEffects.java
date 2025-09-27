@@ -95,30 +95,6 @@ public class StatusEffects {
         });
     }
 
-//    /**
-//     * Apply rapid fire effect to a player's weapon.
-//     */
-//    public static AttributeModification applyRapidFire(Player player, double fireRateMultiplier, double durationSeconds, String source) {
-//        AttributeModification.AttributeModificationVisuals visuals = AttributeModification.AttributeModificationVisuals.builder()
-//                .particleEffect("muzzle_enhancement")
-//                .color("#FF4500")
-//                .animation("flash")
-//                .showFloatingText(true)
-//                .displayText("Rapid Fire!")
-//                .build();
-//
-//        return player.applyAttributeModification(
-//                AttributeModificationType.WEAPON_FIRE_RATE,
-//                fireRateMultiplier,
-//                ModificationMethod.MULTIPLY,
-//                durationSeconds,
-//                source,
-//                -1,
-//                false,
-//                visuals
-//        );
-//    }
-
     /**
      * Apply weapon damage boost effect.
      */
@@ -140,43 +116,6 @@ public class StatusEffects {
             }
         });
     }
-
-//    /**
-//     * Apply precision mode - increased accuracy but reduced fire rate.
-//     */
-//    public static void applyPrecisionMode(Player player, double durationSeconds, String source) {
-//        // Increase accuracy
-//        AttributeModification.AttributeModificationVisuals accuracyVisuals = AttributeModification.AttributeModificationVisuals.builder()
-//                .particleEffect("precision_reticle")
-//                .color("#00FFFF")
-//                .animation("focus")
-//                .showFloatingText(true)
-//                .displayText("Precision Mode")
-//                .build();
-//
-//        player.applyAttributeModification(
-//                AttributeModificationType.WEAPON_ACCURACY,
-//                1.3, // 30% accuracy boost
-//                ModificationMethod.MULTIPLY,
-//                durationSeconds,
-//                source,
-//                -1,
-//                false,
-//                accuracyVisuals
-//        );
-//
-//        // Reduce fire rate
-//        player.applyAttributeModification(
-//                AttributeModificationType.WEAPON_FIRE_RATE,
-//                0.7, // 30% fire rate reduction
-//                ModificationMethod.MULTIPLY,
-//                durationSeconds,
-//                source,
-//                -1,
-//                false,
-//                null // No separate visual for fire rate reduction
-//        );
-//    }
 
     /**
      * Apply berserker mode - increased damage and speed, reduced defense.

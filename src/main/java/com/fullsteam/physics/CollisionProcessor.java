@@ -120,7 +120,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         }
 
         // Process bullet effects before handling the hit
-        bulletEffectProcessor.processEffectsOnPlayerHit(projectile, player);
+        bulletEffectProcessor.processEffectHit(projectile, player.getPosition());
 
         if (player.takeDamage(projectile.getDamage())) {
             Player killer = gameEntities.getPlayer(projectile.getOwnerId());
@@ -145,7 +145,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         Vector2 hitPosition = new Vector2(hitPos.x, hitPos.y);
 
         // Process bullet effects on obstacle hit
-        bulletEffectProcessor.processEffectsOnObstacleHit(projectile, hitPosition);
+        bulletEffectProcessor.processEffectHit(projectile, hitPosition);
 
         // Check if projectile should bounce
         boolean shouldBounce = bulletEffectProcessor.shouldBounceOffObstacle(projectile, obstacle);

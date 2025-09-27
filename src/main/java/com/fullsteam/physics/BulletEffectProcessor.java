@@ -27,14 +27,8 @@ public class BulletEffectProcessor {
         this.pendingProjectiles = new ArrayList<>();
     }
 
-    /**
-     * Process bullet effects when a projectile hits a player
-     */
-    public void processEffectsOnPlayerHit(Projectile projectile, Player player) {
-        Set<BulletEffect> effects = projectile.getBulletEffects();
-        Vector2 hitPosition = player.getPosition();
-
-        for (BulletEffect effect : effects) {
+    public void processEffectHit(Projectile projectile, Vector2 hitPosition) {
+        for (BulletEffect effect : projectile.getBulletEffects()) {
             switch (effect) {
                 case EXPLOSIVE:
                     createExplosion(projectile, hitPosition);
@@ -62,45 +56,6 @@ public class BulletEffectProcessor {
                     break;
                 case BOUNCY:
                     // Bouncy is handled in collision detection
-                    break;
-            }
-        }
-    }
-
-    /**
-     * Process bullet effects when a projectile hits an obstacle
-     */
-    public void processEffectsOnObstacleHit(Projectile projectile, Vector2 hitPosition) {
-        Set<BulletEffect> effects = projectile.getBulletEffects();
-
-        for (BulletEffect effect : effects) {
-            switch (effect) {
-                case EXPLOSIVE:
-                    createExplosion(projectile, hitPosition);
-                    break;
-                case INCENDIARY:
-                    createFireEffect(projectile, hitPosition);
-                    break;
-                case FRAGMENTING:
-                    createFragmentation(projectile, hitPosition);
-                    break;
-                case ELECTRIC:
-                    createElectricEffect(projectile, hitPosition);
-                    break;
-                case FREEZING:
-                    createFreezeEffect(projectile, hitPosition);
-                    break;
-                case POISON:
-                    createPoisonEffect(projectile, hitPosition);
-                    break;
-                case PIERCING:
-                    // Piercing allows projectile to continue through obstacles
-                    break;
-                case BOUNCY:
-                    // Bouncy is handled in physics collision response
-                    break;
-                case HOMING:
-                    // Homing doesn't apply to obstacle hits
                     break;
             }
         }

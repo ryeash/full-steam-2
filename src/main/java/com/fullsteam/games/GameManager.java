@@ -6,8 +6,6 @@ import com.fullsteam.Config;
 import com.fullsteam.ai.AIGameHelper;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
-import com.fullsteam.events.GameEventManager;
-import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.GameInfo;
@@ -17,7 +15,6 @@ import com.fullsteam.model.PlayerSession;
 import com.fullsteam.model.StatusEffects;
 import com.fullsteam.physics.BulletEffectProcessor;
 import com.fullsteam.physics.CollisionProcessor;
-import com.fullsteam.physics.CompoundObstacle;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
@@ -25,7 +22,6 @@ import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.StrategicLocation;
 import com.fullsteam.physics.TeamSpawnArea;
 import com.fullsteam.physics.TeamSpawnManager;
-import com.fullsteam.terrain.TerrainGenerator;
 import io.micronaut.websocket.WebSocketSession;
 import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
@@ -438,7 +434,8 @@ public class GameManager implements StepListener<Body> {
                 Projectile projectile = entry.getValue();
                 if (!projectile.isActive()) {
                     if (projectile.shouldTriggerEffectsOnDismissal()) {
-                        triggerProjectileDismissalEffects(projectile);
+                        projectile.markAsExploded();
+                        getCollisionProcessor().getBulletEffectProcessor().processEffectHit(projectile, projectile.getPosition());
                     }
                     world.removeBody(projectile.getBody());
                     return true;
@@ -698,17 +695,6 @@ public class GameManager implements StepListener<Body> {
             gameEntities.addObstacle(obstacle);
             world.addBody(obstacle.getBody());
         }
-
-        // Add compound obstacles (complex multi-body structures)
-        for (CompoundObstacle compoundObstacle : terrainGenerator.getCompoundObstacles()) {
-            // Add all bodies from the compound obstacle to the physics world
-            compoundObstacle.getBodies().forEach(world::addBody);
-        }
-
-        log.info("Created {} simple obstacles and {} compound structures for {} terrain",
-                terrainGenerator.getGeneratedObstacles().size(),
-                terrainGenerator.getCompoundObstacles().size(),
-                terrainGenerator.getTerrainType().getDisplayName());
     }
 
     private void updateStrategicLocations(double deltaTime) {
@@ -1112,35 +1098,6 @@ public class GameManager implements StepListener<Body> {
                     collisionProcessor.getBulletEffectProcessor().applyHomingBehavior(projectile, deltaTime);
                 }
             }
-        }
-    }
-
-    /**
-     * Trigger effects when a projectile is dismissed due to low velocity.
-     * This handles explosions, electric discharges, and other effects.
-     */
-    private void triggerProjectileDismissalEffects(Projectile projectile) {
-        CollisionProcessor collisionProcessor = getCollisionProcessor();
-        if (collisionProcessor == null) {
-            return;
-        }
-
-        Vector2 position = projectile.getPosition();
-        BulletEffectProcessor effectProcessor = collisionProcessor.getBulletEffectProcessor();
-
-        // Mark projectile as exploded to prevent duplicate effects
-        projectile.markAsExploded();
-
-        if (projectile.hasBulletEffect(BulletEffect.EXPLOSIVE)) {
-            effectProcessor.createExplosion(projectile, position);
-        } else if (projectile.hasBulletEffect(BulletEffect.ELECTRIC)) {
-            effectProcessor.createElectricEffect(projectile, position);
-        } else if (projectile.hasBulletEffect(BulletEffect.INCENDIARY)) {
-            effectProcessor.createFireEffect(projectile, position);
-        } else if (projectile.hasBulletEffect(BulletEffect.FREEZING)) {
-            effectProcessor.createFreezeEffect(projectile, position);
-        } else if (projectile.hasBulletEffect(BulletEffect.POISON)) {
-            effectProcessor.createPoisonEffect(projectile, position);
         }
     }
 
