@@ -19,15 +19,10 @@ class PlayerInterpolator {
         this.lastServerUpdate = performance.now();
         this.isFirstUpdate = true; // Flag to handle initial positioning
         
-        // Prediction state (for local player)
-        this.predictedPos = { x: sprite.x, y: sprite.y };
-        this.predictedRotation = 0;
-        this.velocity = { x: 0, y: 0 };
+        // REMOVED: Prediction state - no longer needed since we don't use client-side prediction
         
-        // Interpolation settings
-        this.smoothingFactor = isLocalPlayer ? 0.3 : 0.15; // Local player needs faster correction
-        this.correctionThreshold = isLocalPlayer ? 25 : 15; // Local player allows more deviation
-        this.maxCorrectionSpeed = 400; // pixels/second
+        // Interpolation settings (simplified - no prediction)
+        this.smoothingFactor = 0.15; // Same for all players since no prediction
         this.maxInterpolationDistance = 200; // pixels - beyond this, assume teleport/respawn
         
         // Performance optimization
@@ -53,14 +48,7 @@ class PlayerInterpolator {
             this.sprite.y = y;
             this.sprite.rotation = -rotation; // Invert for PIXI
             
-            // Reset prediction state for local player
-            if (this.isLocalPlayer) {
-                this.predictedPos.x = x;
-                this.predictedPos.y = y;
-                this.predictedRotation = rotation;
-                this.velocity.x = 0;
-                this.velocity.y = 0;
-            }
+            // No prediction state to reset since we don't use client-side prediction
             
             // Player teleported/respawned - no logging needed for performance
             this.isFirstUpdate = false;
@@ -78,39 +66,7 @@ class PlayerInterpolator {
         this.lastServerUpdate = now;
     }
     
-    reconcileWithServer(serverX, serverY, serverRotation, deltaTime) {
-        // For local player: check if server position differs significantly from prediction
-        if (this.tempDistance > this.correctionThreshold) {
-            if (this.tempDistance > 100) {
-                // Major desync - snap to server position
-                this.sprite.x = serverX;
-                this.sprite.y = serverY;
-                this.predictedPos.x = serverX;
-                this.predictedPos.y = serverY;
-            } else {
-                // Minor desync - gradually correct prediction
-                const correctionFactor = Math.min(1.0, (this.maxCorrectionSpeed * deltaTime) / this.tempDistance);
-                const correctionX = this.tempDx * -correctionFactor;
-                const correctionY = this.tempDy * -correctionFactor;
-                
-                this.sprite.x += correctionX;
-                this.sprite.y += correctionY;
-                this.predictedPos.x += correctionX;
-                this.predictedPos.y += correctionY;
-            }
-        }
-        
-        // Always update rotation smoothly
-        this.sprite.rotation = this.lerpAngle(this.sprite.rotation, -serverRotation, this.smoothingFactor);
-        this.predictedRotation = serverRotation; // Store server rotation in physics coordinates
-        
-        // Debug: Log server reconciliation for local player
-        if (this.isLocalPlayer && Math.random() < 0.005) { // Log 0.5% of the time
-            console.log('Server reconciliation - serverRot:', serverRotation.toFixed(2), 
-                       'spriteRot:', this.sprite.rotation.toFixed(2),
-                       'predictedRot:', this.predictedRotation.toFixed(2));
-        }
-    }
+    // REMOVED: reconcileWithServer() - no longer needed since we don't use client-side prediction
     
     interpolateToServer(serverX, serverY, serverRotation, deltaTime) {
         // Smooth interpolation to server position for all players
@@ -1231,6 +1187,10 @@ class GameEngine {
         // Create health bar above player
         const healthBarContainer = this.createHealthBar(playerData);
         sprite.healthBar = healthBarContainer;
+        
+        // Create reload indicator (initially hidden)
+        const reloadIndicator = this.createReloadIndicator(playerData);
+        sprite.reloadIndicator = reloadIndicator;
     
         // Create death marker (initially hidden)
         if (this.deathTexture) {
@@ -1341,6 +1301,11 @@ class GameEngine {
             this.updateHealthBar(sprite.healthBar, playerData);
             sprite.healthBar.visible = playerData.active && playerData.health > 0;
         }
+        
+        // Update reload indicator
+        if (sprite.reloadIndicator) {
+            this.updateReloadIndicator(sprite.reloadIndicator, playerData);
+        }
 
         sprite.playerData = playerData;
     }
@@ -1359,6 +1324,11 @@ class GameEngine {
             // Remove health bar from name container
             if (sprite.healthBar) {
                 this.nameContainer.removeChild(sprite.healthBar);
+            }
+            
+            // Remove reload indicator from name container
+            if (sprite.reloadIndicator) {
+                this.nameContainer.removeChild(sprite.reloadIndicator);
             }
             
             // Remove death marker from game container
@@ -1412,6 +1382,49 @@ class GameEngine {
     }
     
     /**
+     * Create reload indicator for a player.
+     */
+    createReloadIndicator(playerData) {
+        const reloadContainer = new PIXI.Container();
+        
+        // Create background circle for the "R"
+        const background = new PIXI.Graphics();
+        background.beginFill(0x000000, 0.7); // Semi-transparent black background
+        background.drawCircle(0, 0, 12); // 12 pixel radius
+        background.endFill();
+        background.lineStyle(2, 0xff4444, 1.0); // Red border
+        background.drawCircle(0, 0, 12);
+        reloadContainer.addChild(background);
+        
+        // Create the "R" text
+        const reloadText = new PIXI.Text('R', {
+            fontSize: 14,
+            fill: 0xff4444, // Red color
+            fontWeight: 'bold',
+            fontFamily: 'Arial'
+        });
+        reloadText.anchor.set(0.5);
+        reloadText.position.set(0, 0);
+        reloadContainer.addChild(reloadText);
+        
+        // Position above player (will be updated in updatePlayer)
+        const isoPos = this.worldToIsometric(playerData.x, playerData.y);
+        reloadContainer.position.set(isoPos.x, isoPos.y - 50); // Above health bar
+        
+        // Initially hidden
+        reloadContainer.visible = false;
+        
+        // Store references for updates
+        reloadContainer.background = background;
+        reloadContainer.reloadText = reloadText;
+        
+        // Add to name container so it doesn't rotate with player
+        this.nameContainer.addChild(reloadContainer);
+        
+        return reloadContainer;
+    }
+    
+    /**
      * Update health bar appearance and position.
      */
     updateHealthBar(healthBarContainer, playerData) {
@@ -1440,6 +1453,33 @@ class GameEngine {
         healthBarContainer.healthFill.beginFill(healthColor);
         healthBarContainer.healthFill.drawRoundedRect(-25, 0, 50 * healthPercent, 6, 2);
         healthBarContainer.healthFill.endFill();
+    }
+    
+    /**
+     * Update reload indicator appearance and position.
+     */
+    updateReloadIndicator(reloadContainer, playerData) {
+        if (!reloadContainer) return;
+        
+        // Update position above player using current sprite position (may be interpolated)
+        const sprite = this.players.get(playerData.id);
+        if (sprite) {
+            reloadContainer.position.set(sprite.x, sprite.y - 50); // Above health bar
+        }
+        
+        // Show/hide based on reloading status and if player is active
+        const isReloading = playerData.reloading || false;
+        const isActive = playerData.active || false;
+        reloadContainer.visible = isActive && isReloading;
+        
+        // Optional: Add pulsing animation when reloading
+        if (isReloading && reloadContainer.reloadText) {
+            const time = Date.now() * 0.005; // Slow pulsing
+            const pulse = 0.8 + Math.sin(time) * 0.2; // Pulse between 0.6 and 1.0
+            reloadContainer.reloadText.alpha = pulse;
+        } else if (reloadContainer.reloadText) {
+            reloadContainer.reloadText.alpha = 1.0; // Full opacity when not reloading
+        }
     }
     
     createProjectile(projectileData) {
@@ -2865,7 +2905,7 @@ class GameEngine {
         if (deathScreen && deathInfo) {
             deathScreen.style.display = 'flex';
             deathInfo.textContent = data.killerName ?
-                `Eliminated by Player ${data.killerName}` :
+                `Eliminated by ${data.killerName}` :
                 'You were eliminated';
         }
     }

@@ -15,6 +15,7 @@ import org.dyn4j.geometry.Vector2;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -139,22 +140,10 @@ public class Player extends GameEntity {
     public void applyWeaponConfig(WeaponConfig primary, WeaponConfig secondary) {
         if (primary != null) {
             try {
-                System.out.println("DEBUG: Building primary weapon from config: " + primary.type +
-                                   ", bulletsPerShot points: " + primary.bulletsPerShot +
-                                   ", damage points: " + primary.damage +
-                                   ", fireRate points: " + primary.fireRate);
-                // Use the enhanced buildWeapon() method that includes effects and ordinance
+                double percentAmmo = Optional.ofNullable(this.primaryWeapon).map(w -> w.getCurrentAmmo() / w.getMagazineSize()).orElse(100);
                 primaryWeapon = primary.buildWeapon();
-                System.out.println("DEBUG: Built primary weapon: " + primaryWeapon.getName() +
-                                   ", bulletsPerShot: " + primaryWeapon.getBulletsPerShot() +
-                                   ", damage: " + primaryWeapon.getDamage() +
-                                   ", fireRate: " + primaryWeapon.getFireRate());
-                if (primaryWeapon.getName() == null || primaryWeapon.getName().equals("null")) {
-                    // Fallback name if not set
-                    primaryWeapon = primary.buildWeapon();
-                }
+                primaryWeapon.setCurrentAmmo((int) (primaryWeapon.getMagazineSize() * percentAmmo));
             } catch (Exception e) {
-                System.err.println("DEBUG: Exception building weapon: " + e.getMessage());
                 e.printStackTrace();
                 // Fallback to legacy method if new method fails
                 primaryWeapon = WeaponConfig.ASSAULT_RIFLE_PRESET.buildWeapon();
@@ -162,13 +151,9 @@ public class Player extends GameEntity {
         }
         if (secondary != null) {
             try {
-                // Use the enhanced buildWeapon() method that includes effects and ordinance
                 secondaryWeapon = secondary.buildWeapon();
-                if (secondaryWeapon.getName() == null || secondaryWeapon.getName().equals("null")) {
-                    // Fallback name if not set
-                    secondaryWeapon = secondary.buildWeapon();
-                }
             } catch (Exception e) {
+                e.printStackTrace();
                 // Fallback to legacy method if new method fails
                 secondaryWeapon = WeaponConfig.HAND_CANNON_PRESET.buildWeapon();
             }
