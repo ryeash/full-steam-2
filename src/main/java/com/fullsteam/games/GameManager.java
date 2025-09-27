@@ -490,7 +490,9 @@ public class GameManager implements StepListener<Body> {
             return;
         }
 
-        boolean playerKilled = player.takeDamage(damage * deltaTime);
+        if (player.takeDamage(damage * deltaTime)) {
+            killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+        }
 
         // Apply special status effects based on field effect type (only when damage is applied)
         switch (fieldEffect.getType()) {
@@ -499,7 +501,7 @@ public class GameManager implements StepListener<Body> {
                 StatusEffects.applyBurning(this, player, damage * 0.3, 1.0, fieldEffect.getOwnerId());
                 break;
             case POISON:
-                // Poison causes poison effect - additional damage over time  
+                // Poison causes poison effect - additional damage over time
                 StatusEffects.applyPoison(this, player, damage * 0.2, 1.5, fieldEffect.getOwnerId());
                 break;
             case ELECTRIC:
@@ -519,10 +521,6 @@ public class GameManager implements StepListener<Body> {
                 // Fragmentation is instantaneous, shouldn't reach here
                 break;
         }
-
-        if (playerKilled) {
-            killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
-        }
     }
 
     protected void onPlayerJoined(PlayerSession playerSession) {
@@ -535,7 +533,7 @@ public class GameManager implements StepListener<Body> {
         gameEntities.addPlayer(player);
         world.addBody(player.getBody());
 
-        send(playerSession.getSession(), createInitialGameState());
+        send(playerSession.getSession(), createInitialGameState(player));
         log.info("Player {} ({}) joined game {} successfully. Total players: {}, Total sessions: {}",
                 playerSession.getPlayerId(), playerSession.getPlayerName(), gameId, gameEntities.getPlayers().size(), gameEntities.getPlayerSessions().size());
 
@@ -963,9 +961,10 @@ public class GameManager implements StepListener<Body> {
                 (ThreadLocalRandom.current().nextDouble() - 0.5) * gameConfig.getWorldHeight() * 0.8);
     }
 
-    private Map<String, Object> createInitialGameState() {
+    private Map<String, Object> createInitialGameState(Player player) {
         Map<String, Object> state = new HashMap<>();
         state.put("type", "initialState");
+        state.put("playerId", player.getId());
         state.put("worldWidth", gameConfig.getWorldWidth());
         state.put("worldHeight", gameConfig.getWorldHeight());
         state.put("teamCount", gameConfig.getTeamCount());

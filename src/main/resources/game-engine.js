@@ -65,14 +65,9 @@ class PlayerInterpolator {
             // Player teleported/respawned - no logging needed for performance
             this.isFirstUpdate = false;
         } else {
-            // Normal movement - use interpolation
-            if (this.isLocalPlayer) {
-                // Local player: Apply server reconciliation
-                this.reconcileWithServer(x, y, rotation, timeSinceLastUpdate);
-            } else {
-                // Remote player: Apply smooth interpolation
-                this.interpolateToServer(x, y, rotation, timeSinceLastUpdate);
-            }
+            // Normal movement - use interpolation for all players (no prediction)
+            // Treat local player the same as remote players for smooth interpolation
+            this.interpolateToServer(x, y, rotation, timeSinceLastUpdate);
             this.isFirstUpdate = false;
         }
         
@@ -107,16 +102,30 @@ class PlayerInterpolator {
         
         // Always update rotation smoothly
         this.sprite.rotation = this.lerpAngle(this.sprite.rotation, -serverRotation, this.smoothingFactor);
-        this.predictedRotation = -serverRotation;
+        this.predictedRotation = serverRotation; // Store server rotation in physics coordinates
+        
+        // Debug: Log server reconciliation for local player
+        if (this.isLocalPlayer && Math.random() < 0.005) { // Log 0.5% of the time
+            console.log('Server reconciliation - serverRot:', serverRotation.toFixed(2), 
+                       'spriteRot:', this.sprite.rotation.toFixed(2),
+                       'predictedRot:', this.predictedRotation.toFixed(2));
+        }
     }
     
     interpolateToServer(serverX, serverY, serverRotation, deltaTime) {
-        // For remote players: smooth interpolation to server position
+        // Smooth interpolation to server position for all players
         const lerpFactor = Math.min(1.0, this.smoothingFactor * (deltaTime * 60)); // Adjust for frame rate
         
         this.sprite.x += (serverX - this.sprite.x) * lerpFactor;
         this.sprite.y += (serverY - this.sprite.y) * lerpFactor;
         this.sprite.rotation = this.lerpAngle(this.sprite.rotation, -serverRotation, lerpFactor);
+        
+        // Debug: Log interpolation for local player
+        if (this.isLocalPlayer && Math.random() < 0.005) { // Log 0.5% of the time
+            console.log('Interpolation - serverPos:', serverX.toFixed(2), serverY.toFixed(2),
+                       'spritePos:', this.sprite.x.toFixed(2), this.sprite.y.toFixed(2),
+                       'lerpFactor:', lerpFactor.toFixed(3), 'rotation:', serverRotation.toFixed(2));
+        }
     }
     
     predictMovement(input, deltaTime) {
@@ -125,13 +134,22 @@ class PlayerInterpolator {
         // Client-side prediction for local player
         const moveSpeed = 150; // Should match server movement speed
         
-        // Calculate predicted velocity
+        // Calculate predicted velocity in world coordinates
         this.velocity.x = input.moveX * moveSpeed;
         this.velocity.y = input.moveY * moveSpeed;
         
-        // Apply predicted movement
-        this.predictedPos.x += this.velocity.x * deltaTime;
-        this.predictedPos.y += this.velocity.y * deltaTime;
+        // Apply predicted movement in world coordinates
+        // Convert current screen position to world coordinates first
+        const currentWorldPos = this.convertScreenToWorld(this.predictedPos.x, this.predictedPos.y);
+        
+        // Apply movement in world coordinates
+        currentWorldPos.x += this.velocity.x * deltaTime;
+        currentWorldPos.y += this.velocity.y * deltaTime;
+        
+        // Convert back to screen coordinates for display
+        const screenPos = this.convertWorldToScreen(currentWorldPos.x, currentWorldPos.y);
+        this.predictedPos.x = screenPos.x;
+        this.predictedPos.y = screenPos.y;
         
         // Update sprite position with prediction
         this.sprite.x = this.predictedPos.x;
@@ -139,10 +157,21 @@ class PlayerInterpolator {
         
         // Update rotation based on mouse input
         if (input.worldX !== undefined && input.worldY !== undefined) {
-            const dx = input.worldX - this.predictedPos.x;
-            const dy = input.worldY - this.predictedPos.y;
+            // Use the world position we calculated above for consistent coordinates
+            const worldPos = this.convertScreenToWorld(this.predictedPos.x, this.predictedPos.y);
+            
+            const dx = input.worldX - worldPos.x;
+            const dy = input.worldY - worldPos.y;
             this.predictedRotation = Math.atan2(dy, dx);
             this.sprite.rotation = -this.predictedRotation; // Invert for PIXI
+            
+            // Debug: Log rotation for local player (reduced frequency)
+            if (this.isLocalPlayer && Math.random() < 0.005) { // Log 0.5% of the time
+                console.log('Client prediction - worldPos:', worldPos.x.toFixed(2), worldPos.y.toFixed(2),
+                           'dx:', dx.toFixed(2), 'dy:', dy.toFixed(2), 
+                           'predictedRot:', this.predictedRotation.toFixed(2), 
+                           'spriteRot:', this.sprite.rotation.toFixed(2));
+            }
         }
     }
     
@@ -152,6 +181,24 @@ class PlayerInterpolator {
         if (diff > Math.PI) diff -= 2 * Math.PI;
         if (diff < -Math.PI) diff += 2 * Math.PI;
         return from + diff * factor;
+    }
+    
+    convertScreenToWorld(screenX, screenY) {
+        // Convert from screen coordinates (PIXI) back to world coordinates (physics)
+        // This is the inverse of worldToIsometric transformation
+        return {
+            x: screenX,
+            y: -screenY  // Invert Y to convert from PIXI coordinates to physics coordinates
+        };
+    }
+    
+    convertWorldToScreen(worldX, worldY) {
+        // Convert from world coordinates (physics) to screen coordinates (PIXI)
+        // This matches the worldToIsometric transformation in GameEngine
+        return {
+            x: worldX,
+            y: -worldY  // Invert Y to convert from physics coordinates to PIXI coordinates
+        };
     }
     
     destroy() {
@@ -361,8 +408,11 @@ class GameEngine {
                 interpolator.update(deltaTime);
             });
             
+            // TEMPORARY: Disable client-side prediction to test
+            const USE_PREDICTION = false;
+            
             // Update player predictions (only for local player)
-            if (this.myPlayerId && this.lastPlayerInput) {
+            if (USE_PREDICTION && this.myPlayerId && this.lastPlayerInput) {
                 const localInterpolator = this.playerInterpolators.get(this.myPlayerId);
                 if (localInterpolator) {
                     localInterpolator.predictMovement(this.lastPlayerInput, dt);
@@ -878,6 +928,7 @@ class GameEngine {
     }
     
     handleInitialState(data) {
+        this.myPlayerId = data.playerId;
         this.worldBounds.width = data.worldWidth || 2000;
         this.worldBounds.height = data.worldHeight || 2000;
         
@@ -927,16 +978,10 @@ class GameEngine {
             
             data.players.forEach(playerData => {
                 currentPlayerIds.add(playerData.id);
-                
                 if (this.players.has(playerData.id)) {
                     this.updatePlayer(playerData);
                 } else {
                     this.createPlayer(playerData);
-                }
-                
-                // Set our player ID if we don't have one yet
-                if (!this.myPlayerId) {
-                    this.myPlayerId = playerData.id;
                 }
             });
             
@@ -1237,19 +1282,37 @@ class GameEngine {
         const sprite = this.players.get(playerData.id);
         if (!sprite) return;
 
-        // Use interpolator for smooth movement
-        const interpolator = this.playerInterpolators.get(playerData.id);
-        if (interpolator) {
-            // Convert server position from world to screen coordinates
-            const isoPos = this.worldToIsometric(playerData.x, playerData.y);
-            
-            // Update interpolator with server data
-            interpolator.updateFromServer(isoPos.x, isoPos.y, playerData.rotation || 0);
+        // Enable interpolation for smoothness, but keep prediction disabled
+        const USE_INTERPOLATION = true;
+        
+        if (USE_INTERPOLATION) {
+            // Use interpolator for smooth movement
+            const interpolator = this.playerInterpolators.get(playerData.id);
+            if (interpolator) {
+                // Convert server position from world to screen coordinates
+                const isoPos = this.worldToIsometric(playerData.x, playerData.y);
+                
+                // Update interpolator with server data
+                // Server rotation is in physics coordinates, pass it directly
+                interpolator.updateFromServer(isoPos.x, isoPos.y, playerData.rotation || 0);
+            } else {
+                // Fallback to direct position update if no interpolator
+                const isoPos = this.worldToIsometric(playerData.x, playerData.y);
+                sprite.position.set(isoPos.x, isoPos.y);
+                sprite.rotation = -(playerData.rotation || 0);
+            }
         } else {
-            // Fallback to direct position update if no interpolator
+            // Direct position update - no interpolation
             const isoPos = this.worldToIsometric(playerData.x, playerData.y);
             sprite.position.set(isoPos.x, isoPos.y);
             sprite.rotation = -(playerData.rotation || 0);
+            
+            // Debug: Log direct updates for local player
+            if (playerData.id === this.myPlayerId && Math.random() < 0.01) {
+                console.log('Direct update - serverPos:', playerData.x.toFixed(2), playerData.y.toFixed(2),
+                           'screenPos:', isoPos.x.toFixed(2), isoPos.y.toFixed(2),
+                           'rotation:', playerData.rotation.toFixed(2));
+            }
         }
         
         // Handle death marker logic
