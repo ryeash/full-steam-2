@@ -158,11 +158,17 @@ class PlayerInterpolator {
     }
     
     destroy() {
+        // Clear all object references to prevent memory leaks
         this.sprite = null;
         this.serverPos = null;
         this.predictedPos = null;
         this.velocity = null;
         this.isFirstUpdate = null;
+        
+        // Clear cached values
+        this.tempDx = 0;
+        this.tempDy = 0;
+        this.tempDistance = 0;
     }
 }
 
@@ -278,10 +284,16 @@ class ProjectileInterpolator {
      * Clean up resources when interpolator is no longer needed
      */
     destroy() {
+        // Clear all object references to prevent memory leaks
         this.container = null;
         this.velocity = null;
         this.serverPos = null;
         this.lastTrailPosition = null;
+        
+        // Clear any cached values
+        this.tempDistance = 0;
+        this.tempDx = 0;
+        this.tempDy = 0;
     }
 }
 
@@ -297,6 +309,8 @@ class GameEngine {
         this.strategicLocations = new Map();
         this.obstacles = new Map();
         this.fieldEffects = new Map();
+        this.beams = new Map();
+        this.utilityEntities = new Map(); // For turrets, barriers, nets, mines, teleport pads
         this.myPlayerId = null;
         this.lastPlayerInput = null; // Store last input for prediction
         this.gameState = null;
@@ -1024,7 +1038,157 @@ class GameEngine {
             }
         }
         
+        // Handle beams
+        if (data.beams) {
+            const currentBeamIds = new Set();
+            data.beams.forEach(beamData => {
+                currentBeamIds.add(beamData.id);
+                if (this.beams.has(beamData.id)) {
+                    this.updateBeam(beamData);
+                } else {
+                    this.createBeam(beamData);
+                }
+            });
+
+            for (let [beamId, beam] of this.beams) {
+                if (!currentBeamIds.has(beamId)) {
+                    this.removeBeam(beamId);
+                }
+            }
+        }
+        
+        // Handle utility entities (turrets, barriers, nets, mines, teleport pads)
+        this.handleUtilityEntities(data);
+        
         this.updateUI(data);
+    }
+    
+    /**
+     * Handle all utility entities from server data
+     */
+    handleUtilityEntities(data) {
+        const currentEntityIds = new Set();
+        
+        // Handle turrets
+        if (data.turrets) {
+            data.turrets.forEach(turretData => {
+                currentEntityIds.add(turretData.id);
+                if (this.utilityEntities.has(turretData.id)) {
+                    this.updateUtilityEntity(turretData);
+                } else {
+                    this.createUtilityEntity(turretData);
+                }
+            });
+        }
+        
+        // Handle barriers
+        if (data.barriers) {
+            data.barriers.forEach(barrierData => {
+                currentEntityIds.add(barrierData.id);
+                if (this.utilityEntities.has(barrierData.id)) {
+                    this.updateUtilityEntity(barrierData);
+                } else {
+                    this.createUtilityEntity(barrierData);
+                }
+            });
+        }
+        
+        // Handle nets
+        if (data.nets) {
+            data.nets.forEach(netData => {
+                currentEntityIds.add(netData.id);
+                if (this.utilityEntities.has(netData.id)) {
+                    this.updateUtilityEntity(netData);
+                } else {
+                    this.createUtilityEntity(netData);
+                }
+            });
+        }
+        
+        // Handle mines
+        if (data.mines) {
+            data.mines.forEach(mineData => {
+                currentEntityIds.add(mineData.id);
+                if (this.utilityEntities.has(mineData.id)) {
+                    this.updateUtilityEntity(mineData);
+                } else {
+                    this.createUtilityEntity(mineData);
+                }
+            });
+        }
+        
+        // Handle teleport pads
+        if (data.teleportPads) {
+            data.teleportPads.forEach(padData => {
+                currentEntityIds.add(padData.id);
+                if (this.utilityEntities.has(padData.id)) {
+                    this.updateUtilityEntity(padData);
+                } else {
+                    this.createUtilityEntity(padData);
+                }
+            });
+        }
+        
+        // Remove entities that no longer exist
+        for (let [entityId, entity] of this.utilityEntities) {
+            if (!currentEntityIds.has(entityId)) {
+                this.removeUtilityEntity(entityId);
+            }
+        }
+    }
+    
+    /**
+     * Create a utility entity
+     */
+    createUtilityEntity(entityData) {
+        const entityContainer = new PIXI.Container();
+        const isoPos = this.worldToIsometric(entityData.x, entityData.y);
+        entityContainer.position.set(isoPos.x, isoPos.y);
+        
+        // Create graphics based on entity type
+        const entityGraphics = this.createUtilityEntityGraphics(entityData);
+        entityContainer.addChild(entityGraphics);
+        
+        // Set z-index based on type
+        entityContainer.zIndex = this.getUtilityEntityZIndex(entityData.type);
+        
+        // Store entity data
+        entityContainer.entityData = entityData;
+        entityContainer.entityGraphics = entityGraphics;
+        this.utilityEntities.set(entityData.id, entityContainer);
+        this.gameContainer.addChild(entityContainer);
+        
+        // Enable sorting
+        this.gameContainer.sortableChildren = true;
+    }
+    
+    /**
+     * Update a utility entity
+     */
+    updateUtilityEntity(entityData) {
+        const entityContainer = this.utilityEntities.get(entityData.id);
+        if (!entityContainer) return;
+        
+        // Update position
+        const isoPos = this.worldToIsometric(entityData.x, entityData.y);
+        entityContainer.position.set(isoPos.x, isoPos.y);
+        
+        // Update visual state based on entity data
+        this.updateUtilityEntityVisual(entityContainer, entityData);
+        
+        entityContainer.entityData = entityData;
+    }
+    
+    /**
+     * Remove a utility entity
+     */
+    removeUtilityEntity(entityId) {
+        const entityContainer = this.utilityEntities.get(entityId);
+        if (entityContainer) {
+            this.cleanupUtilityEntityContainer(entityContainer);
+            this.gameContainer.removeChild(entityContainer);
+            this.utilityEntities.delete(entityId);
+        }
     }
     
     handlePlayerKilled(data) {
@@ -1313,29 +1477,11 @@ class GameEngine {
     removePlayer(playerId) {
         const sprite = this.players.get(playerId);
         if (sprite) {
+            // Clean up all player-related objects
+            this.cleanupPlayerSprite(sprite);
+            
             // Remove sprite from game container
             this.gameContainer.removeChild(sprite);
-            
-            // Remove name label from name container
-            if (sprite.nameLabel) {
-                this.nameContainer.removeChild(sprite.nameLabel);
-            }
-            
-            // Remove health bar from name container
-            if (sprite.healthBar) {
-                this.nameContainer.removeChild(sprite.healthBar);
-            }
-            
-            // Remove reload indicator from name container
-            if (sprite.reloadIndicator) {
-                this.nameContainer.removeChild(sprite.reloadIndicator);
-            }
-            
-            // Remove death marker from game container
-            if (sprite.deathMarker) {
-                this.gameContainer.removeChild(sprite.deathMarker);
-            }
-            
             this.players.delete(playerId);
         }
         
@@ -1345,6 +1491,67 @@ class GameEngine {
             interpolator.destroy();
             this.playerInterpolators.delete(playerId);
         }
+    }
+    
+    /**
+     * Thoroughly clean up a player sprite to prevent memory leaks
+     */
+    cleanupPlayerSprite(sprite) {
+        // Remove and destroy name label
+        if (sprite.nameLabel) {
+            if (sprite.nameLabel.parent) {
+                sprite.nameLabel.parent.removeChild(sprite.nameLabel);
+            }
+            sprite.nameLabel.destroy();
+            sprite.nameLabel = null;
+        }
+        
+        // Remove and destroy health bar
+        if (sprite.healthBar) {
+            if (sprite.healthBar.parent) {
+                sprite.healthBar.parent.removeChild(sprite.healthBar);
+            }
+            // Clean up health bar components
+            if (sprite.healthBar.healthBg) {
+                sprite.healthBar.healthBg.destroy();
+            }
+            if (sprite.healthBar.healthFill) {
+                sprite.healthBar.healthFill.destroy();
+            }
+            sprite.healthBar.destroy({ children: true });
+            sprite.healthBar = null;
+        }
+        
+        // Remove and destroy reload indicator
+        if (sprite.reloadIndicator) {
+            if (sprite.reloadIndicator.parent) {
+                sprite.reloadIndicator.parent.removeChild(sprite.reloadIndicator);
+            }
+            // Clean up reload indicator components
+            if (sprite.reloadIndicator.background) {
+                sprite.reloadIndicator.background.destroy();
+            }
+            if (sprite.reloadIndicator.reloadText) {
+                sprite.reloadIndicator.reloadText.destroy();
+            }
+            sprite.reloadIndicator.destroy({ children: true });
+            sprite.reloadIndicator = null;
+        }
+        
+        // Remove and destroy death marker
+        if (sprite.deathMarker) {
+            if (sprite.deathMarker.parent) {
+                sprite.deathMarker.parent.removeChild(sprite.deathMarker);
+            }
+            sprite.deathMarker.destroy();
+            sprite.deathMarker = null;
+        }
+        
+        // Clear player data reference
+        sprite.playerData = null;
+        
+        // Destroy the main sprite
+        sprite.destroy();
     }
     
     /**
@@ -1874,6 +2081,10 @@ class GameEngine {
     removeProjectile(projectileId) {
         const projectileContainer = this.projectiles.get(projectileId);
         if (projectileContainer) {
+            // Clean up all child objects and references
+            this.cleanupProjectileContainer(projectileContainer);
+            
+            // Remove from parent container
             this.gameContainer.removeChild(projectileContainer);
             this.projectiles.delete(projectileId);
         }
@@ -1884,6 +2095,65 @@ class GameEngine {
             interpolator.destroy();
             this.projectileInterpolators.delete(projectileId);
         }
+    }
+    
+    /**
+     * Thoroughly clean up a projectile container to prevent memory leaks
+     */
+    cleanupProjectileContainer(projectileContainer) {
+        // Clean up plasma effects if they exist
+        if (projectileContainer.plasmaEffects) {
+            const effects = projectileContainer.plasmaEffects;
+            
+            // Remove all plasma effect children
+            if (effects.outerGlow && effects.outerGlow.parent) {
+                effects.outerGlow.parent.removeChild(effects.outerGlow);
+            }
+            if (effects.middleGlow && effects.middleGlow.parent) {
+                effects.middleGlow.parent.removeChild(effects.middleGlow);
+            }
+            if (effects.innerGlow && effects.innerGlow.parent) {
+                effects.innerGlow.parent.removeChild(effects.innerGlow);
+            }
+            if (effects.electricArcs && effects.electricArcs.parent) {
+                effects.electricArcs.parent.removeChild(effects.electricArcs);
+            }
+            
+            // Clear references
+            projectileContainer.plasmaEffects = null;
+        }
+        
+        // Clean up trail if it exists
+        if (projectileContainer.trail) {
+            if (projectileContainer.trail.parent) {
+                projectileContainer.trail.parent.removeChild(projectileContainer.trail);
+            }
+            projectileContainer.trail.destroy();
+            projectileContainer.trail = null;
+        }
+        
+        // Clear trail points array
+        if (projectileContainer.trailPoints) {
+            projectileContainer.trailPoints.length = 0;
+            projectileContainer.trailPoints = null;
+        }
+        
+        // Clean up main sprite
+        if (projectileContainer.sprite) {
+            if (projectileContainer.sprite.parent) {
+                projectileContainer.sprite.parent.removeChild(projectileContainer.sprite);
+            }
+            projectileContainer.sprite.destroy();
+            projectileContainer.sprite = null;
+        }
+        
+        // Clear all references
+        projectileContainer.projectileData = null;
+        projectileContainer.isPlasma = null;
+        projectileContainer.maxTrailLength = null;
+        
+        // Destroy the container itself
+        projectileContainer.destroy({ children: true, texture: false, baseTexture: false });
     }
     
     createStrategicLocation(locationData) {
@@ -2125,12 +2395,776 @@ class GameEngine {
     removeFieldEffect(effectId) {
         const effectContainer = this.fieldEffects.get(effectId);
         if (effectContainer) {
+            // Clean up animation ticker first
+            if (effectContainer.animationFunction) {
+                this.app.ticker.remove(effectContainer.animationFunction);
+                effectContainer.animationFunction = null;
+            }
+            
             // Add fade-out animation before removal
             this.fadeOutEffect(effectContainer, () => {
+                // Final cleanup
+                this.cleanupFieldEffectContainer(effectContainer);
                 this.gameContainer.removeChild(effectContainer);
                 this.fieldEffects.delete(effectId);
             });
         }
+    }
+    
+    /**
+     * Create a beam weapon effect
+     */
+    createBeam(beamData) {
+        const beamContainer = new PIXI.Container();
+        
+        // Convert world coordinates to screen coordinates
+        const startPos = this.worldToIsometric(beamData.startX, beamData.startY);
+        const endPos = this.worldToIsometric(beamData.endX, beamData.endY);
+        
+        beamContainer.position.set(startPos.x, startPos.y);
+        
+        // Calculate beam length and angle
+        const dx = endPos.x - startPos.x;
+        const dy = endPos.y - startPos.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx);
+        
+        // Create the main beam graphics based on type
+        const beamGraphics = this.createBeamGraphics(beamData, length);
+        beamGraphics.rotation = angle;
+        beamContainer.addChild(beamGraphics);
+        
+        // Add beam effects based on damage type
+        if (beamData.damageType === 'DAMAGE_OVER_TIME' || beamData.damageType === 'BURST') {
+            this.addBeamEffects(beamContainer, beamData, length, angle);
+        }
+        
+        // Set z-index above projectiles but below UI
+        beamContainer.zIndex = 15;
+        
+        // Store beam data and add to containers
+        beamContainer.beamData = beamData;
+        beamContainer.beamGraphics = beamGraphics;
+        beamContainer.beamLength = length;
+        beamContainer.beamAngle = angle;
+        this.beams.set(beamData.id, beamContainer);
+        this.gameContainer.addChild(beamContainer);
+        
+        // Enable sorting for proper z-index handling
+        this.gameContainer.sortableChildren = true;
+    }
+    
+    /**
+     * Update a beam weapon effect
+     */
+    updateBeam(beamData) {
+        const beamContainer = this.beams.get(beamData.id);
+        if (!beamContainer) return;
+        
+        // Update position and angle
+        const startPos = this.worldToIsometric(beamData.startX, beamData.startY);
+        const endPos = this.worldToIsometric(beamData.endX, beamData.endY);
+        
+        beamContainer.position.set(startPos.x, startPos.y);
+        
+        // Recalculate beam properties
+        const dx = endPos.x - startPos.x;
+        const dy = endPos.y - startPos.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx);
+        
+        // Update beam graphics if length or angle changed significantly
+        if (Math.abs(length - beamContainer.beamLength) > 5 || 
+            Math.abs(angle - beamContainer.beamAngle) > 0.1) {
+            
+            // Remove old graphics
+            if (beamContainer.beamGraphics) {
+                beamContainer.removeChild(beamContainer.beamGraphics);
+                beamContainer.beamGraphics.destroy();
+            }
+            
+            // Create new graphics with updated dimensions
+            const beamGraphics = this.createBeamGraphics(beamData, length);
+            beamGraphics.rotation = angle;
+            beamContainer.addChild(beamGraphics);
+            
+            beamContainer.beamGraphics = beamGraphics;
+            beamContainer.beamLength = length;
+            beamContainer.beamAngle = angle;
+        }
+        
+        // Update beam intensity based on duration
+        const intensity = beamData.durationPercent || 1.0;
+        beamContainer.alpha = Math.max(0.3, intensity);
+        
+        beamContainer.beamData = beamData;
+    }
+    
+    /**
+     * Remove a beam weapon effect
+     */
+    removeBeam(beamId) {
+        const beamContainer = this.beams.get(beamId);
+        if (beamContainer) {
+            this.cleanupBeamContainer(beamContainer);
+            this.gameContainer.removeChild(beamContainer);
+            this.beams.delete(beamId);
+        }
+    }
+    
+    /**
+     * Create beam graphics based on beam type and properties
+     */
+    createBeamGraphics(beamData, length) {
+        const graphics = new PIXI.Graphics();
+        
+        // Determine beam type from damage properties
+        let beamType = 'LASER'; // default
+        if (beamData.isHealingBeam) {
+            beamType = 'HEAL_BEAM';
+        } else if (beamData.damageType === 'DAMAGE_OVER_TIME') {
+            beamType = 'PLASMA_BEAM';
+        } else if (beamData.canPierce) {
+            beamType = 'RAILGUN';
+        } else if (beamData.damageType === 'BURST') {
+            beamType = 'PULSE_LASER';
+        }
+        
+        switch (beamType) {
+            case 'LASER':
+                return this.createLaserGraphics(graphics, length, beamData);
+            case 'PLASMA_BEAM':
+                return this.createPlasmaBeamGraphics(graphics, length, beamData);
+            case 'HEAL_BEAM':
+                return this.createHealBeamGraphics(graphics, length, beamData);
+            case 'RAILGUN':
+                return this.createRailgunGraphics(graphics, length, beamData);
+            case 'PULSE_LASER':
+                return this.createPulseLaserGraphics(graphics, length, beamData);
+            default:
+                return this.createGenericBeamGraphics(graphics, length, beamData);
+        }
+    }
+    
+    /**
+     * Create laser beam graphics
+     */
+    createLaserGraphics(graphics, length, beamData) {
+        // Main laser beam - bright magenta/red
+        graphics.lineStyle(4, 0xff44ff, 0.9);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(length, 0);
+        
+        // Inner core - white hot
+        graphics.lineStyle(2, 0xffffff, 1.0);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(length, 0);
+        
+        // Outer glow effect
+        graphics.lineStyle(8, 0xff44ff, 0.3);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(length, 0);
+        
+        return graphics;
+    }
+    
+    /**
+     * Create plasma beam graphics
+     */
+    createPlasmaBeamGraphics(graphics, length, beamData) {
+        // Main plasma beam - electric blue
+        graphics.lineStyle(6, 0x4488ff, 0.8);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(length, 0);
+        
+        // Plasma core - bright white
+        graphics.lineStyle(3, 0xaaffff, 1.0);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(length, 0);
+        
+        // Crackling energy effect
+        graphics.lineStyle(10, 0x4488ff, 0.2);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(length, 0);
+        
+        // Add plasma instability (random segments)
+        for (let i = 0; i < length; i += 20) {
+            const segmentEnd = Math.min(i + 15 + Math.random() * 10, length);
+            const offset = (Math.random() - 0.5) * 4;
+            
+            graphics.lineStyle(2, 0x88aaff, 0.6);
+            graphics.moveTo(i, 0);
+            graphics.lineTo(segmentEnd, offset);
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create heal beam graphics
+     */
+    createHealBeamGraphics(graphics, length, beamData) {
+        // Main healing beam - soft green
+        graphics.lineStyle(5, 0x2ecc71, 0.7);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(length, 0);
+        
+        // Healing core - bright green
+        graphics.lineStyle(2, 0x58d68d, 1.0);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(length, 0);
+        
+        // Healing aura
+        graphics.lineStyle(12, 0x2ecc71, 0.2);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(length, 0);
+        
+        // Add healing particles along the beam
+        for (let i = 10; i < length; i += 15) {
+            const offset = (Math.random() - 0.5) * 6;
+            graphics.beginFill(0x58d68d, 0.8);
+            graphics.drawCircle(i, offset, 1.5);
+            graphics.endFill();
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create railgun beam graphics
+     */
+    createRailgunGraphics(graphics, length, beamData) {
+        // Main railgun beam - bright white/blue
+        graphics.lineStyle(3, 0xaaffff, 1.0);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(length, 0);
+        
+        // Railgun core - pure white
+        graphics.lineStyle(1, 0xffffff, 1.0);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(length, 0);
+        
+        // Electromagnetic field
+        graphics.lineStyle(8, 0x88ccff, 0.4);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(length, 0);
+        
+        // Add electromagnetic distortion lines
+        for (let i = 0; i < length; i += 25) {
+            const distortionLength = 8 + Math.random() * 6;
+            graphics.lineStyle(1, 0xaaffff, 0.5);
+            graphics.moveTo(i, -distortionLength/2);
+            graphics.lineTo(i, distortionLength/2);
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create pulse laser graphics
+     */
+    createPulseLaserGraphics(graphics, length, beamData) {
+        // Main pulse beam - orange/red
+        graphics.lineStyle(4, 0xff8844, 0.8);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(length, 0);
+        
+        // Pulse core - bright yellow
+        graphics.lineStyle(2, 0xffaa44, 1.0);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(length, 0);
+        
+        // Pulse segments (burst effect)
+        const pulseCount = Math.floor(length / 30);
+        for (let i = 0; i < pulseCount; i++) {
+            const pulseStart = i * 30;
+            const pulseEnd = pulseStart + 20;
+            const intensity = 0.5 + Math.random() * 0.5;
+            
+            graphics.lineStyle(6, 0xff8844, intensity * 0.6);
+            graphics.moveTo(pulseStart, 0);
+            graphics.lineTo(Math.min(pulseEnd, length), 0);
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create generic beam graphics
+     */
+    createGenericBeamGraphics(graphics, length, beamData) {
+        // Generic beam - white
+        graphics.lineStyle(3, 0xffffff, 0.8);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(length, 0);
+        
+        // Core
+        graphics.lineStyle(1, 0xffffff, 1.0);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(length, 0);
+        
+        return graphics;
+    }
+    
+    /**
+     * Add special effects to beams (for DOT and burst types)
+     */
+    addBeamEffects(beamContainer, beamData, length, angle) {
+        // Add pulsing or crackling effects for continuous beams
+        if (beamData.damageType === 'DAMAGE_OVER_TIME') {
+            // Add continuous energy effect
+            const energyEffect = new PIXI.Graphics();
+            energyEffect.lineStyle(8, 0x4488ff, 0.1);
+            energyEffect.moveTo(0, 0);
+            energyEffect.lineTo(length, 0);
+            energyEffect.rotation = angle;
+            beamContainer.addChild(energyEffect);
+            
+            // Store for animation
+            beamContainer.energyEffect = energyEffect;
+        }
+    }
+    
+    /**
+     * Create graphics for utility entities based on type
+     */
+    createUtilityEntityGraphics(entityData) {
+        const graphics = new PIXI.Graphics();
+        
+        switch (entityData.type) {
+            case 'TURRET':
+                return this.createTurretGraphics(graphics, entityData);
+            case 'BARRIER':
+                return this.createBarrierGraphics(graphics, entityData);
+            case 'NET':
+                return this.createNetGraphics(graphics, entityData);
+            case 'MINE':
+                return this.createMineGraphics(graphics, entityData);
+            case 'TELEPORT_PAD':
+                return this.createTeleportPadGraphics(graphics, entityData);
+            default:
+                return this.createGenericUtilityGraphics(graphics, entityData);
+        }
+    }
+    
+    /**
+     * Create turret graphics
+     */
+    createTurretGraphics(graphics, entityData) {
+        // Turret base - dark gray circle
+        graphics.beginFill(0x444444, 0.9);
+        graphics.drawCircle(0, 0, 18);
+        graphics.endFill();
+        
+        // Turret base outline
+        graphics.lineStyle(2, 0x666666, 1.0);
+        graphics.drawCircle(0, 0, 18);
+        
+        // Turret barrel - pointing in direction
+        graphics.lineStyle(4, 0x333333, 1.0);
+        graphics.moveTo(0, 0);
+        graphics.lineTo(25, 0); // Barrel length
+        
+        // Turret barrel tip
+        graphics.beginFill(0x222222, 1.0);
+        graphics.drawCircle(25, 0, 3);
+        graphics.endFill();
+        
+        // Team color indicator
+        const teamColor = this.getTeamColor(entityData.ownerTeam || 0);
+        graphics.beginFill(teamColor, 0.8);
+        graphics.drawCircle(0, 0, 8);
+        graphics.endFill();
+        
+        // Health indicator (if available)
+        if (entityData.health !== undefined) {
+            const healthPercent = Math.max(0, entityData.health / 100);
+            graphics.lineStyle(2, 0x2ecc71, healthPercent);
+            graphics.drawCircle(0, 0, 20);
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create barrier graphics
+     */
+    createBarrierGraphics(graphics, entityData) {
+        // Barrier main structure - rectangular
+        graphics.beginFill(0x8B4513, 0.8); // Brown color
+        graphics.drawRoundedRect(-25, -8, 50, 16, 4);
+        graphics.endFill();
+        
+        // Barrier outline
+        graphics.lineStyle(2, 0x654321, 1.0);
+        graphics.drawRoundedRect(-25, -8, 50, 16, 4);
+        
+        // Support posts
+        graphics.beginFill(0x654321, 1.0);
+        graphics.drawRect(-3, -12, 6, 8); // Left post
+        graphics.drawRect(-3, 8, 6, 8);   // Right post
+        graphics.endFill();
+        
+        // Health indicator
+        if (entityData.health !== undefined) {
+            const healthPercent = Math.max(0, entityData.health / 100);
+            const healthColor = healthPercent > 0.6 ? 0x2ecc71 : healthPercent > 0.3 ? 0xf39c12 : 0xe74c3c;
+            
+            graphics.beginFill(healthColor, 0.7);
+            graphics.drawRect(-25, -12, 50 * healthPercent, 4);
+            graphics.endFill();
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create net projectile graphics
+     */
+    createNetGraphics(graphics, entityData) {
+        // Net main body - web pattern
+        graphics.lineStyle(2, 0x8B4513, 0.8); // Brown net
+        
+        // Draw net pattern
+        const size = 12;
+        const gridSize = 4;
+        
+        // Horizontal lines
+        for (let y = -size; y <= size; y += gridSize) {
+            graphics.moveTo(-size, y);
+            graphics.lineTo(size, y);
+        }
+        
+        // Vertical lines
+        for (let x = -size; x <= size; x += gridSize) {
+            graphics.moveTo(x, -size);
+            graphics.lineTo(x, size);
+        }
+        
+        // Net outline circle
+        graphics.lineStyle(3, 0x654321, 0.9);
+        graphics.drawCircle(0, 0, size);
+        
+        // Add some rope texture
+        graphics.beginFill(0x8B4513, 0.6);
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const x = Math.cos(angle) * (size - 2);
+            const y = Math.sin(angle) * (size - 2);
+            graphics.drawCircle(x, y, 1);
+        }
+        graphics.endFill();
+        
+        return graphics;
+    }
+    
+    /**
+     * Create proximity mine graphics
+     */
+    createMineGraphics(graphics, entityData) {
+        const isArmed = entityData.isArmed || false;
+        const armingPercent = entityData.armingPercent || 0;
+        const lifespanPercent = entityData.lifespanPercent || 1;
+        
+        // Mine body - dark metallic
+        graphics.beginFill(0x2c3e50, 0.9);
+        graphics.drawCircle(0, 0, 12);
+        graphics.endFill();
+        
+        // Mine outline
+        graphics.lineStyle(2, 0x34495e, 1.0);
+        graphics.drawCircle(0, 0, 12);
+        
+        // Spikes around the mine
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const x1 = Math.cos(angle) * 8;
+            const y1 = Math.sin(angle) * 8;
+            const x2 = Math.cos(angle) * 15;
+            const y2 = Math.sin(angle) * 15;
+            
+            graphics.lineStyle(2, 0x34495e, 1.0);
+            graphics.moveTo(x1, y1);
+            graphics.lineTo(x2, y2);
+        }
+        
+        // Status indicator
+        if (!isArmed) {
+            // Arming progress - yellow ring
+            graphics.lineStyle(3, 0xf39c12, 0.8);
+            graphics.arc(0, 0, 16, 0, Math.PI * 2 * armingPercent);
+        } else {
+            // Armed - red pulsing ring
+            const pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.01);
+            graphics.lineStyle(3, 0xe74c3c, pulse);
+            graphics.drawCircle(0, 0, 16);
+        }
+        
+        // Lifespan indicator
+        if (lifespanPercent < 0.3) {
+            graphics.beginFill(0xff6b6b, 0.3);
+            graphics.drawCircle(0, 0, 20);
+            graphics.endFill();
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create teleport pad graphics
+     */
+    createTeleportPadGraphics(graphics, entityData) {
+        const isLinked = entityData.isLinked || false;
+        const isCharging = entityData.isCharging || false;
+        const chargingProgress = entityData.chargingProgress || 0;
+        const pulseValue = entityData.pulseValue || 0.5;
+        
+        // Teleport pad base - large circle
+        const baseColor = isLinked ? 0x9b59b6 : 0x6c5ce7; // Purple when linked, blue when not
+        graphics.beginFill(baseColor, 0.3);
+        graphics.drawCircle(0, 0, 20);
+        graphics.endFill();
+        
+        // Outer ring
+        graphics.lineStyle(3, baseColor, 0.8);
+        graphics.drawCircle(0, 0, 20);
+        
+        // Inner energy core
+        const coreAlpha = isCharging ? chargingProgress : 1.0;
+        graphics.beginFill(0xffffff, coreAlpha * 0.6);
+        graphics.drawCircle(0, 0, 8);
+        graphics.endFill();
+        
+        // Pulsing energy rings
+        if (!isCharging || chargingProgress > 0.5) {
+            const pulseAlpha = pulseValue * 0.5;
+            graphics.lineStyle(2, 0xffffff, pulseAlpha);
+            graphics.drawCircle(0, 0, 12);
+            graphics.drawCircle(0, 0, 16);
+        }
+        
+        // Charging progress indicator
+        if (isCharging) {
+            graphics.lineStyle(4, 0xf39c12, 0.8);
+            graphics.arc(0, 0, 24, 0, Math.PI * 2 * chargingProgress);
+        }
+        
+        // Link indicator
+        if (isLinked) {
+            // Draw connection symbols
+            for (let i = 0; i < 4; i++) {
+                const angle = (i / 4) * Math.PI * 2;
+                const x = Math.cos(angle) * 14;
+                const y = Math.sin(angle) * 14;
+                
+                graphics.beginFill(0x9b59b6, 0.8);
+                graphics.drawPolygon([
+                    x - 2, y - 2,
+                    x + 2, y - 2,
+                    x + 4, y,
+                    x + 2, y + 2,
+                    x - 2, y + 2,
+                    x - 4, y
+                ]); // Arrow pointing outward
+                graphics.endFill();
+            }
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create generic utility graphics
+     */
+    createGenericUtilityGraphics(graphics, entityData) {
+        graphics.beginFill(0x888888, 0.7);
+        graphics.drawCircle(0, 0, 15);
+        graphics.endFill();
+        
+        graphics.lineStyle(2, 0xcccccc, 1.0);
+        graphics.drawCircle(0, 0, 15);
+        
+        return graphics;
+    }
+    
+    /**
+     * Get z-index for utility entity types
+     */
+    getUtilityEntityZIndex(entityType) {
+        switch (entityType) {
+            case 'TURRET':
+                return 12; // Above players
+            case 'BARRIER':
+                return 6;  // Above obstacles, below players
+            case 'NET':
+                return 9;  // Same as projectiles
+            case 'MINE':
+                return 7;  // Above obstacles, below players
+            case 'TELEPORT_PAD':
+                return 5;  // Below most things
+            default:
+                return 8;
+        }
+    }
+    
+    /**
+     * Update utility entity visual state
+     */
+    updateUtilityEntityVisual(container, entityData) {
+        // Update alpha based on activity
+        if (!entityData.active) {
+            container.alpha = 0.5;
+        } else {
+            container.alpha = 1.0;
+        }
+        
+        // Type-specific updates
+        switch (entityData.type) {
+            case 'MINE':
+                this.updateMineVisual(container, entityData);
+                break;
+            case 'TELEPORT_PAD':
+                this.updateTeleportPadVisual(container, entityData);
+                break;
+            case 'TURRET':
+                this.updateTurretVisual(container, entityData);
+                break;
+        }
+    }
+    
+    /**
+     * Update mine visual effects
+     */
+    updateMineVisual(container, entityData) {
+        // Recreate graphics if arming status changed
+        if (container.lastArmedState !== entityData.isArmed) {
+            container.removeChild(container.entityGraphics);
+            container.entityGraphics.destroy();
+            
+            const newGraphics = this.createMineGraphics(new PIXI.Graphics(), entityData);
+            container.addChild(newGraphics);
+            container.entityGraphics = newGraphics;
+            container.lastArmedState = entityData.isArmed;
+        }
+    }
+    
+    /**
+     * Update teleport pad visual effects
+     */
+    updateTeleportPadVisual(container, entityData) {
+        // Recreate graphics for dynamic effects
+        container.removeChild(container.entityGraphics);
+        container.entityGraphics.destroy();
+        
+        const newGraphics = this.createTeleportPadGraphics(new PIXI.Graphics(), entityData);
+        container.addChild(newGraphics);
+        container.entityGraphics = newGraphics;
+    }
+    
+    /**
+     * Update turret visual effects
+     */
+    updateTurretVisual(container, entityData) {
+        // Update rotation if target direction is provided
+        if (entityData.targetDirection !== undefined) {
+            container.rotation = entityData.targetDirection;
+        }
+    }
+    
+    /**
+     * Clean up utility entity container
+     */
+    cleanupUtilityEntityContainer(container) {
+        // Clean up graphics
+        if (container.entityGraphics) {
+            container.entityGraphics.clear();
+            container.entityGraphics.destroy();
+            container.entityGraphics = null;
+        }
+        
+        // Clear references
+        container.entityData = null;
+        container.lastArmedState = null;
+        
+        // Destroy container
+        container.destroy({ children: true, texture: false, baseTexture: false });
+    }
+    
+    /**
+     * Clean up beam container to prevent memory leaks
+     */
+    cleanupBeamContainer(beamContainer) {
+        // Clean up beam graphics
+        if (beamContainer.beamGraphics) {
+            beamContainer.beamGraphics.clear();
+            beamContainer.beamGraphics.destroy();
+            beamContainer.beamGraphics = null;
+        }
+        
+        // Clean up energy effects
+        if (beamContainer.energyEffect) {
+            beamContainer.energyEffect.clear();
+            beamContainer.energyEffect.destroy();
+            beamContainer.energyEffect = null;
+        }
+        
+        // Clear all references
+        beamContainer.beamData = null;
+        beamContainer.beamLength = null;
+        beamContainer.beamAngle = null;
+        
+        // Destroy the container
+        beamContainer.destroy({ children: true, texture: false, baseTexture: false });
+    }
+    
+    /**
+     * Thoroughly clean up a field effect container to prevent memory leaks
+     */
+    cleanupFieldEffectContainer(effectContainer) {
+        // Remove animation ticker first (if not already removed)
+        if (effectContainer.animationFunction) {
+            this.app.ticker.remove(effectContainer.animationFunction);
+            effectContainer.animationFunction = null;
+        }
+        
+        // Remove fade-out ticker if it exists
+        if (effectContainer.fadeOutFunction) {
+            this.app.ticker.remove(effectContainer.fadeOutFunction);
+            effectContainer.fadeOutFunction = null;
+        }
+        
+        // Clean up graphics objects explicitly
+        if (effectContainer.effectGraphics) {
+            effectContainer.effectGraphics.clear();
+            if (effectContainer.effectGraphics.parent) {
+                effectContainer.effectGraphics.parent.removeChild(effectContainer.effectGraphics);
+            }
+            effectContainer.effectGraphics.destroy();
+            effectContainer.effectGraphics = null;
+        }
+        
+        // Clean up all child graphics objects
+        const childrenToDestroy = [...effectContainer.children];
+        childrenToDestroy.forEach(child => {
+            if (child.clear && typeof child.clear === 'function') {
+                child.clear(); // Clear graphics content
+            }
+            if (child.parent) {
+                child.parent.removeChild(child);
+            }
+            child.destroy();
+        });
+        
+        // Clear all custom properties
+        effectContainer.effectData = null;
+        effectContainer.animationTime = null;
+        effectContainer.animationSpeed = null;
+        effectContainer.originalScale = null;
+        effectContainer.originalX = null;
+        effectContainer.originalY = null;
+        
+        // Destroy the container itself
+        effectContainer.destroy({ children: true, texture: false, baseTexture: false });
     }
     
     /**
@@ -2153,6 +3187,21 @@ class GameEngine {
                 return this.createFragmentationGraphics(graphics, radius, effectData);
             case 'POISON':
                 return this.createPoisonGraphics(graphics, radius, effectData);
+            // Utility effect types
+            case 'HEAL_ZONE':
+                return this.createHealZoneGraphics(graphics, radius, effectData);
+            case 'SMOKE_CLOUD':
+                return this.createSmokeCloudGraphics(graphics, radius, effectData);
+            case 'SLOW_FIELD':
+                return this.createSlowFieldGraphics(graphics, radius, effectData);
+            case 'SHIELD_BARRIER':
+                return this.createShieldBarrierGraphics(graphics, radius, effectData);
+            case 'GRAVITY_WELL':
+                return this.createGravityWellGraphics(graphics, radius, effectData);
+            case 'VISION_REVEAL':
+                return this.createVisionRevealGraphics(graphics, radius, effectData);
+            case 'SPEED_BOOST':
+                return this.createSpeedBoostGraphics(graphics, radius, effectData);
             default:
                 return this.createGenericEffectGraphics(graphics, radius, effectData);
         }
@@ -2397,6 +3446,356 @@ class GameEngine {
     }
     
     /**
+     * Create heal zone effect graphics
+     */
+    createHealZoneGraphics(graphics, radius, effectData) {
+        // Outer healing aura - soft green
+        graphics.beginFill(0x2ecc71, 0.2);
+        graphics.drawCircle(0, 0, radius);
+        graphics.endFill();
+        
+        // Middle healing field - brighter green
+        graphics.beginFill(0x27ae60, 0.4);
+        graphics.drawCircle(0, 0, radius * 0.7);
+        graphics.endFill();
+        
+        // Inner core - bright healing light
+        graphics.beginFill(0x2ecc71, 0.6);
+        graphics.drawCircle(0, 0, radius * 0.3);
+        graphics.endFill();
+        
+        // Add healing cross symbol
+        graphics.lineStyle(3, 0x2ecc71, 0.8);
+        const crossSize = radius * 0.4;
+        // Vertical line
+        graphics.moveTo(0, -crossSize);
+        graphics.lineTo(0, crossSize);
+        // Horizontal line
+        graphics.moveTo(-crossSize, 0);
+        graphics.lineTo(crossSize, 0);
+        
+        // Add healing particles
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const distance = radius * (0.5 + Math.random() * 0.3);
+            const x = Math.cos(angle) * distance;
+            const y = Math.sin(angle) * distance;
+            const size = 2 + Math.random() * 3;
+            
+            graphics.beginFill(0x58d68d, 0.7);
+            graphics.drawCircle(x, y, size);
+            graphics.endFill();
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create smoke cloud effect graphics
+     */
+    createSmokeCloudGraphics(graphics, radius, effectData) {
+        // Create multiple overlapping smoke puffs for realistic cloud effect
+        const puffCount = 12;
+        
+        for (let i = 0; i < puffCount; i++) {
+            const angle = (i / puffCount) * Math.PI * 2 + Math.random() * 0.5;
+            const distance = Math.random() * radius * 0.6;
+            const x = Math.cos(angle) * distance;
+            const y = Math.sin(angle) * distance;
+            const puffRadius = radius * (0.3 + Math.random() * 0.4);
+            
+            // Vary smoke colors from dark to light gray
+            const smokeColors = [0x2c3e50, 0x34495e, 0x5d6d7e, 0x85929e];
+            const smokeColor = smokeColors[Math.floor(Math.random() * smokeColors.length)];
+            const alpha = 0.3 + Math.random() * 0.4;
+            
+            graphics.beginFill(smokeColor, alpha);
+            graphics.drawCircle(x, y, puffRadius);
+            graphics.endFill();
+        }
+        
+        // Add swirling smoke tendrils
+        graphics.lineStyle(2, 0x566573, 0.3);
+        for (let i = 0; i < 6; i++) {
+            const startAngle = (i / 6) * Math.PI * 2;
+            const spiralRadius = radius * 0.8;
+            
+            graphics.moveTo(
+                Math.cos(startAngle) * spiralRadius * 0.2,
+                Math.sin(startAngle) * spiralRadius * 0.2
+            );
+            
+            // Create spiral smoke pattern
+            for (let j = 1; j <= 10; j++) {
+                const angle = startAngle + (j / 10) * Math.PI * 0.8;
+                const currentRadius = spiralRadius * (0.2 + (j / 10) * 0.6);
+                const jitter = (Math.random() - 0.5) * 8; // Add randomness
+                graphics.lineTo(
+                    Math.cos(angle) * currentRadius + jitter,
+                    Math.sin(angle) * currentRadius + jitter
+                );
+            }
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create slow field effect graphics
+     */
+    createSlowFieldGraphics(graphics, radius, effectData) {
+        // Outer slow field - purple/blue
+        graphics.beginFill(0x8e44ad, 0.3);
+        graphics.drawCircle(0, 0, radius);
+        graphics.endFill();
+        
+        // Middle field - darker purple
+        graphics.beginFill(0x663399, 0.4);
+        graphics.drawCircle(0, 0, radius * 0.7);
+        graphics.endFill();
+        
+        // Inner core - deep purple
+        graphics.beginFill(0x4a235a, 0.5);
+        graphics.drawCircle(0, 0, radius * 0.4);
+        graphics.endFill();
+        
+        // Add slow effect ripples
+        graphics.lineStyle(2, 0x9b59b6, 0.6);
+        for (let i = 1; i <= 4; i++) {
+            const rippleRadius = radius * (i / 5);
+            graphics.drawCircle(0, 0, rippleRadius);
+        }
+        
+        // Add slow particles (moving inward)
+        for (let i = 0; i < 12; i++) {
+            const angle = (i / 12) * Math.PI * 2;
+            const distance = radius * (0.6 + Math.random() * 0.3);
+            const x = Math.cos(angle) * distance;
+            const y = Math.sin(angle) * distance;
+            const size = 1.5 + Math.random() * 2;
+            
+            graphics.beginFill(0xbb8fce, 0.8);
+            graphics.drawCircle(x, y, size);
+            graphics.endFill();
+            
+            // Add inward-pointing arrows
+            const arrowSize = 4;
+            graphics.lineStyle(1, 0xbb8fce, 0.7);
+            graphics.moveTo(x + Math.cos(angle) * arrowSize, y + Math.sin(angle) * arrowSize);
+            graphics.lineTo(x - Math.cos(angle) * arrowSize, y - Math.sin(angle) * arrowSize);
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create shield barrier effect graphics
+     */
+    createShieldBarrierGraphics(graphics, radius, effectData) {
+        // Outer shield energy field - cyan/blue
+        graphics.beginFill(0x3498db, 0.2);
+        graphics.drawCircle(0, 0, radius);
+        graphics.endFill();
+        
+        // Shield barrier ring
+        graphics.lineStyle(4, 0x2980b9, 0.8);
+        graphics.drawCircle(0, 0, radius * 0.8);
+        
+        // Inner shield core
+        graphics.beginFill(0x5dade2, 0.4);
+        graphics.drawCircle(0, 0, radius * 0.3);
+        graphics.endFill();
+        
+        // Add hexagonal shield pattern
+        graphics.lineStyle(2, 0x85c1e9, 0.6);
+        const hexRadius = radius * 0.6;
+        const hexPoints = [];
+        for (let i = 0; i < 6; i++) {
+            const angle = (i / 6) * Math.PI * 2;
+            hexPoints.push(Math.cos(angle) * hexRadius);
+            hexPoints.push(Math.sin(angle) * hexRadius);
+        }
+        graphics.drawPolygon(hexPoints);
+        
+        // Add shield energy sparks
+        for (let i = 0; i < 16; i++) {
+            const angle = (i / 16) * Math.PI * 2;
+            const distance = radius * 0.8;
+            const x = Math.cos(angle) * distance;
+            const y = Math.sin(angle) * distance;
+            const sparkSize = 1 + Math.random() * 2;
+            
+            graphics.beginFill(0xaed6f1, 0.9);
+            graphics.drawCircle(x, y, sparkSize);
+            graphics.endFill();
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create gravity well effect graphics
+     */
+    createGravityWellGraphics(graphics, radius, effectData) {
+        // Outer gravity field - dark purple/black
+        graphics.beginFill(0x1a1a2e, 0.4);
+        graphics.drawCircle(0, 0, radius);
+        graphics.endFill();
+        
+        // Gravity distortion rings
+        graphics.lineStyle(2, 0x6c5ce7, 0.5);
+        for (let i = 1; i <= 6; i++) {
+            const ringRadius = radius * (i / 7);
+            graphics.drawCircle(0, 0, ringRadius);
+        }
+        
+        // Central singularity
+        graphics.beginFill(0x0f0f23, 0.9);
+        graphics.drawCircle(0, 0, radius * 0.15);
+        graphics.endFill();
+        
+        // Event horizon glow
+        graphics.beginFill(0x6c5ce7, 0.6);
+        graphics.drawCircle(0, 0, radius * 0.25);
+        graphics.endFill();
+        
+        // Add gravitational particles (spiraling inward)
+        for (let i = 0; i < 20; i++) {
+            const angle = (i / 20) * Math.PI * 2;
+            const spiralOffset = (i / 20) * Math.PI * 4; // Multiple spirals
+            const distance = radius * (0.4 + Math.random() * 0.5);
+            const x = Math.cos(angle + spiralOffset) * distance;
+            const y = Math.sin(angle + spiralOffset) * distance;
+            const size = 1 + Math.random() * 1.5;
+            
+            graphics.beginFill(0xa29bfe, 0.7);
+            graphics.drawCircle(x, y, size);
+            graphics.endFill();
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create vision reveal effect graphics
+     */
+    createVisionRevealGraphics(graphics, radius, effectData) {
+        // Outer reveal field - bright yellow/gold
+        graphics.beginFill(0xf1c40f, 0.2);
+        graphics.drawCircle(0, 0, radius);
+        graphics.endFill();
+        
+        // Middle scanning ring
+        graphics.beginFill(0xe67e22, 0.3);
+        graphics.drawCircle(0, 0, radius * 0.7);
+        graphics.endFill();
+        
+        // Inner radar core
+        graphics.beginFill(0xf39c12, 0.5);
+        graphics.drawCircle(0, 0, radius * 0.2);
+        graphics.endFill();
+        
+        // Add radar sweep lines
+        graphics.lineStyle(2, 0xf1c40f, 0.7);
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            graphics.moveTo(0, 0);
+            graphics.lineTo(Math.cos(angle) * radius * 0.9, Math.sin(angle) * radius * 0.9);
+        }
+        
+        // Add scanning pulses
+        graphics.lineStyle(3, 0xf39c12, 0.8);
+        for (let i = 1; i <= 3; i++) {
+            const pulseRadius = radius * (i / 4);
+            graphics.drawCircle(0, 0, pulseRadius);
+        }
+        
+        // Add vision enhancement particles
+        for (let i = 0; i < 12; i++) {
+            const angle = (i / 12) * Math.PI * 2;
+            const distance = radius * (0.5 + Math.random() * 0.4);
+            const x = Math.cos(angle) * distance;
+            const y = Math.sin(angle) * distance;
+            const size = 1.5 + Math.random() * 2;
+            
+            graphics.beginFill(0xffd700, 0.8);
+            graphics.drawCircle(x, y, size);
+            graphics.endFill();
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create speed boost effect graphics
+     */
+    createSpeedBoostGraphics(graphics, radius, effectData) {
+        // Outer speed field - bright green/lime
+        graphics.beginFill(0x2ecc71, 0.2);
+        graphics.drawCircle(0, 0, radius);
+        graphics.endFill();
+        
+        // Middle boost ring
+        graphics.beginFill(0x27ae60, 0.3);
+        graphics.drawCircle(0, 0, radius * 0.7);
+        graphics.endFill();
+        
+        // Inner speed core
+        graphics.beginFill(0x00ff88, 0.5);
+        graphics.drawCircle(0, 0, radius * 0.3);
+        graphics.endFill();
+        
+        // Add speed boost arrows pointing outward
+        graphics.lineStyle(3, 0x00ff88, 0.8);
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const innerRadius = radius * 0.4;
+            const outerRadius = radius * 0.8;
+            const arrowSize = radius * 0.1;
+            
+            // Main arrow line
+            const startX = Math.cos(angle) * innerRadius;
+            const startY = Math.sin(angle) * innerRadius;
+            const endX = Math.cos(angle) * outerRadius;
+            const endY = Math.sin(angle) * outerRadius;
+            
+            graphics.moveTo(startX, startY);
+            graphics.lineTo(endX, endY);
+            
+            // Arrow head
+            const headAngle1 = angle + Math.PI * 0.8;
+            const headAngle2 = angle - Math.PI * 0.8;
+            
+            graphics.moveTo(endX, endY);
+            graphics.lineTo(
+                endX + Math.cos(headAngle1) * arrowSize,
+                endY + Math.sin(headAngle1) * arrowSize
+            );
+            
+            graphics.moveTo(endX, endY);
+            graphics.lineTo(
+                endX + Math.cos(headAngle2) * arrowSize,
+                endY + Math.sin(headAngle2) * arrowSize
+            );
+        }
+        
+        // Add speed particles (moving outward)
+        for (let i = 0; i < 16; i++) {
+            const angle = (i / 16) * Math.PI * 2;
+            const distance = radius * (0.3 + Math.random() * 0.4);
+            const x = Math.cos(angle) * distance;
+            const y = Math.sin(angle) * distance;
+            const size = 1 + Math.random() * 2;
+            
+            graphics.beginFill(0x58d68d, 0.9);
+            graphics.drawCircle(x, y, size);
+            graphics.endFill();
+        }
+        
+        return graphics;
+    }
+    
+    /**
      * Create generic effect graphics
      */
     createGenericEffectGraphics(graphics, radius, effectData) {
@@ -2422,17 +3821,23 @@ class GameEngine {
         container.animationSpeed = animationSpeed;
         container.originalScale = container.scale.x;
         
+        // Create a bound function reference so we can remove it later
+        container.animationFunction = () => this.animateEffect(container);
+        
         // Add to ticker for animation updates
-        this.app.ticker.add(() => this.animateEffect(container));
+        this.app.ticker.add(container.animationFunction);
     }
     
     /**
      * Animate field effects
      */
     animateEffect(container) {
-        if (!container.effectData || !container.parent) {
+        if (!container.effectData || !container.parent || !container.effectGraphics) {
             // Effect has been removed, stop animating
-            this.app.ticker.remove(() => this.animateEffect(container));
+            if (container.animationFunction) {
+                this.app.ticker.remove(container.animationFunction);
+                container.animationFunction = null;
+            }
             return;
         }
         
@@ -2457,6 +3862,28 @@ class GameEngine {
                 break;
             case 'POISON':
                 this.animatePoison(container);
+                break;
+            // Utility effect animations
+            case 'HEAL_ZONE':
+                this.animateHealZone(container);
+                break;
+            case 'SMOKE_CLOUD':
+                this.animateSmokeCloud(container);
+                break;
+            case 'SLOW_FIELD':
+                this.animateSlowField(container);
+                break;
+            case 'SHIELD_BARRIER':
+                this.animateShieldBarrier(container);
+                break;
+            case 'GRAVITY_WELL':
+                this.animateGravityWell(container);
+                break;
+            case 'VISION_REVEAL':
+                this.animateVisionReveal(container);
+                break;
+            case 'SPEED_BOOST':
+                this.animateSpeedBoost(container);
                 break;
         }
     }
@@ -2600,6 +4027,138 @@ class GameEngine {
     }
     
     /**
+     * Animate heal zone effects
+     */
+    animateHealZone(container) {
+        const time = container.animationTime;
+        
+        // Gentle pulsing for healing effect
+        const pulse = 0.9 + Math.sin(time * 4) * 0.1;
+        container.scale.set(pulse);
+        
+        // Soft breathing alpha
+        const breathe = 0.8 + Math.sin(time * 3) * 0.2;
+        container.alpha = breathe;
+        
+        // Slow rotation for mystical feel
+        container.rotation = time * 0.5;
+    }
+    
+    /**
+     * Animate smoke cloud effects
+     */
+    animateSmokeCloud(container) {
+        const time = container.animationTime;
+        
+        // Slow billowing effect
+        const billow1 = Math.sin(time * 2) * 0.05;
+        const billow2 = Math.sin(time * 1.3) * 0.03;
+        container.scale.set(0.95 + billow1 + billow2);
+        
+        // Gradual drift
+        if (!container.originalX) {
+            container.originalX = container.x;
+            container.originalY = container.y;
+        }
+        
+        const drift = time * 0.2;
+        container.x = container.originalX + Math.sin(drift) * 3;
+        container.y = container.originalY + Math.cos(drift * 0.7) * 2;
+        
+        // Slowly fade in and maintain
+        container.alpha = Math.min(0.8, time * 0.5);
+    }
+    
+    /**
+     * Animate slow field effects
+     */
+    animateSlowField(container) {
+        const time = container.animationTime;
+        
+        // Slow ripple effect
+        const ripple = 0.95 + Math.sin(time * 3) * 0.05;
+        container.scale.set(ripple);
+        
+        // Pulsing alpha to show field strength
+        const pulse = 0.7 + Math.sin(time * 2.5) * 0.2;
+        container.alpha = pulse;
+        
+        // Slow counter-rotation
+        container.rotation = -time * 0.3;
+    }
+    
+    /**
+     * Animate shield barrier effects
+     */
+    animateShieldBarrier(container) {
+        const time = container.animationTime;
+        
+        // Shield energy fluctuation
+        const energy = 0.95 + Math.sin(time * 6) * 0.05;
+        container.scale.set(energy);
+        
+        // Shield shimmer effect
+        const shimmer = 0.8 + Math.sin(time * 8) * 0.15;
+        container.alpha = shimmer;
+        
+        // Steady rotation for energy field
+        container.rotation = time * 1.0;
+    }
+    
+    /**
+     * Animate gravity well effects
+     */
+    animateGravityWell(container) {
+        const time = container.animationTime;
+        
+        // Gravitational distortion - slight scale variation
+        const distortion = 0.98 + Math.sin(time * 5) * 0.02;
+        container.scale.set(distortion);
+        
+        // Stable but ominous presence
+        container.alpha = 0.9;
+        
+        // Slow rotation suggesting gravitational forces
+        container.rotation = time * 0.8;
+    }
+    
+    /**
+     * Animate vision reveal effects
+     */
+    animateVisionReveal(container) {
+        const time = container.animationTime;
+        
+        // Radar sweep effect
+        const sweep = 0.9 + Math.sin(time * 8) * 0.1;
+        container.scale.set(sweep);
+        
+        // Scanning pulse alpha
+        const scan = 0.7 + Math.sin(time * 12) * 0.2;
+        container.alpha = scan;
+        
+        // Fast rotation for radar sweep
+        container.rotation = time * 3.0;
+    }
+    
+    /**
+     * Animate speed boost effects
+     */
+    animateSpeedBoost(container) {
+        const time = container.animationTime;
+        
+        // Energetic pulsing
+        const energy = 0.9 + Math.sin(time * 10) * 0.1;
+        container.scale.set(energy);
+        
+        // Bright, active alpha
+        const active = 0.8 + Math.sin(time * 7) * 0.15;
+        container.alpha = active;
+        
+        // Fast rotation for dynamic feel
+        container.rotation = time * 2.0;
+    }
+    
+    /**
      * Get animation speed for different effect types
      */
     getEffectAnimationSpeed(effectType) {
@@ -2614,6 +4173,19 @@ class GameEngine {
                 return 0.1; // Medium animation
             case 'FREEZE':
                 return 0.05; // Slow animation
+            // Utility effect speeds
+            case 'HEAL_ZONE':
+            case 'SLOW_FIELD':
+                return 0.08; // Slow, gentle animation
+            case 'SMOKE_CLOUD':
+                return 0.05; // Very slow, natural movement
+            case 'SHIELD_BARRIER':
+            case 'SPEED_BOOST':
+                return 0.12; // Medium-fast, energetic
+            case 'GRAVITY_WELL':
+                return 0.06; // Slow, ominous
+            case 'VISION_REVEAL':
+                return 0.15; // Fast, active scanning
             default:
                 return 0.1;
         }
@@ -2641,14 +4213,35 @@ class GameEngine {
      */
     fadeOutEffect(container, callback) {
         const fadeSpeed = 0.05;
+        
+        // Store fade function reference for proper cleanup
         const fadeOut = () => {
+            if (!container || container.alpha === undefined) {
+                // Container was already destroyed, clean up ticker
+                this.app.ticker.remove(fadeOut);
+                if (callback) callback();
+                return;
+            }
+            
             container.alpha -= fadeSpeed;
             if (container.alpha <= 0) {
                 this.app.ticker.remove(fadeOut);
-                callback();
+                if (callback) callback();
             }
         };
+        
+        // Store reference on container for emergency cleanup
+        container.fadeOutFunction = fadeOut;
         this.app.ticker.add(fadeOut);
+        
+        // Safety timeout to prevent infinite fade
+        setTimeout(() => {
+            if (container && container.fadeOutFunction) {
+                this.app.ticker.remove(container.fadeOutFunction);
+                container.fadeOutFunction = null;
+                if (callback) callback();
+            }
+        }, 5000); // 5 second timeout
     }
     
     // Health bar methods removed - health now shown in consolidated HUD
@@ -2956,11 +4549,12 @@ class GameEngine {
         }
         
         // Use decoded config or fall back to legacy URL params
-        let playerName, weaponConfig;
+        let playerName, weaponConfig, utilityWeapon;
         
         if (playerConfig && playerConfig.weaponConfig) {
             playerName = playerConfig.playerName || "Player";
             weaponConfig = playerConfig.weaponConfig;
+            utilityWeapon = playerConfig.utilityWeapon;
         } else {
             throw Error("missing configuration")
         }
@@ -2968,7 +4562,8 @@ class GameEngine {
         const message = {
             type: 'configChange',
             playerName: playerName,
-            weaponConfig: weaponConfig
+            weaponConfig: weaponConfig,
+            utilityWeapon: utilityWeapon
         };
 
         console.log('Sending player configuration:', message);
@@ -3133,6 +4728,107 @@ class GameEngine {
     handleResize() {
         this.app.renderer.resize(window.innerWidth, window.innerHeight);
     }
+    
+    /**
+     * Perform periodic memory cleanup to prevent leaks
+     */
+    performMemoryCleanup() {
+        console.log('Performing memory cleanup...');
+        
+        // Clean up any orphaned interpolators
+        this.projectileInterpolators.forEach((interpolator, id) => {
+            if (!this.projectiles.has(id)) {
+                console.warn(`Found orphaned projectile interpolator for ID ${id}, cleaning up`);
+                interpolator.destroy();
+                this.projectileInterpolators.delete(id);
+            }
+        });
+        
+        this.playerInterpolators.forEach((interpolator, id) => {
+            if (!this.players.has(id)) {
+                console.warn(`Found orphaned player interpolator for ID ${id}, cleaning up`);
+                interpolator.destroy();
+                this.playerInterpolators.delete(id);
+            }
+        });
+        
+        // Clean up any field effects with orphaned animation functions
+        this.fieldEffects.forEach((effect, id) => {
+            if (effect.animationFunction && (!effect.parent || !effect.effectData)) {
+                console.warn(`Found orphaned field effect animation for ID ${id}, cleaning up`);
+                this.app.ticker.remove(effect.animationFunction);
+                effect.animationFunction = null;
+            }
+            if (effect.fadeOutFunction && (!effect.parent || effect.alpha <= 0)) {
+                console.warn(`Found orphaned field effect fade for ID ${id}, cleaning up`);
+                this.app.ticker.remove(effect.fadeOutFunction);
+                effect.fadeOutFunction = null;
+            }
+        });
+        
+        // Force garbage collection if available (Chrome DevTools)
+        if (window.gc) {
+            window.gc();
+        }
+        
+        // Log memory usage if available
+        if (performance.memory) {
+            const memInfo = performance.memory;
+            console.log(`Memory usage: ${(memInfo.usedJSHeapSize / 1024 / 1024).toFixed(2)}MB / ${(memInfo.totalJSHeapSize / 1024 / 1024).toFixed(2)}MB`);
+        }
+    }
+    
+    /**
+     * Clean up all resources when the game engine is destroyed
+     */
+    destroy() {
+        // Clear the memory cleanup interval
+        if (this.memoryCleanupInterval) {
+            clearInterval(this.memoryCleanupInterval);
+            this.memoryCleanupInterval = null;
+        }
+        
+        // Clean up all interpolators
+        this.projectileInterpolators.forEach(interpolator => interpolator.destroy());
+        this.projectileInterpolators.clear();
+        
+        this.playerInterpolators.forEach(interpolator => interpolator.destroy());
+        this.playerInterpolators.clear();
+        
+        // Clean up all game objects
+        this.projectiles.forEach(projectile => this.cleanupProjectileContainer(projectile));
+        this.projectiles.clear();
+        
+        this.players.forEach(player => this.cleanupPlayerSprite(player));
+        this.players.clear();
+        
+        this.fieldEffects.forEach(effect => this.cleanupFieldEffectContainer(effect));
+        this.fieldEffects.clear();
+        
+        this.beams.forEach(beam => this.cleanupBeamContainer(beam));
+        this.beams.clear();
+        
+        this.utilityEntities.forEach(entity => this.cleanupUtilityEntityContainer(entity));
+        this.utilityEntities.clear();
+        
+        // Clean up PIXI app
+        if (this.app) {
+            this.app.destroy(true, { children: true, texture: true, baseTexture: true });
+            this.app = null;
+        }
+        
+        // Clear all references
+        this.gameContainer = null;
+        this.uiContainer = null;
+        this.backgroundContainer = null;
+        this.nameContainer = null;
+        this.websocket = null;
+        this.inputManager = null;
+        this.camera = null;
+        this.gameState = null;
+        
+        console.log('GameEngine destroyed and cleaned up');
+    }
 }
 
 /**
@@ -3189,6 +4885,9 @@ class InputManager {
         
         // Start gamepad polling
         this.pollGamepads();
+        
+        // Start periodic memory cleanup (every 30 seconds)
+        this.memoryCleanupInterval = setInterval(() => this.performMemoryCleanup(), 30000);
     }
     
     setupEventListeners() {
@@ -3229,20 +4928,19 @@ class InputManager {
             case 'a': this.keys.a = true; this.updateMovementAxes(); break;
             case 's': this.keys.s = true; this.updateMovementAxes(); break;
             case 'd': this.keys.d = true; this.updateMovementAxes(); break;
+            case 'r': this.keys.r = true; break;
             case 'shift': this.keys.shift = true; break;
             case ' ': this.keys.space = true; break;
-            case '1': this.sendWeaponSwitch(0); break;
-            case '2': this.sendWeaponSwitch(1); break;
-            case 'r': this.sendReload(); break;
         }
     }
-    
+
     handleKeyUp(e) {
         switch(e.key.toLowerCase()) {
             case 'w': this.keys.w = false; this.updateMovementAxes(); break;
             case 'a': this.keys.a = false; this.updateMovementAxes(); break;
             case 's': this.keys.s = false; this.updateMovementAxes(); break;
             case 'd': this.keys.d = false; this.updateMovementAxes(); break;
+            case 'r': this.keys.r = false; break;
             case 'shift': this.keys.shift = false; break;
             case ' ': this.keys.space = false; break;
         }
@@ -3283,7 +4981,9 @@ class InputManager {
         if (e.button === 0) {
             this.mouse.left = true;
         }
-        if (e.button === 2) this.mouse.right = true;
+        if (e.button === 2) {
+            this.mouse.right = true;
+        }
         e.preventDefault();
     }
     
@@ -3475,18 +5175,9 @@ class InputManager {
      * Handle gamepad-specific actions
      */
     handleGamepadActions() {
-        if (!this.gamepad.connected) return;
-        
-        // Handle weapon switching (Y button)
-        if (this.gamepad.buttons.y && !this.gamepad.buttons.y_prev) {
-            this.sendWeaponSwitch(1); // Switch to secondary weapon
+        if (!this.gamepad.connected) {
+            return;
         }
-        
-        // Handle reload (X button)
-        if (this.gamepad.buttons.x && !this.gamepad.buttons.x_prev) {
-            this.sendReload();
-        }
-        
         // Store previous button states for edge detection
         this.gamepad.buttons.y_prev = this.gamepad.buttons.y;
         this.gamepad.buttons.x_prev = this.gamepad.buttons.x;
@@ -3608,20 +5299,22 @@ class InputManager {
             }
             
             // Determine input values based on active input source
-            let moveX, moveY, fire, secondary;
+            let moveX, moveY, fire, altFire, reload;
             
             if (this.gamepad.connected && this.inputSource === 'gamepad') {
                 // Use gamepad input
                 moveX = this.movement.moveX; // Already updated by updateGamepadMovement
                 moveY = this.movement.moveY;
                 fire = this.gamepad.buttons.rt || this.gamepad.buttons.a; // Right trigger or A button
-                secondary = this.gamepad.buttons.lt || this.gamepad.buttons.b; // Left trigger or B button
+                altFire = this.gamepad.buttons.rb || this.gamepad.buttons.b; // Right bumper or B button for utility
+                reload = this.gamepad.buttons.x;
             } else {
                 // Use keyboard/mouse input
                 moveX = this.movement.moveX;
                 moveY = this.movement.moveY;
                 fire = this.mouse.left;
-                secondary = this.mouse.right;
+                altFire = this.mouse.right || this.keys.space; // Right click OR space bar for utility
+                reload = this.keys.r;
             }
             
             const input = {
@@ -3633,9 +5326,9 @@ class InputManager {
                 worldX: this.mouse.worldX || 0,
                 worldY: this.mouse.worldY || 0,
                 left: !!fire,
-                right: !!secondary,
-                weaponSwitch: null,
-                reload: null,
+                right: !!altFire, // Legacy field - now maps to altFire
+                altFire: !!altFire, // New field for utility weapons
+                reload: !!reload,
                 inputSource: this.inputSource // Let server know input source
             };
             
@@ -3643,44 +5336,35 @@ class InputManager {
         }
     }
     
-    sendWeaponSwitch(weaponIndex) {
-        if (this.onInputChange) {
-            const input = {
-                type: 'playerInput',
-                moveX: this.movement.moveX,
-                moveY: this.movement.moveY,
-                mouseX: this.mouse.x || 0,
-                mouseY: this.mouse.y || 0,
-                worldX: this.mouse.worldX || 0,
-                worldY: this.mouse.worldY || 0,
-                left: false, // Don't accidentally shoot when switching weapons
-                right: false,
-                weaponSwitch: weaponIndex,
-                reload: null,
-                inputSource: this.inputSource
-            };
-            this.onInputChange(input);
+    /**
+     * Clean up InputManager resources
+     */
+    destroy() {
+        // Clear the memory cleanup interval
+        if (this.memoryCleanupInterval) {
+            clearInterval(this.memoryCleanupInterval);
+            this.memoryCleanupInterval = null;
         }
-    }
-    
-    sendReload() {
-        if (this.onInputChange) {
-            const input = {
-                type: 'playerInput',
-                moveX: this.movement.moveX,
-                moveY: this.movement.moveY,
-                mouseX: this.mouse.x || 0,
-                mouseY: this.mouse.y || 0,
-                worldX: this.mouse.worldX || 0,
-                worldY: this.mouse.worldY || 0,
-                left: false, // Don't accidentally shoot when reloading
-                right: false,
-                weaponSwitch: null,
-                reload: true,
-                inputSource: this.inputSource
-            };
-            
-            this.onInputChange(input);
-        }
+        
+        // Remove event listeners
+        document.removeEventListener('keydown', this.handleKeyDown);
+        document.removeEventListener('keyup', this.handleKeyUp);
+        document.removeEventListener('mousemove', this.handleMouseMove);
+        document.removeEventListener('mousedown', this.handleMouseDown);
+        document.removeEventListener('mouseup', this.handleMouseUp);
+        document.removeEventListener('contextmenu', (e) => e.preventDefault());
+        
+        window.removeEventListener('gamepadconnected', this.handleGamepadConnected);
+        window.removeEventListener('gamepaddisconnected', this.handleGamepadDisconnected);
+        
+        // Clear all references
+        this.keys = null;
+        this.movement = null;
+        this.mouse = null;
+        this.gamepad = null;
+        this.onInputChange = null;
+        this.gameEngine = null;
+        
+        console.log('InputManager destroyed and cleaned up');
     }
 }

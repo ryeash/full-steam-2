@@ -7,21 +7,34 @@ import com.fullsteam.ai.AIGameHelper;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
 import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.GameInfo;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
 import com.fullsteam.model.StatusEffects;
+import com.fullsteam.model.UtilityWeapon;
+import com.fullsteam.model.DamageApplicationType;
+import com.fullsteam.model.Ordinance;
+import com.fullsteam.model.WeaponConfig;
+import com.fullsteam.physics.Barrier;
 import com.fullsteam.physics.BulletEffectProcessor;
 import com.fullsteam.physics.CollisionProcessor;
 import com.fullsteam.physics.GameEntities;
+import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Projectile;
+import com.fullsteam.physics.ProximityMine;
 import com.fullsteam.physics.StrategicLocation;
 import com.fullsteam.physics.TeamSpawnArea;
 import com.fullsteam.physics.TeamSpawnManager;
+import com.fullsteam.physics.TeleportPad;
+import com.fullsteam.physics.Turret;
+import com.fullsteam.physics.Beam;
+import com.fullsteam.physics.HealBeam;
+import com.fullsteam.physics.LaserBeam;
 import io.micronaut.websocket.WebSocketSession;
 import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
@@ -30,8 +43,11 @@ import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.Settings;
 import org.dyn4j.dynamics.TimeStep;
 import org.dyn4j.geometry.MassType;
-import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
+import org.dyn4j.geometry.Shape;
+import org.dyn4j.geometry.Circle;
+import org.dyn4j.geometry.Rectangle;
+import org.dyn4j.geometry.Polygon;
 import org.dyn4j.world.PhysicsWorld;
 import org.dyn4j.world.World;
 import org.dyn4j.world.listener.StepListener;
@@ -443,13 +459,61 @@ public class GameManager implements StepListener<Body> {
                 return false;
             });
 
+            // Clean up expired beams
+            gameEntities.getBeams().entrySet().removeIf(entry -> {
+                Beam beam = entry.getValue();
+                if (beam.isExpired()) {
+                    world.removeBody(beam.getBody());
+                    return true;
+                }
+                return false;
+            });
+
             updateStrategicLocations(deltaTime);
             updateFieldEffects(deltaTime);
+            updateUtilityEntities(deltaTime);
             world.updatev(deltaTime);
             gameEntities.getFieldEffects().entrySet().removeIf(entry -> {
                 FieldEffect effect = entry.getValue();
                 if (effect.isExpired()) {
                     world.removeBody(effect.getBody());
+                    return true;
+                }
+                return false;
+            });
+            
+            // Clean up expired utility entities
+            gameEntities.getTurrets().entrySet().removeIf(entry -> {
+                Turret turret = entry.getValue();
+                if (turret.isExpired()) {
+                    world.removeBody(turret.getBody());
+                    return true;
+                }
+                return false;
+            });
+            
+            gameEntities.getBarriers().entrySet().removeIf(entry -> {
+                Barrier barrier = entry.getValue();
+                if (barrier.isExpired()) {
+                    world.removeBody(barrier.getBody());
+                    return true;
+                }
+                return false;
+            });
+            
+            gameEntities.getNetProjectiles().entrySet().removeIf(entry -> {
+                NetProjectile net = entry.getValue();
+                if (net.isExpired()) {
+                    world.removeBody(net.getBody());
+                    return true;
+                }
+                return false;
+            });
+            
+            gameEntities.getProximityMines().entrySet().removeIf(entry -> {
+                ProximityMine mine = entry.getValue();
+                if (mine.isExpired()) {
+                    world.removeBody(mine.getBody());
                     return true;
                 }
                 return false;
@@ -485,41 +549,219 @@ public class GameManager implements StepListener<Body> {
      * Apply damage over time from a field effect to a player.
      */
     private void applyFieldEffectDamageOverTime(Player player, FieldEffect fieldEffect, double deltaTime) {
-        double damage = fieldEffect.getDamageAtPosition(player.getPosition());
-        if (damage <= 0) {
+        double effectValue = fieldEffect.getDamageAtPosition(player.getPosition());
+        if (effectValue <= 0) {
             return;
         }
 
-        if (player.takeDamage(damage * deltaTime)) {
-            killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
-        }
-
-        // Apply special status effects based on field effect type (only when damage is applied)
+        // Apply effects based on field effect type
         switch (fieldEffect.getType()) {
+            // Damage effects
             case FIRE:
-                // Fire causes burning effect - additional damage over time
-                StatusEffects.applyBurning(this, player, damage * 0.3, 1.0, fieldEffect.getOwnerId());
+                if (player.takeDamage(effectValue * deltaTime)) {
+                    killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                }
+                StatusEffects.applyBurning(this, player, effectValue * 0.3, 1.0, fieldEffect.getOwnerId());
                 break;
             case POISON:
-                // Poison causes poison effect - additional damage over time
-                StatusEffects.applyPoison(this, player, damage * 0.2, 1.5, fieldEffect.getOwnerId());
+                if (player.takeDamage(effectValue * deltaTime)) {
+                    killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                }
+                StatusEffects.applyPoison(this, player, effectValue * 0.2, 1.5, fieldEffect.getOwnerId());
                 break;
             case ELECTRIC:
-                // Electric field causes brief stunning/slowing
+                if (player.takeDamage(effectValue * deltaTime)) {
+                    killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                }
                 StatusEffects.applySlowEffect(player, 0.7, 0.5,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Electric Field"));
                 break;
             case FREEZE:
-                // Freeze effect slows movement
+                if (player.takeDamage(effectValue * deltaTime)) {
+                    killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                }
                 StatusEffects.applySlowEffect(player, 0.6, 1.0,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Freeze Field"));
                 break;
+                
+            // Utility effects (positive)
+            case HEAL_ZONE:
+                // Only heal teammates (or self in FFA)
+                if (canFieldEffectHelpPlayer(fieldEffect, player)) {
+                    double healAmount = effectValue * deltaTime;
+                    player.setHealth(Math.min(100.0, player.getHealth() + healAmount));
+                }
+                break;
+            case SPEED_BOOST:
+                // Only boost teammates (or self in FFA)
+                if (canFieldEffectHelpPlayer(fieldEffect, player)) {
+                    StatusEffects.applySpeedBoost(player, 1.5, 1.0,
+                            Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Speed Boost"));
+                }
+                break;
+            case SLOW_FIELD:
+                // Only slow enemies
+                if (fieldEffect.canAffect(player)) {
+                    StatusEffects.applySlowEffect(player, 0.5, 1.0,
+                            Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Slow Field"));
+                }
+                break;
+            case GRAVITY_WELL:
+                // Pull all players toward center (physics effect)
+                if (fieldEffect.canAffect(player)) {
+                    applyGravityWellEffect(player, fieldEffect, deltaTime);
+                }
+                break;
+            case SMOKE_CLOUD:
+                // Reduce visibility (handled by client)
+                break;
+            case SHIELD_BARRIER:
+                // Damage absorption (TODO: implement shield mechanics)
+                break;
+            case VISION_REVEAL:
+                // Reveal enemies (handled by client)
+                break;
+                
             case EXPLOSION:
-                // Explosions are instantaneous, shouldn't reach here
-                break;
             case FRAGMENTATION:
-                // Fragmentation is instantaneous, shouldn't reach here
+                // Instantaneous effects, shouldn't reach here
                 break;
+        }
+    }
+
+    /**
+     * Check if a field effect can help a player (for positive effects like healing)
+     */
+    private boolean canFieldEffectHelpPlayer(FieldEffect fieldEffect, Player player) {
+        // In FFA mode (team 0), can help self
+        if (fieldEffect.getOwnerTeam() == 0 || player.getTeam() == 0) {
+            return fieldEffect.getOwnerId() == player.getId();
+        }
+        
+        // In team mode, can help teammates
+        return fieldEffect.getOwnerTeam() == player.getTeam();
+    }
+
+    /**
+     * Apply gravity well effect that pulls players toward the center
+     */
+    private void applyGravityWellEffect(Player player, FieldEffect fieldEffect, double deltaTime) {
+        Vector2 playerPos = player.getPosition();
+        Vector2 wellCenter = fieldEffect.getPosition();
+        Vector2 pullDirection = wellCenter.copy();
+        pullDirection.subtract(playerPos);
+        
+        double distance = pullDirection.getMagnitude();
+        if (distance > 0) {
+            pullDirection.normalize();
+            double pullStrength = 200.0 * deltaTime; // Adjust as needed
+            Vector2 pullForce = pullDirection.multiply(pullStrength);
+            
+            // Apply force to player's body
+            player.getBody().applyForce(pullForce);
+        }
+    }
+
+    /**
+     * Update utility entities and handle their special behaviors
+     */
+    private void updateUtilityEntities(double deltaTime) {
+        // Update turrets and handle their AI
+        for (Turret turret : gameEntities.getAllTurrets()) {
+            if (!turret.isActive()) {
+                continue;
+            }
+            
+            // Turret AI: acquire targets and fire
+            turret.acquireTarget(gameEntities.getAllPlayers().stream().toList());
+            Projectile turretShot = turret.tryFire();
+            if (turretShot != null) {
+                gameEntities.addProjectile(turretShot);
+                world.addBody(turretShot.getBody());
+            }
+        }
+
+        // Check proximity mines for triggers
+        for (ProximityMine mine : gameEntities.getAllProximityMines()) {
+            if (!mine.isActive()) {
+                continue;
+            }
+            
+            if (mine.checkForTrigger(gameEntities.getAllPlayers().stream().toList())) {
+                FieldEffect explosion = mine.explode();
+                if (explosion != null) {
+                    gameEntities.addFieldEffect(explosion);
+                    world.addBody(explosion.getBody());
+                }
+            }
+        }
+
+        // Handle net projectile collisions (basic implementation)
+        for (NetProjectile net : gameEntities.getAllNetProjectiles()) {
+            if (!net.isActive()) {
+                continue;
+            }
+            
+            // Check for player collisions
+            Vector2 netPos = net.getPosition();
+            for (Player player : gameEntities.getAllPlayers()) {
+                if (!player.isActive()) {
+                    continue;
+                }
+                
+                double distance = netPos.distance(player.getPosition());
+                if (distance <= 25.0) { // Net hit radius
+                    net.hitPlayer(player);
+                    break; // Net is consumed on hit
+                }
+            }
+        }
+
+        // Handle teleport pad activations
+        for (TeleportPad teleportPad : gameEntities.getAllTeleportPads()) {
+            if (!teleportPad.isActive()) {
+                continue;
+            }
+            
+            // Check for player activations
+            Vector2 padPos = teleportPad.getPosition();
+            for (Player player : gameEntities.getAllPlayers()) {
+                if (!player.isActive()) {
+                    continue;
+                }
+                
+                double distance = padPos.distance(player.getPosition());
+                if (distance <= teleportPad.getActivationRadius()) {
+                    if (teleportPad.teleportPlayer(player)) {
+                        log.info("Player {} teleported via pad {}", player.getId(), teleportPad.getId());
+                    }
+                }
+            }
+        }
+
+        // Process beam damage for DOT and burst beams
+        for (Beam beam : gameEntities.getAllBeams()) {
+            if (!beam.isActive()) {
+                continue;
+            }
+            
+            // Get players in beam path and apply damage based on beam type
+            List<Player> playersInPath = getPlayersInBeamPath(beam);
+            for (Player player : playersInPath) {
+                if (beam.canAffectPlayer(player)) {
+                    switch (beam.getDamageApplicationType()) {
+                        case DAMAGE_OVER_TIME:
+                            beam.processContinuousDamage(player, deltaTime);
+                            break;
+                        case BURST:
+                            // Burst damage is handled internally by beam's update method
+                            break;
+                        case INSTANT:
+                            // Instant damage was already applied when beam was created
+                            break;
+                    }
+                }
+            }
         }
     }
 
@@ -573,15 +815,482 @@ public class GameManager implements StepListener<Body> {
         Player player = gameEntities.getPlayer(playerId);
         if (player != null && input != null) {
             player.processInput(input);
+            
+            // Handle primary weapon fire (left click)
             if (input.isLeft()) {
-                for (Projectile projectile : player.shoot()) {
-                    if (projectile != null) {
-                        gameEntities.addProjectile(projectile);
-                        world.addBody(projectile.getBody());
+                // Check if weapon fires beams or projectiles
+                if (player.getCurrentWeapon().getOrdinance().isBeamType()) {
+                    // Handle beam weapons
+                    Beam beam = player.shootBeam();
+                    if (beam != null) {
+                        // Update beam's effective end point based on obstacle collisions
+                        Vector2 effectiveEnd = findBeamObstacleIntersection(beam.getStartPoint(), beam.getEndPoint());
+                        beam.setEffectiveEndPoint(effectiveEnd);
+                        
+                        gameEntities.addBeam(beam);
+                        world.addBody(beam.getBody());
+                        
+                        // Process initial hit for instant damage beams
+                        if (beam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
+                            processBeamInitialHit(beam);
+                        }
+                    }
+                } else {
+                    // Handle projectile weapons
+                    for (Projectile projectile : player.shoot()) {
+                        if (projectile != null) {
+                            gameEntities.addProjectile(projectile);
+                            world.addBody(projectile.getBody());
+                        }
                     }
                 }
             }
+            
+            // Handle utility weapon fire (right click/altFire)
+            if (input.isAltFire()) {
+                Player.UtilityActivation activation = player.useUtility();
+                if (activation != null) {
+                    processUtilityActivation(activation);
+                }
+            }
         }
+    }
+
+    /**
+     * Process utility weapon activation and create appropriate effects
+     */
+    protected void processUtilityActivation(Player.UtilityActivation activation) {
+        UtilityWeapon utility = activation.utilityWeapon;
+        
+        if (utility.isFieldEffectBased()) {
+            // Create FieldEffect for area-based utilities
+            createUtilityFieldEffect(activation);
+        } else if (utility.isEntityBased()) {
+            // Create custom entity for complex utilities
+            createUtilityEntity(activation);
+        } else if (utility.isBeamBased()) {
+            // Create beam for line-of-sight utilities
+            createUtilityBeam(activation);
+        }
+    }
+
+    /**
+     * Create a FieldEffect for utility weapons that use the field effect system
+     */
+    private void createUtilityFieldEffect(Player.UtilityActivation activation) {
+        UtilityWeapon utility = activation.utilityWeapon;
+        FieldEffectType effectType = utility.getFieldEffectType();
+        
+        // Calculate target position based on utility range and aim direction
+        Vector2 targetPos = activation.position.copy();
+        if (utility.getRange() > 0) {
+            Vector2 offset = activation.direction.copy();
+            offset.multiply(utility.getRange());
+            targetPos.add(offset);
+        }
+        
+        // Create the field effect
+        FieldEffect fieldEffect = new FieldEffect(
+            Config.nextId(),
+            activation.playerId,
+            effectType,
+            targetPos,
+            utility.getRange() * 0.5, // Use half range as radius
+            utility.getDamage(),
+            effectType.getDefaultDuration(),
+            activation.team
+        );
+        
+        gameEntities.addFieldEffect(fieldEffect);
+        world.addBody(fieldEffect.getBody());
+    }
+
+    /**
+     * Create custom entities for utility weapons that need complex behavior
+     */
+    private void createUtilityEntity(Player.UtilityActivation activation) {
+        UtilityWeapon utility = activation.utilityWeapon;
+        
+        switch (utility) {
+            case TURRET_CONSTRUCTOR:
+                createTurret(activation);
+                break;
+            case WALL_BUILDER:
+                createBarrier(activation);
+                break;
+            case NET_LAUNCHER:
+                createNetProjectile(activation);
+                break;
+            case MINE_LAYER:
+                createProximityMine(activation);
+                break;
+            case TELEPORTER:
+                createTeleportPad(activation);
+                break;
+            default:
+                log.warn("Unknown entity-based utility weapon: {}", utility.getDisplayName());
+                break;
+        }
+    }
+
+    private void createTurret(Player.UtilityActivation activation) {
+        // Calculate placement position slightly in front of player
+        Vector2 placement = activation.position.copy();
+        Vector2 offset = activation.direction.copy();
+        offset.multiply(50.0); // Place 50 units in front
+        placement.add(offset);
+
+        Turret turret = new Turret(
+            Config.nextId(),
+            activation.playerId,
+            activation.team,
+            placement,
+            15.0 // 15 second lifespan
+        );
+
+        gameEntities.addTurret(turret);
+        world.addBody(turret.getBody());
+        log.info("Player {} deployed turret at ({}, {})", activation.playerId, placement.x, placement.y);
+    }
+
+    private void createBarrier(Player.UtilityActivation activation) {
+        // Calculate placement position in front of player
+        Vector2 placement = activation.position.copy();
+        Vector2 offset = activation.direction.copy();
+        offset.multiply(40.0); // Place 40 units in front
+        placement.add(offset);
+
+        Barrier barrier = new Barrier(
+            Config.nextId(),
+            activation.playerId,
+            activation.team,
+            placement,
+            activation.direction,
+            20.0 // 20 second lifespan
+        );
+
+        gameEntities.addBarrier(barrier);
+        world.addBody(barrier.getBody());
+        log.info("Player {} deployed barrier at ({}, {})", activation.playerId, placement.x, placement.y);
+    }
+
+    private void createNetProjectile(Player.UtilityActivation activation) {
+        // Fire net projectile in aim direction
+        Vector2 velocity = activation.direction.copy();
+        velocity.multiply(300.0); // Net projectile speed
+
+        NetProjectile netProjectile = new NetProjectile(
+            Config.nextId(),
+            activation.playerId,
+            activation.team,
+            activation.position,
+            velocity,
+            5.0 // 5 second time to live
+        );
+
+        gameEntities.addNetProjectile(netProjectile);
+        world.addBody(netProjectile.getBody());
+        log.info("Player {} fired net projectile", activation.playerId);
+    }
+
+    private void createProximityMine(Player.UtilityActivation activation) {
+        // Place mine at player's current position
+        ProximityMine mine = new ProximityMine(
+            Config.nextId(),
+            activation.playerId,
+            activation.team,
+            activation.position,
+            30.0 // 30 second lifespan
+        );
+
+        gameEntities.addProximityMine(mine);
+        world.addBody(mine.getBody());
+        log.info("Player {} placed proximity mine at ({}, {})", activation.playerId, activation.position.x, activation.position.y);
+    }
+
+    private void createTeleportPad(Player.UtilityActivation activation) {
+        // Calculate placement position slightly in front of player
+        Vector2 placement = activation.position.copy();
+        Vector2 offset = activation.direction.copy();
+        offset.multiply(30.0); // Place 30 units in front
+        placement.add(offset);
+
+        TeleportPad teleportPad = new TeleportPad(
+            Config.nextId(),
+            activation.playerId,
+            activation.team,
+            placement,
+            60.0 // 60 second lifespan
+        );
+
+        gameEntities.addTeleportPad(teleportPad);
+        world.addBody(teleportPad.getBody());
+        
+        // Try to link with existing teleport pad from same player
+        linkTeleportPads(teleportPad, activation.playerId);
+        
+        log.info("Player {} placed teleport pad at ({}, {})", activation.playerId, placement.x, placement.y);
+    }
+
+    /**
+     * Link teleport pads from the same player
+     */
+    private void linkTeleportPads(TeleportPad newPad, int playerId) {
+        // Find existing unlinked teleport pad from same player
+        for (TeleportPad existingPad : gameEntities.getAllTeleportPads()) {
+            if (existingPad.getId() != newPad.getId() && 
+                existingPad.getOwnerId() == playerId && 
+                !existingPad.isLinked() && 
+                existingPad.isActive()) {
+                
+                // Link the pads
+                newPad.linkTo(existingPad);
+                log.info("Linked teleport pads {} and {} for player {}", newPad.getId(), existingPad.getId(), playerId);
+                break; // Only link to one pad
+            }
+        }
+    }
+
+    /**
+     * Create a beam for utility weapons that use the beam system
+     */
+    private void createUtilityBeam(Player.UtilityActivation activation) {
+        UtilityWeapon utility = activation.utilityWeapon;
+        Ordinance beamOrdinance = utility.getBeamOrdinance();
+        
+        // Create beam using the utility's beam ordinance
+        Beam utilityBeam = createBeamFromUtility(
+            Config.nextId(),
+            activation.position,
+            activation.direction,
+            utility.getRange(),
+            utility.getDamage(),
+            activation.playerId,
+            activation.team,
+            beamOrdinance
+        );
+        
+        if (utilityBeam != null) {
+            // Update beam's effective end point based on obstacle collisions
+            Vector2 effectiveEnd = findBeamObstacleIntersection(utilityBeam.getStartPoint(), utilityBeam.getEndPoint());
+            utilityBeam.setEffectiveEndPoint(effectiveEnd);
+            
+            gameEntities.addBeam(utilityBeam);
+            world.addBody(utilityBeam.getBody());
+            
+            // Process initial hit for instant damage beams
+            if (utilityBeam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
+                processBeamInitialHit(utilityBeam);
+            }
+            
+            log.info("Player {} activated beam utility {} with range {}", 
+                    activation.playerId, utility.getDisplayName(), utility.getRange());
+        }
+    }
+
+    /**
+     * Factory method to create utility beams with special behaviors
+     */
+    private Beam createBeamFromUtility(int beamId, Vector2 startPoint, Vector2 direction, 
+                                      double range, double damage, int ownerId, int ownerTeam, 
+                                      Ordinance ordinance) {
+        switch (ordinance) {
+            case HEAL_BEAM:
+                return new HealBeam(beamId, startPoint, direction, range, damage, 
+                                  ownerId, ownerTeam, ordinance.getBeamDuration(), 
+                                  ordinance.getDamageInterval());
+            case LASER:
+                // For utility lasers, we might want custom behavior
+                return new LaserBeam(beamId, startPoint, direction, range, damage, 
+                                   ownerId, ownerTeam, ordinance.getBeamDuration());
+            default:
+                return null; // Unsupported beam type for utilities
+        }
+    }
+
+    /**
+     * Process initial hit for instant damage beams (like laser, railgun)
+     */
+    private void processBeamInitialHit(Beam beam) {
+        List<Player> playersInPath = getPlayersInBeamPath(beam);
+        
+        for (Player player : playersInPath) {
+            if (beam.canAffectPlayer(player)) {
+                beam.processInitialHit(player);
+                
+                // For non-piercing beams, stop after first hit
+                if (!beam.canPierceTargets()) {
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * Get all players that intersect with a beam's path using line-based collision detection
+     * This method accounts for obstacles blocking the beam path
+     */
+    private List<Player> getPlayersInBeamPath(Beam beam) {
+        List<Player> playersInPath = new ArrayList<>();
+        Vector2 beamStart = beam.getStartPoint();
+        Vector2 effectiveBeamEnd = beam.getEffectiveEndPoint(); // Use pre-calculated effective end point
+        
+        for (Player player : gameEntities.getAllPlayers()) {
+            if (!player.isActive() || player.getHealth() <= 0) {
+                continue;
+            }
+            
+            // Check if player intersects with the unobstructed portion of the beam
+            if (isPlayerInBeamPath(player, beamStart, effectiveBeamEnd)) {
+                playersInPath.add(player);
+            }
+        }
+        
+        // Sort by distance from beam start for proper piercing order
+        playersInPath.sort((p1, p2) -> {
+            double dist1 = beamStart.distanceSquared(p1.getPosition());
+            double dist2 = beamStart.distanceSquared(p2.getPosition());
+            return Double.compare(dist1, dist2);
+        });
+        
+        return playersInPath;
+    }
+
+    /**
+     * Check if a player intersects with a beam's path using line-circle collision
+     */
+    private boolean isPlayerInBeamPath(Player player, Vector2 beamStart, Vector2 beamEnd) {
+        Vector2 playerPos = player.getPosition();
+        double playerRadius = 15.0; // Player collision radius
+        
+        // Calculate distance from point to line segment
+        double lineLength = beamStart.distance(beamEnd);
+        if (lineLength == 0) {
+            return beamStart.distance(playerPos) <= playerRadius;
+        }
+        
+        // Project player position onto beam line
+        Vector2 beamDir = beamEnd.copy().subtract(beamStart);
+        Vector2 playerOffset = playerPos.copy().subtract(beamStart);
+        
+        double projection = playerOffset.dot(beamDir) / (lineLength * lineLength);
+        projection = Math.max(0, Math.min(1, projection)); // Clamp to line segment
+        
+        Vector2 closestPoint = beamStart.copy().add(beamDir.multiply(projection));
+        double distance = playerPos.distance(closestPoint);
+        
+        return distance <= playerRadius;
+    }
+
+    /**
+     * Find where a beam intersects with obstacles, returning the effective end point
+     * If no obstacles are hit, returns the original beam end point
+     */
+    private Vector2 findBeamObstacleIntersection(Vector2 beamStart, Vector2 beamEnd) {
+        Vector2 closestIntersection = beamEnd.copy();
+        double closestDistance = beamStart.distance(beamEnd);
+        
+        // Check intersection with all obstacles
+        for (Obstacle obstacle : gameEntities.getAllObstacles()) {
+            Vector2 intersection = findLineObstacleIntersection(beamStart, beamEnd, obstacle);
+            if (intersection != null) {
+                double distance = beamStart.distance(intersection);
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestIntersection = intersection;
+                }
+            }
+        }
+        
+        return closestIntersection;
+    }
+
+    /**
+     * Find intersection point between a line segment and an obstacle
+     * Returns null if no intersection occurs
+     */
+    private Vector2 findLineObstacleIntersection(Vector2 lineStart, Vector2 lineEnd, Obstacle obstacle) {
+        // Get obstacle shape and transform
+        Shape shape = obstacle.getPrimaryShape();
+        Vector2 obstaclePos = obstacle.getPosition();
+        double obstacleRotation = obstacle.getBody().getTransform().getRotationAngle();
+        
+        if (shape instanceof Circle circle) {
+            return findLineCircleIntersection(lineStart, lineEnd, obstaclePos, circle.getRadius());
+        } else if (shape instanceof Rectangle rect) {
+            return findLineRectangleIntersection(lineStart, lineEnd, obstaclePos, rect.getWidth(), rect.getHeight(), obstacleRotation);
+        } else if (shape instanceof Polygon polygon) {
+            return findLinePolygonIntersection(lineStart, lineEnd, polygon, obstaclePos, obstacleRotation);
+        }
+        
+        return null;
+    }
+
+    /**
+     * Find intersection between line segment and circle
+     */
+    private Vector2 findLineCircleIntersection(Vector2 lineStart, Vector2 lineEnd, Vector2 circleCenter, double radius) {
+        // Translate line to circle-centered coordinates
+        Vector2 start = lineStart.copy().subtract(circleCenter);
+        Vector2 end = lineEnd.copy().subtract(circleCenter);
+        Vector2 dir = end.copy().subtract(start);
+        
+        // Solve quadratic equation for line-circle intersection
+        double a = dir.dot(dir);
+        double b = 2 * start.dot(dir);
+        double c = start.dot(start) - radius * radius;
+        
+        double discriminant = b * b - 4 * a * c;
+        if (discriminant < 0) {
+            return null; // No intersection
+        }
+        
+        double t1 = (-b - Math.sqrt(discriminant)) / (2 * a);
+        double t2 = (-b + Math.sqrt(discriminant)) / (2 * a);
+        
+        // Find the closest intersection within the line segment
+        double t = -1;
+        if (t1 >= 0 && t1 <= 1) {
+            t = t1;
+        } else if (t2 >= 0 && t2 <= 1) {
+            t = t2;
+        }
+        
+        if (t >= 0) {
+            Vector2 intersection = start.copy().add(dir.multiply(t));
+            return intersection.add(circleCenter); // Transform back to world coordinates
+        }
+        
+        return null;
+    }
+
+    /**
+     * Find intersection between line segment and axis-aligned rectangle
+     */
+    private Vector2 findLineRectangleIntersection(Vector2 lineStart, Vector2 lineEnd, Vector2 rectCenter, 
+                                                 double width, double height, double rotation) {
+        // For simplicity, treat rotated rectangles as circles with radius = diagonal/2
+        // This is an approximation but works well for gameplay
+        double diagonal = Math.sqrt(width * width + height * height);
+        return findLineCircleIntersection(lineStart, lineEnd, rectCenter, diagonal / 2);
+    }
+
+    /**
+     * Find intersection between line segment and polygon
+     */
+    private Vector2 findLinePolygonIntersection(Vector2 lineStart, Vector2 lineEnd, Polygon polygon, 
+                                              Vector2 polygonCenter, double rotation) {
+        // For complex polygons, use bounding circle approximation for performance
+        // This could be made more accurate by checking each polygon edge, but that's expensive
+        double boundingRadius = 0;
+        for (Vector2 vertex : polygon.getVertices()) {
+            double distance = vertex.getMagnitude();
+            if (distance > boundingRadius) {
+                boundingRadius = distance;
+            }
+        }
+        
+        return findLineCircleIntersection(lineStart, lineEnd, polygonCenter, boundingRadius);
     }
 
     protected void processPlayerConfigChange(PlayerSession playerSession, PlayerConfigRequest request) {
@@ -595,16 +1304,32 @@ public class GameManager implements StepListener<Body> {
                 log.info("Updated player {} name to: {}", playerSession.getPlayerId(), newName);
             }
 
-            // Handle new unified weapon config or legacy separate weapons
+            // Handle weapon configuration
+            WeaponConfig primaryConfig = null;
+            UtilityWeapon utilityConfig = null;
+            
+            // Determine primary weapon config
             if (request.getWeaponConfig() != null) {
-                // New unified weapon config - use for both primary and secondary
-                log.info("Applying custom weapon config for player {}: {}", player.getPlayerName(), request.getWeaponConfig().type);
-                player.applyWeaponConfig(request.getWeaponConfig(), request.getWeaponConfig());
-            } else {
-                // Legacy support for separate primary/secondary weapons
-                log.info("Applying legacy weapon config for player {}", player.getPlayerName());
-                player.applyWeaponConfig(request.getPrimaryWeapon(), request.getSecondaryWeapon());
+                primaryConfig = request.getWeaponConfig();
+                log.info("Applying custom weapon config for player {}: {}", player.getPlayerName(), primaryConfig.type);
+            } else if (request.getPrimaryWeapon() != null) {
+                primaryConfig = request.getPrimaryWeapon();
+                log.info("Applying legacy primary weapon config for player {}", player.getPlayerName());
             }
+            
+            // Determine utility weapon config
+            if (request.getUtilityWeapon() != null) {
+                try {
+                    utilityConfig = UtilityWeapon.valueOf(request.getUtilityWeapon());
+                    log.info("Applying utility weapon for player {}: {}", player.getPlayerName(), utilityConfig.getDisplayName());
+                } catch (IllegalArgumentException e) {
+                    log.warn("Invalid utility weapon '{}' for player {}, using default", request.getUtilityWeapon(), player.getPlayerName());
+                    utilityConfig = UtilityWeapon.HEAL_ZONE;
+                }
+            }
+            
+            // Apply configurations
+            player.applyWeaponConfig(primaryConfig, utilityConfig);
         }
     }
 
@@ -735,7 +1460,8 @@ public class GameManager implements StepListener<Body> {
             playerState.put("rotation", player.getRotation());
             playerState.put("health", player.getHealth());
             playerState.put("active", player.isActive());
-            playerState.put("weapon", player.getCurrentWeaponIndex());
+            playerState.put("weapon", 0); // Always primary weapon now
+            playerState.put("utilityWeapon", player.getUtilityWeapon().name());
             playerState.put("ammo", player.getCurrentWeapon().getCurrentAmmo());
             playerState.put("maxAmmo", player.getCurrentWeapon().getMagazineSize());
             playerState.put("reloading", player.isReloading());
@@ -823,6 +1549,124 @@ public class GameManager implements StepListener<Body> {
             fieldEffectStates.add(effectState);
         }
         gameState.put("fieldEffects", fieldEffectStates);
+
+        // Add utility entities to game state
+        List<Map<String, Object>> turretStates = new ArrayList<>();
+        for (Turret turret : gameEntities.getAllTurrets()) {
+            Vector2 pos = turret.getPosition();
+            Map<String, Object> turretState = new HashMap<>();
+            turretState.put("id", turret.getId());
+            turretState.put("type", "TURRET");
+            turretState.put("x", pos.x);
+            turretState.put("y", pos.y);
+            turretState.put("rotation", turret.getRotation());
+            turretState.put("health", turret.getHealth());
+            turretState.put("active", turret.isActive());
+            turretState.put("ownerId", turret.getOwnerId());
+            turretState.put("ownerTeam", turret.getOwnerTeam());
+            turretState.put("lifespanPercent", turret.getLifespanPercent());
+            turretStates.add(turretState);
+        }
+        gameState.put("turrets", turretStates);
+
+        List<Map<String, Object>> barrierStates = new ArrayList<>();
+        for (Barrier barrier : gameEntities.getAllBarriers()) {
+            Vector2 pos = barrier.getPosition();
+            Map<String, Object> barrierState = new HashMap<>();
+            barrierState.put("id", barrier.getId());
+            barrierState.put("type", "BARRIER");
+            barrierState.put("x", pos.x);
+            barrierState.put("y", pos.y);
+            barrierState.put("rotation", barrier.getRotation());
+            barrierState.put("health", barrier.getHealth());
+            barrierState.put("active", barrier.isActive());
+            barrierState.put("ownerId", barrier.getOwnerId());
+            barrierState.put("ownerTeam", barrier.getOwnerTeam());
+            barrierState.put("lifespanPercent", barrier.getLifespanPercent());
+            barrierStates.add(barrierState);
+        }
+        gameState.put("barriers", barrierStates);
+
+        List<Map<String, Object>> netStates = new ArrayList<>();
+        for (NetProjectile net : gameEntities.getAllNetProjectiles()) {
+            Vector2 pos = net.getPosition();
+            Vector2 vel = net.getVelocity();
+            Map<String, Object> netState = new HashMap<>();
+            netState.put("id", net.getId());
+            netState.put("type", "NET");
+            netState.put("x", pos.x);
+            netState.put("y", pos.y);
+            netState.put("vx", vel.x);
+            netState.put("vy", vel.y);
+            netState.put("active", net.isActive());
+            netState.put("ownerId", net.getOwnerId());
+            netState.put("ownerTeam", net.getOwnerTeam());
+            netStates.add(netState);
+        }
+        gameState.put("nets", netStates);
+
+        List<Map<String, Object>> mineStates = new ArrayList<>();
+        for (ProximityMine mine : gameEntities.getAllProximityMines()) {
+            Vector2 pos = mine.getPosition();
+            Map<String, Object> mineState = new HashMap<>();
+            mineState.put("id", mine.getId());
+            mineState.put("type", "MINE");
+            mineState.put("x", pos.x);
+            mineState.put("y", pos.y);
+            mineState.put("active", mine.isActive());
+            mineState.put("ownerId", mine.getOwnerId());
+            mineState.put("ownerTeam", mine.getOwnerTeam());
+            mineState.put("isArmed", mine.isArmed());
+            mineState.put("armingPercent", mine.getArmingPercent());
+            mineState.put("lifespanPercent", mine.getLifespanPercent());
+            mineStates.add(mineState);
+        }
+        gameState.put("mines", mineStates);
+
+        List<Map<String, Object>> teleportPadStates = new ArrayList<>();
+        for (TeleportPad teleportPad : gameEntities.getAllTeleportPads()) {
+            Vector2 pos = teleportPad.getPosition();
+            Map<String, Object> padState = new HashMap<>();
+            padState.put("id", teleportPad.getId());
+            padState.put("type", "TELEPORT_PAD");
+            padState.put("x", pos.x);
+            padState.put("y", pos.y);
+            padState.put("active", teleportPad.isActive());
+            padState.put("ownerId", teleportPad.getOwnerId());
+            padState.put("ownerTeam", teleportPad.getOwnerTeam());
+            padState.put("isLinked", teleportPad.isLinked());
+            padState.put("isCharging", teleportPad.isCharging());
+            padState.put("chargingProgress", teleportPad.getChargingProgress());
+            padState.put("lifespanPercent", teleportPad.getLifespanPercent());
+            padState.put("pulseValue", teleportPad.getPulseValue());
+            if (teleportPad.getLinkedPad() != null) {
+                padState.put("linkedPadId", teleportPad.getLinkedPad().getId());
+            }
+            teleportPadStates.add(padState);
+        }
+        gameState.put("teleportPads", teleportPadStates);
+
+        // Beam states
+        List<Map<String, Object>> beamStates = new ArrayList<>();
+        for (Beam beam : gameEntities.getAllBeams()) {
+            Vector2 startPos = beam.getStartPoint();
+            Vector2 effectiveEndPos = beam.getEffectiveEndPoint(); // Use effective end point for rendering
+            Map<String, Object> beamState = new HashMap<>();
+            beamState.put("id", beam.getId());
+            beamState.put("startX", startPos.x);
+            beamState.put("startY", startPos.y);
+            beamState.put("endX", effectiveEndPos.x);
+            beamState.put("endY", effectiveEndPos.y);
+            beamState.put("ownerId", beam.getOwnerId());
+            beamState.put("ownerTeam", beam.getOwnerTeam());
+            beamState.put("damage", beam.getDamage());
+            beamState.put("damageType", beam.getDamageApplicationType().name());
+            beamState.put("durationPercent", beam.getDurationPercent());
+            beamState.put("isHealingBeam", beam.isHealingBeam());
+            beamState.put("canPierce", beam.canPierceTargets());
+            beamStates.add(beamState);
+        }
+        gameState.put("beams", beamStates);
 
         broadcast(gameState);
     }

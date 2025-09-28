@@ -5,6 +5,7 @@ import com.fullsteam.GameLobby;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.LobbyInfo;
 import com.fullsteam.model.Ordinance;
+import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.WeaponAttribute;
 import com.fullsteam.model.WeaponConfig;
 import io.micronaut.context.annotation.Context;
@@ -107,23 +108,23 @@ public class GameController {
 
         // Preset weapons
         Map<String, Map<String, Object>> presets = new HashMap<>();
-        
+
         // Basic ordinance showcases
         presets.put("ASSAULT_RIFLE", createPresetData(WeaponConfig.ASSAULT_RIFLE_PRESET));
         presets.put("HAND_CANNON", createPresetData(WeaponConfig.HAND_CANNON_PRESET));
         presets.put("PLASMA_RIFLE", createPresetData(WeaponConfig.PLASMA_RIFLE_PRESET));
-        
+
         // New ordinance showcases
         presets.put("SIEGE_CANNON", createPresetData(WeaponConfig.SIEGE_CANNON_PRESET));
         presets.put("PRECISION_DART_GUN", createPresetData(WeaponConfig.PRECISION_DART_GUN_PRESET));
         presets.put("FLAME_PROJECTOR", createPresetData(WeaponConfig.FLAME_PROJECTOR_PRESET));
-        
+
         // Explosive weapons (ordinance + effects)
         presets.put("EXPLOSIVE_SNIPER", createPresetData(WeaponConfig.EXPLOSIVE_SNIPER_PRESET));
         presets.put("ROCKET_LAUNCHER", createPresetData(WeaponConfig.ROCKET_LAUNCHER_PRESET));
         presets.put("GRENADE_LAUNCHER", createPresetData(WeaponConfig.GRENADE_LAUNCHER_PRESET));
         presets.put("CLUSTER_MORTAR", createPresetData(WeaponConfig.CLUSTER_MORTAR_PRESET));
-        
+
         // Special effect showcases
         presets.put("BOUNCY_SMG", createPresetData(WeaponConfig.BOUNCY_SMG_PRESET));
         presets.put("PIERCING_RIFLE", createPresetData(WeaponConfig.PIERCING_RIFLE_PRESET));
@@ -132,12 +133,27 @@ public class GameController {
         presets.put("ARC_PISTOL", createPresetData(WeaponConfig.ARC_PISTOL_PRESET));
         presets.put("TOXIC_SPRAYER", createPresetData(WeaponConfig.TOXIC_SPRAYER_PRESET));
         presets.put("ICE_CANNON", createPresetData(WeaponConfig.ICE_CANNON_PRESET));
-        
+
         data.put("presets", presets);
 
         // Point budget
         data.put("maxPoints", 100);
 
+        data.put("utilityWeapons", Arrays.stream(UtilityWeapon.values())
+                .map(utility -> {
+                    Map<String, Object> utilityData = new HashMap<>();
+                    utilityData.put("name", utility.name());
+                    utilityData.put("displayName", utility.getDisplayName());
+                    utilityData.put("description", utility.getDescription());
+                    utilityData.put("category", utility.getCategory().getDisplayName());
+                    utilityData.put("cooldown", utility.getCooldown());
+                    utilityData.put("range", utility.getRange());
+                    utilityData.put("damage", utility.getDamage());
+                    utilityData.put("isFieldEffectBased", utility.isFieldEffectBased());
+                    utilityData.put("isEntityBased", utility.isEntityBased());
+                    return utilityData;
+                })
+                .collect(Collectors.toList()));
         return data;
     }
 

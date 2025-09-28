@@ -3,6 +3,8 @@ package com.fullsteam.physics;
 import com.fullsteam.Config;
 import com.fullsteam.model.AttributeModification;
 import com.fullsteam.model.PlayerInput;
+import com.fullsteam.model.UtilityWeapon;
+import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.Weapon;
 import com.fullsteam.model.WeaponConfig;
 import lombok.Getter;
@@ -15,7 +17,6 @@ import org.dyn4j.geometry.Vector2;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -25,12 +26,12 @@ public class Player extends GameEntity {
     private String playerName;
     private int team = 0; // 0 = no team (FFA), 1+ = team number
     private Weapon primaryWeapon;
-    private Weapon secondaryWeapon;
-    private int currentWeapon = 0; // 0 = primary, 1 = secondary
+    private UtilityWeapon utilityWeapon;
     private boolean isReloading = false;
     private double reloadTimeRemaining = 0;
     private Vector2 aimDirection = new Vector2(1, 0);
     private long lastShotTime = 0;
+    private long lastUtilityUseTime = 0;
     private int kills = 0;
     private int deaths = 0;
     private double respawnTime = 0;
@@ -50,7 +51,7 @@ public class Player extends GameEntity {
 
         // Default weapons
         this.primaryWeapon = WeaponConfig.ASSAULT_RIFLE_PRESET.buildWeapon();
-        this.secondaryWeapon = WeaponConfig.HAND_CANNON_PRESET.buildWeapon();
+        this.utilityWeapon = UtilityWeapon.HEAL_ZONE; // Default utility weapon
     }
 
     private static Body createPlayerBody(double x, double y) {
@@ -126,21 +127,22 @@ public class Player extends GameEntity {
             body.setAngularVelocity(0.0);
         }
 
-        // Weapon switching
-        if (input.getWeaponSwitch() != null) {
-            currentWeapon = input.getWeaponSwitch() % 2;
-        }
+        // Weapon switching is no longer needed - primary weapon is always active
 
         // Reloading
         if (Boolean.TRUE.equals(input.getReload()) && !isReloading) {
             startReload();
         }
+        
+        // Handle legacy right-click mapping to altFire
+        if (input.isRight()) {
+            input.setAltFire(true);
+        }
     }
 
-    public void applyWeaponConfig(WeaponConfig primary, WeaponConfig secondary) {
+    public void applyWeaponConfig(WeaponConfig primary, UtilityWeapon utility) {
         if (primary != null) {
             try {
-//                double percentAmmo = Optional.ofNullable(this.primaryWeapon).map(w -> w.getCurrentAmmo() / w.getMagazineSize()).orElse(100);
                 primaryWeapon = primary.buildWeapon();
                 // TODO: too naive
                 primaryWeapon.reload();
@@ -150,19 +152,13 @@ public class Player extends GameEntity {
                 primaryWeapon = WeaponConfig.ASSAULT_RIFLE_PRESET.buildWeapon();
             }
         }
-        if (secondary != null) {
-            try {
-                secondaryWeapon = secondary.buildWeapon();
-            } catch (Exception e) {
-                e.printStackTrace();
-                // Fallback to legacy method if new method fails
-                secondaryWeapon = WeaponConfig.HAND_CANNON_PRESET.buildWeapon();
-            }
+        if (utility != null) {
+            this.utilityWeapon = utility;
         }
     }
 
     public boolean canShoot() {
-        Weapon weapon = getCurrentWeapon();
+        Weapon weapon = primaryWeapon; // Always use primary weapon for shooting
         long now = System.currentTimeMillis();
         double fireInterval = 1000.0 / weapon.getFireRate();
         // Check if we have enough ammo for at least one bullet (partial bursts are allowed)
@@ -173,8 +169,18 @@ public class Player extends GameEntity {
                && (now - lastShotTime) >= fireInterval;
     }
 
+    public boolean canUseUtility() {
+        if (!isActive() || health <= 0 || utilityWeapon == null) {
+            return false;
+        }
+        
+        long now = System.currentTimeMillis();
+        double cooldownMs = utilityWeapon.getCooldown() * 1000.0;
+        return (now - lastUtilityUseTime) >= cooldownMs;
+    }
+
     public List<Projectile> shoot() {
-        Weapon weapon = getCurrentWeapon();
+        Weapon weapon = primaryWeapon; // Always use primary weapon
         if (!canShoot()) {
             if (!isReloading && weapon.getCurrentAmmo() <= 0) {
                 startReload();
@@ -223,8 +229,111 @@ public class Player extends GameEntity {
         return toFire;
     }
 
+    /**
+     * Shoot a beam weapon instead of projectiles
+     * @return Beam object if weapon can fire beams and conditions are met, null otherwise
+     */
+    public Beam shootBeam() {
+        Weapon weapon = primaryWeapon; // Always use primary weapon
+        if (!canShoot() || !weapon.getOrdinance().isBeamType()) {
+            if (!isReloading && weapon.getCurrentAmmo() <= 0) {
+                startReload();
+            }
+            return null;
+        }
+
+        lastShotTime = System.currentTimeMillis();
+        weapon.setCurrentAmmo(weapon.getCurrentAmmo() - 1); // Beams consume 1 ammo
+
+        Vector2 pos = getPosition();
+        Vector2 direction = aimDirection.copy();
+        direction.normalize();
+        
+        Ordinance ordinance = weapon.getOrdinance();
+        double range = weapon.getRange();
+        double damage = weapon.getDamage();
+        
+        // Create the appropriate beam type based on ordinance
+        return createBeamFromOrdinance(ordinance, pos, direction, range, damage);
+    }
+
+    /**
+     * Factory method to create the correct beam type based on ordinance
+     */
+    private Beam createBeamFromOrdinance(Ordinance ordinance, Vector2 startPoint, Vector2 direction, 
+                                        double range, double damage) {
+        int beamId = Config.nextId();
+        
+        switch (ordinance) {
+            case LASER:
+                return new LaserBeam(beamId, startPoint, direction, range, damage, 
+                                   getId(), getTeam(), ordinance.getBeamDuration());
+            case PLASMA_BEAM:
+                return new PlasmaBeam(beamId, startPoint, direction, range, damage, 
+                                    getId(), getTeam(), ordinance.getBeamDuration(), 
+                                    ordinance.getDamageInterval());
+            case HEAL_BEAM:
+                return new HealBeam(beamId, startPoint, direction, range, damage, 
+                                  getId(), getTeam(), ordinance.getBeamDuration(), 
+                                  ordinance.getDamageInterval());
+            case RAILGUN:
+                return new RailgunBeam(beamId, startPoint, direction, range, damage, 
+                                     getId(), getTeam(), ordinance.getBeamDuration());
+            case PULSE_LASER:
+                return new PulseLaser(beamId, startPoint, direction, range, damage, 
+                                    getId(), getTeam(), ordinance.getBeamDuration(), 
+                                    ordinance.getDamageInterval());
+            case ARC_BEAM:
+                return new ArcBeam(beamId, startPoint, direction, range, damage, 
+                                 getId(), getTeam(), ordinance.getBeamDuration(), 
+                                 ordinance.getDamageInterval());
+            default:
+                return null; // Not a beam weapon
+        }
+    }
+
+    /**
+     * Use the utility weapon. Returns data needed to create the utility effect.
+     * @return UtilityActivation data, or null if utility cannot be used
+     */
+    public UtilityActivation useUtility() {
+        if (!canUseUtility()) {
+            return null;
+        }
+
+        lastUtilityUseTime = System.currentTimeMillis();
+        Vector2 pos = getPosition();
+        
+        return new UtilityActivation(
+            utilityWeapon,
+            pos.copy(),
+            aimDirection.copy(),
+            id,
+            team
+        );
+    }
+
+    /**
+     * Data class for utility weapon activation
+     */
+    public static class UtilityActivation {
+        public final UtilityWeapon utilityWeapon;
+        public final Vector2 position;
+        public final Vector2 direction;
+        public final int playerId;
+        public final int team;
+
+        public UtilityActivation(UtilityWeapon utilityWeapon, Vector2 position, Vector2 direction, int playerId, int team) {
+            this.utilityWeapon = utilityWeapon;
+            this.position = position;
+            this.direction = direction;
+            this.playerId = playerId;
+            this.team = team;
+        }
+    }
+
     private void startReload() {
-        Weapon weapon = getCurrentWeapon();
+        Weapon weapon = primaryWeapon; // Always reload primary weapon
         if (weapon.needsReload()) {
             isReloading = true;
             reloadTimeRemaining = weapon.getReloadTime();
@@ -253,15 +362,12 @@ public class Player extends GameEntity {
     }
 
     public Weapon getCurrentWeapon() {
-        Weapon w = currentWeapon == 0 ? primaryWeapon : secondaryWeapon;
+        // Always return primary weapon (utility weapons are handled separately)
+        Weapon w = primaryWeapon;
         for (AttributeModification attributeModification : attributeModifications) {
             w = attributeModification.update(w);
         }
         return w;
-    }
-
-    public int getCurrentWeaponIndex() {
-        return currentWeapon;
     }
 
     /**
@@ -303,7 +409,6 @@ public class Player extends GameEntity {
         setPosition(respawnPoint.x, respawnPoint.y);
         setVelocity(0, 0);
         primaryWeapon.reload();
-        secondaryWeapon.reload();
         isReloading = false;
     }
 }

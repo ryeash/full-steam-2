@@ -26,6 +26,14 @@ public class GameEntities {
     private final Map<Integer, Obstacle> obstacles = new ConcurrentSkipListMap<>();
     private final Map<Integer, FieldEffect> fieldEffects = new ConcurrentSkipListMap<>();
 
+    // Utility entity collections
+    private final Map<Integer, Turret> turrets = new ConcurrentSkipListMap<>();
+    private final Map<Integer, Barrier> barriers = new ConcurrentSkipListMap<>();
+    private final Map<Integer, NetProjectile> netProjectiles = new ConcurrentSkipListMap<>();
+    private final Map<Integer, ProximityMine> proximityMines = new ConcurrentSkipListMap<>();
+    private final Map<Integer, TeleportPad> teleportPads = new ConcurrentSkipListMap<>();
+    private final Map<Integer, Beam> beams = new ConcurrentSkipListMap<>();
+
     public void addPlayerSession(PlayerSession playerSession) {
         playerSessions.put(playerSession.getPlayerId(), playerSession);
     }
@@ -108,6 +116,14 @@ public class GameEntities {
 
         // Remove expired field effects
         fieldEffects.entrySet().removeIf(entry -> entry.getValue().isExpired());
+        
+        // Remove expired utility entities
+        turrets.entrySet().removeIf(entry -> entry.getValue().isExpired());
+        barriers.entrySet().removeIf(entry -> entry.getValue().isExpired());
+        netProjectiles.entrySet().removeIf(entry -> entry.getValue().isExpired());
+        proximityMines.entrySet().removeIf(entry -> entry.getValue().isExpired());
+        teleportPads.entrySet().removeIf(entry -> entry.getValue().isExpired());
+        beams.entrySet().removeIf(entry -> entry.getValue().isExpired());
     }
 
     /**
@@ -127,6 +143,14 @@ public class GameEntities {
 
         // Update all field effects
         fieldEffects.values().forEach(effect -> effect.update(deltaTime));
+        
+        // Update all utility entities
+        turrets.values().forEach(turret -> turret.update(deltaTime));
+        barriers.values().forEach(barrier -> barrier.update(deltaTime));
+        netProjectiles.values().forEach(net -> net.update(deltaTime));
+        proximityMines.values().forEach(mine -> mine.update(deltaTime));
+        teleportPads.values().forEach(pad -> pad.update(deltaTime));
+        beams.values().forEach(beam -> beam.update(deltaTime));
     }
 
     public PlayerSession removePlayerSession(int playerId) {
@@ -148,6 +172,85 @@ public class GameEntities {
 
     public Collection<FieldEffect> getAllFieldEffects() {
         return fieldEffects.values();
+    }
+
+    // ===== Utility Entity Management =====
+
+    // Turret management
+    public void addTurret(Turret turret) {
+        turrets.put(turret.getId(), turret);
+    }
+
+    public Turret getTurret(int turretId) {
+        return turrets.get(turretId);
+    }
+
+    public Collection<Turret> getAllTurrets() {
+        return turrets.values();
+    }
+
+    // Barrier management
+    public void addBarrier(Barrier barrier) {
+        barriers.put(barrier.getId(), barrier);
+    }
+
+    public Barrier getBarrier(int barrierId) {
+        return barriers.get(barrierId);
+    }
+
+    public Collection<Barrier> getAllBarriers() {
+        return barriers.values();
+    }
+
+    // Net projectile management
+    public void addNetProjectile(NetProjectile netProjectile) {
+        netProjectiles.put(netProjectile.getId(), netProjectile);
+    }
+
+    public NetProjectile getNetProjectile(int netId) {
+        return netProjectiles.get(netId);
+    }
+
+    public Collection<NetProjectile> getAllNetProjectiles() {
+        return netProjectiles.values();
+    }
+
+    // Proximity mine management
+    public void addProximityMine(ProximityMine mine) {
+        proximityMines.put(mine.getId(), mine);
+    }
+
+    public ProximityMine getProximityMine(int mineId) {
+        return proximityMines.get(mineId);
+    }
+
+    public Collection<ProximityMine> getAllProximityMines() {
+        return proximityMines.values();
+    }
+
+    // TeleportPad management
+    public void addTeleportPad(TeleportPad teleportPad) {
+        teleportPads.put(teleportPad.getId(), teleportPad);
+    }
+
+    public TeleportPad getTeleportPad(int teleportPadId) {
+        return teleportPads.get(teleportPadId);
+    }
+
+    public Collection<TeleportPad> getAllTeleportPads() {
+        return teleportPads.values();
+    }
+
+    public void addBeam(Beam beam) {
+        beams.put(beam.getId(), beam);
+    }
+
+    public Beam getBeam(int beamId) {
+        return beams.get(beamId);
+    }
+
+    public Collection<Beam> getAllBeams() {
+        return beams.values();
     }
 
 }

@@ -2,6 +2,7 @@ package com.fullsteam.ai;
 
 import com.fullsteam.RandomNames;
 import com.fullsteam.model.PlayerInput;
+import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
 import lombok.Getter;
@@ -111,15 +112,15 @@ public class AIPlayerManager {
     public static AIPlayer createRandomAIPlayer(int id, double x, double y, int team) {
         AIPersonality personality = AIPersonality.createRandom();
         AIPlayer aiPlayer = new AIPlayer(id, RandomNames.randomName(), x, y, personality, team);
-        
+
         // Assign random weapons based on personality
         com.fullsteam.model.WeaponConfig[] weapons = AIWeaponSelector.selectWeaponLoadoutForPersonality(personality);
-        aiPlayer.applyWeaponConfig(weapons[0], weapons[1]);
-        
-        log.info("Assigned weapons to AI player {} ({}): Primary={}, Secondary={}", 
+        aiPlayer.applyWeaponConfig(weapons[0], UtilityWeapon.HEAL_ZONE);
+
+        log.info("Assigned weapons to AI player {} ({}): Primary={}, Secondary={}",
                 aiPlayer.getId(), aiPlayer.getPersonality().getPersonalityType(),
                 weapons[0].getType(), weapons[1].getType());
-        
+
         return aiPlayer;
     }
 
@@ -134,17 +135,17 @@ public class AIPlayerManager {
             case "rusher" -> AIPersonality.createRusher();
             default -> AIPersonality.createBalanced();
         };
-        
+
         AIPlayer aiPlayer = new AIPlayer(id, RandomNames.randomName(), x, y, personality, team);
-        
+
         // Assign weapons based on personality
         com.fullsteam.model.WeaponConfig[] weapons = AIWeaponSelector.selectWeaponLoadoutForPersonality(personality);
-        aiPlayer.applyWeaponConfig(weapons[0], weapons[1]);
-        
-        log.info("Assigned weapons to AI player {} ({}): Primary={}, Secondary={}", 
+        aiPlayer.applyWeaponConfig(weapons[0], UtilityWeapon.HEAL_ZONE);
+
+        log.info("Assigned weapons to AI player {} ({}): Primary={}, Secondary={}",
                 aiPlayer.getId(), aiPlayer.getPersonality().getPersonalityType(),
                 weapons[0].getType(), weapons[1].getType());
-        
+
         return aiPlayer;
     }
 
@@ -258,7 +259,7 @@ public class AIPlayerManager {
                 input.setLeft(false);
             }
         }
-        
+
         // Force reload if completely out of ammo - safety net
         if (aiPlayer.getCurrentWeapon().getCurrentAmmo() == 0 && !aiPlayer.isReloading()) {
             input.setReload(true);
