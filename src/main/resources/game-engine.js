@@ -719,6 +719,7 @@ class GameEngine {
         // Setup event listeners
         document.getElementById('close-scoreboard')?.addEventListener('click', () => {
             document.getElementById('scoreboard').style.display = 'none';
+            this.scoreboardVisible = false; // Update state for gamepad users
         });
         
         // Tab to show scoreboard
@@ -726,14 +727,19 @@ class GameEngine {
             if (e.key === 'Tab') {
                 e.preventDefault();
                 document.getElementById('scoreboard').style.display = 'block';
+                this.scoreboardVisible = true; // Update state for gamepad sync
             }
         });
         
         document.addEventListener('keyup', (e) => {
             if (e.key === 'Tab') {
                 document.getElementById('scoreboard').style.display = 'none';
+                this.scoreboardVisible = false; // Update state for gamepad sync
             }
         });
+        
+        // Store reference for gamepad scoreboard control
+        this.scoreboardVisible = false;
     }
 
     async loadAssets() {
@@ -5178,7 +5184,18 @@ class InputManager {
         if (!this.gamepad.connected) {
             return;
         }
+        
+        // Handle scoreboard toggle with Back/Select button (button 8)
+        const backPressed = this.gamepad.buttons.back;
+        const backPrevious = this.gamepad.buttons.back_prev || false;
+        
+        // Toggle scoreboard on button press (edge detection)
+        if (backPressed && !backPrevious) {
+            this.toggleScoreboard();
+        }
+        
         // Store previous button states for edge detection
+        this.gamepad.buttons.back_prev = this.gamepad.buttons.back;
         this.gamepad.buttons.y_prev = this.gamepad.buttons.y;
         this.gamepad.buttons.x_prev = this.gamepad.buttons.x;
     }
@@ -5245,6 +5262,23 @@ class InputManager {
                 this.gamepad.buttons[key] = false;
             }
         });
+    }
+    
+    /**
+     * Toggle scoreboard visibility (for gamepad users)
+     */
+    toggleScoreboard() {
+        const scoreboard = document.getElementById('scoreboard');
+        if (!scoreboard) return;
+        
+        if (window.gameEngine) {
+            window.gameEngine.scoreboardVisible = !window.gameEngine.scoreboardVisible;
+            scoreboard.style.display = window.gameEngine.scoreboardVisible ? 'block' : 'none';
+            
+            // Show notification for gamepad users
+            const action = window.gameEngine.scoreboardVisible ? 'opened' : 'closed';
+            this.showInputSourceNotification(`Scoreboard ${action} (Back/Select button)`);
+        }
     }
     
     /**
