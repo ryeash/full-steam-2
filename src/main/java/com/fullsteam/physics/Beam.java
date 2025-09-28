@@ -4,6 +4,7 @@ import com.fullsteam.model.DamageApplicationType;
 import lombok.Getter;
 import lombok.Setter;
 import org.dyn4j.dynamics.Body;
+import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
@@ -71,7 +72,8 @@ public abstract class Beam extends GameEntity {
         Body body = new Body();
         // Create a thin rectangle representing the beam line for collision detection
         Rectangle rectangle = new Rectangle(range, 2.0); // Very thin beam
-        body.addFixture(rectangle);
+        BodyFixture bodyFixture = body.addFixture(rectangle);
+        bodyFixture.setSensor(true);
         body.setMass(MassType.INFINITE); // Stationary
         
         // Position and orient the beam
