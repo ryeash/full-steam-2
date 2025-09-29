@@ -258,38 +258,14 @@ public class Player extends GameEntity {
     }
 
     /**
-     * Factory method to create the correct beam type based on ordinance
+     * Factory method to create a beam based on ordinance (simplified single-class approach)
      */
     private Beam createBeamFromOrdinance(Ordinance ordinance, Vector2 startPoint, Vector2 direction, 
                                         double range, double damage) {
         int beamId = Config.nextId();
         
-        switch (ordinance) {
-            case LASER:
-                return new LaserBeam(beamId, startPoint, direction, range, damage, 
-                                   getId(), getTeam(), ordinance.getBeamDuration());
-            case PLASMA_BEAM:
-                return new PlasmaBeam(beamId, startPoint, direction, range, damage, 
-                                    getId(), getTeam(), ordinance.getBeamDuration(), 
-                                    ordinance.getDamageInterval());
-            case HEAL_BEAM:
-                return new HealBeam(beamId, startPoint, direction, range, damage, 
-                                  getId(), getTeam(), ordinance.getBeamDuration(), 
-                                  ordinance.getDamageInterval());
-            case RAILGUN:
-                return new RailgunBeam(beamId, startPoint, direction, range, damage, 
-                                     getId(), getTeam(), ordinance.getBeamDuration());
-            case PULSE_LASER:
-                return new PulseLaser(beamId, startPoint, direction, range, damage, 
-                                    getId(), getTeam(), ordinance.getBeamDuration(), 
-                                    ordinance.getDamageInterval());
-            case ARC_BEAM:
-                return new ArcBeam(beamId, startPoint, direction, range, damage, 
-                                 getId(), getTeam(), ordinance.getBeamDuration(), 
-                                 ordinance.getDamageInterval());
-            default:
-                return null; // Not a beam weapon
-        }
+        // Single Beam class handles all beam types via ordinance
+        return new Beam(beamId, startPoint, direction, range, damage, getId(), getTeam(), ordinance);
     }
 
     /**

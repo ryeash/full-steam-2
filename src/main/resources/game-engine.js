@@ -2445,8 +2445,8 @@ class GameEngine {
             this.addBeamEffects(beamContainer, beamData, length, angle);
         }
         
-        // Set z-index above projectiles but below UI
-        beamContainer.zIndex = 15;
+        // Set z-index above projectiles but below players
+        beamContainer.zIndex = 9;
         
         // Store beam data and add to containers
         beamContainer.beamData = beamData;

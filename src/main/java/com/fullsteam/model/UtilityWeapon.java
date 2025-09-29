@@ -7,65 +7,66 @@ package com.fullsteam.model;
 public enum UtilityWeapon {
     // FieldEffect-based utilities (area effects)
     HEAL_ZONE("Heal Zone", "Creates a stationary healing area that restores ally health over time", 
-              FieldEffectType.HEAL_ZONE, null, 3.0, 60.0, 15.0, UtilityCategory.SUPPORT),
+              FieldEffectType.HEAL_ZONE, null, 3.0, 60.0, 45.0, 15.0, UtilityCategory.SUPPORT),
               
     SMOKE_GRENADE("Smoke Grenade", "Deploys a vision-blocking smoke cloud", 
-                  FieldEffectType.SMOKE_CLOUD, null, 2.0, 80.0, 0.0, UtilityCategory.TACTICAL),
+                  FieldEffectType.SMOKE_CLOUD, null, 2.0, 80.0, 60.0, 0.0, UtilityCategory.TACTICAL),
                   
     GRAVITY_WELL("Gravity Well", "Creates a field that pulls enemies toward the center", 
-                 FieldEffectType.GRAVITY_WELL, null, 4.0, 70.0, 25.0, UtilityCategory.CROWD_CONTROL),
+                 FieldEffectType.GRAVITY_WELL, null, 4.0, 70.0, 50.0, 25.0, UtilityCategory.CROWD_CONTROL),
                  
     SLOW_FIELD("Slow Field", "Generates an area that reduces enemy movement speed", 
-               FieldEffectType.SLOW_FIELD, null, 3.5, 75.0, 10.0, UtilityCategory.CROWD_CONTROL),
+               FieldEffectType.SLOW_FIELD, null, 3.5, 75.0, 55.0, 10.0, UtilityCategory.CROWD_CONTROL),
                
     SHIELD_GENERATOR("Shield Generator", "Creates a protective barrier that absorbs damage", 
-                     FieldEffectType.SHIELD_BARRIER, null, 5.0, 50.0, 0.0, UtilityCategory.SUPPORT),
+                     FieldEffectType.SHIELD_BARRIER, null, 5.0, 50.0, 40.0, 0.0, UtilityCategory.SUPPORT),
                      
     SCANNER_DRONE("Scanner Drone", "Reveals enemy positions in a large area", 
-                  FieldEffectType.VISION_REVEAL, null, 2.5, 100.0, 0.0, UtilityCategory.TACTICAL),
+                  FieldEffectType.VISION_REVEAL, null, 2.5, 100.0, 80.0, 0.0, UtilityCategory.TACTICAL),
                   
     SPEED_BOOST_PAD("Speed Boost Pad", "Creates a zone that increases ally movement speed", 
-                    FieldEffectType.SPEED_BOOST, null, 3.0, 65.0, 0.0, UtilityCategory.SUPPORT),
+                    FieldEffectType.SPEED_BOOST, null, 3.0, 65.0, 50.0, 0.0, UtilityCategory.SUPPORT),
 
-    // Entity-based utilities (complex behaviors) - TODO: Implement these classes
+    // Entity-based utilities (complex behaviors)
     TURRET_CONSTRUCTOR("Turret Constructor", "Deploys an automated defense turret", 
-                       null, "Turret", 6.0, 40.0, 30.0, UtilityCategory.DEFENSIVE),
+                       null, "Turret", 6.0, 40.0, 25.0, 30.0, UtilityCategory.DEFENSIVE),
                        
     NET_LAUNCHER("Net Launcher", "Fires nets that immobilize enemies temporarily", 
-                 null, "NetProjectile", 1.5, 90.0, 20.0, UtilityCategory.CROWD_CONTROL),
+                 null, "NetProjectile", 1.5, 90.0, 30.0, 20.0, UtilityCategory.CROWD_CONTROL),
                  
     WALL_BUILDER("Wall Builder", "Constructs temporary barriers for cover", 
-                 null, "Barrier", 4.0, 30.0, 0.0, UtilityCategory.DEFENSIVE),
+                 null, "Barrier", 4.0, 30.0, 20.0, 0.0, UtilityCategory.DEFENSIVE),
                  
     TELEPORTER("Teleporter", "Creates linked portals for quick movement", 
-               null, "TeleportPad", 8.0, 120.0, 0.0, UtilityCategory.TACTICAL),
+               null, "TeleportPad", 8.0, 120.0, 35.0, 0.0, UtilityCategory.TACTICAL),
                
     MINE_LAYER("Mine Layer", "Places proximity mines that explode when enemies approach", 
-               null, "ProximityMine", 2.0, 50.0, 40.0, UtilityCategory.DEFENSIVE),
+               null, "ProximityMine", 2.0, 50.0, 40.0, 40.0, UtilityCategory.DEFENSIVE),
 
     // Beam-based utilities (line-of-sight effects)
     REPAIR_BEAM("Repair Beam", "Targeted healing beam that restores ally health through line-of-sight", 
-                null, null, 4.0, 80.0, 25.0, UtilityCategory.SUPPORT, Ordinance.HEAL_BEAM),
+                null, null, 4.0, 80.0, 8.0, 25.0, UtilityCategory.SUPPORT, Ordinance.HEAL_BEAM),
                 
     DISRUPTOR_BEAM("Disruptor Beam", "Targeted beam that disables enemy weapons temporarily", 
-                   null, null, 5.0, 70.0, 0.0, UtilityCategory.CROWD_CONTROL, Ordinance.LASER),
+                   null, null, 5.0, 70.0, 6.0, 0.0, UtilityCategory.CROWD_CONTROL, Ordinance.LASER),
                    
     SCANNER_BEAM("Scanner Beam", "Reveals enemy health and status through walls", 
-                 null, null, 3.0, 100.0, 0.0, UtilityCategory.TACTICAL, Ordinance.LASER);
+                 null, null, 3.0, 100.0, 5.0, 0.0, UtilityCategory.TACTICAL, Ordinance.LASER);
 
     private final String displayName;
     private final String description;
     private final FieldEffectType fieldEffectType; // null if entity-based or beam-based
     private final String entityClassName; // null if field-effect-based or beam-based
     private final double cooldown; // seconds between uses
-    private final double range; // effective range/radius
+    private final double range; // targeting/placement range
+    private final double radius; // effect area radius
     private final double damage; // damage for offensive utilities (0 for non-damaging)
     private final UtilityCategory category;
     private final Ordinance beamOrdinance; // null if not beam-based
 
     // Constructor for FieldEffect and Entity-based utilities
     UtilityWeapon(String displayName, String description, FieldEffectType fieldEffectType, 
-                  String entityClassName, double cooldown, double range, double damage, 
+                  String entityClassName, double cooldown, double range, double radius, double damage, 
                   UtilityCategory category) {
         this.displayName = displayName;
         this.description = description;
@@ -73,6 +74,7 @@ public enum UtilityWeapon {
         this.entityClassName = entityClassName;
         this.cooldown = cooldown;
         this.range = range;
+        this.radius = radius;
         this.damage = damage;
         this.category = category;
         this.beamOrdinance = null; // Not beam-based
@@ -80,7 +82,7 @@ public enum UtilityWeapon {
 
     // Constructor for Beam-based utilities
     UtilityWeapon(String displayName, String description, FieldEffectType fieldEffectType, 
-                  String entityClassName, double cooldown, double range, double damage, 
+                  String entityClassName, double cooldown, double range, double radius, double damage, 
                   UtilityCategory category, Ordinance beamOrdinance) {
         this.displayName = displayName;
         this.description = description;
@@ -88,6 +90,7 @@ public enum UtilityWeapon {
         this.entityClassName = entityClassName;
         this.cooldown = cooldown;
         this.range = range;
+        this.radius = radius;
         this.damage = damage;
         this.category = category;
         this.beamOrdinance = beamOrdinance;
@@ -115,6 +118,10 @@ public enum UtilityWeapon {
 
     public double getRange() {
         return range;
+    }
+
+    public double getRadius() {
+        return radius;
     }
 
     public double getDamage() {

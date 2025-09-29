@@ -64,9 +64,6 @@ public class Weapon {
         this.bulletsPerShot = (int) WeaponAttribute.BULLETS_PER_SHOT.compute(bulletsPerShot);
         this.linearDamping = WeaponAttribute.LINEAR_DAMPING.compute(linearDamping);
         this.currentAmmo = magazineSize;
-
-        // Debug logging
-        System.out.println("DEBUG: Created weapon '" + name + "' with magazineSize: " + magazineSize + ", currentAmmo: " + currentAmmo);
     }
 
     // clone constructor

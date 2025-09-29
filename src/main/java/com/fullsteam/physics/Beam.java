@@ -1,6 +1,7 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.model.DamageApplicationType;
+import com.fullsteam.model.Ordinance;
 import lombok.Getter;
 import lombok.Setter;
 import org.dyn4j.dynamics.Body;
@@ -9,19 +10,19 @@ import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * Abstract base class for beam weapons that provide instant hit-scan behavior
+ * Beam weapon class for all beam types (laser, plasma, heal beam, etc.)
+ * Beams are instantaneous line-of-sight weapons that can apply damage in different ways
+ * Similar to Projectile.java, this single class handles multiple beam types via Ordinance
  */
 @Getter
 @Setter
-public abstract class Beam extends GameEntity {
+public class Beam extends GameEntity {
     protected final Vector2 startPoint;
     protected final Vector2 endPoint;
     protected Vector2 effectiveEndPoint; // Actual end point after obstacle collision
@@ -33,6 +34,7 @@ public abstract class Beam extends GameEntity {
     protected final DamageApplicationType damageApplicationType;
     protected final double damageInterval;
     protected final double beamDuration;
+    protected final Ordinance ordinance; // Type of beam (laser, plasma, heal, etc.)
     
     // Track affected players for DOT and burst beams
     protected final Set<Integer> affectedPlayers = new HashSet<>();
@@ -42,8 +44,7 @@ public abstract class Beam extends GameEntity {
     private double timeSinceLastDamage = 0.0;
 
     public Beam(int id, Vector2 startPoint, Vector2 direction, double range, double damage, 
-                int ownerId, int ownerTeam, DamageApplicationType damageApplicationType, 
-                double damageInterval, double beamDuration) {
+                int ownerId, int ownerTeam, Ordinance ordinance) {
         super(id, createBeamBody(startPoint, direction, range), Double.POSITIVE_INFINITY); // Beams don't have health
         this.startPoint = startPoint.copy();
         this.direction = direction.copy();
@@ -52,9 +53,10 @@ public abstract class Beam extends GameEntity {
         this.damage = damage;
         this.ownerId = ownerId;
         this.ownerTeam = ownerTeam;
-        this.damageApplicationType = damageApplicationType;
-        this.damageInterval = damageInterval;
-        this.beamDuration = beamDuration;
+        this.ordinance = ordinance;
+        this.damageApplicationType = ordinance.getDamageApplicationType();
+        this.damageInterval = ordinance.getDamageInterval();
+        this.beamDuration = ordinance.getBeamDuration();
         this.timeRemaining = beamDuration;
         
         // Calculate end point
@@ -107,57 +109,38 @@ public abstract class Beam extends GameEntity {
                 // Instant damage is applied once during creation
                 break;
             case DAMAGE_OVER_TIME:
-                applyDamageOverTime(deltaTime);
+                // DOT damage is now handled by GameManager with proper collision detection
                 break;
             case BURST:
-                applyBurstDamage(deltaTime);
+                // BURST damage is now handled by GameManager with proper collision detection
                 break;
         }
 
         lastUpdateTime = System.currentTimeMillis();
     }
 
-    /**
-     * Apply damage over time to all players in beam path
-     */
-    private void applyDamageOverTime(double deltaTime) {
-        List<Player> playersInPath = getPlayersInBeamPath();
-        
-        for (Player player : playersInPath) {
-            if (canAffectPlayer(player)) {
-                processContinuousDamage(player, deltaTime);
-            }
-        }
-    }
 
     /**
-     * Apply burst damage at intervals
+     * Update the time since last damage application (used by GameManager for BURST beams)
      */
-    private void applyBurstDamage(double deltaTime) {
+    public void updateTimeSinceLastDamage(double deltaTime) {
         timeSinceLastDamage += deltaTime;
-        
-        if (timeSinceLastDamage >= damageInterval) {
-            List<Player> playersInPath = getPlayersInBeamPath();
-            
-            for (Player player : playersInPath) {
-                if (canAffectPlayer(player)) {
-                    processBurstDamage(player);
-                }
-            }
-            
-            timeSinceLastDamage = 0.0;
-        }
+    }
+    
+    /**
+     * Check if burst damage should be applied based on timing
+     */
+    public boolean shouldApplyBurstDamage() {
+        return timeSinceLastDamage >= damageInterval;
+    }
+    
+    /**
+     * Reset the burst damage timer after applying damage
+     */
+    public void resetBurstTimer() {
+        timeSinceLastDamage = 0.0;
     }
 
-    /**
-     * Get all players that intersect with the beam path using line-based collision detection
-     * This is populated by the GameManager during beam processing
-     */
-    public List<Player> getPlayersInBeamPath() {
-        // This method is called by GameManager with collision detection results
-        // The actual collision detection is done in GameManager.getPlayersInBeamPath()
-        return new ArrayList<>(); // Placeholder - actual implementation in GameManager
-    }
 
     /**
      * Check if this beam can affect a specific player
@@ -190,23 +173,87 @@ public abstract class Beam extends GameEntity {
 
     /**
      * Process initial hit when beam is first created (for instant damage)
+     * Returns the damage amount to be applied by GameManager
      */
-    public abstract void processInitialHit(Player player);
+    public double processInitialHit(Player player) {
+        if (!canAffectPlayer(player)) {
+            return 0.0;
+        }
+        
+        switch (ordinance) {
+            case LASER:
+            case RAILGUN:
+                // Standard instant damage
+                return damage;
+            case PULSE_LASER:
+                // Pulse laser does initial burst damage
+                double pulseCount = beamDuration / damageInterval;
+                return damage / pulseCount;
+            case ARC_BEAM:
+                // Arc beam does initial arc damage
+                double arcCount = beamDuration / damageInterval;
+                return damage / arcCount;
+            default:
+                // Other beam types don't do initial damage
+                return 0.0;
+        }
+    }
 
     /**
      * Process continuous damage over time
+     * Returns the damage amount to be applied by GameManager (negative for healing)
      */
-    public abstract void processContinuousDamage(Player player, double deltaTime);
+    public double processContinuousDamage(Player player, double deltaTime) {
+        if (!canAffectPlayer(player)) {
+            return 0.0;
+        }
+        
+        switch (ordinance) {
+            case PLASMA_BEAM:
+                // Continuous plasma damage
+                double plasmaPerSecond = damage / beamDuration;
+                return plasmaPerSecond * deltaTime;
+            case HEAL_BEAM:
+                // Continuous healing (negative damage)
+                double healPerSecond = damage / beamDuration; // damage field used for heal amount
+                return -(healPerSecond * deltaTime); // Negative for healing
+            default:
+                // Other beam types don't do continuous damage
+                return 0.0;
+        }
+    }
 
     /**
      * Process burst damage at intervals
+     * Returns the damage amount to be applied by GameManager
      */
-    public abstract void processBurstDamage(Player player);
+    public double processBurstDamage(Player player) {
+        if (!canAffectPlayer(player)) {
+            return 0.0;
+        }
+        
+        switch (ordinance) {
+            case PULSE_LASER:
+                // Pulse laser burst damage
+                double pulseCount = beamDuration / damageInterval;
+                return damage / pulseCount;
+            case ARC_BEAM:
+                // Arc beam burst damage with potential chain effect
+                double arcCount = beamDuration / damageInterval;
+                // TODO: Implement chain lightning logic to nearby enemies
+                return damage / arcCount;
+            default:
+                // Other beam types don't do burst damage
+                return 0.0;
+        }
+    }
 
     /**
      * Check if this is a healing beam
      */
-    public abstract boolean isHealingBeam();
+    public boolean isHealingBeam() {
+        return ordinance == Ordinance.HEAL_BEAM;
+    }
 
     /**
      * Check if the beam has expired
@@ -225,5 +272,13 @@ public abstract class Beam extends GameEntity {
     /**
      * Check if this beam can pierce through targets
      */
-    public abstract boolean canPierceTargets();
+    public boolean canPierceTargets() {
+        switch (ordinance) {
+            case RAILGUN:
+            case ARC_BEAM:
+                return true; // Railgun pierces, Arc beam chains to multiple targets
+            default:
+                return false; // Most beams stop after first hit
+        }
+    }
 }

@@ -6,19 +6,20 @@ import com.fullsteam.Config;
 import com.fullsteam.ai.AIGameHelper;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
+import com.fullsteam.model.DamageApplicationType;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.GameInfo;
+import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
 import com.fullsteam.model.StatusEffects;
 import com.fullsteam.model.UtilityWeapon;
-import com.fullsteam.model.DamageApplicationType;
-import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.Barrier;
+import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.BulletEffectProcessor;
 import com.fullsteam.physics.CollisionProcessor;
 import com.fullsteam.physics.GameEntities;
@@ -32,25 +33,26 @@ import com.fullsteam.physics.TeamSpawnArea;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.TeleportPad;
 import com.fullsteam.physics.Turret;
-import com.fullsteam.physics.Beam;
-import com.fullsteam.physics.HealBeam;
-import com.fullsteam.physics.LaserBeam;
 import io.micronaut.websocket.WebSocketSession;
 import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
 import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
+import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.dynamics.Settings;
 import org.dyn4j.dynamics.TimeStep;
-import org.dyn4j.geometry.MassType;
-import org.dyn4j.geometry.Vector2;
-import org.dyn4j.geometry.Shape;
 import org.dyn4j.geometry.Circle;
-import org.dyn4j.geometry.Rectangle;
+import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Polygon;
+import org.dyn4j.geometry.Ray;
+import org.dyn4j.geometry.Rectangle;
+import org.dyn4j.geometry.Shape;
+import org.dyn4j.geometry.Vector2;
+import org.dyn4j.world.DetectFilter;
 import org.dyn4j.world.PhysicsWorld;
 import org.dyn4j.world.World;
 import org.dyn4j.world.listener.StepListener;
+import org.dyn4j.world.result.RaycastResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -481,7 +483,7 @@ public class GameManager implements StepListener<Body> {
                 }
                 return false;
             });
-            
+
             // Clean up expired utility entities
             gameEntities.getTurrets().entrySet().removeIf(entry -> {
                 Turret turret = entry.getValue();
@@ -491,7 +493,7 @@ public class GameManager implements StepListener<Body> {
                 }
                 return false;
             });
-            
+
             gameEntities.getBarriers().entrySet().removeIf(entry -> {
                 Barrier barrier = entry.getValue();
                 if (barrier.isExpired()) {
@@ -500,7 +502,7 @@ public class GameManager implements StepListener<Body> {
                 }
                 return false;
             });
-            
+
             gameEntities.getNetProjectiles().entrySet().removeIf(entry -> {
                 NetProjectile net = entry.getValue();
                 if (net.isExpired()) {
@@ -509,7 +511,7 @@ public class GameManager implements StepListener<Body> {
                 }
                 return false;
             });
-            
+
             gameEntities.getProximityMines().entrySet().removeIf(entry -> {
                 ProximityMine mine = entry.getValue();
                 if (mine.isExpired()) {
@@ -538,8 +540,22 @@ public class GameManager implements StepListener<Body> {
                 continue;
             }
             for (Player player : gameEntities.getAllPlayers()) {
-                if (player.isActive() && fieldEffect.canAffect(player)) {
-                    applyFieldEffectDamageOverTime(player, fieldEffect, deltaTime);
+                if (player.isActive()) {
+                    // For healing effects, use different logic than damage effects
+                    boolean shouldProcess = false;
+                    if (fieldEffect.getType() == FieldEffectType.HEAL_ZONE || 
+                        fieldEffect.getType() == FieldEffectType.SPEED_BOOST) {
+                        // Use helper method for positive effects
+                        shouldProcess = fieldEffect.isInRange(player.getPosition()) && 
+                                       canFieldEffectHelpPlayer(fieldEffect, player);
+                    } else {
+                        // Use standard damage logic for negative effects
+                        shouldProcess = fieldEffect.canAffect(player);
+                    }
+                    
+                    if (shouldProcess) {
+                        applyFieldEffectDamageOverTime(player, fieldEffect, deltaTime);
+                    }
                 }
             }
         }
@@ -583,13 +599,19 @@ public class GameManager implements StepListener<Body> {
                 StatusEffects.applySlowEffect(player, 0.6, 1.0,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Freeze Field"));
                 break;
-                
+
             // Utility effects (positive)
             case HEAL_ZONE:
                 // Only heal teammates (or self in FFA)
                 if (canFieldEffectHelpPlayer(fieldEffect, player)) {
                     double healAmount = effectValue * deltaTime;
+                    double oldHealth = player.getHealth();
                     player.setHealth(Math.min(100.0, player.getHealth() + healAmount));
+                    log.debug("HEAL_ZONE: Player {} healed from {} to {} (amount: {})", 
+                             player.getId(), oldHealth, player.getHealth(), healAmount);
+                } else {
+                    log.debug("HEAL_ZONE: Player {} cannot be helped by field effect (owner: {}, ownerTeam: {}, playerTeam: {})", 
+                             player.getId(), fieldEffect.getOwnerId(), fieldEffect.getOwnerTeam(), player.getTeam());
                 }
                 break;
             case SPEED_BOOST:
@@ -613,6 +635,7 @@ public class GameManager implements StepListener<Body> {
                 }
                 break;
             case SMOKE_CLOUD:
+                // TODO: maybe a candidate for deletion
                 // Reduce visibility (handled by client)
                 break;
             case SHIELD_BARRIER:
@@ -621,7 +644,7 @@ public class GameManager implements StepListener<Body> {
             case VISION_REVEAL:
                 // Reveal enemies (handled by client)
                 break;
-                
+
             case EXPLOSION:
             case FRAGMENTATION:
                 // Instantaneous effects, shouldn't reach here
@@ -633,12 +656,12 @@ public class GameManager implements StepListener<Body> {
      * Check if a field effect can help a player (for positive effects like healing)
      */
     private boolean canFieldEffectHelpPlayer(FieldEffect fieldEffect, Player player) {
-        // In FFA mode (team 0), can help self
+        // In FFA mode (team 0), can only help self
         if (fieldEffect.getOwnerTeam() == 0 || player.getTeam() == 0) {
             return fieldEffect.getOwnerId() == player.getId();
         }
         
-        // In team mode, can help teammates
+        // In team mode, can help teammates AND the owner
         return fieldEffect.getOwnerTeam() == player.getTeam();
     }
 
@@ -650,15 +673,34 @@ public class GameManager implements StepListener<Body> {
         Vector2 wellCenter = fieldEffect.getPosition();
         Vector2 pullDirection = wellCenter.copy();
         pullDirection.subtract(playerPos);
-        
+
         double distance = pullDirection.getMagnitude();
         if (distance > 0) {
             pullDirection.normalize();
-            double pullStrength = 200.0 * deltaTime; // Adjust as needed
-            Vector2 pullForce = pullDirection.multiply(pullStrength);
             
-            // Apply force to player's body
-            player.getBody().applyForce(pullForce);
+            // Calculate pull strength based on distance (stronger when closer)
+            double maxDistance = fieldEffect.getRadius();
+            double distanceRatio = Math.max(0.0, (maxDistance - distance) / maxDistance);
+            double pullStrength = 150.0 * distanceRatio * deltaTime; // Max 150 units/sec pull
+            
+            // Apply pull by modifying the player's current velocity
+            Vector2 currentVelocity = player.getVelocity();
+            Vector2 pullVelocity = pullDirection.multiply(pullStrength);
+            
+            // Add pull to current velocity (this works with the kinematic movement system)
+            Vector2 newVelocity = currentVelocity.add(pullVelocity);
+            
+            // Limit the total velocity to prevent excessive speeds
+            double maxVelocity = 400.0; // Reasonable max speed
+            if (newVelocity.getMagnitude() > maxVelocity) {
+                newVelocity.normalize();
+                newVelocity = newVelocity.multiply(maxVelocity);
+            }
+            
+            player.setVelocity(newVelocity.x, newVelocity.y);
+            
+            log.debug("GRAVITY_WELL: Pulling player {} toward center. Distance: {}, Pull strength: {}", 
+                     player.getId(), distance, pullStrength);
         }
     }
 
@@ -671,7 +713,7 @@ public class GameManager implements StepListener<Body> {
             if (!turret.isActive()) {
                 continue;
             }
-            
+
             // Turret AI: acquire targets and fire
             turret.acquireTarget(gameEntities.getAllPlayers().stream().toList());
             Projectile turretShot = turret.tryFire();
@@ -686,7 +728,7 @@ public class GameManager implements StepListener<Body> {
             if (!mine.isActive()) {
                 continue;
             }
-            
+
             if (mine.checkForTrigger(gameEntities.getAllPlayers().stream().toList())) {
                 FieldEffect explosion = mine.explode();
                 if (explosion != null) {
@@ -701,14 +743,14 @@ public class GameManager implements StepListener<Body> {
             if (!net.isActive()) {
                 continue;
             }
-            
+
             // Check for player collisions
             Vector2 netPos = net.getPosition();
             for (Player player : gameEntities.getAllPlayers()) {
                 if (!player.isActive()) {
                     continue;
                 }
-                
+
                 double distance = netPos.distance(player.getPosition());
                 if (distance <= 25.0) { // Net hit radius
                     net.hitPlayer(player);
@@ -722,14 +764,14 @@ public class GameManager implements StepListener<Body> {
             if (!teleportPad.isActive()) {
                 continue;
             }
-            
+
             // Check for player activations
             Vector2 padPos = teleportPad.getPosition();
             for (Player player : gameEntities.getAllPlayers()) {
                 if (!player.isActive()) {
                     continue;
                 }
-                
+
                 double distance = padPos.distance(player.getPosition());
                 if (distance <= teleportPad.getActivationRadius()) {
                     if (teleportPad.teleportPlayer(player)) {
@@ -744,17 +786,39 @@ public class GameManager implements StepListener<Body> {
             if (!beam.isActive()) {
                 continue;
             }
-            
+
+            Player beamOwner = gameEntities.getPlayer(beam.getOwnerId());
+
             // Get players in beam path and apply damage based on beam type
             List<Player> playersInPath = getPlayersInBeamPath(beam);
             for (Player player : playersInPath) {
                 if (beam.canAffectPlayer(player)) {
                     switch (beam.getDamageApplicationType()) {
                         case DAMAGE_OVER_TIME:
-                            beam.processContinuousDamage(player, deltaTime);
+                            double dotDamage = beam.processContinuousDamage(player, deltaTime);
+                            if (dotDamage > 0) {
+                                // Apply damage and check if player died
+                                if (player.takeDamage(dotDamage)) {
+                                    killPlayer(player, beamOwner);
+                                }
+                            } else if (dotDamage < 0) {
+                                // Apply healing (negative damage)
+                                player.heal(-dotDamage);
+                            }
                             break;
                         case BURST:
-                            // Burst damage is handled internally by beam's update method
+                            // Handle burst damage with proper timing
+                            beam.updateTimeSinceLastDamage(deltaTime);
+                            if (beam.shouldApplyBurstDamage()) {
+                                double burstDamage = beam.processBurstDamage(player);
+                                if (burstDamage > 0) {
+                                    // Apply damage and check if player died
+                                    if (player.takeDamage(burstDamage)) {
+                                        killPlayer(player, beamOwner);
+                                    }
+                                }
+                                beam.resetBurstTimer();
+                            }
                             break;
                         case INSTANT:
                             // Instant damage was already applied when beam was created
@@ -815,7 +879,7 @@ public class GameManager implements StepListener<Body> {
         Player player = gameEntities.getPlayer(playerId);
         if (player != null && input != null) {
             player.processInput(input);
-            
+
             // Handle primary weapon fire (left click)
             if (input.isLeft()) {
                 // Check if weapon fires beams or projectiles
@@ -826,10 +890,10 @@ public class GameManager implements StepListener<Body> {
                         // Update beam's effective end point based on obstacle collisions
                         Vector2 effectiveEnd = findBeamObstacleIntersection(beam.getStartPoint(), beam.getEndPoint());
                         beam.setEffectiveEndPoint(effectiveEnd);
-                        
+
                         gameEntities.addBeam(beam);
                         world.addBody(beam.getBody());
-                        
+
                         // Process initial hit for instant damage beams
                         if (beam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
                             processBeamInitialHit(beam);
@@ -845,7 +909,7 @@ public class GameManager implements StepListener<Body> {
                     }
                 }
             }
-            
+
             // Handle utility weapon fire (right click/altFire)
             if (input.isAltFire()) {
                 Player.UtilityActivation activation = player.useUtility();
@@ -861,7 +925,7 @@ public class GameManager implements StepListener<Body> {
      */
     protected void processUtilityActivation(Player.UtilityActivation activation) {
         UtilityWeapon utility = activation.utilityWeapon;
-        
+
         if (utility.isFieldEffectBased()) {
             // Create FieldEffect for area-based utilities
             createUtilityFieldEffect(activation);
@@ -880,7 +944,7 @@ public class GameManager implements StepListener<Body> {
     private void createUtilityFieldEffect(Player.UtilityActivation activation) {
         UtilityWeapon utility = activation.utilityWeapon;
         FieldEffectType effectType = utility.getFieldEffectType();
-        
+
         // Calculate target position based on utility range and aim direction
         Vector2 targetPos = activation.position.copy();
         if (utility.getRange() > 0) {
@@ -888,19 +952,19 @@ public class GameManager implements StepListener<Body> {
             offset.multiply(utility.getRange());
             targetPos.add(offset);
         }
-        
+
         // Create the field effect
         FieldEffect fieldEffect = new FieldEffect(
-            Config.nextId(),
-            activation.playerId,
-            effectType,
-            targetPos,
-            utility.getRange() * 0.5, // Use half range as radius
-            utility.getDamage(),
-            effectType.getDefaultDuration(),
-            activation.team
+                Config.nextId(),
+                activation.playerId,
+                effectType,
+                targetPos,
+                utility.getRadius(), // Use explicit radius
+                utility.getDamage(),
+                effectType.getDefaultDuration(),
+                activation.team
         );
-        
+
         gameEntities.addFieldEffect(fieldEffect);
         world.addBody(fieldEffect.getBody());
     }
@@ -910,7 +974,7 @@ public class GameManager implements StepListener<Body> {
      */
     private void createUtilityEntity(Player.UtilityActivation activation) {
         UtilityWeapon utility = activation.utilityWeapon;
-        
+
         switch (utility) {
             case TURRET_CONSTRUCTOR:
                 createTurret(activation);
@@ -941,11 +1005,11 @@ public class GameManager implements StepListener<Body> {
         placement.add(offset);
 
         Turret turret = new Turret(
-            Config.nextId(),
-            activation.playerId,
-            activation.team,
-            placement,
-            15.0 // 15 second lifespan
+                Config.nextId(),
+                activation.playerId,
+                activation.team,
+                placement,
+                15.0 // 15 second lifespan
         );
 
         gameEntities.addTurret(turret);
@@ -961,12 +1025,12 @@ public class GameManager implements StepListener<Body> {
         placement.add(offset);
 
         Barrier barrier = new Barrier(
-            Config.nextId(),
-            activation.playerId,
-            activation.team,
-            placement,
-            activation.direction,
-            20.0 // 20 second lifespan
+                Config.nextId(),
+                activation.playerId,
+                activation.team,
+                placement,
+                activation.direction,
+                20.0 // 20 second lifespan
         );
 
         gameEntities.addBarrier(barrier);
@@ -980,12 +1044,12 @@ public class GameManager implements StepListener<Body> {
         velocity.multiply(300.0); // Net projectile speed
 
         NetProjectile netProjectile = new NetProjectile(
-            Config.nextId(),
-            activation.playerId,
-            activation.team,
-            activation.position,
-            velocity,
-            5.0 // 5 second time to live
+                Config.nextId(),
+                activation.playerId,
+                activation.team,
+                activation.position,
+                velocity,
+                5.0 // 5 second time to live
         );
 
         gameEntities.addNetProjectile(netProjectile);
@@ -996,11 +1060,11 @@ public class GameManager implements StepListener<Body> {
     private void createProximityMine(Player.UtilityActivation activation) {
         // Place mine at player's current position
         ProximityMine mine = new ProximityMine(
-            Config.nextId(),
-            activation.playerId,
-            activation.team,
-            activation.position,
-            30.0 // 30 second lifespan
+                Config.nextId(),
+                activation.playerId,
+                activation.team,
+                activation.position,
+                30.0 // 30 second lifespan
         );
 
         gameEntities.addProximityMine(mine);
@@ -1016,19 +1080,19 @@ public class GameManager implements StepListener<Body> {
         placement.add(offset);
 
         TeleportPad teleportPad = new TeleportPad(
-            Config.nextId(),
-            activation.playerId,
-            activation.team,
-            placement,
-            60.0 // 60 second lifespan
+                Config.nextId(),
+                activation.playerId,
+                activation.team,
+                placement,
+                60.0 // 60 second lifespan
         );
 
         gameEntities.addTeleportPad(teleportPad);
         world.addBody(teleportPad.getBody());
-        
+
         // Try to link with existing teleport pad from same player
         linkTeleportPads(teleportPad, activation.playerId);
-        
+
         log.info("Player {} placed teleport pad at ({}, {})", activation.playerId, placement.x, placement.y);
     }
 
@@ -1038,11 +1102,11 @@ public class GameManager implements StepListener<Body> {
     private void linkTeleportPads(TeleportPad newPad, int playerId) {
         // Find existing unlinked teleport pad from same player
         for (TeleportPad existingPad : gameEntities.getAllTeleportPads()) {
-            if (existingPad.getId() != newPad.getId() && 
-                existingPad.getOwnerId() == playerId && 
-                !existingPad.isLinked() && 
+            if (existingPad.getId() != newPad.getId() &&
+                existingPad.getOwnerId() == playerId &&
+                !existingPad.isLinked() &&
                 existingPad.isActive()) {
-                
+
                 // Link the pads
                 newPad.linkTo(existingPad);
                 log.info("Linked teleport pads {} and {} for player {}", newPad.getId(), existingPad.getId(), playerId);
@@ -1057,55 +1121,45 @@ public class GameManager implements StepListener<Body> {
     private void createUtilityBeam(Player.UtilityActivation activation) {
         UtilityWeapon utility = activation.utilityWeapon;
         Ordinance beamOrdinance = utility.getBeamOrdinance();
-        
+
         // Create beam using the utility's beam ordinance
         Beam utilityBeam = createBeamFromUtility(
-            Config.nextId(),
-            activation.position,
-            activation.direction,
-            utility.getRange(),
-            utility.getDamage(),
-            activation.playerId,
-            activation.team,
-            beamOrdinance
+                Config.nextId(),
+                activation.position,
+                activation.direction,
+                utility.getRange(),
+                utility.getDamage(),
+                activation.playerId,
+                activation.team,
+                beamOrdinance
         );
-        
+
         if (utilityBeam != null) {
             // Update beam's effective end point based on obstacle collisions
             Vector2 effectiveEnd = findBeamObstacleIntersection(utilityBeam.getStartPoint(), utilityBeam.getEndPoint());
             utilityBeam.setEffectiveEndPoint(effectiveEnd);
-            
+
             gameEntities.addBeam(utilityBeam);
             world.addBody(utilityBeam.getBody());
-            
+
             // Process initial hit for instant damage beams
             if (utilityBeam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
                 processBeamInitialHit(utilityBeam);
             }
-            
-            log.info("Player {} activated beam utility {} with range {}", 
+
+            log.info("Player {} activated beam utility {} with range {}",
                     activation.playerId, utility.getDisplayName(), utility.getRange());
         }
     }
 
     /**
-     * Factory method to create utility beams with special behaviors
+     * Factory method to create utility beams (simplified single-class approach)
      */
-    private Beam createBeamFromUtility(int beamId, Vector2 startPoint, Vector2 direction, 
-                                      double range, double damage, int ownerId, int ownerTeam, 
-                                      Ordinance ordinance) {
-        switch (ordinance) {
-            case HEAL_BEAM:
-                return new HealBeam(beamId, startPoint, direction, range, damage, 
-                                  ownerId, ownerTeam, ordinance.getBeamDuration(), 
-                                  ordinance.getDamageInterval());
-            case LASER:
-                // For utility lasers, we might want custom behavior
-                return new LaserBeam(beamId, startPoint, direction, range, damage, 
-                                   ownerId, ownerTeam, ordinance.getBeamDuration());
-            default:
-                return null; // Unsupported beam type for utilities
-        }
+    private Beam createBeamFromUtility(int beamId, Vector2 startPoint, Vector2 direction,
+                                       double range, double damage, int ownerId, int ownerTeam,
+                                       Ordinance ordinance) {
+        // Single Beam class handles all beam types via ordinance
+        return new Beam(beamId, startPoint, direction, range, damage, ownerId, ownerTeam, ordinance);
     }
 
     /**
@@ -1113,11 +1167,19 @@ public class GameManager implements StepListener<Body> {
      */
     private void processBeamInitialHit(Beam beam) {
         List<Player> playersInPath = getPlayersInBeamPath(beam);
-        
+        Player beamOwner = gameEntities.getPlayer(beam.getOwnerId());
+
         for (Player player : playersInPath) {
             if (beam.canAffectPlayer(player)) {
-                beam.processInitialHit(player);
-                
+                double damageAmount = beam.processInitialHit(player);
+
+                if (damageAmount > 0) {
+                    // Apply damage and check if player died
+                    if (player.takeDamage(damageAmount)) {
+                        killPlayer(player, beamOwner);
+                    }
+                }
+
                 // For non-piercing beams, stop after first hit
                 if (!beam.canPierceTargets()) {
                     break;
@@ -1127,58 +1189,101 @@ public class GameManager implements StepListener<Body> {
     }
 
     /**
-     * Get all players that intersect with a beam's path using line-based collision detection
-     * This method accounts for obstacles blocking the beam path
+     * Get all players that intersect with a beam's path using dyn4j ray casting
+     * This method accounts for obstacles blocking the beam path and is much more accurate
      */
     private List<Player> getPlayersInBeamPath(Beam beam) {
         List<Player> playersInPath = new ArrayList<>();
         Vector2 beamStart = beam.getStartPoint();
-        Vector2 effectiveBeamEnd = beam.getEffectiveEndPoint(); // Use pre-calculated effective end point
-        
-        for (Player player : gameEntities.getAllPlayers()) {
-            if (!player.isActive() || player.getHealth() <= 0) {
-                continue;
-            }
-            
-            // Check if player intersects with the unobstructed portion of the beam
-            if (isPlayerInBeamPath(player, beamStart, effectiveBeamEnd)) {
-                playersInPath.add(player);
+        Vector2 effectiveBeamEnd = beam.getEffectiveEndPoint();
+
+        // Create ray from beam start to effective end
+        Vector2 direction = effectiveBeamEnd.copy();
+        direction.subtract(beamStart);
+        double maxDistance = direction.getMagnitude();
+        direction.normalize();
+
+        Ray ray = new Ray(beamStart, direction);
+
+        // Use dyn4j's ray casting to find all players in the beam path
+        List<RaycastResult<Body, BodyFixture>> results = world.raycast(ray, maxDistance, new DetectFilter<>(true, true, null));
+        // Convert results to players and sort by distance
+        for (RaycastResult<Body, BodyFixture> result : results) {
+            Body body = result.getBody();
+            if (body.getUserData() instanceof Player player) {
+                if (player.isActive() && player.getHealth() > 0) {
+                    playersInPath.add(player);
+                }
             }
         }
-        
+
         // Sort by distance from beam start for proper piercing order
         playersInPath.sort((p1, p2) -> {
             double dist1 = beamStart.distanceSquared(p1.getPosition());
             double dist2 = beamStart.distanceSquared(p2.getPosition());
             return Double.compare(dist1, dist2);
         });
-        
+
         return playersInPath;
     }
 
     /**
-     * Check if a player intersects with a beam's path using line-circle collision
+     * Calculate beam reflection off obstacles (for future enhancement)
+     * Returns the reflected beam direction and remaining distance
      */
+    public BeamReflection calculateBeamReflection(Vector2 hitPoint, Vector2 incomingDirection, Vector2 surfaceNormal, double remainingDistance) {
+        // Calculate reflection using: R = I - 2(I·N)N
+        Vector2 reflectedDirection = incomingDirection.copy();
+        double dotProduct = incomingDirection.dot(surfaceNormal);
+        Vector2 reflection = surfaceNormal.copy();
+        reflection.multiply(2.0 * dotProduct);
+        reflectedDirection.subtract(reflection);
+        reflectedDirection.normalize();
+
+        return new BeamReflection(hitPoint, reflectedDirection, remainingDistance);
+    }
+
+    /**
+     * Data class for beam reflection information
+     */
+    public static class BeamReflection {
+        public final Vector2 reflectionPoint;
+        public final Vector2 reflectedDirection;
+        public final double remainingDistance;
+
+        public BeamReflection(Vector2 reflectionPoint, Vector2 reflectedDirection, double remainingDistance) {
+            this.reflectionPoint = reflectionPoint.copy();
+            this.reflectedDirection = reflectedDirection.copy();
+            this.remainingDistance = remainingDistance;
+        }
+    }
+
+    /**
+     * Check if a player intersects with a beam's path using line-circle collision
+     *
+     * @deprecated Use dyn4j ray casting instead for better accuracy
+     */
+    @Deprecated
     private boolean isPlayerInBeamPath(Player player, Vector2 beamStart, Vector2 beamEnd) {
         Vector2 playerPos = player.getPosition();
         double playerRadius = 15.0; // Player collision radius
-        
+
         // Calculate distance from point to line segment
         double lineLength = beamStart.distance(beamEnd);
         if (lineLength == 0) {
             return beamStart.distance(playerPos) <= playerRadius;
         }
-        
+
         // Project player position onto beam line
         Vector2 beamDir = beamEnd.copy().subtract(beamStart);
         Vector2 playerOffset = playerPos.copy().subtract(beamStart);
-        
+
         double projection = playerOffset.dot(beamDir) / (lineLength * lineLength);
         projection = Math.max(0, Math.min(1, projection)); // Clamp to line segment
-        
+
         Vector2 closestPoint = beamStart.copy().add(beamDir.multiply(projection));
         double distance = playerPos.distance(closestPoint);
-        
+
         return distance <= playerRadius;
     }
 
@@ -1186,23 +1291,39 @@ public class GameManager implements StepListener<Body> {
      * Find where a beam intersects with obstacles, returning the effective end point
      * If no obstacles are hit, returns the original beam end point
      */
+    /**
+     * Find the intersection point between a beam and obstacles using dyn4j ray casting
+     * This is much more accurate and efficient than manual line-segment collision detection
+     */
     private Vector2 findBeamObstacleIntersection(Vector2 beamStart, Vector2 beamEnd) {
-        Vector2 closestIntersection = beamEnd.copy();
-        double closestDistance = beamStart.distance(beamEnd);
-        
-        // Check intersection with all obstacles
-        for (Obstacle obstacle : gameEntities.getAllObstacles()) {
-            Vector2 intersection = findLineObstacleIntersection(beamStart, beamEnd, obstacle);
-            if (intersection != null) {
-                double distance = beamStart.distance(intersection);
-                if (distance < closestDistance) {
-                    closestDistance = distance;
-                    closestIntersection = intersection;
+        // Create ray from beam start to beam end
+        Vector2 direction = beamEnd.copy();
+        direction.subtract(beamStart);
+        double maxDistance = direction.getMagnitude();
+        direction.normalize();
+
+        Ray ray = new Ray(beamStart, direction);
+
+        // Use dyn4j's built-in ray casting to find the closest obstacle intersection
+        List<RaycastResult<Body, BodyFixture>> results = world.raycast(ray, maxDistance, new DetectFilter<>(true, true, null));
+        RaycastResult<Body, BodyFixture> result = null;
+        if (!results.isEmpty()) {
+            // Find the closest result
+            result = results.get(0);
+            for (RaycastResult<Body, BodyFixture> r : results) {
+                if (r.getBody().getUserData() instanceof Obstacle && r.getRaycast().getDistance() < result.getRaycast().getDistance()) {
+                    result = r;
                 }
             }
         }
-        
-        return closestIntersection;
+
+        if (result != null) {
+            // Return the intersection point
+            return result.getRaycast().getPoint();
+        } else {
+            // No obstacle intersection found, return original end point
+            return beamEnd.copy();
+        }
     }
 
     /**
@@ -1214,7 +1335,7 @@ public class GameManager implements StepListener<Body> {
         Shape shape = obstacle.getPrimaryShape();
         Vector2 obstaclePos = obstacle.getPosition();
         double obstacleRotation = obstacle.getBody().getTransform().getRotationAngle();
-        
+
         if (shape instanceof Circle circle) {
             return findLineCircleIntersection(lineStart, lineEnd, obstaclePos, circle.getRadius());
         } else if (shape instanceof Rectangle rect) {
@@ -1222,7 +1343,7 @@ public class GameManager implements StepListener<Body> {
         } else if (shape instanceof Polygon polygon) {
             return findLinePolygonIntersection(lineStart, lineEnd, polygon, obstaclePos, obstacleRotation);
         }
-        
+
         return null;
     }
 
@@ -1234,20 +1355,20 @@ public class GameManager implements StepListener<Body> {
         Vector2 start = lineStart.copy().subtract(circleCenter);
         Vector2 end = lineEnd.copy().subtract(circleCenter);
         Vector2 dir = end.copy().subtract(start);
-        
+
         // Solve quadratic equation for line-circle intersection
         double a = dir.dot(dir);
         double b = 2 * start.dot(dir);
         double c = start.dot(start) - radius * radius;
-        
+
         double discriminant = b * b - 4 * a * c;
         if (discriminant < 0) {
             return null; // No intersection
         }
-        
+
         double t1 = (-b - Math.sqrt(discriminant)) / (2 * a);
         double t2 = (-b + Math.sqrt(discriminant)) / (2 * a);
-        
+
         // Find the closest intersection within the line segment
         double t = -1;
         if (t1 >= 0 && t1 <= 1) {
@@ -1255,20 +1376,20 @@ public class GameManager implements StepListener<Body> {
         } else if (t2 >= 0 && t2 <= 1) {
             t = t2;
         }
-        
+
         if (t >= 0) {
             Vector2 intersection = start.copy().add(dir.multiply(t));
             return intersection.add(circleCenter); // Transform back to world coordinates
         }
-        
+
         return null;
     }
 
     /**
      * Find intersection between line segment and axis-aligned rectangle
      */
-    private Vector2 findLineRectangleIntersection(Vector2 lineStart, Vector2 lineEnd, Vector2 rectCenter, 
-                                                 double width, double height, double rotation) {
+    private Vector2 findLineRectangleIntersection(Vector2 lineStart, Vector2 lineEnd, Vector2 rectCenter,
+                                                  double width, double height, double rotation) {
         // For simplicity, treat rotated rectangles as circles with radius = diagonal/2
         // This is an approximation but works well for gameplay
         double diagonal = Math.sqrt(width * width + height * height);
@@ -1278,8 +1399,8 @@ public class GameManager implements StepListener<Body> {
     /**
      * Find intersection between line segment and polygon
      */
-    private Vector2 findLinePolygonIntersection(Vector2 lineStart, Vector2 lineEnd, Polygon polygon, 
-                                              Vector2 polygonCenter, double rotation) {
+    private Vector2 findLinePolygonIntersection(Vector2 lineStart, Vector2 lineEnd, Polygon polygon,
+                                                Vector2 polygonCenter, double rotation) {
         // For complex polygons, use bounding circle approximation for performance
         // This could be made more accurate by checking each polygon edge, but that's expensive
         double boundingRadius = 0;
@@ -1289,7 +1410,7 @@ public class GameManager implements StepListener<Body> {
                 boundingRadius = distance;
             }
         }
-        
+
         return findLineCircleIntersection(lineStart, lineEnd, polygonCenter, boundingRadius);
     }
 
@@ -1307,7 +1428,7 @@ public class GameManager implements StepListener<Body> {
             // Handle weapon configuration
             WeaponConfig primaryConfig = null;
             UtilityWeapon utilityConfig = null;
-            
+
             // Determine primary weapon config
             if (request.getWeaponConfig() != null) {
                 primaryConfig = request.getWeaponConfig();
@@ -1316,7 +1437,7 @@ public class GameManager implements StepListener<Body> {
                 primaryConfig = request.getPrimaryWeapon();
                 log.info("Applying legacy primary weapon config for player {}", player.getPlayerName());
             }
-            
+
             // Determine utility weapon config
             if (request.getUtilityWeapon() != null) {
                 try {
@@ -1327,7 +1448,7 @@ public class GameManager implements StepListener<Body> {
                     utilityConfig = UtilityWeapon.HEAL_ZONE;
                 }
             }
-            
+
             // Apply configurations
             player.applyWeaponConfig(primaryConfig, utilityConfig);
         }
