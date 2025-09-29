@@ -41,12 +41,9 @@ import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.dynamics.Settings;
 import org.dyn4j.dynamics.TimeStep;
-import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
-import org.dyn4j.geometry.Polygon;
 import org.dyn4j.geometry.Ray;
 import org.dyn4j.geometry.Rectangle;
-import org.dyn4j.geometry.Shape;
 import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.DetectFilter;
 import org.dyn4j.world.PhysicsWorld;
@@ -93,6 +90,9 @@ public class GameManager implements StepListener<Body> {
     @Getter
     protected long gameStartTime;
     protected boolean gameRunning = false;
+    
+    // Track players affected by slow fields for damping reset
+    private final Set<Integer> playersInSlowFields = new HashSet<>();
 
     // AI management settings - initialized from gameConfig
     private final long aiCheckIntervalMs;
@@ -531,6 +531,9 @@ public class GameManager implements StepListener<Body> {
      * This handles damage-over-time effects like POISON and FIRE.
      */
     private void updateFieldEffects(double deltaTime) {
+        // Clear slow field tracking for this frame
+        Set<Integer> currentFrameSlowPlayers = new HashSet<>();
+        
         for (FieldEffect fieldEffect : gameEntities.getAllFieldEffects()) {
             if (!fieldEffect.isActive()) {
                 continue;
@@ -555,10 +558,30 @@ public class GameManager implements StepListener<Body> {
                     
                     if (shouldProcess) {
                         applyFieldEffectDamageOverTime(player, fieldEffect, deltaTime);
+                        
+                        // Track players in slow fields for this frame
+                        if (fieldEffect.getType() == FieldEffectType.SLOW_FIELD) {
+                            currentFrameSlowPlayers.add(player.getId());
+                        }
                     }
                 }
             }
         }
+        
+        // Reset damping for players who left slow fields
+        for (Integer playerId : playersInSlowFields) {
+            if (!currentFrameSlowPlayers.contains(playerId)) {
+                Player player = gameEntities.getPlayer(playerId);
+                if (player != null && player.isActive()) {
+                    player.resetDamping();
+                    log.debug("SLOW_FIELD: Reset damping for player {} (left slow field)", playerId);
+                }
+            }
+        }
+        
+        // Update tracking set for next frame
+        playersInSlowFields.clear();
+        playersInSlowFields.addAll(currentFrameSlowPlayers);
     }
 
     /**
@@ -624,13 +647,12 @@ public class GameManager implements StepListener<Body> {
             case SLOW_FIELD:
                 // Only slow enemies
                 if (fieldEffect.canAffect(player)) {
-                    StatusEffects.applySlowEffect(player, 0.5, 1.0,
-                            Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Slow Field"));
+                    applySlowFieldEffect(player, fieldEffect, deltaTime);
                 }
                 break;
             case GRAVITY_WELL:
-                // Pull all players toward center (physics effect)
-                if (fieldEffect.canAffect(player)) {
+                // Pull all players toward center (physics effect affects everyone in range)
+                if (fieldEffect.isInRange(player.getPosition())) {
                     applyGravityWellEffect(player, fieldEffect, deltaTime);
                 }
                 break;
@@ -666,7 +688,7 @@ public class GameManager implements StepListener<Body> {
     }
 
     /**
-     * Apply gravity well effect that pulls players toward the center
+     * Apply gravity well effect that pulls players toward the center using physics forces
      */
     private void applyGravityWellEffect(Player player, FieldEffect fieldEffect, double deltaTime) {
         Vector2 playerPos = player.getPosition();
@@ -681,26 +703,50 @@ public class GameManager implements StepListener<Body> {
             // Calculate pull strength based on distance (stronger when closer)
             double maxDistance = fieldEffect.getRadius();
             double distanceRatio = Math.max(0.0, (maxDistance - distance) / maxDistance);
-            double pullStrength = 150.0 * distanceRatio * deltaTime; // Max 150 units/sec pull
+            double pullForce = 800.0 * distanceRatio; // Base force strength
             
-            // Apply pull by modifying the player's current velocity
-            Vector2 currentVelocity = player.getVelocity();
-            Vector2 pullVelocity = pullDirection.multiply(pullStrength);
+            Vector2 force = pullDirection.multiply(pullForce);
+            player.applyForce(force);
             
-            // Add pull to current velocity (this works with the kinematic movement system)
-            Vector2 newVelocity = currentVelocity.add(pullVelocity);
+            log.debug("GRAVITY_WELL: Applied force {} to player {} (distance: {}, ratio: {})", 
+                     pullForce, player.getId(), distance, distanceRatio);
+        }
+    }
+
+    /**
+     * Apply slow field effect using physics-based resistance forces and increased damping
+     */
+    private void applySlowFieldEffect(Player player, FieldEffect fieldEffect, double deltaTime) {
+        Vector2 playerPos = player.getPosition();
+        double distance = playerPos.distance(fieldEffect.getPosition());
+        double maxDistance = fieldEffect.getRadius();
+        
+        // Calculate effect strength based on distance (stronger when closer to center)
+        double distanceRatio = Math.max(0.0, (maxDistance - distance) / maxDistance);
+        
+        // Track that this player is in a slow field
+        playersInSlowFields.add(player.getId());
+        
+        // Apply increased damping for "thick fluid" effect
+        double dampingMultiplier = 1.0 + (2.0 * distanceRatio); // 1.0x to 3.0x damping
+        player.applyTemporaryDamping(dampingMultiplier);
+        
+        // Apply resistance force opposite to movement direction
+        Vector2 playerVelocity = player.getVelocity();
+        double currentSpeed = playerVelocity.getMagnitude();
+        
+        if (currentSpeed > 1.0) { // Only apply resistance if moving significantly
+            double resistanceStrength = 400.0 * distanceRatio; // Base resistance force
             
-            // Limit the total velocity to prevent excessive speeds
-            double maxVelocity = 400.0; // Reasonable max speed
-            if (newVelocity.getMagnitude() > maxVelocity) {
-                newVelocity.normalize();
-                newVelocity = newVelocity.multiply(maxVelocity);
-            }
+            Vector2 resistanceDirection = playerVelocity.copy();
+            resistanceDirection.normalize();
+            resistanceDirection = resistanceDirection.multiply(-1.0); // Opposite direction
             
-            player.setVelocity(newVelocity.x, newVelocity.y);
+            Vector2 resistanceForce = resistanceDirection.multiply(resistanceStrength);
+            player.applyForce(resistanceForce);
             
-            log.debug("GRAVITY_WELL: Pulling player {} toward center. Distance: {}, Pull strength: {}", 
-                     player.getId(), distance, pullStrength);
+            log.debug("SLOW_FIELD: Applied resistance {} and damping {}x to player {} (speed: {}, ratio: {})", 
+                     resistanceStrength, dampingMultiplier, player.getId(), currentSpeed, distanceRatio);
         }
     }
 
@@ -967,6 +1013,9 @@ public class GameManager implements StepListener<Body> {
 
         gameEntities.addFieldEffect(fieldEffect);
         world.addBody(fieldEffect.getBody());
+        
+        log.info("Created {} field effect at ({}, {}) with radius {} for player {}", 
+                effectType.name(), targetPos.x, targetPos.y, utility.getRadius(), activation.playerId);
     }
 
     /**
@@ -1258,34 +1307,6 @@ public class GameManager implements StepListener<Body> {
         }
     }
 
-    /**
-     * Check if a player intersects with a beam's path using line-circle collision
-     *
-     * @deprecated Use dyn4j ray casting instead for better accuracy
-     */
-    @Deprecated
-    private boolean isPlayerInBeamPath(Player player, Vector2 beamStart, Vector2 beamEnd) {
-        Vector2 playerPos = player.getPosition();
-        double playerRadius = 15.0; // Player collision radius
-
-        // Calculate distance from point to line segment
-        double lineLength = beamStart.distance(beamEnd);
-        if (lineLength == 0) {
-            return beamStart.distance(playerPos) <= playerRadius;
-        }
-
-        // Project player position onto beam line
-        Vector2 beamDir = beamEnd.copy().subtract(beamStart);
-        Vector2 playerOffset = playerPos.copy().subtract(beamStart);
-
-        double projection = playerOffset.dot(beamDir) / (lineLength * lineLength);
-        projection = Math.max(0, Math.min(1, projection)); // Clamp to line segment
-
-        Vector2 closestPoint = beamStart.copy().add(beamDir.multiply(projection));
-        double distance = playerPos.distance(closestPoint);
-
-        return distance <= playerRadius;
-    }
 
     /**
      * Find where a beam intersects with obstacles, returning the effective end point
@@ -1326,93 +1347,6 @@ public class GameManager implements StepListener<Body> {
         }
     }
 
-    /**
-     * Find intersection point between a line segment and an obstacle
-     * Returns null if no intersection occurs
-     */
-    private Vector2 findLineObstacleIntersection(Vector2 lineStart, Vector2 lineEnd, Obstacle obstacle) {
-        // Get obstacle shape and transform
-        Shape shape = obstacle.getPrimaryShape();
-        Vector2 obstaclePos = obstacle.getPosition();
-        double obstacleRotation = obstacle.getBody().getTransform().getRotationAngle();
-
-        if (shape instanceof Circle circle) {
-            return findLineCircleIntersection(lineStart, lineEnd, obstaclePos, circle.getRadius());
-        } else if (shape instanceof Rectangle rect) {
-            return findLineRectangleIntersection(lineStart, lineEnd, obstaclePos, rect.getWidth(), rect.getHeight(), obstacleRotation);
-        } else if (shape instanceof Polygon polygon) {
-            return findLinePolygonIntersection(lineStart, lineEnd, polygon, obstaclePos, obstacleRotation);
-        }
-
-        return null;
-    }
-
-    /**
-     * Find intersection between line segment and circle
-     */
-    private Vector2 findLineCircleIntersection(Vector2 lineStart, Vector2 lineEnd, Vector2 circleCenter, double radius) {
-        // Translate line to circle-centered coordinates
-        Vector2 start = lineStart.copy().subtract(circleCenter);
-        Vector2 end = lineEnd.copy().subtract(circleCenter);
-        Vector2 dir = end.copy().subtract(start);
-
-        // Solve quadratic equation for line-circle intersection
-        double a = dir.dot(dir);
-        double b = 2 * start.dot(dir);
-        double c = start.dot(start) - radius * radius;
-
-        double discriminant = b * b - 4 * a * c;
-        if (discriminant < 0) {
-            return null; // No intersection
-        }
-
-        double t1 = (-b - Math.sqrt(discriminant)) / (2 * a);
-        double t2 = (-b + Math.sqrt(discriminant)) / (2 * a);
-
-        // Find the closest intersection within the line segment
-        double t = -1;
-        if (t1 >= 0 && t1 <= 1) {
-            t = t1;
-        } else if (t2 >= 0 && t2 <= 1) {
-            t = t2;
-        }
-
-        if (t >= 0) {
-            Vector2 intersection = start.copy().add(dir.multiply(t));
-            return intersection.add(circleCenter); // Transform back to world coordinates
-        }
-
-        return null;
-    }
-
-    /**
-     * Find intersection between line segment and axis-aligned rectangle
-     */
-    private Vector2 findLineRectangleIntersection(Vector2 lineStart, Vector2 lineEnd, Vector2 rectCenter,
-                                                  double width, double height, double rotation) {
-        // For simplicity, treat rotated rectangles as circles with radius = diagonal/2
-        // This is an approximation but works well for gameplay
-        double diagonal = Math.sqrt(width * width + height * height);
-        return findLineCircleIntersection(lineStart, lineEnd, rectCenter, diagonal / 2);
-    }
-
-    /**
-     * Find intersection between line segment and polygon
-     */
-    private Vector2 findLinePolygonIntersection(Vector2 lineStart, Vector2 lineEnd, Polygon polygon,
-                                                Vector2 polygonCenter, double rotation) {
-        // For complex polygons, use bounding circle approximation for performance
-        // This could be made more accurate by checking each polygon edge, but that's expensive
-        double boundingRadius = 0;
-        for (Vector2 vertex : polygon.getVertices()) {
-            double distance = vertex.getMagnitude();
-            if (distance > boundingRadius) {
-                boundingRadius = distance;
-            }
-        }
-
-        return findLineCircleIntersection(lineStart, lineEnd, polygonCenter, boundingRadius);
-    }
 
     protected void processPlayerConfigChange(PlayerSession playerSession, PlayerConfigRequest request) {
         Player player = gameEntities.getPlayer(playerSession.getPlayerId());
@@ -1492,46 +1426,6 @@ public class GameManager implements StepListener<Body> {
         world.addBody(rightWall);
     }
 
-    private void createStrategicLocations() {
-        String[] locationNames = {"Alpha", "Beta", "Gamma", "Delta", "Echo"};
-        for (int i = 0; i < gameConfig.getStrategicLocationsCount(); i++) {
-            Vector2 locationPosition = findSafeLocationPosition();
-
-            StrategicLocation location = new StrategicLocation(locationNames[i], locationPosition.x, locationPosition.y);
-            gameEntities.addStrategicLocation(location);
-            world.addBody(location.getBody());
-        }
-    }
-
-    /**
-     * Find a safe position for strategic locations that avoids obstacles.
-     */
-    private Vector2 findSafeLocationPosition() {
-        for (int attempts = 0; attempts < 20; attempts++) {
-            double x = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldWidth() - 200);
-            double y = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldHeight() - 200);
-            Vector2 candidate = new Vector2(x, y);
-
-            // Check if position is clear of terrain obstacles (larger radius for strategic locations)
-            if (terrainGenerator.isPositionClear(candidate, 80.0)) {
-                // Also check against existing strategic locations
-                boolean tooCloseToOther = false;
-                for (StrategicLocation existing : gameEntities.getAllStrategicLocations()) {
-                    if (candidate.distance(existing.getPosition()) < 150.0) {
-                        tooCloseToOther = true;
-                        break;
-                    }
-                }
-
-                if (!tooCloseToOther) {
-                    return candidate;
-                }
-            }
-        }
-
-        // Fallback to terrain generator's safe spawn method
-        return terrainGenerator.getSafeSpawnPosition(80.0);
-    }
 
     private void createObstacles() {
         // Use procedurally generated simple obstacles from terrain generator

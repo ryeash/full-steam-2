@@ -60,12 +60,12 @@ public class Player extends GameEntity {
         body.addFixture(circle);
         body.setMass(MassType.NORMAL);
         body.getTransform().setTranslation(x, y);
-        body.setLinearDamping(0.97);
-
-        // Prevent physics engine from affecting rotation
-        body.setAngularDamping(0.0);
+        
+        // Physics-based movement configuration
+        body.setLinearDamping(Config.PLAYER_LINEAR_DAMPING);
+        body.setAngularDamping(Config.PLAYER_ANGULAR_DAMPING);
         body.setAngularVelocity(0.0);
-
+        
         return body;
     }
 
@@ -105,14 +105,9 @@ public class Player extends GameEntity {
             return;
         }
 
+        // Physics-based dynamic movement
         Vector2 moveVector = new Vector2(input.getMoveX(), input.getMoveY());
-        if (moveVector.getMagnitude() > 0) {
-            moveVector.normalize();
-            double speed = maxSpeed;
-            setVelocity(moveVector.x * speed, moveVector.y * speed);
-        } else {
-            setVelocity(0, 0);
-        }
+        processMovement(moveVector);
 
         // Aiming
         Vector2 playerPos = getPosition();
@@ -127,8 +122,6 @@ public class Player extends GameEntity {
             body.setAngularVelocity(0.0);
         }
 
-        // Weapon switching is no longer needed - primary weapon is always active
-
         // Reloading
         if (Boolean.TRUE.equals(input.getReload()) && !isReloading) {
             startReload();
@@ -137,6 +130,30 @@ public class Player extends GameEntity {
         // Handle legacy right-click mapping to altFire
         if (input.isRight()) {
             input.setAltFire(true);
+        }
+    }
+
+    /**
+     * Physics-based movement using forces for realistic acceleration and deceleration
+     */
+    private void processMovement(Vector2 moveVector) {
+        if (moveVector.getMagnitude() > 0) {
+            // Player wants to move - apply force toward target velocity
+            moveVector.normalize();
+            Vector2 targetVelocity = moveVector.multiply(maxSpeed);
+            Vector2 currentVelocity = getVelocity();
+            Vector2 velocityDiff = targetVelocity.subtract(currentVelocity);
+            
+            // Apply force proportional to velocity difference (PD controller)
+            Vector2 force = velocityDiff.multiply(Config.PLAYER_ACCELERATION);
+            body.applyForce(force);
+        } else {
+            // Player wants to stop - apply braking force
+            Vector2 currentVelocity = getVelocity();
+            if (currentVelocity.getMagnitude() > 1.0) { // Only brake if moving significantly
+                Vector2 brakingForce = currentVelocity.multiply(-Config.PLAYER_BRAKING_FORCE);
+                body.applyForce(brakingForce);
+            }
         }
     }
 
@@ -386,5 +403,55 @@ public class Player extends GameEntity {
         setVelocity(0, 0);
         primaryWeapon.reload();
         isReloading = false;
+    }
+
+    /**
+     * Apply knockback force to the player using physics impulse
+     */
+    public void applyKnockback(Vector2 direction, double force) {
+        if (!active) {
+            return;
+        }
+        
+        Vector2 knockbackDirection = direction.copy();
+        knockbackDirection.normalize();
+        Vector2 impulse = knockbackDirection.multiply(force);
+        body.applyImpulse(impulse);
+    }
+
+    /**
+     * Apply a continuous force to the player (for effects like wind, conveyor belts, gravity wells)
+     */
+    public void applyForce(Vector2 force) {
+        if (!active) {
+            return;
+        }
+        
+        body.applyForce(force);
+    }
+
+    /**
+     * Temporarily modify linear damping for environmental effects (like slow fields)
+     */
+    public void applyTemporaryDamping(double dampingMultiplier) {
+        if (!active) {
+            return;
+        }
+        
+        double newDamping = Config.PLAYER_LINEAR_DAMPING * dampingMultiplier;
+        // Clamp damping to reasonable values (0.0 to 0.99)
+        newDamping = Math.max(0.0, Math.min(0.99, newDamping));
+        body.setLinearDamping(newDamping);
+    }
+
+    /**
+     * Reset linear damping to default value
+     */
+    public void resetDamping() {
+        if (!active) {
+            return;
+        }
+        
+        body.setLinearDamping(Config.PLAYER_LINEAR_DAMPING);
     }
 }
