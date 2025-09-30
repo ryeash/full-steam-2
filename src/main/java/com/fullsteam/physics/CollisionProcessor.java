@@ -13,6 +13,7 @@ import org.dyn4j.world.BroadphaseCollisionData;
 import org.dyn4j.world.ContactCollisionData;
 import org.dyn4j.world.ManifoldCollisionData;
 import org.dyn4j.world.NarrowphaseCollisionData;
+import org.dyn4j.world.World;
 import org.dyn4j.world.listener.CollisionListener;
 import org.dyn4j.world.listener.ContactListener;
 
@@ -21,17 +22,13 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
 
     private final GameManager gameManager;
     private final GameEntities gameEntities;
-    /**
-     * -- GETTER --
-     * Get the bullet effect processor for accessing pending effects and projectiles
-     */
     @Getter
     private final BulletEffectProcessor bulletEffectProcessor;
 
-    public CollisionProcessor(GameManager gameManager, GameEntities gameEntities) {
+    public CollisionProcessor(World<Body> world, GameManager gameManager, GameEntities gameEntities) {
         this.gameManager = gameManager;
         this.gameEntities = gameEntities;
-        this.bulletEffectProcessor = new BulletEffectProcessor(gameEntities);
+        this.bulletEffectProcessor = new BulletEffectProcessor(world, gameEntities);
     }
 
     @Override
@@ -77,19 +74,12 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             return p1.getBulletEffects().contains(BulletEffect.BOUNCY) || p2.getBulletEffects().contains(BulletEffect.BOUNCY);// Disable collision resolution between projectiles
         }
 
-        // Prevent projectile-to-projectile collisions - let them pass through each other
         if (entity1 instanceof Player player && entity2 instanceof Projectile projectile) {
             handlePlayerProjectileCollision(player, projectile);
             return false; // Prevent physics resolution for projectile hits
         } else if (entity1 instanceof Projectile projectile && entity2 instanceof Player player) {
             handlePlayerProjectileCollision(player, projectile);
             return false; // Prevent physics resolution for projectile hits
-        } else if (entity1 instanceof Player player && entity2 instanceof StrategicLocation strategicLocation) {
-            handlePlayerLocationInteraction(player, strategicLocation);
-            return true; // Allow physics to handle player-location overlaps (sensors should not resolve anyway)
-        } else if (entity1 instanceof StrategicLocation strategicLocation && entity2 instanceof Player player) {
-            handlePlayerLocationInteraction(player, strategicLocation);
-            return true; // Allow physics to handle player-location overlaps (sensors should not resolve anyway)
         } else if (entity1 instanceof Projectile projectile && entity2 instanceof Obstacle obstacle) {
             return handleProjectileObstacleCollision(projectile, obstacle);
         } else if (entity1 instanceof Obstacle obstacle && entity2 instanceof Projectile projectile) {
@@ -163,10 +153,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             projectile.setActive(false);
             return false; // Stop the projectile
         }
-    }
-
-    private void handlePlayerLocationInteraction(Player player, StrategicLocation location) {
-        // TODO
     }
 
     private void handlePlayerFieldEffectCollision(Player player, FieldEffect fieldEffect) {

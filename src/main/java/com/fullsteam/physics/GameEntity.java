@@ -41,6 +41,10 @@ public abstract class GameEntity {
         body.setLinearVelocity(x, y);
     }
 
+    public void setVelocity(Vector2 velocity) {
+        body.setLinearVelocity(velocity);
+    }
+
     public double getRotation() {
         return body.getTransform().getRotationAngle();
     }

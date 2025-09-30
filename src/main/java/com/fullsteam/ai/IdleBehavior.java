@@ -2,7 +2,6 @@ package com.fullsteam.ai;
 
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.physics.GameEntities;
-import com.fullsteam.physics.StrategicLocation;
 import org.dyn4j.geometry.Vector2;
 
 import java.util.concurrent.ThreadLocalRandom;
@@ -30,11 +29,11 @@ public class IdleBehavior implements AIBehavior {
         // Move towards wander target
         Vector2 playerPos = aiPlayer.getPosition();
         Vector2 direction = wanderTarget.copy().subtract(playerPos);
-        
+
         // Always move towards target, but slow down as we approach
         double distance = direction.getMagnitude();
         direction.normalize();
-        
+
         // Speed scales with distance, but never goes to zero
         double moveSpeed = Math.max(0.3, Math.min(0.8, distance / 100.0));
         input.setMoveX(direction.x * moveSpeed);
@@ -51,7 +50,7 @@ public class IdleBehavior implements AIBehavior {
             double enemyDistance = playerPos.distance(enemyPos);
             if (enemyDistance < 400 && aiPlayer.canShoot()) {
                 input.setLeft(true);
-                
+
                 // Move towards enemy if they're within reasonable range
                 if (enemyDistance > 150 && enemyDistance < 350) {
                     Vector2 toEnemy = enemyPos.copy().subtract(playerPos);
@@ -61,23 +60,14 @@ public class IdleBehavior implements AIBehavior {
                 }
             }
         } else {
-            // Second priority: Look for nearby strategic locations
-            StrategicLocation nearestLocation = findNearestStrategicLocation(aiPlayer, gameEntities);
-            if (nearestLocation != null) {
-                Vector2 locationPos = nearestLocation.getPosition();
-                input.setWorldX(locationPos.x);
-                input.setWorldY(locationPos.y);
-            } else {
-                // Default: Aim in movement direction
-                input.setWorldX(playerPos.x + direction.x * 100);
-                input.setWorldY(playerPos.y + direction.y * 100);
-            }
+            input.setWorldX(playerPos.x + direction.x * 100);
+            input.setWorldY(playerPos.y + direction.y * 100);
         }
-        
+
         // Always check for reload when idle - this is the missing piece!
         int currentAmmo = aiPlayer.getCurrentWeapon().getCurrentAmmo();
         int magazineSize = aiPlayer.getCurrentWeapon().getMagazineSize();
-        
+
         // Reload if out of ammo or if ammo is low and we're not in immediate danger
         boolean shouldReload = false;
         if (currentAmmo == 0) {
@@ -87,7 +77,7 @@ public class IdleBehavior implements AIBehavior {
         } else if (currentAmmo < magazineSize * 0.4 && nearestEnemy == null) {
             shouldReload = true; // Reload when safe and less than 40% ammo
         }
-        
+
         if (shouldReload && !aiPlayer.isReloading()) {
             input.setReload(true);
         }
@@ -131,7 +121,7 @@ public class IdleBehavior implements AIBehavior {
         // Keep within world bounds (rough approximation)
         wanderTarget.x = Math.max(-900, Math.min(900, wanderTarget.x));
         wanderTarget.y = Math.max(-900, Math.min(900, wanderTarget.y));
-        
+
         // If target is too close to current position, extend it
         double actualDistance = playerPos.distance(wanderTarget);
         if (actualDistance < 100) {
@@ -160,22 +150,6 @@ public class IdleBehavior implements AIBehavior {
             if (distance < nearestDistance) {
                 nearestDistance = distance;
                 nearest = player;
-            }
-        }
-
-        return nearest;
-    }
-
-    private StrategicLocation findNearestStrategicLocation(AIPlayer aiPlayer, GameEntities gameEntities) {
-        Vector2 playerPos = aiPlayer.getPosition();
-        StrategicLocation nearest = null;
-        double nearestDistance = Double.MAX_VALUE;
-
-        for (StrategicLocation location : gameEntities.getAllStrategicLocations()) {
-            double distance = playerPos.distance(location.getPosition());
-            if (distance < nearestDistance) {
-                nearestDistance = distance;
-                nearest = location;
             }
         }
 

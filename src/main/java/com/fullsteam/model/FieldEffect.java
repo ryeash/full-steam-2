@@ -87,11 +87,20 @@ public class FieldEffect extends GameEntity {
             return false;
         }
 
-        // Team-based damage rules (same as projectiles)
         if (entity instanceof Player player) {
+            // for own-team/self targeting
+            if (type == FieldEffectType.HEAL_ZONE || type == FieldEffectType.SPEED_BOOST) {
+                // In FFA mode (team 0), can only help self
+                if (ownerTeam == 0 || player.getTeam() == 0) {
+                    return ownerId == player.getId();
+                }
+                // In team mode, can help teammates AND the owner
+                return ownerTeam == player.getTeam();
+            }
 
+            // Team-based damage rules (same as projectiles)
             // Can't damage self (though this should be rare for field effects)
-            if (player.getId() == id) {
+            if (player.getId() == ownerId) {
                 return false;
             }
 

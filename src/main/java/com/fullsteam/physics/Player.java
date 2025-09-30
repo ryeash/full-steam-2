@@ -2,9 +2,9 @@ package com.fullsteam.physics;
 
 import com.fullsteam.Config;
 import com.fullsteam.model.AttributeModification;
+import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.UtilityWeapon;
-import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.Weapon;
 import com.fullsteam.model.WeaponConfig;
 import lombok.Getter;
@@ -39,10 +39,6 @@ public class Player extends GameEntity {
     private double maxSpeed = Config.PLAYER_SPEED;
     private final Set<AttributeModification> attributeModifications = new HashSet<>();
 
-    public Player(int id, String playerName, double x, double y) {
-        this(id, playerName, x, y, 0); // Default to no team (FFA)
-    }
-
     public Player(int id, String playerName, double x, double y, int team) {
         super(id, createPlayerBody(x, y), 100.0);
         this.playerName = playerName != null ? playerName : "Player " + id;
@@ -60,12 +56,12 @@ public class Player extends GameEntity {
         body.addFixture(circle);
         body.setMass(MassType.NORMAL);
         body.getTransform().setTranslation(x, y);
-        
+
         // Physics-based movement configuration
         body.setLinearDamping(Config.PLAYER_LINEAR_DAMPING);
         body.setAngularDamping(Config.PLAYER_ANGULAR_DAMPING);
         body.setAngularVelocity(0.0);
-        
+
         return body;
     }
 
@@ -126,7 +122,7 @@ public class Player extends GameEntity {
         if (Boolean.TRUE.equals(input.getReload()) && !isReloading) {
             startReload();
         }
-        
+
         // Handle legacy right-click mapping to altFire
         if (input.isRight()) {
             input.setAltFire(true);
@@ -143,7 +139,7 @@ public class Player extends GameEntity {
             Vector2 targetVelocity = moveVector.multiply(maxSpeed);
             Vector2 currentVelocity = getVelocity();
             Vector2 velocityDiff = targetVelocity.subtract(currentVelocity);
-            
+
             // Apply force proportional to velocity difference (PD controller)
             Vector2 force = velocityDiff.multiply(Config.PLAYER_ACCELERATION);
             body.applyForce(force);
@@ -190,7 +186,7 @@ public class Player extends GameEntity {
         if (!isActive() || health <= 0 || utilityWeapon == null) {
             return false;
         }
-        
+
         long now = System.currentTimeMillis();
         double cooldownMs = utilityWeapon.getCooldown() * 1000.0;
         return (now - lastUtilityUseTime) >= cooldownMs;
@@ -248,6 +244,7 @@ public class Player extends GameEntity {
 
     /**
      * Shoot a beam weapon instead of projectiles
+     *
      * @return Beam object if weapon can fire beams and conditions are met, null otherwise
      */
     public Beam shootBeam() {
@@ -265,11 +262,11 @@ public class Player extends GameEntity {
         Vector2 pos = getPosition();
         Vector2 direction = aimDirection.copy();
         direction.normalize();
-        
+
         Ordinance ordinance = weapon.getOrdinance();
         double range = weapon.getRange();
         double damage = weapon.getDamage();
-        
+
         // Create the appropriate beam type based on ordinance
         return createBeamFromOrdinance(ordinance, pos, direction, range, damage);
     }
@@ -277,16 +274,17 @@ public class Player extends GameEntity {
     /**
      * Factory method to create a beam based on ordinance (simplified single-class approach)
      */
-    private Beam createBeamFromOrdinance(Ordinance ordinance, Vector2 startPoint, Vector2 direction, 
-                                        double range, double damage) {
+    private Beam createBeamFromOrdinance(Ordinance ordinance, Vector2 startPoint, Vector2 direction,
+                                         double range, double damage) {
         int beamId = Config.nextId();
-        
+
         // Single Beam class handles all beam types via ordinance
         return new Beam(beamId, startPoint, direction, range, damage, getId(), getTeam(), ordinance);
     }
 
     /**
      * Use the utility weapon. Returns data needed to create the utility effect.
+     *
      * @return UtilityActivation data, or null if utility cannot be used
      */
     public UtilityActivation useUtility() {
@@ -296,13 +294,13 @@ public class Player extends GameEntity {
 
         lastUtilityUseTime = System.currentTimeMillis();
         Vector2 pos = getPosition();
-        
+
         return new UtilityActivation(
-            utilityWeapon,
-            pos.copy(),
-            aimDirection.copy(),
-            id,
-            team
+                utilityWeapon,
+                pos.copy(),
+                aimDirection.copy(),
+                id,
+                team
         );
     }
 
@@ -412,7 +410,7 @@ public class Player extends GameEntity {
         if (!active) {
             return;
         }
-        
+
         Vector2 knockbackDirection = direction.copy();
         knockbackDirection.normalize();
         Vector2 impulse = knockbackDirection.multiply(force);
@@ -426,7 +424,7 @@ public class Player extends GameEntity {
         if (!active) {
             return;
         }
-        
+
         body.applyForce(force);
     }
 
@@ -437,7 +435,7 @@ public class Player extends GameEntity {
         if (!active) {
             return;
         }
-        
+
         double newDamping = Config.PLAYER_LINEAR_DAMPING * dampingMultiplier;
         // Clamp damping to reasonable values (0.0 to 0.99)
         newDamping = Math.max(0.0, Math.min(0.99, newDamping));
@@ -451,7 +449,7 @@ public class Player extends GameEntity {
         if (!active) {
             return;
         }
-        
+
         body.setLinearDamping(Config.PLAYER_LINEAR_DAMPING);
     }
 }

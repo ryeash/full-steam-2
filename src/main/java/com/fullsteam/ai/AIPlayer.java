@@ -27,10 +27,6 @@ public class AIPlayer extends Player {
     private Vector2 targetMoveDirection = new Vector2(0, 0);
     private double movementSmoothingFactor = 0.7; // How much to blend between old and new movement
 
-    public AIPlayer(int id, String playerName, double x, double y, AIPersonality personality) {
-        this(id, playerName, x, y, personality, 0); // Default to FFA team
-    }
-    
     public AIPlayer(int id, String playerName, double x, double y, AIPersonality personality, int team) {
         super(id, playerName, x, y, team);
         this.personality = personality;

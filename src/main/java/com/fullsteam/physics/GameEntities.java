@@ -4,6 +4,8 @@ import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
 import lombok.Getter;
+import org.dyn4j.dynamics.Body;
+import org.dyn4j.world.World;
 
 import java.util.Collection;
 import java.util.Map;
@@ -18,11 +20,11 @@ import java.util.concurrent.ConcurrentSkipListMap;
 @Getter
 public class GameEntities {
 
+    private final World<Body> world;
     protected final Map<Integer, PlayerSession> playerSessions = new ConcurrentSkipListMap<>();
     protected final Map<Integer, PlayerInput> playerInputs = new ConcurrentSkipListMap<>();
     private final Map<Integer, Player> players = new ConcurrentSkipListMap<>();
     private final Map<Integer, Projectile> projectiles = new ConcurrentSkipListMap<>();
-    private final Map<Integer, StrategicLocation> strategicLocations = new ConcurrentSkipListMap<>();
     private final Map<Integer, Obstacle> obstacles = new ConcurrentSkipListMap<>();
     private final Map<Integer, FieldEffect> fieldEffects = new ConcurrentSkipListMap<>();
 
@@ -33,6 +35,10 @@ public class GameEntities {
     private final Map<Integer, ProximityMine> proximityMines = new ConcurrentSkipListMap<>();
     private final Map<Integer, TeleportPad> teleportPads = new ConcurrentSkipListMap<>();
     private final Map<Integer, Beam> beams = new ConcurrentSkipListMap<>();
+
+    public GameEntities(World<Body> world) {
+        this.world = world;
+    }
 
     public void addPlayerSession(PlayerSession playerSession) {
         playerSessions.put(playerSession.getPlayerId(), playerSession);
@@ -76,22 +82,6 @@ public class GameEntities {
         return projectiles.values();
     }
 
-    // ===== Strategic Location Management =====
-
-    public void addStrategicLocation(StrategicLocation location) {
-        strategicLocations.put(location.getId(), location);
-    }
-
-    public StrategicLocation getStrategicLocation(int locationId) {
-        return strategicLocations.get(locationId);
-    }
-
-    public Collection<StrategicLocation> getAllStrategicLocations() {
-        return strategicLocations.values();
-    }
-
-    // ===== Obstacle Management =====
-
     public void addObstacle(Obstacle obstacle) {
         obstacles.put(obstacle.getId(), obstacle);
     }
@@ -106,24 +96,132 @@ public class GameEntities {
      */
     public void removeInactiveEntities() {
         // Remove inactive players
-        players.entrySet().removeIf(entry -> !entry.getValue().isActive());
+//        players.entrySet().removeIf(entry -> {
+//            if (!entry.getValue().isActive()) {
+//                world.removeBody(entry.getValue().getBody());
+//            }
+//            return !entry.getValue().isActive();
+//        });
 
         // Remove inactive projectiles
-        projectiles.entrySet().removeIf(entry -> !entry.getValue().isActive());
-
-        // Remove inactive strategic locations (unlikely but for completeness)
-        strategicLocations.entrySet().removeIf(entry -> !entry.getValue().isActive());
+//        projectiles.entrySet().removeIf(entry -> {
+//            Projectile projectile = entry.getValue();
+//            if (!projectile.isActive()) {
+//                if (projectile.shouldTriggerEffectsOnDismissal()) {
+//                    projectile.markAsExploded();
+//                    getCollisionProcessor().getBulletEffectProcessor().processEffectHit(projectile, projectile.getPosition());
+//                }
+//                world.removeBody(projectile.getBody());
+//                return true;
+//            }
+//            return false;
+//        });
 
         // Remove expired field effects
-        fieldEffects.entrySet().removeIf(entry -> entry.getValue().isExpired());
-        
+        fieldEffects.entrySet().removeIf(entry -> {
+            FieldEffect o = entry.getValue();
+            if (o.isExpired()) {
+                world.removeBody(o.getBody());
+                return true;
+            }
+            return false;
+        });
+
         // Remove expired utility entities
-        turrets.entrySet().removeIf(entry -> entry.getValue().isExpired());
-        barriers.entrySet().removeIf(entry -> entry.getValue().isExpired());
-        netProjectiles.entrySet().removeIf(entry -> entry.getValue().isExpired());
-        proximityMines.entrySet().removeIf(entry -> entry.getValue().isExpired());
-        teleportPads.entrySet().removeIf(entry -> entry.getValue().isExpired());
-        beams.entrySet().removeIf(entry -> entry.getValue().isExpired());
+        turrets.entrySet().removeIf(entry -> {
+            Turret o = entry.getValue();
+            if (o.isExpired()) {
+                world.removeBody(o.getBody());
+                return true;
+            }
+            return false;
+        });
+        barriers.entrySet().removeIf(entry -> {
+            Barrier o = entry.getValue();
+            if (o.isExpired()) {
+                world.removeBody(o.getBody());
+                return true;
+            }
+            return false;
+        });
+        netProjectiles.entrySet().removeIf(entry -> {
+            NetProjectile o = entry.getValue();
+            if (o.isExpired()) {
+                world.removeBody(o.getBody());
+                return true;
+            }
+            return false;
+        });
+        proximityMines.entrySet().removeIf(entry -> {
+            ProximityMine o = entry.getValue();
+            if (o.isExpired()) {
+                world.removeBody(o.getBody());
+                return true;
+            }
+            return false;
+        });
+        teleportPads.entrySet().removeIf(entry -> {
+            TeleportPad o = entry.getValue();
+            if (o.isExpired()) {
+                world.removeBody(o.getBody());
+                return true;
+            }
+            return false;
+        });
+        beams.entrySet().removeIf(entry -> {
+            Beam o = entry.getValue();
+            if (o.isExpired()) {
+                world.removeBody(o.getBody());
+                return true;
+            }
+            return false;
+        });
+
+        fieldEffects.entrySet().removeIf(entry -> {
+            FieldEffect effect = entry.getValue();
+            if (effect.isExpired()) {
+                world.removeBody(effect.getBody());
+                return true;
+            }
+            return false;
+        });
+
+        // Clean up expired utility entities
+        turrets.entrySet().removeIf(entry -> {
+            Turret turret = entry.getValue();
+            if (turret.isExpired()) {
+                world.removeBody(turret.getBody());
+                return true;
+            }
+            return false;
+        });
+
+        barriers.entrySet().removeIf(entry -> {
+            Barrier barrier = entry.getValue();
+            if (barrier.isExpired()) {
+                world.removeBody(barrier.getBody());
+                return true;
+            }
+            return false;
+        });
+
+        netProjectiles.entrySet().removeIf(entry -> {
+            NetProjectile net = entry.getValue();
+            if (net.isExpired()) {
+                world.removeBody(net.getBody());
+                return true;
+            }
+            return false;
+        });
+
+        proximityMines.entrySet().removeIf(entry -> {
+            ProximityMine mine = entry.getValue();
+            if (mine.isExpired()) {
+                world.removeBody(mine.getBody());
+                return true;
+            }
+            return false;
+        });
     }
 
     /**
@@ -132,19 +230,9 @@ public class GameEntities {
      * @param deltaTime Time since last update in seconds
      */
     public void updateAll(double deltaTime) {
-        // Update all players
         players.values().forEach(player -> player.update(deltaTime));
-
-        // Update all projectiles
         projectiles.values().forEach(projectile -> projectile.update(deltaTime));
-
-        // Update all strategic locations
-        strategicLocations.values().forEach(location -> location.update(deltaTime));
-
-        // Update all field effects
         fieldEffects.values().forEach(effect -> effect.update(deltaTime));
-        
-        // Update all utility entities
         turrets.values().forEach(turret -> turret.update(deltaTime));
         barriers.values().forEach(barrier -> barrier.update(deltaTime));
         netProjectiles.values().forEach(net -> net.update(deltaTime));
@@ -157,7 +245,6 @@ public class GameEntities {
         return playerSessions.remove(playerId);
     }
 
-    // Field Effect management methods
     public void addFieldEffect(FieldEffect fieldEffect) {
         fieldEffects.put(fieldEffect.getId(), fieldEffect);
     }

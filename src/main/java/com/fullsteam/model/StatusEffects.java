@@ -14,6 +14,7 @@ public class StatusEffects {
      * Apply a speed boost effect to a player.
      */
     public static void applySpeedBoost(Player player, double speedMultiplier, double durationSeconds, String source) {
+        System.out.println("DEBUG: StatusEffects.applySpeedBoost called for player " + player.getId() + " with multiplier " + speedMultiplier);
         player.getAttributeModifications().add(new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
             @Override
             public String renderHint() {

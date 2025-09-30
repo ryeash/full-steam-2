@@ -20,7 +20,6 @@ import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.Barrier;
 import com.fullsteam.physics.Beam;
-import com.fullsteam.physics.BulletEffectProcessor;
 import com.fullsteam.physics.CollisionProcessor;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.NetProjectile;
@@ -28,7 +27,6 @@ import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.ProximityMine;
-import com.fullsteam.physics.StrategicLocation;
 import com.fullsteam.physics.TeamSpawnArea;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.TeleportPad;
@@ -75,9 +73,9 @@ public class GameManager implements StepListener<Body> {
     @Getter
     protected final GameConfig gameConfig;
     @Getter
-    protected final GameEntities gameEntities = new GameEntities();
+    protected final GameEntities gameEntities;
     @Getter
-    protected final AIPlayerManager aiPlayerManager = new AIPlayerManager();
+    protected final AIPlayerManager aiPlayerManager;
     @Getter
     protected final TeamSpawnManager teamSpawnManager;
     @Getter
@@ -90,7 +88,7 @@ public class GameManager implements StepListener<Body> {
     @Getter
     protected long gameStartTime;
     protected boolean gameRunning = false;
-    
+
     // Track players affected by slow fields for damping reset
     private final Set<Integer> playersInSlowFields = new HashSet<>();
 
@@ -108,37 +106,29 @@ public class GameManager implements StepListener<Body> {
         this.gameConfig = gameConfig;
         this.objectMapper = objectMapper;
         this.gameStartTime = System.currentTimeMillis();
+        this.aiPlayerManager = new AIPlayerManager(gameConfig);
 
         // Initialize AI management settings from config
         this.aiCheckIntervalMs = gameConfig.getAiCheckIntervalMs();
-
-        // Initialize team spawn manager
-        this.teamSpawnManager = new TeamSpawnManager(
-                gameConfig.getWorldWidth(),
-                gameConfig.getWorldHeight(),
-                gameConfig.getTeamCount()
-        );
-
-        // Initialize procedural terrain generator
-        this.terrainGenerator = new TerrainGenerator(
-                gameConfig.getWorldWidth(),
-                gameConfig.getWorldHeight()
-        );
-
-        // Initialize game event manager
-        this.gameEventManager = new GameEventManager(gameEntities, this::send);
+        this.teamSpawnManager = new TeamSpawnManager(gameConfig.getWorldWidth(), gameConfig.getWorldHeight(), gameConfig.getTeamCount());
+        this.terrainGenerator = new TerrainGenerator(gameConfig.getWorldWidth(), gameConfig.getWorldHeight());
 
         this.world = new World<>();
+
         Settings settings = new Settings();
         settings.setMaximumTranslation(300.0);
         this.world.setSettings(settings);
         this.world.setGravity(new Vector2(0, 0));
         this.world.setBounds(new AxisAlignedBounds(gameConfig.getWorldWidth(), gameConfig.getWorldHeight()));
 
-        CollisionProcessor collisionProcessor = new CollisionProcessor(this, this.gameEntities);
+        this.gameEntities = new GameEntities(world);
+        CollisionProcessor collisionProcessor = new CollisionProcessor(world, this, this.gameEntities);
         this.world.addCollisionListener(collisionProcessor);
         this.world.addContactListener(collisionProcessor);
         this.world.addStepListener(this);
+
+        // Initialize game event manager
+        this.gameEventManager = new GameEventManager(gameEntities, this::send);
 
         createWorldBoundaries();
 //        createStrategicLocations();
@@ -222,32 +212,6 @@ public class GameManager implements StepListener<Body> {
     }
 
     /**
-     * Add an AI player to the game with a random personality.
-     */
-    public boolean addAIPlayer() {
-        if (gameEntities.getAllPlayers().size() >= getMaxPlayers()) {
-            return false;
-        }
-
-        int assignedTeam = assignPlayerToTeam();
-        Vector2 spawnPoint = findVariedSpawnPointForTeam(assignedTeam);
-        AIPlayer aiPlayer = AIPlayerManager.createRandomAIPlayer(Config.nextId(), spawnPoint.x, spawnPoint.y, assignedTeam);
-
-        // Add to game entities
-        gameEntities.addPlayer(aiPlayer);
-        world.addBody(aiPlayer.getBody());
-
-        // Add to AI manager
-        aiPlayerManager.addAIPlayer(aiPlayer);
-
-        log.info("Added AI player {} ({}) with personality {} on team {} at spawn point ({}, {})",
-                aiPlayer.getId(), aiPlayer.getPlayerName(), aiPlayer.getPersonality().getPersonalityType(),
-                assignedTeam, spawnPoint.x, spawnPoint.y);
-
-        return true;
-    }
-
-    /**
      * Add an AI player with a specific personality type.
      */
     public boolean addAIPlayer(String personalityType) {
@@ -258,6 +222,7 @@ public class GameManager implements StepListener<Body> {
         int assignedTeam = assignPlayerToTeam();
         Vector2 spawnPoint = findVariedSpawnPointForTeam(assignedTeam);
         AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithPersonality(Config.nextId(), spawnPoint.x, spawnPoint.y, personalityType, assignedTeam);
+        aiPlayer.setHealth(gameConfig.getPlayerMaxHealth());
 
         // Add to game entities
         gameEntities.addPlayer(aiPlayer);
@@ -461,65 +426,13 @@ public class GameManager implements StepListener<Body> {
                 return false;
             });
 
-            // Clean up expired beams
-            gameEntities.getBeams().entrySet().removeIf(entry -> {
-                Beam beam = entry.getValue();
-                if (beam.isExpired()) {
-                    world.removeBody(beam.getBody());
-                    return true;
-                }
-                return false;
-            });
-
-            updateStrategicLocations(deltaTime);
             updateFieldEffects(deltaTime);
             updateUtilityEntities(deltaTime);
             world.updatev(deltaTime);
-            gameEntities.getFieldEffects().entrySet().removeIf(entry -> {
-                FieldEffect effect = entry.getValue();
-                if (effect.isExpired()) {
-                    world.removeBody(effect.getBody());
-                    return true;
-                }
-                return false;
-            });
 
-            // Clean up expired utility entities
-            gameEntities.getTurrets().entrySet().removeIf(entry -> {
-                Turret turret = entry.getValue();
-                if (turret.isExpired()) {
-                    world.removeBody(turret.getBody());
-                    return true;
-                }
-                return false;
-            });
+            gameEntities.removeInactiveEntities();
 
-            gameEntities.getBarriers().entrySet().removeIf(entry -> {
-                Barrier barrier = entry.getValue();
-                if (barrier.isExpired()) {
-                    world.removeBody(barrier.getBody());
-                    return true;
-                }
-                return false;
-            });
-
-            gameEntities.getNetProjectiles().entrySet().removeIf(entry -> {
-                NetProjectile net = entry.getValue();
-                if (net.isExpired()) {
-                    world.removeBody(net.getBody());
-                    return true;
-                }
-                return false;
-            });
-
-            gameEntities.getProximityMines().entrySet().removeIf(entry -> {
-                ProximityMine mine = entry.getValue();
-                if (mine.isExpired()) {
-                    world.removeBody(mine.getBody());
-                    return true;
-                }
-                return false;
-            });
+            processHomingProjectiles(deltaTime);
             sendGameState();
         } catch (Throwable t) {
             log.error("Error in update loop", t);
@@ -533,7 +446,7 @@ public class GameManager implements StepListener<Body> {
     private void updateFieldEffects(double deltaTime) {
         // Clear slow field tracking for this frame
         Set<Integer> currentFrameSlowPlayers = new HashSet<>();
-        
+
         for (FieldEffect fieldEffect : gameEntities.getAllFieldEffects()) {
             if (!fieldEffect.isActive()) {
                 continue;
@@ -543,31 +456,17 @@ public class GameManager implements StepListener<Body> {
                 continue;
             }
             for (Player player : gameEntities.getAllPlayers()) {
-                if (player.isActive()) {
-                    // For healing effects, use different logic than damage effects
-                    boolean shouldProcess = false;
-                    if (fieldEffect.getType() == FieldEffectType.HEAL_ZONE || 
-                        fieldEffect.getType() == FieldEffectType.SPEED_BOOST) {
-                        // Use helper method for positive effects
-                        shouldProcess = fieldEffect.isInRange(player.getPosition()) && 
-                                       canFieldEffectHelpPlayer(fieldEffect, player);
-                    } else {
-                        // Use standard damage logic for negative effects
-                        shouldProcess = fieldEffect.canAffect(player);
-                    }
-                    
-                    if (shouldProcess) {
-                        applyFieldEffectDamageOverTime(player, fieldEffect, deltaTime);
-                        
-                        // Track players in slow fields for this frame
-                        if (fieldEffect.getType() == FieldEffectType.SLOW_FIELD) {
-                            currentFrameSlowPlayers.add(player.getId());
-                        }
+                if (fieldEffect.canAffect(player)) {
+                    applyFieldEffectDamageOverTime(player, fieldEffect, deltaTime);
+
+                    // Track players in slow fields for this frame
+                    if (fieldEffect.getType() == FieldEffectType.SLOW_FIELD) {
+                        currentFrameSlowPlayers.add(player.getId());
                     }
                 }
             }
         }
-        
+
         // Reset damping for players who left slow fields
         for (Integer playerId : playersInSlowFields) {
             if (!currentFrameSlowPlayers.contains(playerId)) {
@@ -578,7 +477,7 @@ public class GameManager implements StepListener<Body> {
                 }
             }
         }
-        
+
         // Update tracking set for next frame
         playersInSlowFields.clear();
         playersInSlowFields.addAll(currentFrameSlowPlayers);
@@ -626,23 +525,15 @@ public class GameManager implements StepListener<Body> {
             // Utility effects (positive)
             case HEAL_ZONE:
                 // Only heal teammates (or self in FFA)
-                if (canFieldEffectHelpPlayer(fieldEffect, player)) {
-                    double healAmount = effectValue * deltaTime;
-                    double oldHealth = player.getHealth();
-                    player.setHealth(Math.min(100.0, player.getHealth() + healAmount));
-                    log.debug("HEAL_ZONE: Player {} healed from {} to {} (amount: {})", 
-                             player.getId(), oldHealth, player.getHealth(), healAmount);
-                } else {
-                    log.debug("HEAL_ZONE: Player {} cannot be helped by field effect (owner: {}, ownerTeam: {}, playerTeam: {})", 
-                             player.getId(), fieldEffect.getOwnerId(), fieldEffect.getOwnerTeam(), player.getTeam());
-                }
+                double healAmount = effectValue * deltaTime;
+                player.setHealth(Math.min(gameConfig.getPlayerMaxHealth(), player.getHealth() + healAmount));
                 break;
             case SPEED_BOOST:
                 // Only boost teammates (or self in FFA)
-                if (canFieldEffectHelpPlayer(fieldEffect, player)) {
-                    StatusEffects.applySpeedBoost(player, 1.5, 1.0,
-                            Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Speed Boost"));
-                }
+                StatusEffects.applySpeedBoost(player, 3.0, 3.0,
+                        Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Speed Boost"));
+                log.debug("SPEED_BOOST: Applied speed boost to player {} (owner: {}, ownerTeam: {}, playerTeam: {})",
+                        player.getId(), fieldEffect.getOwnerId(), fieldEffect.getOwnerTeam(), player.getTeam());
                 break;
             case SLOW_FIELD:
                 // Only slow enemies
@@ -675,19 +566,6 @@ public class GameManager implements StepListener<Body> {
     }
 
     /**
-     * Check if a field effect can help a player (for positive effects like healing)
-     */
-    private boolean canFieldEffectHelpPlayer(FieldEffect fieldEffect, Player player) {
-        // In FFA mode (team 0), can only help self
-        if (fieldEffect.getOwnerTeam() == 0 || player.getTeam() == 0) {
-            return fieldEffect.getOwnerId() == player.getId();
-        }
-        
-        // In team mode, can help teammates AND the owner
-        return fieldEffect.getOwnerTeam() == player.getTeam();
-    }
-
-    /**
      * Apply gravity well effect that pulls players toward the center using physics forces
      */
     private void applyGravityWellEffect(Player player, FieldEffect fieldEffect, double deltaTime) {
@@ -699,17 +577,17 @@ public class GameManager implements StepListener<Body> {
         double distance = pullDirection.getMagnitude();
         if (distance > 0) {
             pullDirection.normalize();
-            
+
             // Calculate pull strength based on distance (stronger when closer)
             double maxDistance = fieldEffect.getRadius();
             double distanceRatio = Math.max(0.0, (maxDistance - distance) / maxDistance);
             double pullForce = 800.0 * distanceRatio; // Base force strength
-            
+
             Vector2 force = pullDirection.multiply(pullForce);
             player.applyForce(force);
-            
-            log.debug("GRAVITY_WELL: Applied force {} to player {} (distance: {}, ratio: {})", 
-                     pullForce, player.getId(), distance, distanceRatio);
+
+            log.debug("GRAVITY_WELL: Applied force {} to player {} (distance: {}, ratio: {})",
+                    pullForce, player.getId(), distance, distanceRatio);
         }
     }
 
@@ -720,33 +598,33 @@ public class GameManager implements StepListener<Body> {
         Vector2 playerPos = player.getPosition();
         double distance = playerPos.distance(fieldEffect.getPosition());
         double maxDistance = fieldEffect.getRadius();
-        
+
         // Calculate effect strength based on distance (stronger when closer to center)
         double distanceRatio = Math.max(0.0, (maxDistance - distance) / maxDistance);
-        
+
         // Track that this player is in a slow field
         playersInSlowFields.add(player.getId());
-        
+
         // Apply increased damping for "thick fluid" effect
         double dampingMultiplier = 1.0 + (2.0 * distanceRatio); // 1.0x to 3.0x damping
         player.applyTemporaryDamping(dampingMultiplier);
-        
+
         // Apply resistance force opposite to movement direction
         Vector2 playerVelocity = player.getVelocity();
         double currentSpeed = playerVelocity.getMagnitude();
-        
+
         if (currentSpeed > 1.0) { // Only apply resistance if moving significantly
             double resistanceStrength = 400.0 * distanceRatio; // Base resistance force
-            
+
             Vector2 resistanceDirection = playerVelocity.copy();
             resistanceDirection.normalize();
             resistanceDirection = resistanceDirection.multiply(-1.0); // Opposite direction
-            
+
             Vector2 resistanceForce = resistanceDirection.multiply(resistanceStrength);
             player.applyForce(resistanceForce);
-            
-            log.debug("SLOW_FIELD: Applied resistance {} and damping {}x to player {} (speed: {}, ratio: {})", 
-                     resistanceStrength, dampingMultiplier, player.getId(), currentSpeed, distanceRatio);
+
+            log.debug("SLOW_FIELD: Applied resistance {} and damping {}x to player {} (speed: {}, ratio: {})",
+                    resistanceStrength, dampingMultiplier, player.getId(), currentSpeed, distanceRatio);
         }
     }
 
@@ -882,6 +760,7 @@ public class GameManager implements StepListener<Body> {
                 playerSession.getPlayerId(), gameId, spawnPoint.x, spawnPoint.y, assignedTeam);
 
         Player player = new Player(playerSession.getPlayerId(), playerSession.getPlayerName(), spawnPoint.x, spawnPoint.y, assignedTeam);
+        player.setHealth(gameConfig.getPlayerMaxHealth());
         gameEntities.addPlayer(player);
         world.addBody(player.getBody());
 
@@ -1013,8 +892,8 @@ public class GameManager implements StepListener<Body> {
 
         gameEntities.addFieldEffect(fieldEffect);
         world.addBody(fieldEffect.getBody());
-        
-        log.info("Created {} field effect at ({}, {}) with radius {} for player {}", 
+
+        log.info("Created {} field effect at ({}, {}) with radius {} for player {}",
                 effectType.name(), targetPos.x, targetPos.y, utility.getRadius(), activation.playerId);
     }
 
@@ -1435,29 +1314,6 @@ public class GameManager implements StepListener<Body> {
         }
     }
 
-    private void updateStrategicLocations(double deltaTime) {
-        for (StrategicLocation location : gameEntities.getAllStrategicLocations()) {
-            location.update(deltaTime);
-
-            Set<Integer> playersInRange = new HashSet<>();
-            for (Player player : gameEntities.getAllPlayers()) {
-                if (player.isActive() && location.isPlayerInRange(player.getPosition())) {
-                    playersInRange.add(player.getId());
-                }
-            }
-
-            if (playersInRange.size() == 1) {
-                Integer playerId = playersInRange.iterator().next();
-                if (!location.isControlledBy(playerId)) {
-                    location.startCapture(playerId);
-                    location.updateCapture(deltaTime);
-                }
-            } else {
-                location.stopCapture();
-            }
-        }
-    }
-
     private void sendGameState() {
         Map<String, Object> gameState = new HashMap<>();
         gameState.put("type", "gameState");
@@ -1510,21 +1366,6 @@ public class GameManager implements StepListener<Body> {
             projectileStates.add(projState);
         }
         gameState.put("projectiles", projectileStates);
-
-        List<Map<String, Object>> locationStates = new ArrayList<>();
-        for (StrategicLocation location : gameEntities.getAllStrategicLocations()) {
-            Vector2 pos = location.getPosition();
-            Map<String, Object> locState = new HashMap<>();
-            locState.put("id", location.getId());
-            locState.put("name", location.getLocationName());
-            locState.put("x", pos.x);
-            locState.put("y", pos.y);
-            locState.put("controllingPlayer", location.getControllingPlayerId());
-            locState.put("captureProgress", location.getCaptureProgress());
-            locState.put("capturingPlayer", location.getCapturingPlayerId());
-            locationStates.add(locState);
-        }
-        gameState.put("locations", locationStates);
 
         List<Map<String, Object>> obstacleStates = new ArrayList<>();
         for (Obstacle obstacle : gameEntities.getAllObstacles()) {
@@ -1837,19 +1678,6 @@ public class GameManager implements StepListener<Body> {
         // Add procedural terrain data
         state.put("terrain", terrainGenerator.getTerrainData());
 
-        List<Map<String, Object>> locations = new ArrayList<>();
-        for (StrategicLocation location : gameEntities.getAllStrategicLocations()) {
-            Vector2 pos = location.getPosition();
-            Map<String, Object> locData = new HashMap<>();
-            locData.put("id", location.getId());
-            locData.put("name", location.getLocationName());
-            locData.put("x", pos.x);
-            locData.put("y", pos.y);
-            locData.put("radius", gameConfig.getCaptureRadius());
-            locations.add(locData);
-        }
-        state.put("locations", locations);
-
         List<Map<String, Object>> obstacles = new ArrayList<>();
         for (Obstacle obstacle : gameEntities.getAllObstacles()) {
             Vector2 pos = obstacle.getPosition();
@@ -1960,28 +1788,6 @@ public class GameManager implements StepListener<Body> {
     }
 
     /**
-     * Add pending field effects and projectiles from bullet effect processing
-     */
-    private void processPendingEffects() {
-        CollisionProcessor collisionProcessor = getCollisionProcessor();
-        if (collisionProcessor != null) {
-            BulletEffectProcessor effectProcessor = collisionProcessor.getBulletEffectProcessor();
-
-            // Add pending field effects
-            for (FieldEffect effect : effectProcessor.getPendingFieldEffects()) {
-                gameEntities.addFieldEffect(effect);
-                world.addBody(effect.getBody()); // Add physics body to world
-            }
-
-            // Add pending projectiles (from fragmentation, etc.)
-            for (Projectile projectile : effectProcessor.getPendingProjectiles()) {
-                gameEntities.addProjectile(projectile);
-                world.addBody(projectile.getBody());
-            }
-        }
-    }
-
-    /**
      * Get the collision processor from the world's collision listeners
      */
     private CollisionProcessor getCollisionProcessor() {
@@ -2014,7 +1820,5 @@ public class GameManager implements StepListener<Body> {
         double deltaTime = step.getDeltaTime();
         // Apply homing behavior to projectiles
         processHomingProjectiles(deltaTime);
-        // Add pending field effects and projectiles from bullet effects
-        processPendingEffects();
     }
 }

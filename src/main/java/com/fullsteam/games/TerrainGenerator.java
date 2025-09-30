@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -18,27 +17,16 @@ import java.util.concurrent.ThreadLocalRandom;
 @Getter
 public class TerrainGenerator {
 
-    private final long seed;
     private final double worldWidth;
     private final double worldHeight;
-    private final Random random;
 
     // Generated terrain data
     private final List<Obstacle> generatedObstacles = new ArrayList<>();
 
-    public TerrainGenerator(double worldWidth, double worldHeight, Long customSeed) {
+    public TerrainGenerator(double worldWidth, double worldHeight) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
-        this.seed = customSeed != null ? customSeed : ThreadLocalRandom.current().nextLong();
-        this.random = new Random(this.seed);
         generateTerrain();
-    }
-
-    /**
-     * Generate terrain with default random type and seed.
-     */
-    public TerrainGenerator(double worldWidth, double worldHeight) {
-        this(worldWidth, worldHeight, null);
     }
 
     /**
@@ -73,7 +61,7 @@ public class TerrainGenerator {
 
     private ObstacleDensity getRandomObstacleDensity() {
         ObstacleDensity[] densities = ObstacleDensity.values();
-        return densities[random.nextInt(densities.length)];
+        return densities[ThreadLocalRandom.current().nextInt(densities.length)];
     }
 
     private int calculateObstacleCountForWorldSize(ObstacleDensity density) {
@@ -83,16 +71,16 @@ public class TerrainGenerator {
 
         // Adjust density multiplier based on selected density
         double densityMultiplier = switch (density) {
-            case SPARSE -> 0.4 + random.nextDouble() * 0.3;  // 0.4-0.7x
-            case DENSE -> 1.2 + random.nextDouble() * 0.6;   // 1.2-1.8x
-            case CHOKED -> 2.0 + random.nextDouble();  // 2.0-3.0x
+            case SPARSE -> 0.6 + ThreadLocalRandom.current().nextDouble() * 0.3;  // 0.6-0.9x
+            case DENSE -> 1.2 + ThreadLocalRandom.current().nextDouble() * 0.6;   // 1.2-1.8x
+            case CHOKED -> 2.0 + ThreadLocalRandom.current().nextDouble();  // 2.0-3.0x
         };
 
         int baseCount = (int) (worldArea * baseObstaclesPerUnit * densityMultiplier);
 
         // Add some randomness (±20%)
         int variation = (int) (baseCount * 0.2);
-        int finalCount = baseCount + random.nextInt(variation * 2 + 1) - variation;
+        int finalCount = baseCount + ThreadLocalRandom.current().nextInt(variation * 2 + 1) - variation;
 
         // Ensure minimum and maximum bounds
         return Math.max(3, Math.min(finalCount, (int) (worldArea * 0.0001))); // Max 1 obstacle per 10,000 square units
@@ -104,8 +92,8 @@ public class TerrainGenerator {
     private Obstacle generateObstacleWithCollisionCheck(int maxAttempts) {
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
             // Allow obstacles to spawn closer to edges for more dramatic placement
-            double x = (random.nextDouble() - 0.5) * (worldWidth - 100);
-            double y = (random.nextDouble() - 0.5) * (worldHeight - 100);
+            double x = (ThreadLocalRandom.current().nextDouble() - 0.5) * (worldWidth - 100);
+            double y = (ThreadLocalRandom.current().nextDouble() - 0.5) * (worldHeight - 100);
 
             // Create obstacle at this position
             Obstacle candidate = Obstacle.createChaoticObstacle(x, y);
@@ -168,8 +156,8 @@ public class TerrainGenerator {
      */
     public Vector2 getSafeSpawnPosition(double radius) {
         for (int attempt = 0; attempt < 50; attempt++) {
-            double x = (random.nextDouble() - 0.5) * worldWidth * 0.8;
-            double y = (random.nextDouble() - 0.5) * worldHeight * 0.8;
+            double x = (ThreadLocalRandom.current().nextDouble() - 0.5) * worldWidth * 0.8;
+            double y = (ThreadLocalRandom.current().nextDouble() - 0.5) * worldHeight * 0.8;
             Vector2 candidate = new Vector2(x, y);
 
             if (isPositionClear(candidate, radius)) {

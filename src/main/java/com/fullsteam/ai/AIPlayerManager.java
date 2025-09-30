@@ -1,6 +1,7 @@
 package com.fullsteam.ai;
 
 import com.fullsteam.RandomNames;
+import com.fullsteam.games.GameConfig;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.physics.GameEntities;
@@ -30,10 +31,14 @@ public class AIPlayerManager {
     // Available behavior types
     private final List<AIBehavior> behaviorTemplates = List.of(
             new IdleBehavior(),
-            new CombatBehavior(),
-            new CaptureBehavior(),
-            new DefenseBehavior()
+            new CombatBehavior()
     );
+
+    private final GameConfig gameConfig;
+
+    public AIPlayerManager(GameConfig gameConfig) {
+        this.gameConfig = gameConfig;
+    }
 
     /**
      * Add an AI player to be managed by this system.
@@ -107,24 +112,6 @@ public class AIPlayerManager {
     }
 
     /**
-     * Create an AI player with a random personality, name, specific team, and random weapons.
-     */
-    public static AIPlayer createRandomAIPlayer(int id, double x, double y, int team) {
-        AIPersonality personality = AIPersonality.createRandom();
-        AIPlayer aiPlayer = new AIPlayer(id, RandomNames.randomName(), x, y, personality, team);
-
-        // Assign random weapons based on personality
-        com.fullsteam.model.WeaponConfig[] weapons = AIWeaponSelector.selectWeaponLoadoutForPersonality(personality);
-        aiPlayer.applyWeaponConfig(weapons[0], UtilityWeapon.HEAL_ZONE);
-
-        log.info("Assigned weapons to AI player {} ({}): Primary={}, Secondary={}",
-                aiPlayer.getId(), aiPlayer.getPersonality().getPersonalityType(),
-                weapons[0].getType(), weapons[1].getType());
-
-        return aiPlayer;
-    }
-
-    /**
      * Create an AI player with a specific personality type, team, and personality-appropriate weapons.
      */
     public static AIPlayer createAIPlayerWithPersonality(int id, double x, double y, String personalityType, int team) {
@@ -160,10 +147,6 @@ public class AIPlayerManager {
                 }
             }
         }
-
-        // Update memory with strategic location observations
-        gameEntities.getAllStrategicLocations().forEach(location ->
-                aiPlayer.getMemory().observeLocation(location));
     }
 
     private void updateBehavior(AIPlayer aiPlayer, GameEntities gameEntities) {
@@ -244,14 +227,6 @@ public class AIPlayerManager {
             input.setMoveY(input.getMoveY() * 0.5);
         }
 
-        // Modify sprint usage based on aggressiveness
-        if (personality.getAggressiveness() > 0.7 && !input.isShift()) {
-            // Aggressive personalities sprint more often
-            if (ThreadLocalRandom.current().nextDouble() < 0.3) {
-                input.setShift(true);
-            }
-        }
-
         // Modify shooting based on patience
         if (input.isLeft() && personality.getPatience() > 0.7) {
             // Patient personalities wait for better shots
@@ -279,10 +254,6 @@ public class AIPlayerManager {
             return new IdleBehavior();
         } else if (template instanceof CombatBehavior) {
             return new CombatBehavior();
-        } else if (template instanceof CaptureBehavior) {
-            return new CaptureBehavior();
-        } else if (template instanceof DefenseBehavior) {
-            return new DefenseBehavior();
         }
         return new IdleBehavior(); // Fallback
     }

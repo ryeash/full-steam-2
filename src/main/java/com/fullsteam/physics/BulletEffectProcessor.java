@@ -5,7 +5,9 @@ import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Ordinance;
+import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Vector2;
+import org.dyn4j.world.World;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -18,14 +20,12 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public class BulletEffectProcessor {
 
+    private final World<Body> world;
     private final GameEntities gameEntities;
-    private final List<FieldEffect> pendingFieldEffects;
-    private final List<Projectile> pendingProjectiles;
 
-    public BulletEffectProcessor(GameEntities gameEntities) {
+    public BulletEffectProcessor(World<Body> world, GameEntities gameEntities) {
+        this.world = world;
         this.gameEntities = gameEntities;
-        this.pendingFieldEffects = new ArrayList<>();
-        this.pendingProjectiles = new ArrayList<>();
     }
 
     public void processEffectHit(Projectile projectile, Vector2 hitPosition) {
@@ -77,7 +77,8 @@ public class BulletEffectProcessor {
                 FieldEffectType.EXPLOSION.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-        pendingFieldEffects.add(explosion);
+        world.addBody(explosion.getBody());
+        gameEntities.addFieldEffect(explosion);
     }
 
     public void createFireEffect(Projectile projectile, Vector2 position) {
@@ -91,7 +92,8 @@ public class BulletEffectProcessor {
                 FieldEffectType.FIRE.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-        pendingFieldEffects.add(fire);
+        world.addBody(fire.getBody());
+        gameEntities.addFieldEffect(fire);
     }
 
     public void createElectricEffect(Projectile projectile, Vector2 position) {
@@ -105,7 +107,8 @@ public class BulletEffectProcessor {
                 FieldEffectType.ELECTRIC.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-        pendingFieldEffects.add(electric);
+        world.addBody(electric.getBody());
+        gameEntities.addFieldEffect(electric);
     }
 
     public void createFreezeEffect(Projectile projectile, Vector2 position) {
@@ -119,7 +122,8 @@ public class BulletEffectProcessor {
                 FieldEffectType.FREEZE.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-        pendingFieldEffects.add(freeze);
+        world.addBody(freeze.getBody());
+        gameEntities.addFieldEffect(freeze);
     }
 
     public void createPoisonEffect(Projectile projectile, Vector2 position) {
@@ -133,7 +137,8 @@ public class BulletEffectProcessor {
                 FieldEffectType.POISON.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-        pendingFieldEffects.add(poison);
+        world.addBody(poison.getBody());
+        gameEntities.addFieldEffect(poison);
     }
 
     private void createFragmentation(Projectile projectile, Vector2 position) {
@@ -148,7 +153,7 @@ public class BulletEffectProcessor {
                 FieldEffectType.FRAGMENTATION.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-        pendingFieldEffects.add(fragmentation);
+        gameEntities.addFieldEffect(fragmentation);
 
         // Create multiple smaller projectiles
         int fragmentCount = 5 + (int) (projectile.getDamage() / 20); // More fragments for higher damage
@@ -179,7 +184,8 @@ public class BulletEffectProcessor {
                     Ordinance.DART // Small, fast fragments
             );
 
-            pendingProjectiles.add(fragment);
+            world.addBody(fragment.getBody());
+            gameEntities.addProjectile(fragment);
         }
     }
 
@@ -217,15 +223,15 @@ public class BulletEffectProcessor {
         Vector2 direction = targetPos.copy().subtract(projectilePos);
 
         double distance = direction.getMagnitude();
-        if (distance > 200.0) {
-            return; // Homing only works within 200 units
+        if (distance > 250.0) {
+            return; // Homing only works within 250 units
         }
 
         direction.normalize();
 
         // Apply gentle steering force (not instant tracking)
         Vector2 currentVelocity = projectile.getBody().getLinearVelocity();
-        double homingStrength = 0.3; // 30% steering per second
+        double homingStrength = 0.43; // 43% steering per second
 
         Vector2 desiredVelocity = direction.multiply(currentVelocity.getMagnitude());
         Vector2 steeringForce = desiredVelocity.subtract(currentVelocity).multiply(homingStrength * deltaTime);
@@ -257,23 +263,5 @@ public class BulletEffectProcessor {
         }
 
         return nearest;
-    }
-
-    /**
-     * Get pending field effects to be added to the game world
-     */
-    public List<FieldEffect> getPendingFieldEffects() {
-        List<FieldEffect> effects = new ArrayList<>(pendingFieldEffects);
-        pendingFieldEffects.clear();
-        return effects;
-    }
-
-    /**
-     * Get pending projectiles to be added to the game world
-     */
-    public List<Projectile> getPendingProjectiles() {
-        List<Projectile> projectiles = new ArrayList<>(pendingProjectiles);
-        pendingProjectiles.clear();
-        return projectiles;
     }
 }
