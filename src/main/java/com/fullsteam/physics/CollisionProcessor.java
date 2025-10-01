@@ -3,6 +3,7 @@ package com.fullsteam.physics;
 import com.fullsteam.games.GameManager;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.FieldEffectType;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
@@ -13,7 +14,6 @@ import org.dyn4j.world.BroadphaseCollisionData;
 import org.dyn4j.world.ContactCollisionData;
 import org.dyn4j.world.ManifoldCollisionData;
 import org.dyn4j.world.NarrowphaseCollisionData;
-import org.dyn4j.world.World;
 import org.dyn4j.world.listener.CollisionListener;
 import org.dyn4j.world.listener.ContactListener;
 
@@ -25,10 +25,10 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
     @Getter
     private final BulletEffectProcessor bulletEffectProcessor;
 
-    public CollisionProcessor(World<Body> world, GameManager gameManager, GameEntities gameEntities) {
+    public CollisionProcessor(GameManager gameManager, GameEntities gameEntities) {
         this.gameManager = gameManager;
         this.gameEntities = gameEntities;
-        this.bulletEffectProcessor = new BulletEffectProcessor(world, gameEntities);
+        this.bulletEffectProcessor = new BulletEffectProcessor(gameEntities);
     }
 
     @Override
@@ -90,6 +90,10 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         } else if (entity1 instanceof FieldEffect fieldEffect && entity2 instanceof Player player) {
             handlePlayerFieldEffectCollision(player, fieldEffect);
             return true; // Allow physics to handle overlaps (sensors should not resolve anyway)
+        } else if (entity1 instanceof FieldEffect fieldEffect && entity2 instanceof Projectile projectile) {
+            return handleProjectileFieldEffectCollision(projectile, fieldEffect);
+        } else if (entity2 instanceof FieldEffect fieldEffect && entity1 instanceof Projectile projectile) {
+            return handleProjectileFieldEffectCollision(projectile, fieldEffect);
         }
         return true;
     }
@@ -185,9 +189,59 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
                     }
                 }
             }
+            return;
+        }
+
+        if (fieldEffect.getType() == FieldEffectType.GRAVITY_WELL) {
+            Vector2 forceDirection = fieldEffect.getPosition()
+                    .subtract(player.getPosition())
+                    .getNormalized()
+                    .multiply(200000.0); // TODO: why does this have to be so high to actually affect players?
+            if (!forceDirection.isZero()) {
+                player.getBody().applyForce(forceDirection);
+            }
         }
         // Note: Damage-over-time effects (FIRE, POISON, ELECTRIC, FREEZE) are handled
         // continuously in updateFieldEffects() method for proper timing and damage application
+    }
+
+    private boolean handleProjectileFieldEffectCollision(Projectile projectile, FieldEffect fieldEffect) {
+        if (fieldEffect.getType() == FieldEffectType.SHIELD_BARRIER) {
+            // Only stop projectiles that are moving toward the shield center
+            // This allows players inside the shield to fire outward
+            Vector2 projectilePos = projectile.getPosition();
+            Vector2 shieldCenter = fieldEffect.getPosition();
+            Vector2 projectileVelocity = projectile.getBody().getLinearVelocity();
+            
+            // Calculate direction from projectile to shield center
+            Vector2 toShieldCenter = shieldCenter.copy().subtract(projectilePos);
+            
+            // Check if projectile is moving toward the shield center
+            // Use dot product: if positive, projectile is moving toward center
+            if (toShieldCenter.getMagnitude() > 0 && projectileVelocity.getMagnitude() > 0) {
+                toShieldCenter.normalize();
+                Vector2 velocityDirection = projectileVelocity.copy();
+                velocityDirection.normalize();
+                
+                double dotProduct = toShieldCenter.dot(velocityDirection);
+                
+                // Only stop projectile if it's moving toward the shield center (dot product > 0)
+                if (dotProduct > 0) {
+                    projectile.setVelocity(Vector2.create(0, 0));
+                    return false; // Prevent physics resolution
+                }
+            }
+            
+            // Projectile is moving away from shield center, let it pass through
+            return true;
+        } else if (fieldEffect.getType() == FieldEffectType.GRAVITY_WELL) {
+            Vector2 forceDirection = fieldEffect.getPosition()
+                    .subtract(projectile.getPosition())
+                    .getNormalized()
+                    .multiply(10000.0);
+            projectile.getBody().applyForce(forceDirection);
+        }
+        return true;
     }
 
     // ContactListener methods
@@ -203,7 +257,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
 
     @Override
     public void end(ContactCollisionData<Body> collision, Contact contact) {
-
     }
 
     @Override

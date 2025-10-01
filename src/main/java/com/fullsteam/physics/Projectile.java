@@ -55,8 +55,8 @@ public class Projectile extends GameEntity {
         body.setMass(MassType.NORMAL);
         body.getTransform().setTranslation(x, y);
         body.setLinearVelocity(vx, vy);
-        body.setBullet(true); // Enable continuous collision detection
-        body.setLinearDamping(linearDamping); // Apply linear damping for bullet slowdown
+        body.setBullet(true);
+        body.setLinearDamping(linearDamping);
         return body;
     }
 

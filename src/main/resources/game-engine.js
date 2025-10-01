@@ -1087,18 +1087,6 @@ class GameEngine {
             });
         }
         
-        // Handle barriers
-        if (data.barriers) {
-            data.barriers.forEach(barrierData => {
-                currentEntityIds.add(barrierData.id);
-                if (this.utilityEntities.has(barrierData.id)) {
-                    this.updateUtilityEntity(barrierData);
-                } else {
-                    this.createUtilityEntity(barrierData);
-                }
-            });
-        }
-        
         // Handle nets
         if (data.nets) {
             data.nets.forEach(netData => {
@@ -2268,6 +2256,7 @@ class GameEngine {
             case 'DIAMOND_STONE': return 0x9370DB; // Medium purple
             case 'L_SHAPED_WALL': return 0x2F4F4F; // Dark slate gray
             case 'CROSS_BARRIER': return 0x8B7D6B; // Light gray
+            case 'PLAYER_BARRIER': return 0x8B4513; // Light gray
             default: return 0x808080; // Default gray
         }
     }
@@ -2740,8 +2729,6 @@ class GameEngine {
         switch (entityData.type) {
             case 'TURRET':
                 return this.createTurretGraphics(graphics, entityData);
-            case 'BARRIER':
-                return this.createBarrierGraphics(graphics, entityData);
             case 'NET':
                 return this.createNetGraphics(graphics, entityData);
             case 'MINE':
@@ -2787,38 +2774,6 @@ class GameEngine {
             const healthPercent = Math.max(0, entityData.health / 100);
             graphics.lineStyle(2, 0x2ecc71, healthPercent);
             graphics.drawCircle(0, 0, 20);
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create barrier graphics
-     */
-    createBarrierGraphics(graphics, entityData) {
-        // Barrier main structure - rectangular
-        graphics.beginFill(0x8B4513, 0.8); // Brown color
-        graphics.drawRoundedRect(-25, -8, 50, 16, 4);
-        graphics.endFill();
-        
-        // Barrier outline
-        graphics.lineStyle(2, 0x654321, 1.0);
-        graphics.drawRoundedRect(-25, -8, 50, 16, 4);
-        
-        // Support posts
-        graphics.beginFill(0x654321, 1.0);
-        graphics.drawRect(-3, -12, 6, 8); // Left post
-        graphics.drawRect(-3, 8, 6, 8);   // Right post
-        graphics.endFill();
-        
-        // Health indicator
-        if (entityData.health !== undefined) {
-            const healthPercent = Math.max(0, entityData.health / 100);
-            const healthColor = healthPercent > 0.6 ? 0x2ecc71 : healthPercent > 0.3 ? 0xf39c12 : 0xe74c3c;
-            
-            graphics.beginFill(healthColor, 0.7);
-            graphics.drawRect(-25, -12, 50 * healthPercent, 4);
-            graphics.endFill();
         }
         
         return graphics;

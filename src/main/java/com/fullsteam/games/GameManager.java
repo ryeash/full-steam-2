@@ -18,7 +18,6 @@ import com.fullsteam.model.PlayerSession;
 import com.fullsteam.model.StatusEffects;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.WeaponConfig;
-import com.fullsteam.physics.Barrier;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.CollisionProcessor;
 import com.fullsteam.physics.GameEntities;
@@ -26,7 +25,6 @@ import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Projectile;
-import com.fullsteam.physics.ProximityMine;
 import com.fullsteam.physics.TeamSpawnArea;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.TeleportPad;
@@ -121,8 +119,8 @@ public class GameManager implements StepListener<Body> {
         this.world.setGravity(new Vector2(0, 0));
         this.world.setBounds(new AxisAlignedBounds(gameConfig.getWorldWidth(), gameConfig.getWorldHeight()));
 
-        this.gameEntities = new GameEntities(world);
-        CollisionProcessor collisionProcessor = new CollisionProcessor(world, this, this.gameEntities);
+        this.gameEntities = new GameEntities(gameConfig, world);
+        CollisionProcessor collisionProcessor = new CollisionProcessor(this, this.gameEntities);
         this.world.addCollisionListener(collisionProcessor);
         this.world.addContactListener(collisionProcessor);
         this.world.addStepListener(this);
@@ -432,7 +430,7 @@ public class GameManager implements StepListener<Body> {
 
             gameEntities.removeInactiveEntities();
 
-            processHomingProjectiles(deltaTime);
+            processHomingProjectiles();
             sendGameState();
         } catch (Throwable t) {
             log.error("Error in update loop", t);
@@ -543,9 +541,6 @@ public class GameManager implements StepListener<Body> {
                 break;
             case GRAVITY_WELL:
                 // Pull all players toward center (physics effect affects everyone in range)
-                if (fieldEffect.isInRange(player.getPosition())) {
-                    applyGravityWellEffect(player, fieldEffect, deltaTime);
-                }
                 break;
             case SMOKE_CLOUD:
                 // TODO: maybe a candidate for deletion
@@ -554,40 +549,13 @@ public class GameManager implements StepListener<Body> {
             case SHIELD_BARRIER:
                 // Damage absorption (TODO: implement shield mechanics)
                 break;
-            case VISION_REVEAL:
-                // Reveal enemies (handled by client)
-                break;
 
             case EXPLOSION:
             case FRAGMENTATION:
                 // Instantaneous effects, shouldn't reach here
                 break;
-        }
-    }
-
-    /**
-     * Apply gravity well effect that pulls players toward the center using physics forces
-     */
-    private void applyGravityWellEffect(Player player, FieldEffect fieldEffect, double deltaTime) {
-        Vector2 playerPos = player.getPosition();
-        Vector2 wellCenter = fieldEffect.getPosition();
-        Vector2 pullDirection = wellCenter.copy();
-        pullDirection.subtract(playerPos);
-
-        double distance = pullDirection.getMagnitude();
-        if (distance > 0) {
-            pullDirection.normalize();
-
-            // Calculate pull strength based on distance (stronger when closer)
-            double maxDistance = fieldEffect.getRadius();
-            double distanceRatio = Math.max(0.0, (maxDistance - distance) / maxDistance);
-            double pullForce = 800.0 * distanceRatio; // Base force strength
-
-            Vector2 force = pullDirection.multiply(pullForce);
-            player.applyForce(force);
-
-            log.debug("GRAVITY_WELL: Applied force {} to player {} (distance: {}, ratio: {})",
-                    pullForce, player.getId(), distance, distanceRatio);
+            case PROXIMITY_MINE:
+                break;
         }
     }
 
@@ -648,13 +616,13 @@ public class GameManager implements StepListener<Body> {
         }
 
         // Check proximity mines for triggers
-        for (ProximityMine mine : gameEntities.getAllProximityMines()) {
-            if (!mine.isActive()) {
+        for (FieldEffect fieldEffect : gameEntities.getAllFieldEffects()) {
+            if (fieldEffect.getType() != FieldEffectType.PROXIMITY_MINE || !fieldEffect.isActive()) {
                 continue;
             }
 
-            if (mine.checkForTrigger(gameEntities.getAllPlayers().stream().toList())) {
-                FieldEffect explosion = mine.explode();
+            if (fieldEffect.checkForTrigger(gameEntities.getAllPlayers().stream().toList())) {
+                FieldEffect explosion = fieldEffect.trigger();
                 if (explosion != null) {
                     gameEntities.addFieldEffect(explosion);
                     world.addBody(explosion.getBody());
@@ -952,7 +920,7 @@ public class GameManager implements StepListener<Body> {
         offset.multiply(40.0); // Place 40 units in front
         placement.add(offset);
 
-        Barrier barrier = new Barrier(
+        Obstacle barrier = Obstacle.createPlayerBarrier(
                 Config.nextId(),
                 activation.playerId,
                 activation.team,
@@ -961,9 +929,8 @@ public class GameManager implements StepListener<Body> {
                 20.0 // 20 second lifespan
         );
 
-        gameEntities.addBarrier(barrier);
+        gameEntities.addObstacle(barrier);
         world.addBody(barrier.getBody());
-        log.info("Player {} deployed barrier at ({}, {})", activation.playerId, placement.x, placement.y);
     }
 
     private void createNetProjectile(Player.UtilityActivation activation) {
@@ -987,15 +954,18 @@ public class GameManager implements StepListener<Body> {
 
     private void createProximityMine(Player.UtilityActivation activation) {
         // Place mine at player's current position
-        ProximityMine mine = new ProximityMine(
+        FieldEffect mine = new FieldEffect(
                 Config.nextId(),
                 activation.playerId,
-                activation.team,
+                FieldEffectType.PROXIMITY_MINE,
                 activation.position,
-                30.0 // 30 second lifespan
+                6.0, // Small visual radius for mine
+                1.0, // Damage (not used for mines, explosion handles damage)
+                30.0, // 30 second lifespan
+                activation.team
         );
 
-        gameEntities.addProximityMine(mine);
+        gameEntities.addFieldEffect(mine);
         world.addBody(mine.getBody());
         log.info("Player {} placed proximity mine at ({}, {})", activation.playerId, activation.position.x, activation.position.y);
     }
@@ -1062,21 +1032,16 @@ public class GameManager implements StepListener<Body> {
                 beamOrdinance
         );
 
-        if (utilityBeam != null) {
-            // Update beam's effective end point based on obstacle collisions
-            Vector2 effectiveEnd = findBeamObstacleIntersection(utilityBeam.getStartPoint(), utilityBeam.getEndPoint());
-            utilityBeam.setEffectiveEndPoint(effectiveEnd);
+        // Update beam's effective end point based on obstacle collisions
+        Vector2 effectiveEnd = findBeamObstacleIntersection(utilityBeam.getStartPoint(), utilityBeam.getEndPoint());
+        utilityBeam.setEffectiveEndPoint(effectiveEnd);
 
-            gameEntities.addBeam(utilityBeam);
-            world.addBody(utilityBeam.getBody());
+        gameEntities.addBeam(utilityBeam);
+        world.addBody(utilityBeam.getBody());
 
-            // Process initial hit for instant damage beams
-            if (utilityBeam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
-                processBeamInitialHit(utilityBeam);
-            }
-
-            log.info("Player {} activated beam utility {} with range {}",
-                    activation.playerId, utility.getDisplayName(), utility.getRange());
+        // Process initial hit for instant damage beams
+        if (utilityBeam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
+            processBeamInitialHit(utilityBeam);
         }
     }
 
@@ -1186,11 +1151,6 @@ public class GameManager implements StepListener<Body> {
         }
     }
 
-
-    /**
-     * Find where a beam intersects with obstacles, returning the effective end point
-     * If no obstacles are hit, returns the original beam end point
-     */
     /**
      * Find the intersection point between a beam and obstacles using dyn4j ray casting
      * This is much more accurate and efficient than manual line-segment collision detection
@@ -1425,24 +1385,6 @@ public class GameManager implements StepListener<Body> {
         }
         gameState.put("turrets", turretStates);
 
-        List<Map<String, Object>> barrierStates = new ArrayList<>();
-        for (Barrier barrier : gameEntities.getAllBarriers()) {
-            Vector2 pos = barrier.getPosition();
-            Map<String, Object> barrierState = new HashMap<>();
-            barrierState.put("id", barrier.getId());
-            barrierState.put("type", "BARRIER");
-            barrierState.put("x", pos.x);
-            barrierState.put("y", pos.y);
-            barrierState.put("rotation", barrier.getRotation());
-            barrierState.put("health", barrier.getHealth());
-            barrierState.put("active", barrier.isActive());
-            barrierState.put("ownerId", barrier.getOwnerId());
-            barrierState.put("ownerTeam", barrier.getOwnerTeam());
-            barrierState.put("lifespanPercent", barrier.getLifespanPercent());
-            barrierStates.add(barrierState);
-        }
-        gameState.put("barriers", barrierStates);
-
         List<Map<String, Object>> netStates = new ArrayList<>();
         for (NetProjectile net : gameEntities.getAllNetProjectiles()) {
             Vector2 pos = net.getPosition();
@@ -1462,19 +1404,22 @@ public class GameManager implements StepListener<Body> {
         gameState.put("nets", netStates);
 
         List<Map<String, Object>> mineStates = new ArrayList<>();
-        for (ProximityMine mine : gameEntities.getAllProximityMines()) {
-            Vector2 pos = mine.getPosition();
+        for (FieldEffect fieldEffect : gameEntities.getAllFieldEffects()) {
+            if (fieldEffect.getType() != FieldEffectType.PROXIMITY_MINE) {
+                continue;
+            }
+            Vector2 pos = fieldEffect.getPosition();
             Map<String, Object> mineState = new HashMap<>();
-            mineState.put("id", mine.getId());
+            mineState.put("id", fieldEffect.getId());
             mineState.put("type", "MINE");
             mineState.put("x", pos.x);
             mineState.put("y", pos.y);
-            mineState.put("active", mine.isActive());
-            mineState.put("ownerId", mine.getOwnerId());
-            mineState.put("ownerTeam", mine.getOwnerTeam());
-            mineState.put("isArmed", mine.isArmed());
-            mineState.put("armingPercent", mine.getArmingPercent());
-            mineState.put("lifespanPercent", mine.getLifespanPercent());
+            mineState.put("active", fieldEffect.isActive());
+            mineState.put("ownerId", fieldEffect.getOwnerId());
+            mineState.put("ownerTeam", fieldEffect.getOwnerTeam());
+            mineState.put("isArmed", fieldEffect.isArmed());
+            mineState.put("armingPercent", fieldEffect.getArmingPercent());
+            mineState.put("lifespanPercent", fieldEffect.getProgress());
             mineStates.add(mineState);
         }
         gameState.put("mines", mineStates);
@@ -1776,12 +1721,12 @@ public class GameManager implements StepListener<Body> {
     /**
      * Apply homing behavior to projectiles with homing effect
      */
-    private void processHomingProjectiles(double deltaTime) {
+    private void processHomingProjectiles() {
         CollisionProcessor collisionProcessor = getCollisionProcessor();
         if (collisionProcessor != null) {
             for (Projectile projectile : gameEntities.getAllProjectiles()) {
                 if (projectile.isActive()) {
-                    collisionProcessor.getBulletEffectProcessor().applyHomingBehavior(projectile, deltaTime);
+                    collisionProcessor.getBulletEffectProcessor().applyHomingBehavior(projectile);
                 }
             }
         }
@@ -1819,6 +1764,6 @@ public class GameManager implements StepListener<Body> {
     public void end(TimeStep step, PhysicsWorld<Body, ?> world) {
         double deltaTime = step.getDeltaTime();
         // Apply homing behavior to projectiles
-        processHomingProjectiles(deltaTime);
+        processHomingProjectiles();
     }
 }

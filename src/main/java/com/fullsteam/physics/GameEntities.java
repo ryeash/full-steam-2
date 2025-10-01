@@ -1,5 +1,6 @@
 package com.fullsteam.physics;
 
+import com.fullsteam.games.GameConfig;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
@@ -20,6 +21,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 @Getter
 public class GameEntities {
 
+    private final GameConfig config;
     private final World<Body> world;
     protected final Map<Integer, PlayerSession> playerSessions = new ConcurrentSkipListMap<>();
     protected final Map<Integer, PlayerInput> playerInputs = new ConcurrentSkipListMap<>();
@@ -30,13 +32,12 @@ public class GameEntities {
 
     // Utility entity collections
     private final Map<Integer, Turret> turrets = new ConcurrentSkipListMap<>();
-    private final Map<Integer, Barrier> barriers = new ConcurrentSkipListMap<>();
     private final Map<Integer, NetProjectile> netProjectiles = new ConcurrentSkipListMap<>();
-    private final Map<Integer, ProximityMine> proximityMines = new ConcurrentSkipListMap<>();
     private final Map<Integer, TeleportPad> teleportPads = new ConcurrentSkipListMap<>();
     private final Map<Integer, Beam> beams = new ConcurrentSkipListMap<>();
 
-    public GameEntities(World<Body> world) {
+    public GameEntities(GameConfig config, World<Body> world) {
+        this.config = config;
         this.world = world;
     }
 
@@ -117,6 +118,15 @@ public class GameEntities {
 //            return false;
 //        });
 
+        obstacles.entrySet().removeIf(entry -> {
+            Obstacle o = entry.getValue();
+            if (o.isExpired()) {
+                world.removeBody(o.getBody());
+                return true;
+            }
+            return false;
+        });
+
         // Remove expired field effects
         fieldEffects.entrySet().removeIf(entry -> {
             FieldEffect o = entry.getValue();
@@ -136,24 +146,8 @@ public class GameEntities {
             }
             return false;
         });
-        barriers.entrySet().removeIf(entry -> {
-            Barrier o = entry.getValue();
-            if (o.isExpired()) {
-                world.removeBody(o.getBody());
-                return true;
-            }
-            return false;
-        });
         netProjectiles.entrySet().removeIf(entry -> {
             NetProjectile o = entry.getValue();
-            if (o.isExpired()) {
-                world.removeBody(o.getBody());
-                return true;
-            }
-            return false;
-        });
-        proximityMines.entrySet().removeIf(entry -> {
-            ProximityMine o = entry.getValue();
             if (o.isExpired()) {
                 world.removeBody(o.getBody());
                 return true;
@@ -163,6 +157,7 @@ public class GameEntities {
         teleportPads.entrySet().removeIf(entry -> {
             TeleportPad o = entry.getValue();
             if (o.isExpired()) {
+                o.destroy();
                 world.removeBody(o.getBody());
                 return true;
             }
@@ -196,14 +191,6 @@ public class GameEntities {
             return false;
         });
 
-        barriers.entrySet().removeIf(entry -> {
-            Barrier barrier = entry.getValue();
-            if (barrier.isExpired()) {
-                world.removeBody(barrier.getBody());
-                return true;
-            }
-            return false;
-        });
 
         netProjectiles.entrySet().removeIf(entry -> {
             NetProjectile net = entry.getValue();
@@ -214,14 +201,6 @@ public class GameEntities {
             return false;
         });
 
-        proximityMines.entrySet().removeIf(entry -> {
-            ProximityMine mine = entry.getValue();
-            if (mine.isExpired()) {
-                world.removeBody(mine.getBody());
-                return true;
-            }
-            return false;
-        });
     }
 
     /**
@@ -234,9 +213,7 @@ public class GameEntities {
         projectiles.values().forEach(projectile -> projectile.update(deltaTime));
         fieldEffects.values().forEach(effect -> effect.update(deltaTime));
         turrets.values().forEach(turret -> turret.update(deltaTime));
-        barriers.values().forEach(barrier -> barrier.update(deltaTime));
         netProjectiles.values().forEach(net -> net.update(deltaTime));
-        proximityMines.values().forEach(mine -> mine.update(deltaTime));
         teleportPads.values().forEach(pad -> pad.update(deltaTime));
         beams.values().forEach(beam -> beam.update(deltaTime));
     }
@@ -276,18 +253,6 @@ public class GameEntities {
         return turrets.values();
     }
 
-    // Barrier management
-    public void addBarrier(Barrier barrier) {
-        barriers.put(barrier.getId(), barrier);
-    }
-
-    public Barrier getBarrier(int barrierId) {
-        return barriers.get(barrierId);
-    }
-
-    public Collection<Barrier> getAllBarriers() {
-        return barriers.values();
-    }
 
     // Net projectile management
     public void addNetProjectile(NetProjectile netProjectile) {
@@ -302,18 +267,6 @@ public class GameEntities {
         return netProjectiles.values();
     }
 
-    // Proximity mine management
-    public void addProximityMine(ProximityMine mine) {
-        proximityMines.put(mine.getId(), mine);
-    }
-
-    public ProximityMine getProximityMine(int mineId) {
-        return proximityMines.get(mineId);
-    }
-
-    public Collection<ProximityMine> getAllProximityMines() {
-        return proximityMines.values();
-    }
 
     // TeleportPad management
     public void addTeleportPad(TeleportPad teleportPad) {

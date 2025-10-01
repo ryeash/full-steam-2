@@ -9,9 +9,7 @@ import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.World;
 
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -23,8 +21,8 @@ public class BulletEffectProcessor {
     private final World<Body> world;
     private final GameEntities gameEntities;
 
-    public BulletEffectProcessor(World<Body> world, GameEntities gameEntities) {
-        this.world = world;
+    public BulletEffectProcessor(GameEntities gameEntities) {
+        this.world = gameEntities.getWorld();
         this.gameEntities = gameEntities;
     }
 
@@ -206,7 +204,7 @@ public class BulletEffectProcessor {
     /**
      * Apply homing behavior to a projectile (called during projectile update)
      */
-    public void applyHomingBehavior(Projectile projectile, double deltaTime) {
+    public void applyHomingBehavior(Projectile projectile) {
         if (!projectile.hasBulletEffect(BulletEffect.HOMING)) {
             return;
         }
@@ -217,8 +215,7 @@ public class BulletEffectProcessor {
             return;
         }
 
-        Vector2 projectilePos = new Vector2(projectile.getBody().getTransform().getTranslationX(),
-                projectile.getBody().getTransform().getTranslationY());
+        Vector2 projectilePos = projectile.getPosition().copy();
         Vector2 targetPos = nearestEnemy.getPosition();
         Vector2 direction = targetPos.copy().subtract(projectilePos);
 
@@ -229,15 +226,33 @@ public class BulletEffectProcessor {
 
         direction.normalize();
 
-        // Apply gentle steering force (not instant tracking)
+        // Get current velocity to calculate perpendicular steering
         Vector2 currentVelocity = projectile.getBody().getLinearVelocity();
-        double homingStrength = 0.43; // 43% steering per second
+        if (currentVelocity.getMagnitude() < 0.1) {
+            // no-homing
+            return;
+        } else {
+            // Calculate perpendicular steering force
+            Vector2 velocityDirection = currentVelocity.copy();
+            velocityDirection.normalize();
 
-        Vector2 desiredVelocity = direction.multiply(currentVelocity.getMagnitude());
-        Vector2 steeringForce = desiredVelocity.subtract(currentVelocity).multiply(homingStrength * deltaTime);
+            // Calculate the perpendicular direction (90 degrees to velocity)
+            // This creates a steering effect rather than direct attraction
+            Vector2 perpendicularDirection = new Vector2(-velocityDirection.y, velocityDirection.x);
 
-        Vector2 newVelocity = currentVelocity.add(steeringForce);
-        projectile.getBody().setLinearVelocity(newVelocity);
+            // Determine which side to steer toward (left or right of velocity)
+            // Use dot product to determine if target is to the left or right
+            double crossProduct = velocityDirection.cross(direction);
+            if (crossProduct < 0) {
+                // Target is to the right, steer right
+                perpendicularDirection.multiply(-1);
+            }
+            // If crossProduct > 0, target is to the left, steer left (no change needed)
+
+            // Apply perpendicular steering force
+            double steeringForce = 1000.0;
+            projectile.getBody().applyForce(perpendicularDirection.multiply(steeringForce));
+        }
     }
 
     private Player findNearestEnemy(Projectile projectile) {

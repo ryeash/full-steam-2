@@ -3,6 +3,7 @@ package com.fullsteam.physics;
 import lombok.Getter;
 import lombok.Setter;
 import org.dyn4j.dynamics.Body;
+import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
@@ -46,7 +47,8 @@ public class TeleportPad extends GameEntity {
     private static Body createTeleportPadBody(Vector2 position) {
         Body body = new Body();
         Circle circle = new Circle(20.0); // Large activation area
-        body.addFixture(circle);
+        BodyFixture bodyFixture = body.addFixture(circle);
+        bodyFixture.setSensor(true);
         body.setMass(MassType.INFINITE); // Stationary
         body.getTransform().setTranslation(position.x, position.y);
         return body;

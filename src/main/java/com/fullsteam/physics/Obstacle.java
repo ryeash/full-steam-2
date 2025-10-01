@@ -31,7 +31,8 @@ public class Obstacle extends GameEntity {
         HEXAGON_CRYSTAL,  // Regular hexagonal formations
         DIAMOND_STONE,    // Diamond/rhombus shaped rocks
         L_SHAPED_WALL,    // L-shaped structural obstacles
-        CROSS_BARRIER     // Cross/plus shaped obstacles
+        CROSS_BARRIER,    // Cross/plus shaped obstacles
+        PLAYER_BARRIER    // Temporary player-deployed barriers
     }
 
     public enum ShapeCategory {
@@ -48,30 +49,43 @@ public class Obstacle extends GameEntity {
     private final ShapeCategory shapeCategory;
     @Getter
     private final Shape primaryShape;
-    /**
-     * -- GETTER --
-     * Get the approximate radius for collision detection and positioning.
-     * This provides a bounding circle radius for the obstacle.
-     */
     @Getter
     private final double boundingRadius;
     private final Map<String, Object> shapeData;
 
+    // Player barrier specific fields
+    @Getter
+    private final int ownerId; // Player who created this barrier (0 for map obstacles)
+    @Getter
+    private final int ownerTeam; // Team of the player who created this barrier (0 for map obstacles)
+    @Getter
+    private final double lifespan; // Total lifespan for temporary barriers (0 for permanent obstacles)
+
+    private double timeRemaining; // Time remaining for temporary barriers
+
     public Obstacle(int id, double x, double y, ObstacleType type) {
-        super(id, createObstacleBody(x, y, type), Double.POSITIVE_INFINITY); // Obstacles are indestructible by default
+        this(id, x, y, type, 0, 0, 0.0, Double.POSITIVE_INFINITY);
+    }
+
+    public Obstacle(int id, double x, double y, ObstacleType type, int ownerId, int ownerTeam, double lifespan, double health) {
+        super(id, createObstacleBody(x, y, type), health);
         this.type = type;
+        this.ownerId = ownerId;
+        this.ownerTeam = ownerTeam;
+        this.lifespan = lifespan;
+        this.timeRemaining = lifespan;
         this.primaryShape = getBody().getFixture(0).getShape();
         this.shapeCategory = determineShapeCategory(type);
         this.boundingRadius = calculateBoundingRadius();
         this.shapeData = generateShapeData();
-        getBody().setMass(MassType.INFINITE); // Obstacles are static
+        getBody().setMass(MassType.INFINITE);
         getBody().setUserData(this);
     }
 
     private ShapeCategory determineShapeCategory(ObstacleType type) {
         return switch (type) {
             case BOULDER -> ShapeCategory.CIRCULAR;
-            case HOUSE, WALL_SEGMENT -> ShapeCategory.RECTANGULAR;
+            case HOUSE, WALL_SEGMENT, PLAYER_BARRIER -> ShapeCategory.RECTANGULAR;
             case TRIANGLE_ROCK -> ShapeCategory.TRIANGULAR;
             case POLYGON_DEBRIS, HEXAGON_CRYSTAL, DIAMOND_STONE -> ShapeCategory.POLYGONAL;
             case L_SHAPED_WALL, CROSS_BARRIER -> ShapeCategory.COMPOUND;
@@ -118,6 +132,7 @@ public class Obstacle extends GameEntity {
             case DIAMOND_STONE -> createDiamondShape(random);
             case L_SHAPED_WALL -> createLShape(random);
             case CROSS_BARRIER -> createCrossShape(random);
+            case PLAYER_BARRIER -> createPlayerBarrierShape();
             default -> createCircularShape(random);
         };
     }
@@ -449,6 +464,11 @@ public class Obstacle extends GameEntity {
         return new Polygon(ensureCounterClockwiseWinding(vertices));
     }
 
+    private static Convex createPlayerBarrierShape() {
+        // Player barriers are always rectangular, 80 units wide by 10 units thick
+        return new Rectangle(80.0, 10.0);
+    }
+
     /**
      * Calculate the bounding radius for this obstacle.
      */
@@ -495,7 +515,20 @@ public class Obstacle extends GameEntity {
 
     @Override
     public void update(double deltaTime) {
-        // Obstacles are static and don't need updates by default
+        // Handle temporary barriers
+        if (type == ObstacleType.PLAYER_BARRIER && lifespan > 0) {
+            if (!active) {
+                return;
+            }
+
+            timeRemaining -= deltaTime;
+            if (timeRemaining <= 0) {
+                active = false;
+            }
+
+            lastUpdateTime = System.currentTimeMillis();
+        }
+        // Permanent obstacles are static and don't need updates
     }
 
     /**
@@ -527,9 +560,59 @@ public class Obstacle extends GameEntity {
     }
 
     /**
-     * Factory method to create obstacles of a specific type.
+     * Factory method to create a player barrier.
      */
-    public static Obstacle createObstacle(double x, double y, ObstacleType type) {
-        return new Obstacle(Config.nextId(), x, y, type);
+    public static Obstacle createPlayerBarrier(int id, int ownerId, int ownerTeam, Vector2 position, Vector2 direction, double lifespan) {
+        Obstacle barrier = new Obstacle(id, position.x, position.y, ObstacleType.PLAYER_BARRIER, ownerId, ownerTeam, lifespan, 100.0);
+
+        // Orient the barrier perpendicular to the direction (same as original Barrier class)
+        if (direction.getMagnitude() > 0) {
+            double angle = Math.atan2(direction.y, direction.x);
+            barrier.getBody().getTransform().setRotation(angle + Math.PI / 2); // Perpendicular to aim direction
+        }
+
+        return barrier;
+    }
+
+    /**
+     * Check if the obstacle has expired (for temporary barriers)
+     */
+    public boolean isExpired() {
+        if (type != ObstacleType.PLAYER_BARRIER) {
+            return false; // Permanent obstacles never expire
+        }
+        return !active || timeRemaining <= 0;
+    }
+
+    /**
+     * Get the remaining lifespan as a percentage (for temporary barriers)
+     */
+    public double getLifespanPercent() {
+        if (type != ObstacleType.PLAYER_BARRIER || lifespan <= 0) {
+            return 1.0; // Permanent obstacles are always at 100%
+        }
+        return Math.max(0, timeRemaining / lifespan);
+    }
+
+    /**
+     * Override damage handling - barriers can be destroyed, permanent obstacles cannot
+     */
+    @Override
+    public boolean takeDamage(double damage) {
+        if (type == ObstacleType.PLAYER_BARRIER) {
+            if (!active) {
+                return false;
+            }
+
+            boolean wasActive = active;
+            health -= damage;
+            if (health <= 0) {
+                active = false;
+            }
+            return wasActive && !active; // Return true if barrier was destroyed
+        }
+
+        // Permanent obstacles are indestructible
+        return false;
     }
 }

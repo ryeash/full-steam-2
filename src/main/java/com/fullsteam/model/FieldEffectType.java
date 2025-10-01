@@ -14,9 +14,9 @@ public enum FieldEffectType {
     SMOKE_CLOUD(8.0, false),   // Vision blocking area
     SLOW_FIELD(6.0, false),    // Movement reduction field
     SHIELD_BARRIER(10.0, false), // Damage absorption zone
-    GRAVITY_WELL(4.0, false),  // Pull entities toward center
-    VISION_REVEAL(12.0, false), // Reveals enemies in area
-    SPEED_BOOST(7.0, false);   // Increases ally movement speed
+    GRAVITY_WELL(7.0, false),  // Pull entities toward center
+    SPEED_BOOST(7.0, false),   // Increases ally movement speed
+    PROXIMITY_MINE(30.0, false); // Proximity-triggered explosive mine
 
     private final double defaultDuration;
     private final boolean instantaneous;
