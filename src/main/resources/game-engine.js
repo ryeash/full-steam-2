@@ -2790,38 +2790,83 @@ class GameEngine {
      * Create net projectile graphics
      */
     createNetGraphics(graphics, entityData) {
-        // Net main body - web pattern
-        graphics.lineStyle(2, 0x8B4513, 0.8); // Brown net
+        // Triangular bola design - three weighted balls connected by rope
+        const ropeLength = 14;
+        const ballRadius = 4;
         
-        // Draw net pattern
-        const size = 12;
-        const gridSize = 4;
+        // Calculate positions for triangular arrangement
+        const ball1X = 0;
+        const ball1Y = -ropeLength;
+        const ball2X = ropeLength * Math.cos(Math.PI / 6); // 60 degrees
+        const ball2Y = ropeLength * Math.sin(Math.PI / 6);
+        const ball3X = -ropeLength * Math.cos(Math.PI / 6); // -60 degrees
+        const ball3Y = ropeLength * Math.sin(Math.PI / 6);
         
-        // Horizontal lines
-        for (let y = -size; y <= size; y += gridSize) {
-            graphics.moveTo(-size, y);
-            graphics.lineTo(size, y);
+        // Draw connecting ropes between all three balls
+        graphics.lineStyle(3, 0x8B4513, 0.9); // Brown rope
+        
+        // Rope from ball 1 to ball 2
+        graphics.moveTo(ball1X, ball1Y);
+        graphics.lineTo(ball2X, ball2Y);
+        
+        // Rope from ball 2 to ball 3
+        graphics.moveTo(ball2X, ball2Y);
+        graphics.lineTo(ball3X, ball3Y);
+        
+        // Rope from ball 3 to ball 1
+        graphics.moveTo(ball3X, ball3Y);
+        graphics.lineTo(ball1X, ball1Y);
+        
+        // Add rope texture with small segments on each rope
+        graphics.lineStyle(1, 0x654321, 0.7);
+        
+        // Texture on rope 1-2
+        const steps12 = 5;
+        for (let i = 1; i < steps12; i++) {
+            const t = i / steps12;
+            const x = ball1X + (ball2X - ball1X) * t;
+            const y = ball1Y + (ball2Y - ball1Y) * t;
+            graphics.moveTo(x - 1, y - 1);
+            graphics.lineTo(x + 1, y + 1);
         }
         
-        // Vertical lines
-        for (let x = -size; x <= size; x += gridSize) {
-            graphics.moveTo(x, -size);
-            graphics.lineTo(x, size);
+        // Texture on rope 2-3
+        for (let i = 1; i < steps12; i++) {
+            const t = i / steps12;
+            const x = ball2X + (ball3X - ball2X) * t;
+            const y = ball2Y + (ball3Y - ball2Y) * t;
+            graphics.moveTo(x - 1, y - 1);
+            graphics.lineTo(x + 1, y + 1);
         }
         
-        // Net outline circle
-        graphics.lineStyle(3, 0x654321, 0.9);
-        graphics.drawCircle(0, 0, size);
-        
-        // Add some rope texture
-        graphics.beginFill(0x8B4513, 0.6);
-        for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2;
-            const x = Math.cos(angle) * (size - 2);
-            const y = Math.sin(angle) * (size - 2);
-            graphics.drawCircle(x, y, 1);
+        // Texture on rope 3-1
+        for (let i = 1; i < steps12; i++) {
+            const t = i / steps12;
+            const x = ball3X + (ball1X - ball3X) * t;
+            const y = ball3Y + (ball1Y - ball3Y) * t;
+            graphics.moveTo(x - 1, y - 1);
+            graphics.lineTo(x + 1, y + 1);
         }
-        graphics.endFill();
+        
+        // Draw the three weighted balls
+        const ballPositions = [
+            { x: ball1X, y: ball1Y },
+            { x: ball2X, y: ball2Y },
+            { x: ball3X, y: ball3Y }
+        ];
+        
+        ballPositions.forEach(pos => {
+            // Weighted ball
+            graphics.beginFill(0x4A4A4A, 0.9); // Dark gray metal
+            graphics.lineStyle(2, 0x2A2A2A, 1.0); // Darker outline
+            graphics.drawCircle(pos.x, pos.y, ballRadius);
+            graphics.endFill();
+            
+            // Add metallic shine
+            graphics.beginFill(0x6A6A6A, 0.6);
+            graphics.drawCircle(pos.x - 1, pos.y - 1, ballRadius * 0.4);
+            graphics.endFill();
+        });
         
         return graphics;
     }
@@ -2997,6 +3042,9 @@ class GameEngine {
             case 'TURRET':
                 this.updateTurretVisual(container, entityData);
                 break;
+            case 'NET':
+                this.updateNetVisual(container, entityData);
+                break;
         }
     }
     
@@ -3039,6 +3087,10 @@ class GameEngine {
         if (container.healthBar) {
             this.updateTurretHealthBar(container.healthBar, entityData);
         }
+    }
+
+    updateNetVisual(container, entityData) {
+        container.rotation = -(entityData.rotation || 0);
     }
     
     /**

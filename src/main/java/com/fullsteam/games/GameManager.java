@@ -509,14 +509,14 @@ public class GameManager implements StepListener<Body> {
                 if (player.takeDamage(effectValue * deltaTime)) {
                     killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
                 }
-                StatusEffects.applySlowEffect(player, 0.7, 0.5,
+                StatusEffects.applySlowEffect(player, 5, 0.5,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Electric Field"));
                 break;
             case FREEZE:
                 if (player.takeDamage(effectValue * deltaTime)) {
                     killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
                 }
-                StatusEffects.applySlowEffect(player, 0.6, 1.0,
+                StatusEffects.applySlowEffect(player, 10, 1.0,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Freeze Field"));
                 break;
 
@@ -619,27 +619,6 @@ public class GameManager implements StepListener<Body> {
                 if (explosion != null) {
                     gameEntities.addFieldEffect(explosion);
                     world.addBody(explosion.getBody());
-                }
-            }
-        }
-
-        // Handle net projectile collisions (basic implementation)
-        for (NetProjectile net : gameEntities.getAllNetProjectiles()) {
-            if (!net.isActive()) {
-                continue;
-            }
-
-            // Check for player collisions
-            Vector2 netPos = net.getPosition();
-            for (Player player : gameEntities.getAllPlayers()) {
-                if (!player.isActive()) {
-                    continue;
-                }
-
-                double distance = netPos.distance(player.getPosition());
-                if (distance <= 25.0) { // Net hit radius
-                    net.hitPlayer(player);
-                    break; // Net is consumed on hit
                 }
             }
         }
@@ -1389,6 +1368,7 @@ public class GameManager implements StepListener<Body> {
             netState.put("y", pos.y);
             netState.put("vx", vel.x);
             netState.put("vy", vel.y);
+            netState.put("rotation", net.getBody().getTransform().getRotation().toRadians());
             netState.put("active", net.isActive());
             netState.put("ownerId", net.getOwnerId());
             netState.put("ownerTeam", net.getOwnerTeam());

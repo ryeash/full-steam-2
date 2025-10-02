@@ -5,8 +5,6 @@ import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import lombok.Getter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.dynamics.contact.Contact;
@@ -18,12 +16,14 @@ import org.dyn4j.world.ManifoldCollisionData;
 import org.dyn4j.world.NarrowphaseCollisionData;
 import org.dyn4j.world.listener.CollisionListener;
 import org.dyn4j.world.listener.ContactListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 public class CollisionProcessor implements CollisionListener<Body, BodyFixture>, ContactListener<Body> {
 
     private static final Logger log = LoggerFactory.getLogger(CollisionProcessor.class);
-    
+
     private final GameManager gameManager;
     private final GameEntities gameEntities;
     @Getter
@@ -102,10 +102,13 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             return handleProjectileTurretCollision(projectile, turret);
         } else if (entity1 instanceof Turret turret && entity2 instanceof Projectile projectile) {
             return handleProjectileTurretCollision(projectile, turret);
+        } else if (entity1 instanceof NetProjectile net) {
+            return handleNetCollision(net, entity2);
+        } else if (entity2 instanceof NetProjectile net) {
+            return handleNetCollision(net, entity1);
         }
         return true;
     }
-
 
     private void handlePlayerProjectileCollision(Player player, Projectile projectile) {
         if (!player.isActive() || !projectile.isActive()) {
@@ -220,26 +223,26 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             Vector2 projectilePos = projectile.getPosition();
             Vector2 shieldCenter = fieldEffect.getPosition();
             Vector2 projectileVelocity = projectile.getBody().getLinearVelocity();
-            
+
             // Calculate direction from projectile to shield center
             Vector2 toShieldCenter = shieldCenter.copy().subtract(projectilePos);
-            
+
             // Check if projectile is moving toward the shield center
             // Use dot product: if positive, projectile is moving toward center
             if (toShieldCenter.getMagnitude() > 0 && projectileVelocity.getMagnitude() > 0) {
                 toShieldCenter.normalize();
                 Vector2 velocityDirection = projectileVelocity.copy();
                 velocityDirection.normalize();
-                
+
                 double dotProduct = toShieldCenter.dot(velocityDirection);
-                
+
                 // Only stop projectile if it's moving toward the shield center (dot product > 0)
                 if (dotProduct > 0) {
                     projectile.setVelocity(Vector2.create(0, 0));
                     return false; // Prevent physics resolution
                 }
             }
-            
+
             // Projectile is moving away from shield center, let it pass through
             return true;
         } else if (fieldEffect.getType() == FieldEffectType.GRAVITY_WELL) {
@@ -271,22 +274,22 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
 
         // Apply damage to turret
         boolean turretDestroyed = turret.takeDamage(projectile.getDamage());
-        
+
         if (turretDestroyed) {
             // Turret was destroyed, could trigger explosion or other effects
-            log.debug("Turret {} destroyed by projectile from player {}", 
-                     turret.getId(), projectile.getOwnerId());
+            log.debug("Turret {} destroyed by projectile from player {}",
+                    turret.getId(), projectile.getOwnerId());
         }
 
         // Check if projectile should pierce through the turret
         boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, turret);
-        
+
         // Deactivate projectile unless it pierces
         if (!shouldPierce) {
             projectile.setActive(false);
             return false; // Stop the projectile
         }
-        
+
         return true; // Let projectile continue if piercing
     }
 
@@ -303,6 +306,19 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
 
         // In team mode, can only damage turrets on different teams
         return projectile.getOwnerTeam() != turret.getOwnerTeam();
+    }
+
+    private boolean handleNetCollision(NetProjectile net, GameEntity obstacle) {
+        if (obstacle instanceof Player player) {
+            if (net.isActive() && net.canAffectPlayer(player)) {
+                net.hitPlayer(player);
+                return false;
+            }
+        } else if (obstacle instanceof Obstacle) {
+            net.setActive(false);
+            return false;
+        }
+        return true;
     }
 
     // ContactListener methods

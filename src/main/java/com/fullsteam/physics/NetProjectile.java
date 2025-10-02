@@ -20,18 +20,18 @@ public class NetProjectile extends GameEntity {
     private final double slowEffect; // How much to slow the target (0.0 = stopped, 1.0 = normal speed)
     private final double slowDuration; // How long the slow effect lasts
     private final double timeToLive;
-    
+
     private double timeRemaining;
     private Vector2 velocity;
     private boolean hasHit = false;
 
     public NetProjectile(int id, int ownerId, int ownerTeam, Vector2 position, Vector2 velocity, double timeToLive) {
-        super(id, createNetProjectileBody(position), Double.POSITIVE_INFINITY); // Nets don't have health
+        super(id, createNetProjectileBody(position), 1);
         this.ownerId = ownerId;
         this.ownerTeam = ownerTeam;
         this.velocity = velocity.copy();
-        this.damage = 20.0; // Moderate damage on impact
-        this.slowEffect = 0.2; // Slow target to 20% speed
+        this.damage = 0;
+        this.slowEffect = 7;
         this.slowDuration = 3.0; // 3 second immobilization
         this.timeToLive = timeToLive;
         this.timeRemaining = timeToLive;
@@ -44,6 +44,7 @@ public class NetProjectile extends GameEntity {
         body.setMass(MassType.NORMAL);
         body.getTransform().setTranslation(position.x, position.y);
         body.setLinearDamping(0.01); // Very little damping - nets fly far
+        body.setAngularVelocity(70); // Nets spin around
         return body;
     }
 
@@ -74,21 +75,8 @@ public class NetProjectile extends GameEntity {
         if (hasHit || !active) {
             return;
         }
-
-        // Check if we can affect this player
-        if (!canAffectPlayer(player)) {
-            return;
-        }
-
         hasHit = true;
         active = false; // Net is consumed on hit
-
-        // Apply damage
-        if (player.takeDamage(damage)) {
-            // Player was killed by the net (rare but possible if low health)
-            return;
-        }
-
         // Apply immobilization effect
         String ownerName = "Net"; // Default name if owner not found
         StatusEffects.applySlowEffect(player, slowEffect, slowDuration, ownerName);
@@ -97,7 +85,7 @@ public class NetProjectile extends GameEntity {
     /**
      * Check if this net can affect a player
      */
-    private boolean canAffectPlayer(Player player) {
+    public boolean canAffectPlayer(Player player) {
         if (!player.isActive() || player.getHealth() <= 0) {
             return false;
         }
@@ -114,23 +102,6 @@ public class NetProjectile extends GameEntity {
 
         // In team mode, can only affect players on different teams
         return ownerTeam != player.getTeam();
-    }
-
-    /**
-     * Handle collision with obstacles or walls
-     */
-    public void hitObstacle() {
-        if (hasHit) {
-            return;
-        }
-
-        hasHit = true;
-        // Net sticks to walls and becomes inactive
-        velocity = new Vector2(0, 0);
-        body.setLinearVelocity(0, 0);
-        
-        // Reduce remaining time when hitting obstacles
-        timeRemaining = Math.min(timeRemaining, 1.0); // Max 1 second left
     }
 
     /**

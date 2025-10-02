@@ -158,7 +158,7 @@ public class StatusEffects {
     /**
      * Apply slowing effect to a player.
      */
-    public static void applySlowEffect(Player player, double speedMultiplier, double durationSeconds, String source) {
+    public static void applySlowEffect(Player player, double linearDamping, double durationSeconds, String source) {
         player.getAttributeModifications().add(new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
             @Override
             public String renderHint() {
@@ -167,12 +167,12 @@ public class StatusEffects {
 
             @Override
             public void update(Player player, double delta) {
-                player.setMaxSpeed(Config.PLAYER_SPEED * speedMultiplier);
+                player.getBody().setLinearDamping(linearDamping);
             }
 
             @Override
             public void revert(Player player) {
-                player.setMaxSpeed(Config.PLAYER_SPEED);
+                player.getBody().setLinearDamping(Config.PLAYER_LINEAR_DAMPING);
             }
         });
     }
