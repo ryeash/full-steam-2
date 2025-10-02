@@ -539,21 +539,14 @@ public class GameManager implements StepListener<Body> {
                     applySlowFieldEffect(player, fieldEffect, deltaTime);
                 }
                 break;
-            case GRAVITY_WELL:
-                // Pull all players toward center (physics effect affects everyone in range)
-                break;
             case SMOKE_CLOUD:
                 // TODO: maybe a candidate for deletion
                 // Reduce visibility (handled by client)
                 break;
+            case GRAVITY_WELL:
             case SHIELD_BARRIER:
-                // Damage absorption (TODO: implement shield mechanics)
-                break;
-
             case EXPLOSION:
             case FRAGMENTATION:
-                // Instantaneous effects, shouldn't reach here
-                break;
             case PROXIMITY_MINE:
                 break;
         }
@@ -1356,7 +1349,7 @@ public class GameManager implements StepListener<Body> {
             effectState.put("x", pos.x);
             effectState.put("y", pos.y);
             effectState.put("radius", effect.getRadius());
-            effectState.put("damage", effect.getDamage());
+//            effectState.put("damage", effect.getDamage());
             effectState.put("duration", effect.getDuration());
             effectState.put("timeRemaining", effect.getTimeRemaining());
             effectState.put("progress", effect.getProgress());
@@ -1375,7 +1368,7 @@ public class GameManager implements StepListener<Body> {
             turretState.put("type", "TURRET");
             turretState.put("x", pos.x);
             turretState.put("y", pos.y);
-            turretState.put("rotation", turret.getRotation());
+            turretState.put("rotation", turret.getBody().getTransform().getRotation().toRadians());
             turretState.put("health", turret.getHealth());
             turretState.put("active", turret.isActive());
             turretState.put("ownerId", turret.getOwnerId());

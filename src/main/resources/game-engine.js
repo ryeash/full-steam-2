@@ -1143,6 +1143,13 @@ class GameEngine {
         const entityGraphics = this.createUtilityEntityGraphics(entityData);
         entityContainer.addChild(entityGraphics);
         
+        // Create health bar for turrets
+        if (entityData.type === 'TURRET') {
+            const healthBarContainer = this.createTurretHealthBar(entityData);
+            entityContainer.healthBar = healthBarContainer;
+            this.nameContainer.addChild(healthBarContainer);
+        }
+        
         // Set z-index based on type
         entityContainer.zIndex = this.getUtilityEntityZIndex(entityData.type);
         
@@ -3026,12 +3033,77 @@ class GameEngine {
      * Update turret visual effects
      */
     updateTurretVisual(container, entityData) {
-        // Update rotation if target direction is provided
-        if (entityData.targetDirection !== undefined) {
-            container.rotation = entityData.targetDirection;
+        container.rotation = -(entityData.rotation || 0);
+        
+        // Update health bar if it exists
+        if (container.healthBar) {
+            this.updateTurretHealthBar(container.healthBar, entityData);
         }
     }
     
+    /**
+     * Create health bar for a turret
+     */
+    createTurretHealthBar(entityData) {
+        const healthBarContainer = new PIXI.Container();
+        
+        // Health bar background
+        const healthBg = new PIXI.Graphics();
+        healthBg.beginFill(0x333333);
+        healthBg.drawRoundedRect(-20, 0, 40, 5, 2);
+        healthBg.endFill();
+        healthBarContainer.addChild(healthBg);
+        
+        // Health bar fill
+        const healthFill = new PIXI.Graphics();
+        healthFill.beginFill(0x2ecc71);
+        healthFill.drawRoundedRect(-20, 0, 40, 5, 2);
+        healthFill.endFill();
+        healthBarContainer.addChild(healthFill);
+        
+        // Store references for updates
+        healthBarContainer.healthBg = healthBg;
+        healthBarContainer.healthFill = healthFill;
+        
+        // Position above turret
+        const isoPos = this.worldToIsometric(entityData.x, entityData.y);
+        healthBarContainer.position.set(isoPos.x, isoPos.y - 30);
+        
+        return healthBarContainer;
+    }
+    
+    /**
+     * Update turret health bar
+     */
+    updateTurretHealthBar(healthBarContainer, entityData) {
+        if (!healthBarContainer || !entityData.health) return;
+        
+        // Calculate health percentage (assuming max health of 50 for turrets)
+        const maxHealth = 50;
+        const healthPercent = Math.max(0, Math.min(1, entityData.health / maxHealth));
+        
+        // Update health bar fill width
+        const fillWidth = 40 * healthPercent;
+        healthBarContainer.healthFill.clear();
+        healthBarContainer.healthFill.beginFill(0x2ecc71);
+        healthBarContainer.healthFill.drawRoundedRect(-20, 0, fillWidth, 5, 2);
+        healthBarContainer.healthFill.endFill();
+        
+        // Change color based on health level
+        let healthColor = 0x2ecc71; // Green
+        if (healthPercent < 0.3) {
+            healthColor = 0xf44336; // Red
+        } else if (healthPercent < 0.6) {
+            healthColor = 0xffc107; // Yellow
+        }
+        
+        healthBarContainer.healthFill.tint = healthColor;
+        
+        // Update position
+        const isoPos = this.worldToIsometric(entityData.x, entityData.y);
+        healthBarContainer.position.set(isoPos.x, isoPos.y - 30);
+    }
+
     /**
      * Clean up utility entity container
      */
@@ -3041,6 +3113,11 @@ class GameEngine {
             container.entityGraphics.clear();
             container.entityGraphics.destroy();
             container.entityGraphics = null;
+        }
+        
+        // Clean up health bar
+        if (container.healthBar) {
+            container.healthBar.destroy();
         }
         
         // Clear references

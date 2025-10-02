@@ -8,8 +8,8 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
-import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -25,7 +25,7 @@ public class Turret extends GameEntity {
     private final double damage;
     private final double projectileSpeed;
     private final double lifespan; // how long the turret lasts
-    
+
     private double timeRemaining;
     private long lastShotTime = 0;
     private Player currentTarget;
@@ -35,12 +35,13 @@ public class Turret extends GameEntity {
         super(id, createTurretBody(position), 50.0); // 50 HP turret
         this.ownerId = ownerId;
         this.ownerTeam = ownerTeam;
-        this.detectionRange = 200.0; // Detection range
+        this.detectionRange = 400.0; // Detection range
         this.fireRate = 3.0; // 3 shots per second
         this.damage = 15.0; // Moderate damage
         this.projectileSpeed = 400.0; // Fast projectiles
         this.lifespan = lifespan;
         this.timeRemaining = lifespan;
+        this.setRotation(Math.random() * 2 * Math.PI);
     }
 
     private static Body createTurretBody(Vector2 position) {
@@ -97,7 +98,7 @@ public class Turret extends GameEntity {
         }
 
         currentTarget = closestTarget;
-        
+
         // Update aim direction if we have a target
         if (currentTarget != null) {
             Vector2 turretPos = getPosition();
@@ -114,7 +115,8 @@ public class Turret extends GameEntity {
      * Check if a player is a valid target for this turret
      */
     private boolean isValidTarget(Player player) {
-        if (!player.isActive() || player.getHealth() <= 0) {
+        double distance = getPosition().distance(player.getPosition());
+        if (!player.isActive() || player.getHealth() <= 0 || distance > detectionRange) {
             return false;
         }
 
@@ -145,13 +147,17 @@ public class Turret extends GameEntity {
         // Predict target movement for better accuracy
         Vector2 targetPos = predictTargetPosition();
         Vector2 turretPos = getPosition();
-        
+
         Vector2 fireDirection = new Vector2(targetPos.x - turretPos.x, targetPos.y - turretPos.y);
         if (fireDirection.getMagnitude() == 0) {
             return null;
         }
-        
+
         fireDirection.normalize();
+
+        // Update turret rotation to face the target when firing
+        setRotation(Math.atan2(fireDirection.y, fireDirection.x));
+
         Vector2 velocity = fireDirection.multiply(projectileSpeed);
 
         // Add slight inaccuracy to make it less overpowered
@@ -168,10 +174,10 @@ public class Turret extends GameEntity {
                 velocity.x,
                 velocity.y,
                 damage,
-                detectionRange, // Use detection range as projectile range
+                detectionRange + 100, // Use detection range as projectile range
                 ownerTeam,
                 0.02, // Slight linear damping
-                new HashSet<>(), // No special bullet effects
+                Set.of(), // No special bullet effects
                 Ordinance.BULLET  // Standard bullet ordinance
         );
     }
@@ -191,11 +197,11 @@ public class Turret extends GameEntity {
         // Simple prediction: assume target continues at current velocity
         double distance = turretPos.distance(targetPos);
         double timeToHit = distance / projectileSpeed;
-        
+
         // Predict target position
         Vector2 predictedPos = targetPos.copy();
         predictedPos.add(targetVel.x * timeToHit, targetVel.y * timeToHit);
-        
+
         return predictedPos;
     }
 

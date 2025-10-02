@@ -5,6 +5,8 @@ import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import lombok.Getter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.dynamics.contact.Contact;
@@ -20,6 +22,8 @@ import org.dyn4j.world.listener.ContactListener;
 
 public class CollisionProcessor implements CollisionListener<Body, BodyFixture>, ContactListener<Body> {
 
+    private static final Logger log = LoggerFactory.getLogger(CollisionProcessor.class);
+    
     private final GameManager gameManager;
     private final GameEntities gameEntities;
     @Getter
@@ -94,6 +98,10 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             return handleProjectileFieldEffectCollision(projectile, fieldEffect);
         } else if (entity2 instanceof FieldEffect fieldEffect && entity1 instanceof Projectile projectile) {
             return handleProjectileFieldEffectCollision(projectile, fieldEffect);
+        } else if (entity1 instanceof Projectile projectile && entity2 instanceof Turret turret) {
+            return handleProjectileTurretCollision(projectile, turret);
+        } else if (entity1 instanceof Turret turret && entity2 instanceof Projectile projectile) {
+            return handleProjectileTurretCollision(projectile, turret);
         }
         return true;
     }
@@ -242,6 +250,59 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             projectile.getBody().applyForce(forceDirection);
         }
         return true;
+    }
+
+    private boolean handleProjectileTurretCollision(Projectile projectile, Turret turret) {
+        if (!projectile.isActive() || !turret.isActive()) {
+            return true;
+        }
+
+        // Check if projectile can damage the turret (team rules)
+        if (!canProjectileDamageTurret(projectile, turret)) {
+            return true; // Let projectile pass through
+        }
+
+        // Get hit position for effects
+        org.dyn4j.geometry.Vector2 hitPos = projectile.getBody().getTransform().getTranslation();
+        Vector2 hitPosition = new Vector2(hitPos.x, hitPos.y);
+
+        // Process bullet effects on turret hit
+        bulletEffectProcessor.processEffectHit(projectile, hitPosition);
+
+        // Apply damage to turret
+        boolean turretDestroyed = turret.takeDamage(projectile.getDamage());
+        
+        if (turretDestroyed) {
+            // Turret was destroyed, could trigger explosion or other effects
+            log.debug("Turret {} destroyed by projectile from player {}", 
+                     turret.getId(), projectile.getOwnerId());
+        }
+
+        // Check if projectile should pierce through the turret
+        boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, turret);
+        
+        // Deactivate projectile unless it pierces
+        if (!shouldPierce) {
+            projectile.setActive(false);
+            return false; // Stop the projectile
+        }
+        
+        return true; // Let projectile continue if piercing
+    }
+
+    private boolean canProjectileDamageTurret(Projectile projectile, Turret turret) {
+        // Can't damage own turret
+        if (projectile.getOwnerId() == turret.getOwnerId()) {
+            return false;
+        }
+
+        // In FFA mode (team 0), can damage any turret except own
+        if (projectile.getOwnerTeam() == 0 || turret.getOwnerTeam() == 0) {
+            return true;
+        }
+
+        // In team mode, can only damage turrets on different teams
+        return projectile.getOwnerTeam() != turret.getOwnerTeam();
     }
 
     // ContactListener methods
