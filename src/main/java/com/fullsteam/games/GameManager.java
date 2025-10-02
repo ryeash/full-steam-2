@@ -608,21 +608,6 @@ public class GameManager implements StepListener<Body> {
             }
         }
 
-        // Check proximity mines for triggers
-        for (FieldEffect fieldEffect : gameEntities.getAllFieldEffects()) {
-            if (fieldEffect.getType() != FieldEffectType.PROXIMITY_MINE || !fieldEffect.isActive()) {
-                continue;
-            }
-
-            if (fieldEffect.checkForTrigger(gameEntities.getAllPlayers().stream().toList())) {
-                FieldEffect explosion = fieldEffect.trigger();
-                if (explosion != null) {
-                    gameEntities.addFieldEffect(explosion);
-                    world.addBody(explosion.getBody());
-                }
-            }
-        }
-
         // Handle teleport pad activations
         for (TeleportPad teleportPad : gameEntities.getAllTeleportPads()) {
             if (!teleportPad.isActive()) {
@@ -921,7 +906,6 @@ public class GameManager implements StepListener<Body> {
 
         gameEntities.addNetProjectile(netProjectile);
         world.addBody(netProjectile.getBody());
-        log.info("Player {} fired net projectile", activation.playerId);
     }
 
     private void createProximityMine(Player.UtilityActivation activation) {
@@ -931,9 +915,9 @@ public class GameManager implements StepListener<Body> {
                 activation.playerId,
                 FieldEffectType.PROXIMITY_MINE,
                 activation.position,
-                6.0, // Small visual radius for mine
+                45.0, // Small visual radius for mine
                 1.0, // Damage (not used for mines, explosion handles damage)
-                30.0, // 30 second lifespan
+                15.0, // 30 second lifespan
                 activation.team
         );
 
@@ -1047,6 +1031,7 @@ public class GameManager implements StepListener<Body> {
 
                 // For non-piercing beams, stop after first hit
                 if (!beam.canPierceTargets()) {
+                    // TODO: raycast to set the end point of the beam to the intersection point on the player
                     break;
                 }
             }
@@ -1328,7 +1313,6 @@ public class GameManager implements StepListener<Body> {
             effectState.put("x", pos.x);
             effectState.put("y", pos.y);
             effectState.put("radius", effect.getRadius());
-//            effectState.put("damage", effect.getDamage());
             effectState.put("duration", effect.getDuration());
             effectState.put("timeRemaining", effect.getTimeRemaining());
             effectState.put("progress", effect.getProgress());
@@ -1391,8 +1375,6 @@ public class GameManager implements StepListener<Body> {
             mineState.put("ownerId", fieldEffect.getOwnerId());
             mineState.put("ownerTeam", fieldEffect.getOwnerTeam());
             mineState.put("isArmed", fieldEffect.isArmed());
-            mineState.put("armingPercent", fieldEffect.getArmingPercent());
-            mineState.put("lifespanPercent", fieldEffect.getProgress());
             mineStates.add(mineState);
         }
         gameState.put("mines", mineStates);

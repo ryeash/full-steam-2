@@ -1,6 +1,7 @@
 package com.fullsteam.ai;
 
 import com.fullsteam.model.WeaponConfig;
+import com.fullsteam.model.UtilityWeapon;
 
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -260,5 +261,125 @@ public class AIWeaponSelector {
         return weapon.range <= 6 || weapon == WeaponConfig.INCENDIARY_SHOTGUN_PRESET 
                 || weapon == WeaponConfig.FLAME_PROJECTOR_PRESET 
                 || weapon == WeaponConfig.TOXIC_SPRAYER_PRESET;
+    }
+    
+    /**
+     * Select a random utility weapon for AI players.
+     * @return A randomly selected utility weapon
+     */
+    public static UtilityWeapon selectRandomUtilityWeapon() {
+        UtilityWeapon[] allUtilities = UtilityWeapon.values();
+        return allUtilities[ThreadLocalRandom.current().nextInt(allUtilities.length)];
+    }
+    
+    /**
+     * Select a utility weapon based on AI personality.
+     * Different personalities prefer different utility categories.
+     * @param personality The AI personality to select for
+     * @return Utility weapon suitable for the personality
+     */
+    public static UtilityWeapon selectUtilityWeaponForPersonality(AIPersonality personality) {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        
+        switch (personality.getPersonalityType()) {
+            case "Berserker":
+                // Berserkers prefer offensive and crowd control utilities
+                List<UtilityWeapon> berserkerUtilities = List.of(
+                        UtilityWeapon.GRAVITY_WELL,
+                        UtilityWeapon.SLOW_FIELD,
+                        UtilityWeapon.NET_LAUNCHER,
+                        UtilityWeapon.MINE_LAYER,
+                        UtilityWeapon.DISRUPTOR_BEAM
+                );
+                return berserkerUtilities.get(random.nextInt(berserkerUtilities.size()));
+                
+            case "Sniper":
+                // Snipers prefer tactical and defensive utilities
+                List<UtilityWeapon> sniperUtilities = List.of(
+                        UtilityWeapon.TURRET_CONSTRUCTOR,
+                        UtilityWeapon.WALL_BUILDER,
+                        UtilityWeapon.MINE_LAYER,
+                        UtilityWeapon.SMOKE_GRENADE,
+                        UtilityWeapon.TELEPORTER
+                );
+                return sniperUtilities.get(random.nextInt(sniperUtilities.size()));
+                
+            case "Rusher":
+                // Rushers prefer mobility and quick deployment utilities
+                List<UtilityWeapon> rusherUtilities = List.of(
+                        UtilityWeapon.SPEED_BOOST_PAD,
+                        UtilityWeapon.SMOKE_GRENADE,
+                        UtilityWeapon.NET_LAUNCHER,
+                        UtilityWeapon.TELEPORTER,
+                        UtilityWeapon.DISRUPTOR_BEAM
+                );
+                return rusherUtilities.get(random.nextInt(rusherUtilities.size()));
+                
+            case "Strategist":
+                // Strategists prefer area control and support utilities
+                List<UtilityWeapon> strategistUtilities = List.of(
+                        UtilityWeapon.HEAL_ZONE,
+                        UtilityWeapon.SHIELD_GENERATOR,
+                        UtilityWeapon.TURRET_CONSTRUCTOR,
+                        UtilityWeapon.GRAVITY_WELL,
+                        UtilityWeapon.SLOW_FIELD,
+                        UtilityWeapon.TELEPORTER
+                );
+                return strategistUtilities.get(random.nextInt(strategistUtilities.size()));
+                
+            case "Guardian":
+                // Guardians prefer defensive and support utilities
+                List<UtilityWeapon> guardianUtilities = List.of(
+                        UtilityWeapon.HEAL_ZONE,
+                        UtilityWeapon.SHIELD_GENERATOR,
+                        UtilityWeapon.WALL_BUILDER,
+                        UtilityWeapon.TURRET_CONSTRUCTOR,
+                        UtilityWeapon.MINE_LAYER,
+                        UtilityWeapon.SPEED_BOOST_PAD
+                );
+                return guardianUtilities.get(random.nextInt(guardianUtilities.size()));
+                
+            case "Soldier":
+            default:
+                // Soldiers and fallback get balanced utility selection
+                return selectRandomUtilityWeapon();
+        }
+    }
+    
+    /**
+     * Select a utility weapon that complements the given primary weapon.
+     * @param primaryWeapon The primary weapon
+     * @return A complementary utility weapon
+     */
+    public static UtilityWeapon selectComplementaryUtilityWeapon(WeaponConfig primaryWeapon) {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        
+        // Long-range weapons pair well with defensive utilities
+        if (isLongRangeWeapon(primaryWeapon)) {
+            List<UtilityWeapon> longRangeUtilities = List.of(
+                    UtilityWeapon.TURRET_CONSTRUCTOR,
+                    UtilityWeapon.WALL_BUILDER,
+                    UtilityWeapon.MINE_LAYER,
+                    UtilityWeapon.SHIELD_GENERATOR,
+                    UtilityWeapon.HEAL_ZONE
+            );
+            return longRangeUtilities.get(random.nextInt(longRangeUtilities.size()));
+        }
+        
+        // Short-range weapons pair well with mobility and crowd control
+        if (isShortRangeWeapon(primaryWeapon)) {
+            List<UtilityWeapon> shortRangeUtilities = List.of(
+                    UtilityWeapon.SPEED_BOOST_PAD,
+                    UtilityWeapon.SMOKE_GRENADE,
+                    UtilityWeapon.NET_LAUNCHER,
+                    UtilityWeapon.GRAVITY_WELL,
+                    UtilityWeapon.SLOW_FIELD,
+                    UtilityWeapon.TELEPORTER
+            );
+            return shortRangeUtilities.get(random.nextInt(shortRangeUtilities.size()));
+        }
+        
+        // Medium-range weapons get balanced utility selection
+        return selectRandomUtilityWeapon();
     }
 }

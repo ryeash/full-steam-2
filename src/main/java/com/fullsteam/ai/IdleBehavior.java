@@ -1,7 +1,10 @@
 package com.fullsteam.ai;
 
 import com.fullsteam.model.PlayerInput;
+import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.physics.GameEntities;
+import com.fullsteam.physics.Player;
+import com.fullsteam.physics.Turret;
 import org.dyn4j.geometry.Vector2;
 
 import java.util.concurrent.ThreadLocalRandom;
@@ -39,8 +42,8 @@ public class IdleBehavior implements AIBehavior {
         input.setMoveX(direction.x * moveSpeed);
         input.setMoveY(direction.y * moveSpeed);
 
-        // First priority: Look for nearby enemies
-        com.fullsteam.physics.Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
+        // First priority: Look for nearby enemies (players and turrets)
+        AITargetWrapper nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
         if (nearestEnemy != null) {
             Vector2 enemyPos = nearestEnemy.getPosition();
             input.setWorldX(enemyPos.x);
@@ -81,6 +84,9 @@ public class IdleBehavior implements AIBehavior {
         if (shouldReload && !aiPlayer.isReloading()) {
             input.setReload(true);
         }
+        
+        // Use support utilities when idle and safe
+        evaluateIdleUtilityUsage(aiPlayer, input, nearestEnemy);
 
         return input;
     }
@@ -94,7 +100,7 @@ public class IdleBehavior implements AIBehavior {
     @Override
     public int getPriority(AIPlayer aiPlayer, GameEntities gameEntities) {
         // Check if there are any nearby enemies - if so, reduce priority to let combat take over
-        com.fullsteam.physics.Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
+        AITargetWrapper nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
         if (nearestEnemy != null) {
             return 5; // Very low priority when enemies are near
         }
@@ -131,12 +137,13 @@ public class IdleBehavior implements AIBehavior {
         }
     }
 
-    private com.fullsteam.physics.Player findNearestEnemy(AIPlayer aiPlayer, GameEntities gameEntities) {
+    private AITargetWrapper findNearestEnemy(AIPlayer aiPlayer, GameEntities gameEntities) {
         Vector2 playerPos = aiPlayer.getPosition();
-        com.fullsteam.physics.Player nearest = null;
+        AITargetWrapper nearest = null;
         double nearestDistance = 400; // Only consider enemies within 400 units
 
-        for (com.fullsteam.physics.Player player : gameEntities.getAllPlayers()) {
+        // Check all enemy players
+        for (Player player : gameEntities.getAllPlayers()) {
             if (player.getId() == aiPlayer.getId() || !player.isActive()) {
                 continue;
             }
@@ -149,10 +156,118 @@ public class IdleBehavior implements AIBehavior {
             double distance = playerPos.distance(player.getPosition());
             if (distance < nearestDistance) {
                 nearestDistance = distance;
-                nearest = player;
+                nearest = AITargetWrapper.fromPlayer(player);
+            }
+        }
+        
+        // Check all enemy turrets
+        for (Turret turret : gameEntities.getAllTurrets()) {
+            if (!turret.isActive()) {
+                continue;
+            }
+            
+            // Skip friendly turrets - only target enemies
+            AITargetWrapper turretWrapper = AITargetWrapper.fromTurret(turret);
+            if (isTeammate(aiPlayer, turretWrapper)) {
+                continue;
+            }
+
+            double distance = playerPos.distance(turret.getPosition());
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearest = turretWrapper;
             }
         }
 
         return nearest;
+    }
+    
+    private boolean isTeammate(AIPlayer aiPlayer, AITargetWrapper target) {
+        // In FFA mode (team 0), everyone is an enemy
+        if (aiPlayer.getTeam() == 0 || target.getTeam() == 0) {
+            return false;
+        }
+        
+        // In team mode, check if they're on the same team
+        return aiPlayer.getTeam() == target.getTeam();
+    }
+    
+    /**
+     * Evaluate utility weapon usage during idle behavior.
+     * Focus on support and defensive utilities when safe.
+     */
+    private void evaluateIdleUtilityUsage(AIPlayer aiPlayer, PlayerInput input, AITargetWrapper nearestEnemy) {
+        // Don't use utility if on cooldown or if enemies are very close
+        if (!aiPlayer.canUseUtility()) {
+            return;
+        }
+        
+        if (nearestEnemy != null && aiPlayer.getPosition().distance(nearestEnemy.getPosition()) < 200) {
+            return; // Too dangerous to use utilities
+        }
+        
+        UtilityWeapon utility = aiPlayer.getUtilityWeapon();
+        boolean shouldUseUtility = false;
+        double usageChance = 0.0;
+        
+        switch (utility.getCategory()) {
+            case SUPPORT:
+                // Use support utilities when health is low or proactively
+                if (aiPlayer.getHealth() < 80) {
+                    usageChance = 0.3;
+                    if (aiPlayer.getHealth() < 50) usageChance += 0.4;
+                } else if (nearestEnemy == null) {
+                    // Proactive support usage when completely safe
+                    usageChance = 0.1;
+                }
+                break;
+                
+            case DEFENSIVE:
+                // Use defensive utilities when health is low or preparing for combat
+                if (aiPlayer.getHealth() < 70) {
+                    usageChance = 0.4;
+                } else if (nearestEnemy != null && aiPlayer.getPosition().distance(nearestEnemy.getPosition()) < 400) {
+                    // Prepare defenses when enemy is at medium range
+                    usageChance = 0.2;
+                }
+                break;
+                
+            case TACTICAL:
+                // Use tactical utilities for map control when safe
+                if (nearestEnemy == null || aiPlayer.getPosition().distance(nearestEnemy.getPosition()) > 300) {
+                    usageChance = 0.15;
+                }
+                break;
+                
+            case CROWD_CONTROL:
+                // Generally don't use crowd control when idle unless preparing for combat
+                if (nearestEnemy != null && aiPlayer.getPosition().distance(nearestEnemy.getPosition()) < 350) {
+                    usageChance = 0.1;
+                }
+                break;
+        }
+        
+        // Personality modifiers
+        double personalityMultiplier = 1.0;
+        
+        // Strategic personalities use utilities more proactively
+        if (aiPlayer.getPersonality().getPatience() > 0.6) {
+            personalityMultiplier += 0.4;
+        }
+        
+        // Defensive personalities use defensive utilities more often
+        if (utility.getCategory() == UtilityWeapon.UtilityCategory.DEFENSIVE && 
+            aiPlayer.getPersonality().getAggressiveness() < 0.4) {
+            personalityMultiplier += 0.3;
+        }
+        
+        usageChance *= personalityMultiplier;
+        
+        // Random factor with lower base chance than combat
+        shouldUseUtility = Math.random() < usageChance;
+        
+        if (shouldUseUtility) {
+            input.setAltFire(true);
+        }
     }
 }

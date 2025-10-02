@@ -9,8 +9,12 @@ import org.dyn4j.dynamics.Body;
 import org.dyn4j.world.World;
 
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.stream.Collectors;
 
 /**
  * GameEntities is a centralized container for all game entity collections.
@@ -85,6 +89,18 @@ public class GameEntities {
 
     public void addObstacle(Obstacle obstacle) {
         obstacles.put(obstacle.getId(), obstacle);
+
+        if (obstacle.getOwnerId() > 0) {
+            List<Obstacle> forOwner = obstacles.values()
+                    .stream()
+                    .filter(tp -> tp.getOwnerId() == obstacle.getOwnerId())
+                    .sorted(Comparator.comparing(Obstacle::getCreated))
+                    .collect(Collectors.toCollection(LinkedList::new));
+            while (forOwner.size() > 4) {
+                Obstacle remove = forOwner.remove(0);
+                remove.setActive(false);
+            }
+        }
     }
 
     public Collection<Obstacle> getAllObstacles() {
@@ -130,7 +146,7 @@ public class GameEntities {
         // Remove expired field effects
         fieldEffects.entrySet().removeIf(entry -> {
             FieldEffect o = entry.getValue();
-            if (o.isExpired()) {
+            if (o.isExpired() || !o.isActive()) {
                 world.removeBody(o.getBody());
                 return true;
             }
@@ -171,36 +187,6 @@ public class GameEntities {
             }
             return false;
         });
-
-        fieldEffects.entrySet().removeIf(entry -> {
-            FieldEffect effect = entry.getValue();
-            if (effect.isExpired()) {
-                world.removeBody(effect.getBody());
-                return true;
-            }
-            return false;
-        });
-
-        // Clean up expired utility entities
-        turrets.entrySet().removeIf(entry -> {
-            Turret turret = entry.getValue();
-            if (turret.isExpired()) {
-                world.removeBody(turret.getBody());
-                return true;
-            }
-            return false;
-        });
-
-
-        netProjectiles.entrySet().removeIf(entry -> {
-            NetProjectile net = entry.getValue();
-            if (net.isExpired()) {
-                world.removeBody(net.getBody());
-                return true;
-            }
-            return false;
-        });
-
     }
 
     /**
@@ -243,6 +229,16 @@ public class GameEntities {
     // Turret management
     public void addTurret(Turret turret) {
         turrets.put(turret.getId(), turret);
+
+        List<Turret> forOwner = turrets.values()
+                .stream()
+                .filter(tp -> tp.getOwnerId() == turret.getOwnerId())
+                .sorted(Comparator.comparing(Turret::getCreated))
+                .collect(Collectors.toCollection(LinkedList::new));
+        while (forOwner.size() > 4) {
+            Turret remove = forOwner.remove(0);
+            remove.setActive(false);
+        }
     }
 
     public Turret getTurret(int turretId) {
@@ -271,6 +267,16 @@ public class GameEntities {
     // TeleportPad management
     public void addTeleportPad(TeleportPad teleportPad) {
         teleportPads.put(teleportPad.getId(), teleportPad);
+
+        List<TeleportPad> padsForOwner = teleportPads.values()
+                .stream()
+                .filter(tp -> tp.getOwnerId() == teleportPad.getOwnerId())
+                .sorted(Comparator.comparing(TeleportPad::getCreated))
+                .collect(Collectors.toCollection(LinkedList::new));
+        while (padsForOwner.size() > 4) {
+            TeleportPad remove = padsForOwner.remove(0);
+            remove.destroy();
+        }
     }
 
     public TeleportPad getTeleportPad(int teleportPadId) {

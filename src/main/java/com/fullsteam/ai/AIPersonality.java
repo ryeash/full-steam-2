@@ -3,7 +3,6 @@ package com.fullsteam.ai;
 import lombok.Builder;
 import lombok.Getter;
 
-import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**

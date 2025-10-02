@@ -127,11 +127,12 @@ public class AIPlayerManager {
 
         // Assign weapons based on personality
         com.fullsteam.model.WeaponConfig[] weapons = AIWeaponSelector.selectWeaponLoadoutForPersonality(personality);
-        aiPlayer.applyWeaponConfig(weapons[0], UtilityWeapon.HEAL_ZONE);
+        UtilityWeapon utilityWeapon = AIWeaponSelector.selectUtilityWeaponForPersonality(personality);
+        aiPlayer.applyWeaponConfig(weapons[0], utilityWeapon);
 
-        log.info("Assigned weapons to AI player {} ({}): Primary={}, Secondary={}",
+        log.info("Assigned weapons to AI player {} ({}): Primary={}, Utility={}",
                 aiPlayer.getId(), aiPlayer.getPersonality().getPersonalityType(),
-                weapons[0].getType(), weapons[1].getType());
+                weapons[0].getType(), utilityWeapon.getDisplayName());
 
         return aiPlayer;
     }

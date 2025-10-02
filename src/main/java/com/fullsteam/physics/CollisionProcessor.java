@@ -1,5 +1,6 @@
 package com.fullsteam.physics;
 
+import com.fullsteam.Config;
 import com.fullsteam.games.GameManager;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
@@ -212,6 +213,25 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
                 player.getBody().applyForce(forceDirection);
             }
         }
+
+        if (fieldEffect.getType() == FieldEffectType.PROXIMITY_MINE && fieldEffect.canAffect(player) && fieldEffect.isArmed()) {
+            fieldEffect.setActive(false);
+            gameEntities.removeFieldEffect(fieldEffect.getId());
+            gameEntities.getWorld().removeBody(fieldEffect.getBody());
+            FieldEffect explosion = new FieldEffect(
+                    Config.nextId(), // Offset ID to avoid conflicts
+                    fieldEffect.getOwnerId(),
+                    FieldEffectType.EXPLOSION,
+                    fieldEffect.getPosition(),
+                    80.0,
+                    60.0,
+                    FieldEffectType.EXPLOSION.getDefaultDuration(),
+                    fieldEffect.getOwnerTeam()
+            );
+            // Create explosion field effect
+            gameEntities.addFieldEffect(explosion);
+            gameEntities.getWorld().addBody(explosion.getBody());
+        }
         // Note: Damage-over-time effects (FIRE, POISON, ELECTRIC, FREEZE) are handled
         // continuously in updateFieldEffects() method for proper timing and damage application
     }
@@ -308,17 +328,19 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         return projectile.getOwnerTeam() != turret.getOwnerTeam();
     }
 
-    private boolean handleNetCollision(NetProjectile net, GameEntity obstacle) {
-        if (obstacle instanceof Player player) {
+    private boolean handleNetCollision(NetProjectile net, GameEntity entity) {
+        if (entity instanceof Player player) {
             if (net.isActive() && net.canAffectPlayer(player)) {
                 net.hitPlayer(player);
                 return false;
             }
-        } else if (obstacle instanceof Obstacle) {
+            return true;
+        } else if (entity instanceof Obstacle) {
             net.setActive(false);
             return false;
+        } else {
+            return !(entity instanceof Projectile);
         }
-        return true;
     }
 
     // ContactListener methods

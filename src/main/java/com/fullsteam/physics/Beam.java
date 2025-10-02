@@ -273,12 +273,9 @@ public class Beam extends GameEntity {
      * Check if this beam can pierce through targets
      */
     public boolean canPierceTargets() {
-        switch (ordinance) {
-            case RAILGUN:
-            case ARC_BEAM:
-                return true; // Railgun pierces, Arc beam chains to multiple targets
-            default:
-                return false; // Most beams stop after first hit
-        }
+        return switch (ordinance) {
+            case RAILGUN, ARC_BEAM -> true; // Railgun pierces, Arc beam chains to multiple targets
+            default -> false; // Most beams stop after first hit
+        };
     }
 }

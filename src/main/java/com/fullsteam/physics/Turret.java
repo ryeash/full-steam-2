@@ -24,9 +24,7 @@ public class Turret extends GameEntity {
     private final double fireRate; // shots per second
     private final double damage;
     private final double projectileSpeed;
-    private final double lifespan; // how long the turret lasts
-
-    private double timeRemaining;
+    private final long expires;
     private long lastShotTime = 0;
     private Player currentTarget;
     private Vector2 aimDirection = new Vector2(1, 0);
@@ -39,8 +37,7 @@ public class Turret extends GameEntity {
         this.fireRate = 3.0; // 3 shots per second
         this.damage = 15.0; // Moderate damage
         this.projectileSpeed = 400.0; // Fast projectiles
-        this.lifespan = lifespan;
-        this.timeRemaining = lifespan;
+        this.expires = (long) (System.currentTimeMillis() + (lifespan * 1000));
         this.setRotation(Math.random() * 2 * Math.PI);
     }
 
@@ -60,8 +57,7 @@ public class Turret extends GameEntity {
         }
 
         // Update lifespan
-        timeRemaining -= deltaTime;
-        if (timeRemaining <= 0) {
+        if (System.currentTimeMillis() > expires) {
             active = false;
             return;
         }
@@ -222,13 +218,15 @@ public class Turret extends GameEntity {
      * Check if the turret has expired
      */
     public boolean isExpired() {
-        return !active || timeRemaining <= 0;
+        return !active || System.currentTimeMillis() > expires;
     }
 
     /**
      * Get the remaining lifespan as a percentage
      */
     public double getLifespanPercent() {
+        long lifespan = expires - created;
+        long timeRemaining = expires - System.currentTimeMillis();
         return lifespan > 0 ? Math.max(0, timeRemaining / lifespan) : 0;
     }
 }

@@ -22,11 +22,11 @@ public class Config {
     public static final int MAX_GLOBAL_GAMES = 10;
     
     // Player physics configuration
-    public static final double PLAYER_SPEED = 500.0; // pixels per second (max speed)
+    public static final double PLAYER_SPEED = 600.0; // pixels per second (max speed)
     public static final double PLAYER_RADIUS = 20.0;
-    public static final double PLAYER_ACCELERATION = 900.0; // Force applied to reach target velocity
+    public static final double PLAYER_ACCELERATION = 1100.0; // Force applied to reach target velocity
     public static final double PLAYER_BRAKING_FORCE = 700.0; // Force applied when stopping
-    public static final double PLAYER_LINEAR_DAMPING = 0.85; // Physics damping for responsive movement
+    public static final double PLAYER_LINEAR_DAMPING = 1.2; // Physics damping for responsive movement
     public static final double PLAYER_ANGULAR_DAMPING = 1.0; // Rotation control damping
     
     // Game constants

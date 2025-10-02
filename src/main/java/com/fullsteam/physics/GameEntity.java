@@ -11,6 +11,7 @@ public abstract class GameEntity {
     protected double health;
     protected boolean active = true;
     protected long lastUpdateTime;
+    protected final long created = System.currentTimeMillis();
 
     public GameEntity(int id, Body body, double health) {
         this.id = id;

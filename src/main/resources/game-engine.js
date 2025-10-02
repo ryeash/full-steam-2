@@ -2876,47 +2876,76 @@ class GameEngine {
      */
     createMineGraphics(graphics, entityData) {
         const isArmed = entityData.isArmed || false;
-        const armingPercent = entityData.armingPercent || 0;
-        const lifespanPercent = entityData.lifespanPercent || 1;
+        const ownerTeam = entityData.ownerTeam || 0;
         
-        // Mine body - dark metallic
-        graphics.beginFill(0x2c3e50, 0.9);
-        graphics.drawCircle(0, 0, 12);
+        // Outer trigger zone - very subtle danger area
+        graphics.beginFill(0xff4444, 0.06);
+        graphics.drawCircle(0, 0, 18);
         graphics.endFill();
         
-        // Mine outline
-        graphics.lineStyle(2, 0x34495e, 1.0);
-        graphics.drawCircle(0, 0, 12);
+        // Trigger zone outline - dashed circle (more subtle)
+        graphics.lineStyle(1, 0xff6666, 0.25);
+        const dashCount = 16;
+        for (let i = 0; i < dashCount; i++) {
+            const startAngle = (i / dashCount) * Math.PI * 2;
+            const endAngle = ((i + 0.5) / dashCount) * Math.PI * 2;
+            graphics.arc(0, 0, 18, startAngle, endAngle);
+        }
         
-        // Spikes around the mine
-        for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2;
-            const x1 = Math.cos(angle) * 8;
-            const y1 = Math.sin(angle) * 8;
-            const x2 = Math.cos(angle) * 15;
-            const y2 = Math.sin(angle) * 15;
+        // Mine center body - darker, more blended
+        graphics.beginFill(0x252f3a, 0.85);
+        graphics.drawCircle(0, 0, 8);
+        graphics.endFill();
+
+        // Center body outline - much more subtle
+        graphics.lineStyle(1, 0x1e2329, 0.7);
+        graphics.drawCircle(0, 0, 8);
+ 
+        // Core highlight - metallic shine (more prominent without inner ring)
+        graphics.beginFill(0x3a4a5a, 0.4);
+        graphics.drawCircle(-1, -1, 2);
+        graphics.endFill();
+        
+        // Sensor spikes - 6 directional sensors (more subtle)
+        for (let i = 0; i < 6; i++) {
+            const angle = (i / 6) * Math.PI * 2;
+            const innerRadius = 6;
+            const outerRadius = 12;
+            const spikeWidth = 1.2;
             
-            graphics.lineStyle(2, 0x34495e, 1.0);
-            graphics.moveTo(x1, y1);
-            graphics.lineTo(x2, y2);
+            // Sensor spike body - darker and more transparent
+            graphics.lineStyle(spikeWidth, 0x2a3441, 0.8);
+            graphics.moveTo(
+                Math.cos(angle) * innerRadius,
+                Math.sin(angle) * innerRadius
+            );
+            graphics.lineTo(
+                Math.cos(angle) * outerRadius,
+                Math.sin(angle) * outerRadius
+            );
+            
+            // Sensor tip - small detection node (more subtle)
+            graphics.beginFill(0x3a4a5a, 0.7);
+            graphics.drawCircle(
+                Math.cos(angle) * outerRadius,
+                Math.sin(angle) * outerRadius,
+                1.2
+            );
+            graphics.endFill();
         }
         
         // Status indicator
-        if (!isArmed) {
-            // Arming progress - yellow ring
-            graphics.lineStyle(3, 0xf39c12, 0.8);
-            graphics.arc(0, 0, 16, 0, Math.PI * 2 * armingPercent);
-        } else {
-            // Armed - red pulsing ring
-            const pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.01);
-            graphics.lineStyle(3, 0xe74c3c, pulse);
-            graphics.drawCircle(0, 0, 16);
-        }
-        
-        // Lifespan indicator
-        if (lifespanPercent < 0.3) {
-            graphics.beginFill(0xff6b6b, 0.3);
-            graphics.drawCircle(0, 0, 20);
+        if (isArmed) {
+            // Armed - team color pulsing ring around center
+            const pulse = 0.6 + 0.4 * Math.sin(Date.now() * 0.01);
+            const teamColor = this.getTeamColor(ownerTeam);
+            graphics.lineStyle(2, teamColor, pulse);
+            graphics.drawCircle(0, 0, 10);
+            
+            // Armed indicator - small pulsing center light
+            const centerPulse = 0.3 + 0.7 * Math.sin(Date.now() * 0.015);
+            graphics.beginFill(teamColor, centerPulse);
+            graphics.drawCircle(0, 0, 1.5);
             graphics.endFill();
         }
         

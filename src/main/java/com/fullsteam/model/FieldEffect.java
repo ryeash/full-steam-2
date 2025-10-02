@@ -24,52 +24,31 @@ public class FieldEffect extends GameEntity {
     private final FieldEffectType type;
     private final double radius;
     private final double damage;
-    private final double duration;
     private final int ownerTeam;
+    private final long expires;
+    private final long armingTime;
     private final Set<Integer> affectedEntities; // Track which entities have been affected
     private final Map<Integer, Long> lastDamageTime; // Track last damage time for each player (in milliseconds)
 
-    // Proximity mine specific fields
-    private final double armingTime; // Time before mine becomes active (for PROXIMITY_MINE type)
-    private final double triggerRadius; // Radius for triggering mine (for PROXIMITY_MINE type)
-    private final double explosionDamage; // Damage for explosion (for PROXIMITY_MINE type)
-    private final double explosionRadius; // Radius for explosion (for PROXIMITY_MINE type)
-    
-    private double timeRemaining;
-    private double armingTimeRemaining;
-    private boolean active;
-    private boolean isArmed = false;
-    private boolean hasTriggered = false;
-
     public FieldEffect(int id, int ownerId, FieldEffectType type, Vector2 position, double radius, double damage, double duration, int ownerTeam) {
-        super(id, createFieldEffectBody(position, getEffectiveRadius(type, radius)), Double.POSITIVE_INFINITY); // Field effects are indestructible
+        super(id, createFieldEffectBody(position, radius), Double.POSITIVE_INFINITY); // Field effects are indestructible
         this.ownerId = ownerId;
         this.type = type;
         this.radius = radius;
         this.damage = damage;
-        this.duration = duration;
-        this.timeRemaining = duration;
+        this.expires = (long) (System.currentTimeMillis() + (duration * 1000)); // duration in seconds
         this.ownerTeam = ownerTeam;
         this.affectedEntities = new HashSet<>();
         this.lastDamageTime = new HashMap<>();
         this.active = true;
-        
+
         // Initialize proximity mine specific fields
         if (type == FieldEffectType.PROXIMITY_MINE) {
-            this.armingTime = 1.0; // 1 second arming time
-            this.armingTimeRemaining = armingTime;
-            this.triggerRadius = 40.0; // Trigger when enemy is within 40 units
-            this.explosionDamage = 60.0; // High damage
-            this.explosionRadius = 80.0; // Large explosion radius
+            this.armingTime = System.currentTimeMillis() + 1000; // 1 second arming time
         } else {
-            this.armingTime = 0.0;
-            this.armingTimeRemaining = 0.0;
-            this.triggerRadius = 0.0;
-            this.explosionDamage = 0.0;
-            this.explosionRadius = 0.0;
-            this.isArmed = true; // Non-mine effects are always "armed"
+            this.armingTime = 0;
         }
-        
+
         getBody().setUserData(this);
     }
 
@@ -82,30 +61,12 @@ public class FieldEffect extends GameEntity {
         body.getTransform().setTranslation(position.x, position.y);
         return body;
     }
-    
-    private static double getEffectiveRadius(FieldEffectType type, double radius) {
-        // For proximity mines, use a smaller body radius (visual size) but larger trigger radius
-        if (type == FieldEffectType.PROXIMITY_MINE) {
-            return 6.0; // Small mine visual size
-        }
-        return radius;
-    }
 
     public void update(double deltaTime) {
-        if (!active || hasTriggered) {
+        if (!isActive()) {
             return;
         }
-
-        // Handle arming time for proximity mines
-        if (type == FieldEffectType.PROXIMITY_MINE && !isArmed) {
-            armingTimeRemaining -= deltaTime;
-            if (armingTimeRemaining <= 0) {
-                isArmed = true;
-            }
-        }
-
-        timeRemaining -= deltaTime;
-        if (timeRemaining <= 0) {
+        if (System.currentTimeMillis() > expires) {
             active = false;
         }
     }
@@ -182,133 +143,69 @@ public class FieldEffect extends GameEntity {
     }
 
     public boolean isExpired() {
-        return !active || timeRemaining <= 0;
+        return !active || System.currentTimeMillis() > expires;
+    }
+
+    public long getDuration() {
+        return Math.max(expires - created, 0);
+    }
+
+    public long getTimeRemaining() {
+        return Math.max(expires - System.currentTimeMillis(), 0);
     }
 
     public double getProgress() {
-        return duration > 0 ? (duration - timeRemaining) / duration : 1.0;
+        long duration = expires - created;
+        long timeRemaining = expires - System.currentTimeMillis();
+        return (duration > 0 && timeRemaining > 0)
+                ? (double) (duration - timeRemaining) / duration
+                : 1.0;
     }
-    
-    // ===== Proximity Mine Specific Methods =====
-    
-    /**
-     * Check if any enemy players are within trigger range (for proximity mines)
-     */
-    public boolean checkForTrigger(java.util.List<Player> players) {
-        if (type != FieldEffectType.PROXIMITY_MINE || !isArmed || hasTriggered || !active) {
-            return false;
-        }
 
-        Vector2 minePos = getPosition();
-        
-        for (Player player : players) {
-            if (!canTriggerOnPlayer(player)) {
-                continue;
-            }
-
-            double distance = minePos.distance(player.getPosition());
-            if (distance <= triggerRadius) {
-                return true; // Mine should explode
-            }
-        }
-
-        return false;
-    }
-    
-    /**
-     * Check if a player can trigger this mine (for proximity mines)
-     */
-    private boolean canTriggerOnPlayer(Player player) {
-        if (type != FieldEffectType.PROXIMITY_MINE) {
-            return false;
-        }
-        
-        if (!player.isActive() || player.getHealth() <= 0) {
-            return false;
-        }
-
-        // Can't be triggered by the owner
-        if (player.getId() == ownerId) {
-            return false;
-        }
-
-        // In FFA mode (team 0), can be triggered by anyone except owner
-        if (ownerTeam == 0 || player.getTeam() == 0) {
-            return true;
-        }
-
-        // In team mode, can only be triggered by players on different teams
-        return ownerTeam != player.getTeam();
-    }
-    
     /**
      * Trigger the mine and create an explosion field effect (for proximity mines)
      */
-    public FieldEffect trigger() {
-        if (type != FieldEffectType.PROXIMITY_MINE || hasTriggered) {
-            return null;
-        }
+//    public FieldEffect trigger() {
+//        if (type != FieldEffectType.PROXIMITY_MINE || hasTriggered) {
+//            return null;
+//        }
+//
+//        hasTriggered = true;
+//        active = false;
+//
+//        // Create explosion field effect
+//        return new FieldEffect(
+//                getId() + 10000, // Offset ID to avoid conflicts
+//                ownerId,
+//                FieldEffectType.EXPLOSION,
+//                getPosition(),
+//                explosionRadius,
+//                explosionDamage,
+//                FieldEffectType.EXPLOSION.getDefaultDuration(),
+//                ownerTeam
+//        );
+//    }
 
-        hasTriggered = true;
-        active = false;
-
-        // Create explosion field effect
-        return new FieldEffect(
-                getId() + 10000, // Offset ID to avoid conflicts
-                ownerId,
-                FieldEffectType.EXPLOSION,
-                getPosition(),
-                explosionRadius,
-                explosionDamage,
-                FieldEffectType.EXPLOSION.getDefaultDuration(),
-                ownerTeam
-        );
-    }
-    
     /**
-     * Override damage handling - mines explode when damaged (for proximity mines)
-     */
-    @Override
-    public boolean takeDamage(double damage) {
-        if (type == FieldEffectType.PROXIMITY_MINE) {
-            if (!active || hasTriggered) {
-                return false;
-            }
-            // Any damage causes the mine to explode immediately
-            health = 0;
-            active = false;
-            return true; // Mine was destroyed/exploded
-        }
-        
-        // For other field effects, use default behavior
-        return super.takeDamage(damage);
-    }
-    
-    /**
-     * Check if the mine has been triggered (for proximity mines)
-     */
-    public boolean hasTriggered() {
-        return hasTriggered;
-    }
-    
-    /**
-     * Get the arming progress as a percentage (for proximity mines)
+     * Get the arming progress as a percentage
      */
     public double getArmingPercent() {
-        if (type != FieldEffectType.PROXIMITY_MINE) {
+        if (armingTime == 0) {
             return 1.0;
         }
-        
-        if (isArmed) {
+        if (System.currentTimeMillis() > armingTime) {
             return 1.0;
         }
-        return armingTime > 0 ? Math.max(0, (armingTime - armingTimeRemaining) / armingTime) : 1.0;
+        long armingTimeRemaining = armingTime - System.currentTimeMillis();
+        return (armingTime > 0 && armingTimeRemaining > 0)
+                ? Math.max(0, (armingTime - armingTimeRemaining) / armingTime)
+                : 1.0;
     }
-    
+
     /**
      * Check if the mine is armed (for proximity mines)
      */
     public boolean isArmed() {
-        return isArmed;
+        return System.currentTimeMillis() > armingTime;
     }
 }
