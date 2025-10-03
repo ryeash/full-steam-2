@@ -14,7 +14,6 @@ public class StatusEffects {
      * Apply a speed boost effect to a player.
      */
     public static void applySpeedBoost(Player player, double speedMultiplier, double durationSeconds, String source) {
-        System.out.println("DEBUG: StatusEffects.applySpeedBoost called for player " + player.getId() + " with multiplier " + speedMultiplier);
         player.getAttributeModifications().add(new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
             @Override
             public String renderHint() {
@@ -23,12 +22,12 @@ public class StatusEffects {
 
             @Override
             public void update(Player player, double delta) {
-                player.setMaxSpeed(Config.PLAYER_SPEED * speedMultiplier);
+                player.getBody().setLinearDamping(0);
             }
 
             @Override
             public void revert(Player player) {
-                player.setMaxSpeed(Config.PLAYER_SPEED);
+                player.getBody().setLinearDamping(Config.PLAYER_LINEAR_DAMPING);
             }
         });
     }

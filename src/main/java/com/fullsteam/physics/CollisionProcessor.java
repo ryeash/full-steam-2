@@ -5,6 +5,7 @@ import com.fullsteam.games.GameManager;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
+import com.fullsteam.model.StatusEffects;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
@@ -19,6 +20,8 @@ import org.dyn4j.world.listener.CollisionListener;
 import org.dyn4j.world.listener.ContactListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Optional;
 
 
 public class CollisionProcessor implements CollisionListener<Body, BodyFixture>, ContactListener<Body> {
@@ -172,68 +175,124 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
     }
 
     private void handlePlayerFieldEffectCollision(Player player, FieldEffect fieldEffect) {
-        if (!player.isActive() || !fieldEffect.isActive()) {
+        if (!player.isActive()
+            || !fieldEffect.isActive()
+            || !fieldEffect.canAffect(player)) {
             return;
         }
 
-        // Check if the field effect can affect this player (team rules, etc.)
-        if (!fieldEffect.canAffect(player)) {
-            return;
-        }
+        double deltaTime = gameEntities.getWorld().getTimeStep().getDeltaTime();
 
-        // Delegate to collision handler if available
-        if (!player.isActive() || !fieldEffect.isActive()) {
-            return;
-        }
+        switch (fieldEffect.getType()) {
+            // instant damage
+            case EXPLOSION, FRAGMENTATION -> {
+                double damage = fieldEffect.getDamageAtPosition(player.getPosition());
+                if (damage > 0) {
+                    // Instant damage - only apply once per effect
+                    if (!fieldEffect.getAffectedEntities().contains(player.getId())) {
+                        boolean playerKilled = player.takeDamage(damage);
+                        fieldEffect.markAsAffected(player);
 
-        // Only handle instantaneous effects here (explosions, fragmentation)
-        // Damage-over-time effects are handled in updateFieldEffects()
-        if (fieldEffect.getType().isInstantaneous()) {
-            double damage = fieldEffect.getDamageAtPosition(player.getPosition());
-            if (damage > 0) {
-                // Instant damage - only apply once per effect
-                if (!fieldEffect.getAffectedEntities().contains(player.getId())) {
-                    boolean playerKilled = player.takeDamage(damage);
-                    fieldEffect.markAsAffected(player);
-
-                    if (playerKilled) {
-                        gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                        if (playerKilled) {
+                            gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                        }
                     }
                 }
             }
-            return;
-        }
+            case FIRE -> {
+                double effectValue = fieldEffect.getDamageAtPosition(player.getPosition());
+                if (effectValue <= 0) {
+                    return;
+                }
+                if (player.takeDamage(effectValue * deltaTime)) {
+                    gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                }
+                StatusEffects.applyBurning(gameManager, player, effectValue * 0.3, 1.0, fieldEffect.getOwnerId());
 
-        if (fieldEffect.getType() == FieldEffectType.GRAVITY_WELL) {
-            Vector2 forceDirection = fieldEffect.getPosition()
-                    .subtract(player.getPosition())
-                    .getNormalized()
-                    .multiply(200000.0); // TODO: why does this have to be so high to actually affect players?
-            if (!forceDirection.isZero()) {
-                player.getBody().applyForce(forceDirection);
+            }
+            case ELECTRIC -> {
+                double effectValue = fieldEffect.getDamageAtPosition(player.getPosition());
+                if (effectValue <= 0) {
+                    return;
+                }
+                if (player.takeDamage(effectValue * deltaTime)) {
+                    gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                }
+                StatusEffects.applySlowEffect(player, 5, 0.5,
+                        Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Electric Field"));
+
+            }
+            case FREEZE -> {
+                double effectValue = fieldEffect.getDamageAtPosition(player.getPosition());
+                if (effectValue <= 0) {
+                    return;
+                }
+                if (player.takeDamage(effectValue * deltaTime)) {
+                    gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                }
+                StatusEffects.applySlowEffect(player, 5, 1.0,
+                        Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Freeze Field"));
+
+            }
+            case POISON -> {
+                double effectValue = fieldEffect.getDamageAtPosition(player.getPosition());
+                if (effectValue <= 0) {
+                    return;
+                }
+                if (player.takeDamage(effectValue * deltaTime)) {
+                    gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                }
+                StatusEffects.applyPoison(gameManager, player, effectValue * 0.2, 1.5, fieldEffect.getOwnerId());
+            }
+            case HEAL_ZONE -> {
+                double effectValue = fieldEffect.getDamageAtPosition(player.getPosition());
+                if (effectValue <= 0) {
+                    return;
+                }
+                double healAmount = effectValue * deltaTime;
+                player.setHealth(Math.min(gameManager.getGameConfig().getPlayerMaxHealth(), player.getHealth() + healAmount));
+            }
+            case SMOKE_CLOUD -> {
+                // TODO: fix vision
+            }
+            case SLOW_FIELD -> {
+                StatusEffects.applySlowEffect(player, 10, 1.0,
+                        Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Slow Field"));
+            }
+            case SHIELD_BARRIER -> {
+            }
+            case GRAVITY_WELL -> {
+                Vector2 forceDirection = fieldEffect.getPosition()
+                        .subtract(player.getPosition())
+                        .getNormalized()
+                        .multiply(200000.0); // TODO: why does this have to be so high to actually affect players?
+                if (!forceDirection.isZero()) {
+                    player.getBody().applyForce(forceDirection);
+                }
+            }
+            case SPEED_BOOST -> {
+                StatusEffects.applySpeedBoost(player, 0, 2.0, String.valueOf(fieldEffect.getOwnerId()));
+            }
+            case PROXIMITY_MINE -> {
+                gameEntities.addPostUpdateHook(() -> {
+                    fieldEffect.setActive(false);
+                    gameEntities.removeFieldEffect(fieldEffect.getId());
+                    gameEntities.getWorld().removeBody(fieldEffect.getBody());
+                    FieldEffect explosion = new FieldEffect(
+                            Config.nextId(), // Offset ID to avoid conflicts
+                            fieldEffect.getOwnerId(),
+                            FieldEffectType.EXPLOSION,
+                            fieldEffect.getPosition(),
+                            80.0,
+                            60.0,
+                            FieldEffectType.EXPLOSION.getDefaultDuration(),
+                            fieldEffect.getOwnerTeam()
+                    );
+                    gameEntities.addFieldEffect(explosion);
+                    gameEntities.getWorld().addBody(explosion.getBody());
+                });
             }
         }
-
-        if (fieldEffect.getType() == FieldEffectType.PROXIMITY_MINE && fieldEffect.canAffect(player) && fieldEffect.isArmed()) {
-            fieldEffect.setActive(false);
-            gameEntities.removeFieldEffect(fieldEffect.getId());
-            gameEntities.getWorld().removeBody(fieldEffect.getBody());
-            FieldEffect explosion = new FieldEffect(
-                    Config.nextId(), // Offset ID to avoid conflicts
-                    fieldEffect.getOwnerId(),
-                    FieldEffectType.EXPLOSION,
-                    fieldEffect.getPosition(),
-                    80.0,
-                    60.0,
-                    FieldEffectType.EXPLOSION.getDefaultDuration(),
-                    fieldEffect.getOwnerTeam()
-            );
-            // Create explosion field effect
-            gameEntities.addFieldEffect(explosion);
-            gameEntities.getWorld().addBody(explosion.getBody());
-        }
-        // Note: Damage-over-time effects (FIRE, POISON, ELECTRIC, FREEZE) are handled
-        // continuously in updateFieldEffects() method for proper timing and damage application
     }
 
     private boolean handleProjectileFieldEffectCollision(Projectile projectile, FieldEffect fieldEffect) {

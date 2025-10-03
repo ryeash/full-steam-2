@@ -8,8 +8,7 @@ public enum WeaponAttribute {
         @Override
         public double compute(int points) {
             validate(points);
-            int damagePoints = Math.min(points, 40);
-            return 10 + damagePoints;
+            return 10 + points;
         }
     },
     // Fire Rate: 1-16 shots/sec (base 1 + 0.5 per point, max 30 points)

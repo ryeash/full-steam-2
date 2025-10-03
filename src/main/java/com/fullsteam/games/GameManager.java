@@ -15,7 +15,6 @@ import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
-import com.fullsteam.model.StatusEffects;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.Beam;
@@ -54,7 +53,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
@@ -424,168 +422,16 @@ public class GameManager implements StepListener<Body> {
                 return false;
             });
 
-            updateFieldEffects(deltaTime);
             updateUtilityEntities(deltaTime);
             world.updatev(deltaTime);
 
+            gameEntities.runPostUpdateHooks();
             gameEntities.removeInactiveEntities();
 
             processHomingProjectiles();
             sendGameState();
         } catch (Throwable t) {
             log.error("Error in update loop", t);
-        }
-    }
-
-    /**
-     * Update field effects and apply continuous damage over time.
-     * This handles damage-over-time effects like POISON and FIRE.
-     */
-    private void updateFieldEffects(double deltaTime) {
-        // Clear slow field tracking for this frame
-        Set<Integer> currentFrameSlowPlayers = new HashSet<>();
-
-        for (FieldEffect fieldEffect : gameEntities.getAllFieldEffects()) {
-            if (!fieldEffect.isActive()) {
-                continue;
-            }
-            fieldEffect.update(deltaTime);
-            if (fieldEffect.getType().isInstantaneous()) {
-                continue;
-            }
-            for (Player player : gameEntities.getAllPlayers()) {
-                if (fieldEffect.canAffect(player)) {
-                    applyFieldEffectDamageOverTime(player, fieldEffect, deltaTime);
-
-                    // Track players in slow fields for this frame
-                    if (fieldEffect.getType() == FieldEffectType.SLOW_FIELD) {
-                        currentFrameSlowPlayers.add(player.getId());
-                    }
-                }
-            }
-        }
-
-        // Reset damping for players who left slow fields
-        for (Integer playerId : playersInSlowFields) {
-            if (!currentFrameSlowPlayers.contains(playerId)) {
-                Player player = gameEntities.getPlayer(playerId);
-                if (player != null && player.isActive()) {
-                    player.resetDamping();
-                    log.debug("SLOW_FIELD: Reset damping for player {} (left slow field)", playerId);
-                }
-            }
-        }
-
-        // Update tracking set for next frame
-        playersInSlowFields.clear();
-        playersInSlowFields.addAll(currentFrameSlowPlayers);
-    }
-
-    /**
-     * Apply damage over time from a field effect to a player.
-     */
-    private void applyFieldEffectDamageOverTime(Player player, FieldEffect fieldEffect, double deltaTime) {
-        double effectValue = fieldEffect.getDamageAtPosition(player.getPosition());
-        if (effectValue <= 0) {
-            return;
-        }
-
-        // Apply effects based on field effect type
-        switch (fieldEffect.getType()) {
-            // Damage effects
-            case FIRE:
-                if (player.takeDamage(effectValue * deltaTime)) {
-                    killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
-                }
-                StatusEffects.applyBurning(this, player, effectValue * 0.3, 1.0, fieldEffect.getOwnerId());
-                break;
-            case POISON:
-                if (player.takeDamage(effectValue * deltaTime)) {
-                    killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
-                }
-                StatusEffects.applyPoison(this, player, effectValue * 0.2, 1.5, fieldEffect.getOwnerId());
-                break;
-            case ELECTRIC:
-                if (player.takeDamage(effectValue * deltaTime)) {
-                    killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
-                }
-                StatusEffects.applySlowEffect(player, 5, 0.5,
-                        Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Electric Field"));
-                break;
-            case FREEZE:
-                if (player.takeDamage(effectValue * deltaTime)) {
-                    killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
-                }
-                StatusEffects.applySlowEffect(player, 10, 1.0,
-                        Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Freeze Field"));
-                break;
-
-            // Utility effects (positive)
-            case HEAL_ZONE:
-                // Only heal teammates (or self in FFA)
-                double healAmount = effectValue * deltaTime;
-                player.setHealth(Math.min(gameConfig.getPlayerMaxHealth(), player.getHealth() + healAmount));
-                break;
-            case SPEED_BOOST:
-                // Only boost teammates (or self in FFA)
-                StatusEffects.applySpeedBoost(player, 3.0, 3.0,
-                        Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Speed Boost"));
-                log.debug("SPEED_BOOST: Applied speed boost to player {} (owner: {}, ownerTeam: {}, playerTeam: {})",
-                        player.getId(), fieldEffect.getOwnerId(), fieldEffect.getOwnerTeam(), player.getTeam());
-                break;
-            case SLOW_FIELD:
-                // Only slow enemies
-                if (fieldEffect.canAffect(player)) {
-                    applySlowFieldEffect(player, fieldEffect, deltaTime);
-                }
-                break;
-            case SMOKE_CLOUD:
-                // TODO: maybe a candidate for deletion
-                // Reduce visibility (handled by client)
-                break;
-            case GRAVITY_WELL:
-            case SHIELD_BARRIER:
-            case EXPLOSION:
-            case FRAGMENTATION:
-            case PROXIMITY_MINE:
-                break;
-        }
-    }
-
-    /**
-     * Apply slow field effect using physics-based resistance forces and increased damping
-     */
-    private void applySlowFieldEffect(Player player, FieldEffect fieldEffect, double deltaTime) {
-        Vector2 playerPos = player.getPosition();
-        double distance = playerPos.distance(fieldEffect.getPosition());
-        double maxDistance = fieldEffect.getRadius();
-
-        // Calculate effect strength based on distance (stronger when closer to center)
-        double distanceRatio = Math.max(0.0, (maxDistance - distance) / maxDistance);
-
-        // Track that this player is in a slow field
-        playersInSlowFields.add(player.getId());
-
-        // Apply increased damping for "thick fluid" effect
-        double dampingMultiplier = 1.0 + (2.0 * distanceRatio); // 1.0x to 3.0x damping
-        player.applyTemporaryDamping(dampingMultiplier);
-
-        // Apply resistance force opposite to movement direction
-        Vector2 playerVelocity = player.getVelocity();
-        double currentSpeed = playerVelocity.getMagnitude();
-
-        if (currentSpeed > 1.0) { // Only apply resistance if moving significantly
-            double resistanceStrength = 400.0 * distanceRatio; // Base resistance force
-
-            Vector2 resistanceDirection = playerVelocity.copy();
-            resistanceDirection.normalize();
-            resistanceDirection = resistanceDirection.multiply(-1.0); // Opposite direction
-
-            Vector2 resistanceForce = resistanceDirection.multiply(resistanceStrength);
-            player.applyForce(resistanceForce);
-
-            log.debug("SLOW_FIELD: Applied resistance {} and damping {}x to player {} (speed: {}, ratio: {})",
-                    resistanceStrength, dampingMultiplier, player.getId(), currentSpeed, distanceRatio);
         }
     }
 

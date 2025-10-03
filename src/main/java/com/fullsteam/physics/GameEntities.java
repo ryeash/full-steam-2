@@ -10,9 +10,12 @@ import org.dyn4j.world.World;
 
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
@@ -39,6 +42,8 @@ public class GameEntities {
     private final Map<Integer, NetProjectile> netProjectiles = new ConcurrentSkipListMap<>();
     private final Map<Integer, TeleportPad> teleportPads = new ConcurrentSkipListMap<>();
     private final Map<Integer, Beam> beams = new ConcurrentSkipListMap<>();
+
+    private final Deque<Runnable> postWorldUpdateHooks = new ConcurrentLinkedDeque<>();
 
     public GameEntities(GameConfig config, World<Body> world) {
         this.config = config;
@@ -297,6 +302,17 @@ public class GameEntities {
 
     public Collection<Beam> getAllBeams() {
         return beams.values();
+    }
+
+    public void addPostUpdateHook(Runnable runnable) {
+        postWorldUpdateHooks.offer(Objects.requireNonNull(runnable));
+    }
+
+    public void runPostUpdateHooks() {
+        Runnable hook;
+        while ((hook = postWorldUpdateHooks.poll()) != null) {
+            hook.run();
+        }
     }
 
 }

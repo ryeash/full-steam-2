@@ -154,7 +154,7 @@ public class BulletEffectProcessor {
         gameEntities.addFieldEffect(fragmentation);
 
         // Create multiple smaller projectiles
-        int fragmentCount = 5 + (int) (projectile.getDamage() / 20); // More fragments for higher damage
+        int fragmentCount = 3 + (int) (projectile.getDamage() / 15); // More fragments for higher damage
         double fragmentDamage = projectile.getDamage() * 0.4; // Each fragment does less damage
         double fragmentSpeed = projectile.getBody().getLinearVelocity().getMagnitude() * 0.6;
         double randomStartAngle = ThreadLocalRandom.current().nextDouble(0, 2 * Math.PI);
@@ -256,21 +256,14 @@ public class BulletEffectProcessor {
     }
 
     private Player findNearestEnemy(Projectile projectile) {
-        Vector2 projectilePos = new Vector2(projectile.getBody().getTransform().getTranslationX(),
-                projectile.getBody().getTransform().getTranslationY());
-
         Player nearest = null;
         double nearestDistance = Double.MAX_VALUE;
 
         for (Player player : gameEntities.getAllPlayers()) {
-            if (!player.isActive()) {
-                continue;
-            }
-            if (!projectile.canDamage(player)) {
+            if (!player.isActive() || !projectile.canDamage(player)) {
                 continue; // Skip teammates and self
             }
-
-            double distance = projectilePos.distance(player.getPosition());
+            double distance = projectile.getPosition().distance(player.getPosition());
             if (distance < nearestDistance) {
                 nearestDistance = distance;
                 nearest = player;
