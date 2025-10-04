@@ -341,7 +341,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
 
         // Check if projectile can damage the turret (team rules)
         if (!canProjectileDamageTurret(projectile, turret)) {
-            return true; // Let projectile pass through
+            return false; // Let projectile pass through
         }
 
         // Get hit position for effects

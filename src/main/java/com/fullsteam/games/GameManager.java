@@ -30,7 +30,6 @@ import com.fullsteam.physics.TeleportPad;
 import com.fullsteam.physics.Turret;
 import io.micronaut.websocket.WebSocketSession;
 import lombok.Getter;
-import org.apache.commons.lang3.StringUtils;
 import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
@@ -50,10 +49,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -84,14 +81,8 @@ public class GameManager implements StepListener<Body> {
     @Getter
     protected long gameStartTime;
     protected boolean gameRunning = false;
-
-    // Track players affected by slow fields for damping reset
-    private final Set<Integer> playersInSlowFields = new HashSet<>();
-
-    // AI management settings - initialized from gameConfig
     private final long aiCheckIntervalMs;
     private long lastAICheckTime = 0;
-
     private final World<Body> world;
     private final ScheduledFuture<?> shutdownHook;
     private double lastUpdateTime = System.nanoTime() / 1e9;
@@ -924,37 +915,6 @@ public class GameManager implements StepListener<Body> {
     }
 
     /**
-     * Calculate beam reflection off obstacles (for future enhancement)
-     * Returns the reflected beam direction and remaining distance
-     */
-    public BeamReflection calculateBeamReflection(Vector2 hitPoint, Vector2 incomingDirection, Vector2 surfaceNormal, double remainingDistance) {
-        // Calculate reflection using: R = I - 2(I·N)N
-        Vector2 reflectedDirection = incomingDirection.copy();
-        double dotProduct = incomingDirection.dot(surfaceNormal);
-        Vector2 reflection = surfaceNormal.copy();
-        reflection.multiply(2.0 * dotProduct);
-        reflectedDirection.subtract(reflection);
-        reflectedDirection.normalize();
-
-        return new BeamReflection(hitPoint, reflectedDirection, remainingDistance);
-    }
-
-    /**
-     * Data class for beam reflection information
-     */
-    public static class BeamReflection {
-        public final Vector2 reflectionPoint;
-        public final Vector2 reflectedDirection;
-        public final double remainingDistance;
-
-        public BeamReflection(Vector2 reflectionPoint, Vector2 reflectedDirection, double remainingDistance) {
-            this.reflectionPoint = reflectionPoint.copy();
-            this.reflectedDirection = reflectedDirection.copy();
-            this.remainingDistance = remainingDistance;
-        }
-    }
-
-    /**
      * Find the intersection point between a beam and obstacles using dyn4j ray casting
      * This is much more accurate and efficient than manual line-segment collision detection
      */
@@ -989,43 +949,17 @@ public class GameManager implements StepListener<Body> {
         }
     }
 
-
     protected void processPlayerConfigChange(PlayerSession playerSession, PlayerConfigRequest request) {
         Player player = gameEntities.getPlayer(playerSession.getPlayerId());
         if (player != null) {
-            // Handle player name update
-            if (StringUtils.isNotEmpty(request.getPlayerName())) {
-                String newName = StringUtils.abbreviate(request.getPlayerName(), 26);
-                player.setPlayerName(newName);
-                playerSession.setPlayerName(newName);
-                log.info("Updated player {} name to: {}", playerSession.getPlayerId(), newName);
-            }
-
-            // Handle weapon configuration
-            WeaponConfig primaryConfig = null;
-            UtilityWeapon utilityConfig = null;
-
-            // Determine primary weapon config
+            WeaponConfig primaryConfig = WeaponConfig.ASSAULT_RIFLE_PRESET;
+            UtilityWeapon utilityConfig = UtilityWeapon.HEAL_ZONE;
             if (request.getWeaponConfig() != null) {
                 primaryConfig = request.getWeaponConfig();
-                log.info("Applying custom weapon config for player {}: {}", player.getPlayerName(), primaryConfig.type);
-            } else if (request.getPrimaryWeapon() != null) {
-                primaryConfig = request.getPrimaryWeapon();
-                log.info("Applying legacy primary weapon config for player {}", player.getPlayerName());
             }
-
-            // Determine utility weapon config
             if (request.getUtilityWeapon() != null) {
-                try {
-                    utilityConfig = UtilityWeapon.valueOf(request.getUtilityWeapon());
-                    log.info("Applying utility weapon for player {}: {}", player.getPlayerName(), utilityConfig.getDisplayName());
-                } catch (IllegalArgumentException e) {
-                    log.warn("Invalid utility weapon '{}' for player {}, using default", request.getUtilityWeapon(), player.getPlayerName());
-                    utilityConfig = UtilityWeapon.HEAL_ZONE;
-                }
+                utilityConfig = UtilityWeapon.valueOf(request.getUtilityWeapon());
             }
-
-            // Apply configurations
             player.applyWeaponConfig(primaryConfig, utilityConfig);
         }
     }
@@ -1563,8 +1497,6 @@ public class GameManager implements StepListener<Body> {
 
     @Override
     public void end(TimeStep step, PhysicsWorld<Body, ?> world) {
-        double deltaTime = step.getDeltaTime();
-        // Apply homing behavior to projectiles
         processHomingProjectiles();
     }
 }

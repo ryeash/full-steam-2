@@ -24,8 +24,8 @@ import java.util.concurrent.ThreadLocalRandom;
 @Setter
 public class Player extends GameEntity {
     private String playerName;
-    private int team = 0; // 0 = no team (FFA), 1+ = team number
-    private Weapon primaryWeapon;
+    private int team; // 0 = no team (FFA), 1+ = team number
+    private Weapon weapon;
     private UtilityWeapon utilityWeapon;
     private boolean isReloading = false;
     private double reloadTimeRemaining = 0;
@@ -46,7 +46,7 @@ public class Player extends GameEntity {
         this.respawnPoint = new Vector2(x, y);
 
         // Default weapons
-        this.primaryWeapon = WeaponConfig.ASSAULT_RIFLE_PRESET.buildWeapon();
+        this.weapon = WeaponConfig.ASSAULT_RIFLE_PRESET.buildWeapon();
         this.utilityWeapon = UtilityWeapon.HEAL_ZONE; // Default utility weapon
     }
 
@@ -155,15 +155,8 @@ public class Player extends GameEntity {
 
     public void applyWeaponConfig(WeaponConfig primary, UtilityWeapon utility) {
         if (primary != null) {
-            try {
-                primaryWeapon = primary.buildWeapon();
-                // TODO: too naive
-                primaryWeapon.reload();
-            } catch (Exception e) {
-                e.printStackTrace();
-                // Fallback to legacy method if new method fails
-                primaryWeapon = WeaponConfig.ASSAULT_RIFLE_PRESET.buildWeapon();
-            }
+            weapon = primary.buildWeapon();
+            weapon.reload();
         }
         if (utility != null) {
             this.utilityWeapon = utility;
@@ -171,7 +164,7 @@ public class Player extends GameEntity {
     }
 
     public boolean canShoot() {
-        Weapon weapon = primaryWeapon; // Always use primary weapon for shooting
+        Weapon weapon = this.weapon;
         long now = System.currentTimeMillis();
         double fireInterval = 1000.0 / weapon.getFireRate();
         // Check if we have enough ammo for at least one bullet (partial bursts are allowed)
@@ -193,7 +186,7 @@ public class Player extends GameEntity {
     }
 
     public List<Projectile> shoot() {
-        Weapon weapon = primaryWeapon; // Always use primary weapon
+        Weapon weapon = this.weapon; // Always use primary weapon
         if (!canShoot()) {
             if (!isReloading && weapon.getCurrentAmmo() <= 0) {
                 startReload();
@@ -248,7 +241,7 @@ public class Player extends GameEntity {
      * @return Beam object if weapon can fire beams and conditions are met, null otherwise
      */
     public Beam shootBeam() {
-        Weapon weapon = primaryWeapon; // Always use primary weapon
+        Weapon weapon = this.weapon; // Always use primary weapon
         if (!canShoot() || !weapon.getOrdinance().isBeamType()) {
             if (!isReloading && weapon.getCurrentAmmo() <= 0) {
                 startReload();
@@ -324,7 +317,7 @@ public class Player extends GameEntity {
     }
 
     private void startReload() {
-        Weapon weapon = primaryWeapon; // Always reload primary weapon
+        Weapon weapon = this.weapon; // Always reload primary weapon
         if (weapon.needsReload()) {
             isReloading = true;
             reloadTimeRemaining = weapon.getReloadTime();
@@ -354,7 +347,7 @@ public class Player extends GameEntity {
 
     public Weapon getCurrentWeapon() {
         // Always return primary weapon (utility weapons are handled separately)
-        Weapon w = primaryWeapon;
+        Weapon w = weapon;
         for (AttributeModification attributeModification : attributeModifications) {
             w = attributeModification.update(w);
         }
@@ -399,7 +392,7 @@ public class Player extends GameEntity {
         health = 100;
         setPosition(respawnPoint.x, respawnPoint.y);
         setVelocity(0, 0);
-        primaryWeapon.reload();
+        weapon.reload();
         isReloading = false;
     }
 

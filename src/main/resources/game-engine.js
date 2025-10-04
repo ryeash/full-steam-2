@@ -4668,10 +4668,9 @@ class GameEngine {
         }
         
         // Use decoded config or fall back to legacy URL params
-        let playerName, weaponConfig, utilityWeapon;
+        let weaponConfig, utilityWeapon;
         
         if (playerConfig && playerConfig.weaponConfig) {
-            playerName = playerConfig.playerName || "Player";
             weaponConfig = playerConfig.weaponConfig;
             utilityWeapon = playerConfig.utilityWeapon;
         } else {
@@ -4680,7 +4679,6 @@ class GameEngine {
 
         const message = {
             type: 'configChange',
-            playerName: playerName,
             weaponConfig: weaponConfig,
             utilityWeapon: utilityWeapon
         };

@@ -1,7 +1,7 @@
 package com.fullsteam.ai;
 
-import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.model.UtilityWeapon;
+import com.fullsteam.model.WeaponConfig;
 
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -11,20 +11,20 @@ import java.util.concurrent.ThreadLocalRandom;
  * Provides various selection strategies to ensure AI players have diverse and interesting weapons.
  */
 public class AIWeaponSelector {
-    
+
     // All available weapon presets grouped by category for strategic selection
     private static final List<WeaponConfig> BASIC_WEAPONS = List.of(
             WeaponConfig.ASSAULT_RIFLE_PRESET,
             WeaponConfig.HAND_CANNON_PRESET,
             WeaponConfig.PLASMA_RIFLE_PRESET
     );
-    
+
     private static final List<WeaponConfig> ORDINANCE_WEAPONS = List.of(
             WeaponConfig.SIEGE_CANNON_PRESET,
             WeaponConfig.PRECISION_DART_GUN_PRESET,
             WeaponConfig.FLAME_PROJECTOR_PRESET
     );
-    
+
     private static final List<WeaponConfig> EFFECT_WEAPONS = List.of(
             WeaponConfig.BOUNCY_SMG_PRESET,
             WeaponConfig.PIERCING_RIFLE_PRESET,
@@ -34,26 +34,26 @@ public class AIWeaponSelector {
             WeaponConfig.TOXIC_SPRAYER_PRESET,
             WeaponConfig.ICE_CANNON_PRESET
     );
-    
+
     private static final List<WeaponConfig> EXPLOSIVE_WEAPONS = List.of(
             WeaponConfig.EXPLOSIVE_SNIPER_PRESET,
             WeaponConfig.ROCKET_LAUNCHER_PRESET,
             WeaponConfig.GRENADE_LAUNCHER_PRESET,
             WeaponConfig.CLUSTER_MORTAR_PRESET
     );
-    
+
     // Combined list of all weapon presets for completely random selection
     private static final List<WeaponConfig> ALL_WEAPONS = List.of(
             // Basic weapons
             WeaponConfig.ASSAULT_RIFLE_PRESET,
             WeaponConfig.HAND_CANNON_PRESET,
             WeaponConfig.PLASMA_RIFLE_PRESET,
-            
+
             // Ordinance weapons
             WeaponConfig.SIEGE_CANNON_PRESET,
             WeaponConfig.PRECISION_DART_GUN_PRESET,
             WeaponConfig.FLAME_PROJECTOR_PRESET,
-            
+
             // Effect weapons
             WeaponConfig.BOUNCY_SMG_PRESET,
             WeaponConfig.PIERCING_RIFLE_PRESET,
@@ -62,31 +62,33 @@ public class AIWeaponSelector {
             WeaponConfig.ARC_PISTOL_PRESET,
             WeaponConfig.TOXIC_SPRAYER_PRESET,
             WeaponConfig.ICE_CANNON_PRESET,
-            
+
             // Explosive weapons
             WeaponConfig.EXPLOSIVE_SNIPER_PRESET,
             WeaponConfig.ROCKET_LAUNCHER_PRESET,
             WeaponConfig.GRENADE_LAUNCHER_PRESET,
             WeaponConfig.CLUSTER_MORTAR_PRESET
     );
-    
+
     /**
      * Select a completely random weapon preset from all available presets.
+     *
      * @return Random weapon preset
      */
     public static WeaponConfig selectRandomWeapon() {
         return ALL_WEAPONS.get(ThreadLocalRandom.current().nextInt(ALL_WEAPONS.size()));
     }
-    
+
     /**
      * Select a random weapon preset based on AI personality.
      * Different personalities prefer different weapon categories.
+     *
      * @param personality The AI personality to select for
      * @return Weapon preset suitable for the personality
      */
     public static WeaponConfig selectWeaponForPersonality(AIPersonality personality) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        
+
         switch (personality.getPersonalityType()) {
             case "Berserker":
                 // Berserkers prefer explosive and high-damage weapons
@@ -95,7 +97,7 @@ public class AIWeaponSelector {
                 } else {
                     return EFFECT_WEAPONS.get(random.nextInt(EFFECT_WEAPONS.size()));
                 }
-                
+
             case "Sniper":
                 // Snipers prefer long-range precision weapons
                 List<WeaponConfig> sniperWeapons = List.of(
@@ -105,7 +107,7 @@ public class AIWeaponSelector {
                         WeaponConfig.SIEGE_CANNON_PRESET
                 );
                 return sniperWeapons.get(random.nextInt(sniperWeapons.size()));
-                
+
             case "Rusher":
                 // Rushers prefer close-range, high-mobility weapons
                 List<WeaponConfig> rusherWeapons = List.of(
@@ -116,7 +118,7 @@ public class AIWeaponSelector {
                         WeaponConfig.ASSAULT_RIFLE_PRESET
                 );
                 return rusherWeapons.get(random.nextInt(rusherWeapons.size()));
-                
+
             case "Strategist":
                 // Strategists prefer tactical weapons and special ordinance
                 if (random.nextDouble() < 0.5) {
@@ -131,7 +133,7 @@ public class AIWeaponSelector {
                     );
                     return tacticalWeapons.get(random.nextInt(tacticalWeapons.size()));
                 }
-                
+
             case "Support":
                 // Support AIs prefer utility weapons and area effects
                 if (random.nextDouble() < 0.6) {
@@ -146,7 +148,7 @@ public class AIWeaponSelector {
                 } else {
                     return BASIC_WEAPONS.get(random.nextInt(BASIC_WEAPONS.size()));
                 }
-                
+
             case "Guardian":
                 // Guardians prefer defensive weapons and area denial
                 if (random.nextDouble() < 0.5) {
@@ -161,44 +163,46 @@ public class AIWeaponSelector {
                     );
                     return guardianWeapons.get(random.nextInt(guardianWeapons.size()));
                 }
-                
+
             case "Soldier":
             default:
                 // Soldiers and fallback get balanced weapon selection
                 return selectRandomWeapon();
         }
     }
-    
+
     /**
      * Select two different weapon presets for primary and secondary weapons.
      * Ensures AI players have diverse loadouts.
+     *
      * @return Array with [primary, secondary] weapon configs
      */
     public static WeaponConfig[] selectWeaponLoadout() {
         // Select primary weapon from any category
         WeaponConfig primary = selectRandomWeapon();
-        
+
         // Select secondary weapon from a different category if possible
         WeaponConfig secondary;
         int maxAttempts = 10;
         int attempts = 0;
-        
+
         do {
             secondary = selectRandomWeapon();
             attempts++;
         } while (primary.equals(secondary) && attempts < maxAttempts);
-        
+
         return new WeaponConfig[]{primary, secondary};
     }
-    
+
     /**
      * Select weapons for a personality with diverse loadout.
+     *
      * @param personality The AI personality
      * @return Array with [primary, secondary] weapon configs
      */
     public static WeaponConfig[] selectWeaponLoadoutForPersonality(AIPersonality personality) {
         WeaponConfig primary = selectWeaponForPersonality(personality);
-        
+
         // For secondary, either pick complementary weapon or random
         WeaponConfig secondary;
         if (ThreadLocalRandom.current().nextDouble() < 0.3) {
@@ -212,18 +216,19 @@ public class AIWeaponSelector {
                 secondary = selectRandomWeapon();
             }
         }
-        
+
         return new WeaponConfig[]{primary, secondary};
     }
-    
+
     /**
      * Select a weapon that complements the given primary weapon.
+     *
      * @param primary The primary weapon
      * @return A complementary secondary weapon
      */
     private static WeaponConfig selectComplementaryWeapon(WeaponConfig primary) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        
+
         // If primary is long-range, pick short-range secondary
         if (isLongRangeWeapon(primary)) {
             List<WeaponConfig> shortRange = List.of(
@@ -235,7 +240,7 @@ public class AIWeaponSelector {
             );
             return shortRange.get(random.nextInt(shortRange.size()));
         }
-        
+
         // If primary is short-range, pick long-range secondary
         if (isShortRangeWeapon(primary)) {
             List<WeaponConfig> longRange = List.of(
@@ -246,43 +251,45 @@ public class AIWeaponSelector {
             );
             return longRange.get(random.nextInt(longRange.size()));
         }
-        
+
         // For medium-range weapons, pick anything different
         return selectRandomWeapon();
     }
-    
+
     private static boolean isLongRangeWeapon(WeaponConfig weapon) {
-        return weapon.range >= 15 || weapon == WeaponConfig.PIERCING_RIFLE_PRESET 
-                || weapon == WeaponConfig.EXPLOSIVE_SNIPER_PRESET 
-                || weapon == WeaponConfig.SIEGE_CANNON_PRESET;
+        return weapon.range >= 15 || weapon == WeaponConfig.PIERCING_RIFLE_PRESET
+               || weapon == WeaponConfig.EXPLOSIVE_SNIPER_PRESET
+               || weapon == WeaponConfig.SIEGE_CANNON_PRESET;
     }
-    
+
     private static boolean isShortRangeWeapon(WeaponConfig weapon) {
-        return weapon.range <= 6 || weapon == WeaponConfig.INCENDIARY_SHOTGUN_PRESET 
-                || weapon == WeaponConfig.FLAME_PROJECTOR_PRESET 
-                || weapon == WeaponConfig.TOXIC_SPRAYER_PRESET;
+        return weapon.range <= 6 || weapon == WeaponConfig.INCENDIARY_SHOTGUN_PRESET
+               || weapon == WeaponConfig.FLAME_PROJECTOR_PRESET
+               || weapon == WeaponConfig.TOXIC_SPRAYER_PRESET;
     }
-    
+
     /**
      * Select a random utility weapon for AI players.
+     *
      * @return A randomly selected utility weapon
      */
     public static UtilityWeapon selectRandomUtilityWeapon() {
         UtilityWeapon[] allUtilities = UtilityWeapon.values();
         return allUtilities[ThreadLocalRandom.current().nextInt(allUtilities.length)];
     }
-    
+
     /**
      * Select a utility weapon based on AI personality.
      * Different personalities prefer different utility categories.
+     *
      * @param personality The AI personality to select for
      * @return Utility weapon suitable for the personality
      */
     public static UtilityWeapon selectUtilityWeaponForPersonality(AIPersonality personality) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        
-        switch (personality.getPersonalityType()) {
-            case "Berserker":
+
+        return switch (personality.getPersonalityType()) {
+            case "Berserker" -> {
                 // Berserkers prefer offensive and crowd control utilities
                 List<UtilityWeapon> berserkerUtilities = List.of(
                         UtilityWeapon.GRAVITY_WELL,
@@ -291,9 +298,9 @@ public class AIWeaponSelector {
                         UtilityWeapon.MINE_LAYER,
                         UtilityWeapon.DISRUPTOR_BEAM
                 );
-                return berserkerUtilities.get(random.nextInt(berserkerUtilities.size()));
-                
-            case "Sniper":
+                yield berserkerUtilities.get(random.nextInt(berserkerUtilities.size()));
+            }
+            case "Sniper" -> {
                 // Snipers prefer tactical and defensive utilities
                 List<UtilityWeapon> sniperUtilities = List.of(
                         UtilityWeapon.TURRET_CONSTRUCTOR,
@@ -302,9 +309,9 @@ public class AIWeaponSelector {
                         UtilityWeapon.SMOKE_GRENADE,
                         UtilityWeapon.TELEPORTER
                 );
-                return sniperUtilities.get(random.nextInt(sniperUtilities.size()));
-                
-            case "Rusher":
+                yield sniperUtilities.get(random.nextInt(sniperUtilities.size()));
+            }
+            case "Rusher" -> {
                 // Rushers prefer mobility and quick deployment utilities
                 List<UtilityWeapon> rusherUtilities = List.of(
                         UtilityWeapon.SPEED_BOOST_PAD,
@@ -313,9 +320,9 @@ public class AIWeaponSelector {
                         UtilityWeapon.TELEPORTER,
                         UtilityWeapon.DISRUPTOR_BEAM
                 );
-                return rusherUtilities.get(random.nextInt(rusherUtilities.size()));
-                
-            case "Strategist":
+                yield rusherUtilities.get(random.nextInt(rusherUtilities.size()));
+            }
+            case "Strategist" -> {
                 // Strategists prefer area control and support utilities
                 List<UtilityWeapon> strategistUtilities = List.of(
                         UtilityWeapon.HEAL_ZONE,
@@ -325,9 +332,9 @@ public class AIWeaponSelector {
                         UtilityWeapon.SLOW_FIELD,
                         UtilityWeapon.TELEPORTER
                 );
-                return strategistUtilities.get(random.nextInt(strategistUtilities.size()));
-                
-            case "Guardian":
+                yield strategistUtilities.get(random.nextInt(strategistUtilities.size()));
+            }
+            case "Guardian" -> {
                 // Guardians prefer defensive and support utilities
                 List<UtilityWeapon> guardianUtilities = List.of(
                         UtilityWeapon.HEAL_ZONE,
@@ -337,49 +344,9 @@ public class AIWeaponSelector {
                         UtilityWeapon.MINE_LAYER,
                         UtilityWeapon.SPEED_BOOST_PAD
                 );
-                return guardianUtilities.get(random.nextInt(guardianUtilities.size()));
-                
-            case "Soldier":
-            default:
-                // Soldiers and fallback get balanced utility selection
-                return selectRandomUtilityWeapon();
-        }
-    }
-    
-    /**
-     * Select a utility weapon that complements the given primary weapon.
-     * @param primaryWeapon The primary weapon
-     * @return A complementary utility weapon
-     */
-    public static UtilityWeapon selectComplementaryUtilityWeapon(WeaponConfig primaryWeapon) {
-        ThreadLocalRandom random = ThreadLocalRandom.current();
-        
-        // Long-range weapons pair well with defensive utilities
-        if (isLongRangeWeapon(primaryWeapon)) {
-            List<UtilityWeapon> longRangeUtilities = List.of(
-                    UtilityWeapon.TURRET_CONSTRUCTOR,
-                    UtilityWeapon.WALL_BUILDER,
-                    UtilityWeapon.MINE_LAYER,
-                    UtilityWeapon.SHIELD_GENERATOR,
-                    UtilityWeapon.HEAL_ZONE
-            );
-            return longRangeUtilities.get(random.nextInt(longRangeUtilities.size()));
-        }
-        
-        // Short-range weapons pair well with mobility and crowd control
-        if (isShortRangeWeapon(primaryWeapon)) {
-            List<UtilityWeapon> shortRangeUtilities = List.of(
-                    UtilityWeapon.SPEED_BOOST_PAD,
-                    UtilityWeapon.SMOKE_GRENADE,
-                    UtilityWeapon.NET_LAUNCHER,
-                    UtilityWeapon.GRAVITY_WELL,
-                    UtilityWeapon.SLOW_FIELD,
-                    UtilityWeapon.TELEPORTER
-            );
-            return shortRangeUtilities.get(random.nextInt(shortRangeUtilities.size()));
-        }
-        
-        // Medium-range weapons get balanced utility selection
-        return selectRandomUtilityWeapon();
+                yield guardianUtilities.get(random.nextInt(guardianUtilities.size()));
+            }
+            default -> selectRandomUtilityWeapon();
+        };
     }
 }
