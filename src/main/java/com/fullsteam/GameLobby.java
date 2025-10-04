@@ -36,10 +36,6 @@ public class GameLobby {
         Config.EXECUTOR.scheduleAtFixedRate(this::cleanupAIOnlyGames, CLEANUP_CHECK_INTERVAL_MS, CLEANUP_CHECK_INTERVAL_MS, TimeUnit.MILLISECONDS);
     }
 
-    public List<String> getGameTypes() {
-        return Arrays.asList("Battle Royale", "Team Deathmatch", "Capture Points");
-    }
-
     public List<GameInfo> getActiveGames() {
         return activeGames.values().stream()
                 .map(GameManager::getGameInfo)
@@ -50,20 +46,27 @@ public class GameLobby {
         return globalPlayerCount.get();
     }
 
-    public GameManager createGame(String gameType) {
-        if (activeGames.size() >= Config.MAX_GLOBAL_GAMES) {
-            throw new IllegalStateException("Maximum number of games reached");
-        }
-        String gameId = "game_" + gameIdCounter.getAndIncrement();
-        GameManager game = new GameManager(gameId, "Battle Royale", GameConfig.builder()
+    public GameManager createGame() {
+        // Use default config
+        GameConfig defaultConfig = GameConfig.builder()
                 .maxPlayers(18)
                 .teamCount(4)
                 .worldHeight(2000)
                 .worldWidth(3000)
-                .build(),
-                objectMapper);
+                .build();
+        return createGameWithConfig(defaultConfig);
+    }
+
+    public GameManager createGameWithConfig(GameConfig gameConfig) {
+        if (activeGames.size() >= Config.MAX_GLOBAL_GAMES) {
+            throw new IllegalStateException("Maximum number of games reached");
+        }
+        String gameId = "game_" + gameIdCounter.getAndIncrement();
+        GameManager game = new GameManager(gameId, gameConfig, objectMapper);
         activeGames.put(gameId, game);
-        log.info("Created new game: {} ({})", gameId, gameType);
+        log.info("Created new game: {} with config: maxPlayers={}, teamCount={}, world={}x{}", 
+                gameId, gameConfig.getMaxPlayers(), gameConfig.getTeamCount(), 
+                gameConfig.getWorldWidth(), gameConfig.getWorldHeight());
         return game;
     }
 

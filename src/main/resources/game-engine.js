@@ -801,10 +801,9 @@ class GameEngine {
     async connectToServer() {
         const params = new URLSearchParams(window.location.search);
         const gameId = params.get('gameId') || 'default';
-        const gameType = params.get('gameType') || 'Battle Royale';
         
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/game/${gameId}/${gameType}`;
+        const wsUrl = `${protocol}//${window.location.host}/game/${gameId}`;
         
         return new Promise((resolve, reject) => {
             this.websocket = new WebSocket(wsUrl);

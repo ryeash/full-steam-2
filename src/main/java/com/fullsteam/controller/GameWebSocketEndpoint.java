@@ -34,9 +34,9 @@ public class GameWebSocketEndpoint {
     }
 
     @OnOpen
-    public void onOpen(WebSocketSession session, String gameId, String gameType) {
-        log.info("WebSocket connection opened for gameId: {}, gameType: {}", gameId, gameType);
-        if (!connectionService.connectPlayer(session, gameId, gameType)) {
+    public void onOpen(WebSocketSession session, String gameId) {
+        log.info("WebSocket connection opened for gameId: {}", gameId);
+        if (!connectionService.connectPlayer(session, gameId)) {
             log.warn("Failed to connect player to game {}, closing session", gameId);
             session.close();
         } else {

@@ -2,6 +2,8 @@ package com.fullsteam.controller;
 
 import com.fullsteam.Config;
 import com.fullsteam.GameLobby;
+import com.fullsteam.games.GameConfig;
+import com.fullsteam.games.GameManager;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.LobbyInfo;
 import com.fullsteam.model.Ordinance;
@@ -13,10 +15,13 @@ import io.micronaut.core.io.ResourceResolver;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.MediaType;
+import io.micronaut.http.annotation.Body;
 import io.micronaut.http.annotation.Consumes;
 import io.micronaut.http.annotation.Controller;
 import io.micronaut.http.annotation.Get;
+import io.micronaut.http.annotation.Post;
 import io.micronaut.http.annotation.Produces;
+import io.micronaut.http.exceptions.HttpStatusException;
 import io.micronaut.http.server.types.files.StreamedFile;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -55,9 +60,35 @@ public class GameController {
         return new LobbyInfo(
                 gameLobby.getGlobalPlayerCount(),
                 Config.MAX_GLOBAL_PLAYERS,
-                gameLobby.getGameTypes(),
                 gameLobby.getActiveGames()
         );
+    }
+
+    @Get("/api/game-config/default")
+    @Produces(MediaType.APPLICATION_JSON)
+    public GameConfig getDefaultGameConfig() {
+        return GameConfig.builder().build(); // Returns default values from @Builder.Default
+    }
+
+    @Post("/api/games")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Map<String, String> createGame(@Body GameConfig gameConfig) {
+        try {
+            GameManager game;
+            if (gameConfig != null) {
+                game = gameLobby.createGameWithConfig(gameConfig);
+            } else {
+                game = gameLobby.createGame();
+            }
+            return Map.of(
+                "gameId", game.getGameId(),
+                "status", "created"
+            );
+        } catch (IllegalStateException e) {
+            throw new HttpStatusException(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE, 
+                "Failed to create game: " + e.getMessage());
+        }
     }
 
     @Get("/api/weapon-customization")

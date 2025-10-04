@@ -24,7 +24,7 @@ public class PlayerConnectionService {
         this.gameLobby = gameLobby;
     }
 
-    public boolean connectPlayer(WebSocketSession session, String gameId, String gameType) {
+    public boolean connectPlayer(WebSocketSession session, String gameId) {
         try {
             int playerId = playerIdCounter.getAndIncrement();
             PlayerSession playerSession = new PlayerSession(playerId, session);
@@ -32,7 +32,7 @@ public class PlayerConnectionService {
             // Get or create game
             GameManager game = gameLobby.getGame(gameId);
             if (game == null) {
-                game = gameLobby.createGame(gameType);
+                game = gameLobby.createGame();
                 gameId = game.getGameId();
             }
 
@@ -42,14 +42,14 @@ public class PlayerConnectionService {
                 session.put(SESSION_KEY, playerSession);
                 gameLobby.incrementPlayerCount();
 
-                log.info("Player {} connected to game {} ({})", playerSession.getPlayerId(), gameId, gameType);
+                log.info("Player {} connected to game {}", playerSession.getPlayerId(), gameId);
                 return true;
             } else {
                 log.warn("Failed to add player {} to game {}", playerSession.getPlayerId(), gameId);
                 return false;
             }
         } catch (Exception e) {
-            log.error("Error connecting player to game {} ({})", gameId, gameType, e);
+            log.error("Error connecting player to game {}", gameId, e);
             return false;
         }
     }

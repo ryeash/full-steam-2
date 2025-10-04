@@ -62,8 +62,6 @@ public class GameManager implements StepListener<Body> {
     @Getter
     protected final String gameId;
     @Getter
-    protected final String gameType;
-    @Getter
     protected final GameConfig gameConfig;
     @Getter
     protected final GameEntities gameEntities;
@@ -87,9 +85,8 @@ public class GameManager implements StepListener<Body> {
     private final ScheduledFuture<?> shutdownHook;
     private double lastUpdateTime = System.nanoTime() / 1e9;
 
-    public GameManager(String gameId, String gameType, GameConfig gameConfig, ObjectMapper objectMapper) {
+    public GameManager(String gameId, GameConfig gameConfig, ObjectMapper objectMapper) {
         this.gameId = gameId;
-        this.gameType = gameType;
         this.gameConfig = gameConfig;
         this.objectMapper = objectMapper;
         this.gameStartTime = System.currentTimeMillis();
@@ -182,7 +179,6 @@ public class GameManager implements StepListener<Body> {
     public GameInfo getGameInfo() {
         return new GameInfo(
                 gameId,
-                gameType,
                 gameEntities.getPlayerSessions().size(),
                 getMaxPlayers(),
                 gameStartTime,
