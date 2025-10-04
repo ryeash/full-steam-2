@@ -42,6 +42,9 @@ public class GameEntities {
     private final Map<Integer, NetProjectile> netProjectiles = new ConcurrentSkipListMap<>();
     private final Map<Integer, TeleportPad> teleportPads = new ConcurrentSkipListMap<>();
     private final Map<Integer, Beam> beams = new ConcurrentSkipListMap<>();
+    
+    // Capture the Flag entities
+    private final Map<Integer, Flag> flags = new ConcurrentSkipListMap<>();
 
     private final Deque<Runnable> postWorldUpdateHooks = new ConcurrentLinkedDeque<>();
 
@@ -302,6 +305,31 @@ public class GameEntities {
 
     public Collection<Beam> getAllBeams() {
         return beams.values();
+    }
+    
+    // ===== Flag Management =====
+    
+    public void addFlag(Flag flag) {
+        flags.put(flag.getId(), flag);
+    }
+    
+    public void removeFlag(int flagId) {
+        Flag flag = flags.remove(flagId);
+        if (flag != null && flag.getBody() != null) {
+            world.removeBody(flag.getBody());
+        }
+    }
+    
+    public Flag getFlag(int flagId) {
+        return flags.get(flagId);
+    }
+    
+    public Collection<Flag> getAllFlags() {
+        return flags.values();
+    }
+    
+    public Map<Integer, Flag> getFlags() {
+        return flags;
     }
 
     public void addPostUpdateHook(Runnable runnable) {

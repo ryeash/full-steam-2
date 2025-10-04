@@ -34,6 +34,7 @@ public class Player extends GameEntity {
     private long lastUtilityUseTime = 0;
     private int kills = 0;
     private int deaths = 0;
+    private int captures = 0; // Flag captures in CTF mode
     private double respawnTime = 0;
     private Vector2 respawnPoint;
     private double maxSpeed = Config.PLAYER_SPEED;
@@ -343,6 +344,10 @@ public class Player extends GameEntity {
 
     public void addKill() {
         kills++;
+    }
+    
+    public void addCapture() {
+        captures++;
     }
 
     public Weapon getCurrentWeapon() {

@@ -1,5 +1,6 @@
 package com.fullsteam.games;
 
+import com.fullsteam.model.Rules;
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.jackson.Jacksonized;
@@ -32,6 +33,10 @@ public class GameConfig {
     // AI Management Settings
     @Builder.Default
     private long aiCheckIntervalMs = 10000; // 10 seconds
+    
+    // Game Rules (rounds, timing, etc.)
+    @Builder.Default
+    private Rules rules = Rules.builder().build();
 
     /**
      * Check if this configuration uses teams.
@@ -49,6 +54,15 @@ public class GameConfig {
      */
     public boolean isFreeForAll() {
         return teamCount == 0;
+    }
+    
+    /**
+     * Check if this configuration uses rounds (timed gameplay).
+     *
+     * @return true if rounds are enabled, false for infinite gameplay
+     */
+    public boolean hasRounds() {
+        return rules != null && rules.getRoundDuration() > 0;
     }
 }
 

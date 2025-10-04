@@ -311,6 +311,7 @@ class GameEngine {
         this.fieldEffects = new Map();
         this.beams = new Map();
         this.utilityEntities = new Map(); // For turrets, barriers, nets, mines, teleport pads
+        this.flags = new Map(); // CTF flags
         this.myPlayerId = null;
         this.lastPlayerInput = null; // Store last input for prediction
         this.gameState = null;
@@ -341,6 +342,7 @@ class GameEngine {
         this.updateLoadingProgress(40, "Setting up UI...");
         this.setupUI();
         this.createConsolidatedHUD();
+        this.createRoundTimer();
             
             this.updateLoadingProgress(60, "Loading assets...");
             await this.loadAssets();
@@ -420,7 +422,10 @@ class GameEngine {
         // Note: Grid creation moved to handleInitialState() to use correct world dimensions
 
         // Handle window resize
-        window.addEventListener('resize', () => this.handleResize());
+        window.addEventListener('resize', () => {
+            this.handleResize();
+            this.updateRoundTimerPosition();
+        });
     }
     
     /**
@@ -444,6 +449,101 @@ class GameEngine {
         this.createHUDPlayerInfo();
         
         this.uiContainer.addChild(this.hudContainer);
+    }
+    
+    /**
+     * Create round timer display in top center of screen.
+     */
+    createRoundTimer() {
+        this.roundTimerContainer = new PIXI.Container();
+        this.roundTimerContainer.zIndex = 200;
+        this.roundTimerContainer.visible = false; // Hidden by default, shown when rounds are enabled
+        
+        // Background
+        const bg = new PIXI.Graphics();
+        bg.beginFill(0x000000, 0.8);
+        bg.drawRoundedRect(0, 0, 200, 60, 8);
+        bg.endFill();
+        bg.lineStyle(2, 0xffaa00, 0.9);
+        bg.drawRoundedRect(0, 0, 200, 60, 8);
+        this.roundTimerContainer.addChild(bg);
+        
+        // Round number text
+        this.roundNumberText = new PIXI.Text('ROUND 1', {
+            fontSize: 14,
+            fill: 0xffaa00,
+            fontWeight: 'bold',
+            align: 'center'
+        });
+        this.roundNumberText.anchor.set(0.5, 0);
+        this.roundNumberText.position.set(100, 8);
+        this.roundTimerContainer.addChild(this.roundNumberText);
+        
+        // Timer text (MM:SS)
+        this.roundTimerText = new PIXI.Text('05:00', {
+            fontSize: 24,
+            fill: 0xffffff,
+            fontWeight: 'bold',
+            align: 'center'
+        });
+        this.roundTimerText.anchor.set(0.5, 0);
+        this.roundTimerText.position.set(100, 28);
+        this.roundTimerContainer.addChild(this.roundTimerText);
+        
+        this.uiContainer.addChild(this.roundTimerContainer);
+        
+        // Position at top center of screen
+        this.updateRoundTimerPosition();
+    }
+    
+    /**
+     * Update round timer position based on screen size.
+     */
+    updateRoundTimerPosition() {
+        if (!this.roundTimerContainer) return;
+        this.roundTimerContainer.position.set(
+            (this.app.screen.width / 2) - 100, // Center horizontally
+            10 // Top of screen with padding
+        );
+    }
+    
+    /**
+     * Update round timer display with current round state.
+     */
+    updateRoundTimer(roundData) {
+        if (!this.roundTimerContainer || !roundData.roundEnabled) {
+            if (this.roundTimerContainer) {
+                this.roundTimerContainer.visible = false;
+            }
+            return;
+        }
+        
+        this.roundTimerContainer.visible = true;
+        
+        // Update round number
+        this.roundNumberText.text = `ROUND ${roundData.currentRound}`;
+        
+        // Update timer based on game state
+        let timeRemaining;
+        let timerColor;
+        
+        if (roundData.gameState === 'PLAYING') {
+            timeRemaining = roundData.roundTimeRemaining;
+            timerColor = timeRemaining <= 30 ? 0xff4444 : 0xffffff; // Red when under 30 seconds
+        } else if (roundData.gameState === 'REST_PERIOD') {
+            timeRemaining = roundData.restTimeRemaining;
+            timerColor = 0xffaa00; // Orange during rest
+            this.roundNumberText.text = 'REST PERIOD';
+        } else {
+            timeRemaining = 0;
+            timerColor = 0xffffff;
+        }
+        
+        // Format as MM:SS
+        const minutes = Math.floor(Math.max(0, timeRemaining) / 60);
+        const seconds = Math.floor(Math.max(0, timeRemaining) % 60);
+        this.roundTimerText.text = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        this.roundTimerText.style.fill = timerColor;
     }
     
     /**
@@ -656,14 +756,19 @@ class GameEngine {
     getTeamColor(teamNumber) {
         switch (teamNumber) {
             case 0: return 0x808080; // Gray for FFA/no team
-            case 1: return 0xff4444; // Red
-            case 2: return 0x4444ff; // Blue  
-            case 3: return 0x44ff44; // Green
-            case 4: return 0xffff44; // Yellow
-            default: 
-                console.warn(`Unexpected team number: ${teamNumber}, using magenta`);
-                return 0xff44ff; // Magenta for unexpected teams
+            case 1: return 0x4CAF50; // Green
+            case 2: return 0xF44336; // Red
+            case 3: return 0x2196F3; // Blue
+            case 4: return 0xFF9800; // Orange
+            default: return 0x808080; // Default gray
         }
+    }
+    
+    /**
+     * Get team color as hex number (for PIXI Graphics)
+     */
+    getTeamColorHex(teamNumber) {
+        return this.getTeamColor(teamNumber);
     }
     
     /**
@@ -899,6 +1004,12 @@ class GameEngine {
             case 'gameEvent':
                 this.handleGameEvent(data);
                 break;
+            case 'roundEnd':
+                this.handleRoundEnd(data);
+                break;
+            case 'roundStart':
+                this.handleRoundStart(data);
+                break;
         }
     }
     
@@ -947,6 +1058,11 @@ class GameEngine {
     
     handleGameState(data) {
         this.gameState = data;
+        
+        // Update round timer if rounds are enabled
+        if (data.roundEnabled !== undefined) {
+            this.updateRoundTimer(data);
+        }
         
         if (data.players) {
             const currentPlayerIds = new Set();
@@ -1058,6 +1174,25 @@ class GameEngine {
             for (let [beamId, beam] of this.beams) {
                 if (!currentBeamIds.has(beamId)) {
                     this.removeBeam(beamId);
+                }
+            }
+        }
+        
+        // Handle flags (CTF mode)
+        if (data.flags) {
+            const currentFlagIds = new Set();
+            data.flags.forEach(flagData => {
+                currentFlagIds.add(flagData.id);
+                if (this.flags.has(flagData.id)) {
+                    this.updateFlag(flagData);
+                } else {
+                    this.createFlag(flagData);
+                }
+            });
+            
+            for (let [flagId, flag] of this.flags) {
+                if (!currentFlagIds.has(flagId)) {
+                    this.removeFlag(flagId);
                 }
             }
         }
@@ -1327,6 +1462,228 @@ class GameEngine {
                     eventElement.parentNode.removeChild(eventElement);
                 }
             }, 300);
+        }
+    }
+    
+    /**
+     * Handle round end event - display scores
+     */
+    handleRoundEnd(data) {
+        console.log('Round ended:', data);
+        this.showRoundEndScreen(data);
+    }
+    
+    /**
+     * Handle round start event - clear round end screen
+     */
+    handleRoundStart(data) {
+        console.log('Round started:', data);
+        this.hideRoundEndScreen();
+    }
+    
+    /**
+     * Show round end screen with scores
+     */
+    showRoundEndScreen(data) {
+        // Create or get round end overlay
+        let overlay = document.getElementById('round-end-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'round-end-overlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.85);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+            `;
+            document.body.appendChild(overlay);
+        }
+        
+        // Create content container
+        const content = document.createElement('div');
+        content.style.cssText = `
+            background: linear-gradient(135deg, rgba(20, 20, 30, 0.95), rgba(40, 40, 60, 0.95));
+            border: 2px solid rgba(255, 170, 0, 0.6);
+            border-radius: 12px;
+            padding: 40px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        `;
+        
+        // Title
+        const title = document.createElement('h1');
+        title.textContent = `ROUND ${data.round} COMPLETE`;
+        title.style.cssText = `
+            color: #ffaa00;
+            text-align: center;
+            margin: 0 0 30px 0;
+            font-size: 36px;
+            text-shadow: 0 2px 10px rgba(255, 170, 0, 0.5);
+        `;
+        content.appendChild(title);
+        
+        // Scores
+        if (data.scores && data.scores.length > 0) {
+            const scoresContainer = document.createElement('div');
+            scoresContainer.style.cssText = `
+                background: rgba(0, 0, 0, 0.3);
+                border-radius: 8px;
+                padding: 20px;
+                margin-bottom: 20px;
+            `;
+            
+            // Sort scores by kills (descending)
+            const sortedScores = [...data.scores].sort((a, b) => b.kills - a.kills);
+            
+            // Group by team if team mode
+            const hasTeams = sortedScores.some(score => score.team > 0);
+            
+            if (hasTeams) {
+                // Team-based display
+                const teams = {};
+                sortedScores.forEach(score => {
+                    const teamNum = score.team || 0;
+                    if (!teams[teamNum]) {
+                        teams[teamNum] = [];
+                    }
+                    teams[teamNum].push(score);
+                });
+                
+                Object.entries(teams).forEach(([teamNum, players]) => {
+                    const teamHeader = document.createElement('h3');
+                    teamHeader.textContent = teamNum == 0 ? 'No Team' : `Team ${teamNum}`;
+                    teamHeader.style.cssText = `
+                        color: ${this.getTeamColorCSS(parseInt(teamNum))};
+                        margin: 15px 0 10px 0;
+                        font-size: 20px;
+                    `;
+                    scoresContainer.appendChild(teamHeader);
+                    
+                    players.forEach(score => {
+                        scoresContainer.appendChild(this.createScoreRow(score));
+                    });
+                });
+            } else {
+                // FFA display
+                sortedScores.forEach((score, index) => {
+                    scoresContainer.appendChild(this.createScoreRow(score, index + 1));
+                });
+            }
+            
+            content.appendChild(scoresContainer);
+        }
+        
+        // Next round info
+        const nextRoundText = document.createElement('p');
+        nextRoundText.textContent = `Next round starts in ${Math.ceil(data.restDuration)} seconds...`;
+        nextRoundText.style.cssText = `
+            color: #ffaa00;
+            text-align: center;
+            font-size: 18px;
+            margin: 20px 0 0 0;
+            animation: pulse 2s ease-in-out infinite;
+        `;
+        content.appendChild(nextRoundText);
+        
+        // Add pulse animation
+        if (!document.getElementById('round-end-styles')) {
+            const style = document.createElement('style');
+            style.id = 'round-end-styles';
+            style.textContent = `
+                @keyframes pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.6; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        overlay.innerHTML = '';
+        overlay.appendChild(content);
+        overlay.style.display = 'flex';
+    }
+    
+    /**
+     * Create a score row for a player
+     */
+    createScoreRow(score, rank = null) {
+        const row = document.createElement('div');
+        row.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            margin: 5px 0;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            border-left: 3px solid ${this.getTeamColorCSS(score.team)};
+        `;
+        
+        const nameSection = document.createElement('div');
+        nameSection.style.cssText = `
+            flex: 1;
+            color: #ffffff;
+            font-size: 16px;
+            font-weight: bold;
+        `;
+        nameSection.textContent = (rank ? `#${rank} ` : '') + score.playerName;
+        
+        const stats = document.createElement('div');
+        stats.style.cssText = `
+            display: flex;
+            gap: 20px;
+            color: #cccccc;
+            font-size: 14px;
+        `;
+        
+        const kills = document.createElement('span');
+        kills.style.color = '#4ade80';
+        kills.textContent = `${score.kills} K`;
+        
+        const deaths = document.createElement('span');
+        deaths.style.color = '#f87171';
+        deaths.textContent = `${score.deaths} D`;
+        
+        // Add captures if player has any
+        if (score.captures && score.captures > 0) {
+            const captures = document.createElement('span');
+            captures.style.color = '#FFD700';
+            captures.textContent = `${score.captures} 🚩`;
+            stats.appendChild(captures);
+        }
+        
+        const kd = document.createElement('span');
+        kd.style.color = '#fbbf24';
+        kd.textContent = `${(score.kills / Math.max(1, score.deaths)).toFixed(2)} K/D`;
+        
+        stats.appendChild(kills);
+        stats.appendChild(deaths);
+        stats.appendChild(kd);
+        
+        row.appendChild(nameSection);
+        row.appendChild(stats);
+        
+        return row;
+    }
+    
+    /**
+     * Hide round end screen
+     */
+    hideRoundEndScreen() {
+        const overlay = document.getElementById('round-end-overlay');
+        if (overlay) {
+            overlay.style.display = 'none';
         }
     }
     
@@ -2510,6 +2867,128 @@ class GameEngine {
             this.cleanupBeamContainer(beamContainer);
             this.gameContainer.removeChild(beamContainer);
             this.beams.delete(beamId);
+        }
+    }
+    
+    // ===== Flag Management (CTF Mode) =====
+    
+    /**
+     * Create a flag for capture-the-flag mode
+     */
+    createFlag(flagData) {
+        const flagContainer = new PIXI.Container();
+        
+        // Convert world coordinates to screen coordinates
+        const pos = this.worldToIsometric(flagData.x, flagData.y);
+        flagContainer.position.set(pos.x, pos.y);
+        
+        // Create flag pole
+        const pole = new PIXI.Graphics();
+        pole.beginFill(0x333333);
+        pole.drawRect(-2, -30, 4, 30);
+        pole.endFill();
+        flagContainer.addChild(pole);
+        
+        // Create flag sprite (triangle)
+        const flag = new PIXI.Graphics();
+        const teamColor = this.getTeamColorHex(flagData.ownerTeam);
+        flag.beginFill(teamColor);
+        flag.moveTo(0, -30);
+        flag.lineTo(20, -20);
+        flag.lineTo(0, -10);
+        flag.lineTo(0, -30);
+        flag.endFill();
+        
+        // Add black outline
+        flag.lineStyle(1, 0x000000, 1);
+        flag.moveTo(0, -30);
+        flag.lineTo(20, -20);
+        flag.lineTo(0, -10);
+        
+        flagContainer.addChild(flag);
+        flagContainer.flagSprite = flag;
+        
+        // Add team number text on flag
+        const teamText = new PIXI.Text(`${flagData.ownerTeam}`, {
+            fontSize: 12,
+            fill: 0xffffff,
+            fontWeight: 'bold',
+            stroke: 0x000000,
+            strokeThickness: 2
+        });
+        teamText.anchor.set(0.5);
+        teamText.position.set(10, -20);
+        flagContainer.addChild(teamText);
+        
+        // Add glow effect for visibility
+        const glow = new PIXI.Graphics();
+        glow.beginFill(teamColor, 0.3);
+        glow.drawCircle(0, -15, 25);
+        glow.endFill();
+        flagContainer.addChildAt(glow, 0); // Behind everything else
+        flagContainer.glow = glow;
+        
+        // Animate glow
+        flagContainer.glowPhase = 0;
+        
+        // Set z-index (above ground, below players)
+        flagContainer.zIndex = 8;
+        
+        // Store flag data
+        flagContainer.flagData = flagData;
+        this.flags.set(flagData.id, flagContainer);
+        this.gameContainer.addChild(flagContainer);
+        
+        // Enable sorting for proper z-index handling
+        this.gameContainer.sortableChildren = true;
+    }
+    
+    /**
+     * Update a flag's position and state
+     */
+    updateFlag(flagData) {
+        const flagContainer = this.flags.get(flagData.id);
+        if (!flagContainer) return;
+        
+        // Update position (important for carried flags)
+        const pos = this.worldToIsometric(flagData.x, flagData.y);
+        flagContainer.position.set(pos.x, pos.y);
+        
+        // Update visual state based on flag state
+        const state = flagData.state;
+        
+        if (state === 'CARRIED') {
+            // Flag is being carried - make it bob and pulse
+            flagContainer.alpha = 0.9;
+            flagContainer.scale.set(0.8);
+        } else if (state === 'DROPPED') {
+            // Flag is dropped - pulse slowly
+            flagContainer.alpha = 0.8 + Math.sin(Date.now() / 500) * 0.2;
+            flagContainer.scale.set(1.0);
+        } else {
+            // Flag is at home - full opacity
+            flagContainer.alpha = 1.0;
+            flagContainer.scale.set(1.0);
+        }
+        
+        // Animate glow
+        flagContainer.glowPhase += 0.05;
+        if (flagContainer.glow) {
+            flagContainer.glow.alpha = 0.2 + Math.sin(flagContainer.glowPhase) * 0.1;
+        }
+        
+        flagContainer.flagData = flagData;
+    }
+    
+    /**
+     * Remove a flag
+     */
+    removeFlag(flagId) {
+        const flagContainer = this.flags.get(flagId);
+        if (flagContainer) {
+            flagContainer.destroy({ children: true });
+            this.gameContainer.removeChild(flagContainer);
+            this.flags.delete(flagId);
         }
     }
     
@@ -4444,6 +4923,9 @@ class GameEngine {
     updateFFAScoreboard(content, players) {
         const sortedPlayers = [...players].sort((a, b) => (b.kills || 0) - (a.kills || 0));
         
+        // Check if any player has captures (CTF mode)
+        const hasCaptures = players.some(p => (p.captures || 0) > 0);
+        
         content.innerHTML = `
             <table style="width: 100%; color: white;">
                 <thead>
@@ -4451,6 +4933,7 @@ class GameEngine {
                         <th>Player</th>
                         <th>Kills</th>
                         <th>Deaths</th>
+                        ${hasCaptures ? '<th>Captures</th>' : ''}
                         <th>Status</th>
                     </tr>
                 </thead>
@@ -4460,6 +4943,7 @@ class GameEngine {
                             <td><span style="color: ${this.getTeamColorCSS(player.team || 0)}">●</span> ${player.name || `Player ${player.id}`}</td>
                             <td>${player.kills || 0}</td>
                             <td>${player.deaths || 0}</td>
+                            ${hasCaptures ? `<td style="color: #FFD700;">${player.captures || 0} 🚩</td>` : ''}
                             <td>${player.active ? 'Alive' : 'Dead'}</td>
                         </tr>
                     `).join('')}
@@ -4479,6 +4963,9 @@ class GameEngine {
             teams[teamNum].push(player);
         });
         
+        // Check if any player has captures (CTF mode)
+        const hasCaptures = players.some(p => (p.captures || 0) > 0);
+        
         // Sort teams by total kills
         const sortedTeams = Object.entries(teams).sort((a, b) => {
             const aKills = a[1].reduce((sum, p) => sum + (p.kills || 0), 0);
@@ -4491,21 +4978,28 @@ class GameEngine {
         sortedTeams.forEach(([teamNum, teamPlayers]) => {
             const teamKills = teamPlayers.reduce((sum, p) => sum + (p.kills || 0), 0);
             const teamDeaths = teamPlayers.reduce((sum, p) => sum + (p.deaths || 0), 0);
+            const teamCaptures = teamPlayers.reduce((sum, p) => sum + (p.captures || 0), 0);
             const teamName = teamNum == 0 ? 'Free For All' : `Team ${teamNum}`;
             const teamColor = this.getTeamColorCSS(parseInt(teamNum));
             
+            // Build team header with captures if applicable
+            const teamStats = hasCaptures 
+                ? `K: ${teamKills} | D: ${teamDeaths} | 🚩: ${teamCaptures}`
+                : `${teamKills}/${teamDeaths}`;
+            
             html += `
                 <div style="margin-bottom: 15px; border: 1px solid ${teamColor}; border-radius: 5px; padding: 8px;">
-                    <h4 style="margin: 0 0 8px 0; color: ${teamColor};">${teamName} (${teamKills}/${teamDeaths})</h4>
+                    <h4 style="margin: 0 0 8px 0; color: ${teamColor};">${teamName} (${teamStats})</h4>
                     <table style="width: 100%; font-size: 12px;">
                         ${teamPlayers
                             .sort((a, b) => (b.kills || 0) - (a.kills || 0))
                             .map(player => `
                                 <tr style="${player.id === this.myPlayerId ? 'background: rgba(46, 204, 113, 0.2);' : ''}">
                                     <td style="padding: 2px;">${player.name || `Player ${player.id}`}</td>
-                                    <td style="padding: 2px; text-align: center;">${player.kills || 0}</td>
-                                    <td style="padding: 2px; text-align: center;">${player.deaths || 0}</td>
-                                    <td style="padding: 2px; text-align: center;">${player.active ? 'Alive' : 'Dead'}</td>
+                                    <td style="padding: 2px; text-align: center;">${player.kills || 0}K</td>
+                                    <td style="padding: 2px; text-align: center;">${player.deaths || 0}D</td>
+                                    ${hasCaptures ? `<td style="padding: 2px; text-align: center; color: #FFD700;">${player.captures || 0}🚩</td>` : ''}
+                                    <td style="padding: 2px; text-align: center;">${player.active ? '✓' : '✗'}</td>
                                 </tr>
                             `).join('')}
                     </table>

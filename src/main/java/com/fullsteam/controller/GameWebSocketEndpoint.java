@@ -19,7 +19,7 @@ import java.util.Map;
 
 import static com.fullsteam.controller.PlayerConnectionService.SESSION_KEY;
 
-@ServerWebSocket("/game/{gameId}/{gameType}")
+@ServerWebSocket("/game/{gameId}")
 public class GameWebSocketEndpoint {
 
     private static final Logger log = LoggerFactory.getLogger(GameWebSocketEndpoint.class);

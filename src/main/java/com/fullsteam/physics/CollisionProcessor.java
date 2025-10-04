@@ -110,6 +110,12 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             return handleNetCollision(net, entity2);
         } else if (entity2 instanceof NetProjectile net) {
             return handleNetCollision(net, entity1);
+        } else if (entity1 instanceof Player player && entity2 instanceof Flag flag) {
+            handlePlayerFlagCollision(player, flag);
+            return true; // Flags are sensors, no physics resolution
+        } else if (entity1 instanceof Flag flag && entity2 instanceof Player player) {
+            handlePlayerFlagCollision(player, flag);
+            return true; // Flags are sensors, no physics resolution
         }
         return true;
     }
@@ -400,6 +406,113 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         } else {
             return !(entity instanceof Projectile);
         }
+    }
+    
+    /**
+     * Handle player touching a flag - pickup or capture logic.
+     */
+    private void handlePlayerFlagCollision(Player player, Flag flag) {
+        if (!player.isActive()) {
+            return;
+        }
+        
+        int playerTeam = player.getTeam();
+        int flagTeam = flag.getOwnerTeam();
+        
+        // Check if player is already carrying a flag
+        boolean alreadyCarrying = gameEntities.getAllFlags().stream()
+                .anyMatch(f -> f.isCarried() && f.getCarriedByPlayerId() == player.getId());
+        
+        if (alreadyCarrying) {
+            // Player is already carrying a flag, check if they're in their own base for capture
+            if (playerTeam == flagTeam && flag.isAtHome()) {
+                // Player is in their own base with enemy flag - CAPTURE!
+                captureFlag(player, flag);
+            }
+            return;
+        }
+        
+        // Try to pick up the flag
+        if (flag.canBeCapturedBy(playerTeam)) {
+            pickUpFlag(player, flag);
+        } else if (playerTeam == flagTeam && !flag.isAtHome()) {
+            // Player touched their own flag that's not at home - return it
+            returnFlag(flag);
+        }
+    }
+    
+    /**
+     * Player picks up an enemy flag.
+     */
+    private void pickUpFlag(Player player, Flag flag) {
+        flag.pickUp(player.getId());
+        
+        log.info("Player {} (team {}) picked up flag {} (team {})", 
+                player.getId(), player.getTeam(), flag.getId(), flag.getOwnerTeam());
+        
+        // Broadcast pickup event
+        gameManager.broadcastGameEvent(
+                String.format("%s picked up %s flag!", 
+                        player.getPlayerName(), 
+                        getTeamName(flag.getOwnerTeam())),
+                "FLAG_PICKUP",
+                "#ffaa00"
+        );
+    }
+    
+    /**
+     * Player captures a flag (brings enemy flag to own base).
+     */
+    private void captureFlag(Player player, Flag homeFlag) {
+        // Find the flag the player is carrying
+        Optional<Flag> carriedFlagOpt = gameEntities.getAllFlags().stream()
+                .filter(f -> f.isCarried() && f.getCarriedByPlayerId() == player.getId())
+                .findFirst();
+        
+        if (carriedFlagOpt.isEmpty()) {
+            return;
+        }
+        
+        Flag carriedFlag = carriedFlagOpt.get();
+        carriedFlag.capture();
+        
+        // Award points to player
+        gameManager.awardCapture(player, carriedFlag.getOwnerTeam());
+        
+        log.info("Player {} (team {}) captured flag {} (team {})!", 
+                player.getId(), player.getTeam(), carriedFlag.getId(), carriedFlag.getOwnerTeam());
+        
+        // Broadcast capture event
+        gameManager.broadcastGameEvent(
+                String.format("%s captured the %s flag! +1 CAPTURE", 
+                        player.getPlayerName(), 
+                        getTeamName(carriedFlag.getOwnerTeam())),
+                "FLAG_CAPTURE",
+                "#00ff00"
+        );
+    }
+    
+    /**
+     * Return a flag to its home position.
+     */
+    private void returnFlag(Flag flag) {
+        flag.returnToHome();
+        
+        log.info("Flag {} (team {}) returned to home", flag.getId(), flag.getOwnerTeam());
+        
+        // Broadcast return event
+        gameManager.broadcastGameEvent(
+                String.format("%s flag returned!", getTeamName(flag.getOwnerTeam())),
+                "FLAG_RETURN",
+                "#4444ff"
+        );
+    }
+    
+    /**
+     * Get team name for display.
+     */
+    private String getTeamName(int team) {
+        return "Team " + team;
     }
 
     // ContactListener methods

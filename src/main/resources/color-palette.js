@@ -14,6 +14,20 @@ const GameColors = {
       dark: '#C62828',         // Dark red - borders/shadows
       darker: '#B71C1C',       // Darker red - additional contrast
       bright: '#FF3232'        // Bright red - laser effects
+    },
+    team3: {
+      primary: '#2196F3',      // Blue - main team color
+      secondary: '#64B5F6',    // Light blue - secondary elements
+      dark: '#1565C0',         // Dark blue - borders/shadows
+      darker: '#0D47A1',       // Darker blue - additional contrast
+      bright: '#00B0FF'        // Bright blue - laser effects
+    },
+    team4: {
+      primary: '#FF9800',      // Orange - main team color
+      secondary: '#FFB74D',    // Light orange - secondary elements
+      dark: '#E65100',         // Dark orange - borders/shadows
+      darker: '#EF6C00',       // Darker orange - additional contrast
+      bright: '#FFAB00'        // Bright orange - laser effects
     }
   },
 

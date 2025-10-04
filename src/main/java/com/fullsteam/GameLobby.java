@@ -10,7 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -26,7 +25,8 @@ public class GameLobby {
     private final AtomicLong gameIdCounter = new AtomicLong(1);
 
     // Game cleanup settings
-    private static final long CLEANUP_CHECK_INTERVAL_MS = 12 * 1000; // 12 seconds
+    private static final long CLEANUP_CHECK_INTERVAL_MS = 30 * 1000; // 30 seconds
+    private static final long AI_ONLY_GRACE_PERIOD_MS = 2 * 60 * 1000; // 2 minutes grace period for players to join
 
     private final ObjectMapper objectMapper;
 
@@ -99,13 +99,15 @@ public class GameLobby {
         for (Map.Entry<String, GameManager> entry : activeGames.entrySet()) {
             String gameId = entry.getKey();
             GameManager game = entry.getValue();
+            long gameAge = currentTime - game.getGameStartTime();
 
-            // Check if game should be shut down
-            if (!game.hasHumanPlayers()) {
+            // Only cleanup AI-only games that have existed longer than the grace period
+            // This gives players time to configure and join before the game is shut down
+            if (!game.hasHumanPlayers() && gameAge > AI_ONLY_GRACE_PERIOD_MS) {
                 gamesToRemove.add(gameId);
                 log.info("Scheduling AI-only game {} for shutdown (running for {} minutes with {} AI players)",
                         gameId,
-                        (currentTime - game.getGameStartTime()) / 60000,
+                        gameAge / 60000,
                         game.getAIPlayerCount());
             }
         }

@@ -11,14 +11,17 @@ import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.GameInfo;
+import com.fullsteam.model.GameState;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
+import com.fullsteam.model.RoundScore;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.CollisionProcessor;
+import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Obstacle;
@@ -84,6 +87,15 @@ public class GameManager implements StepListener<Body> {
     private final World<Body> world;
     private final ScheduledFuture<?> shutdownHook;
     private double lastUpdateTime = System.nanoTime() / 1e9;
+    
+    // Round-based game state
+    @Getter
+    private GameState gameState = GameState.PLAYING;
+    @Getter
+    private int currentRound = 1;
+    private double roundTimeRemaining = 0.0; // seconds remaining in current round
+    private double restTimeRemaining = 0.0; // seconds remaining in rest period
+    private Map<Integer, RoundScore> roundScores = new HashMap<>(); // playerId -> score snapshot
 
     public GameManager(String gameId, GameConfig gameConfig, ObjectMapper objectMapper) {
         this.gameId = gameId;
@@ -96,6 +108,13 @@ public class GameManager implements StepListener<Body> {
         this.aiCheckIntervalMs = gameConfig.getAiCheckIntervalMs();
         this.teamSpawnManager = new TeamSpawnManager(gameConfig.getWorldWidth(), gameConfig.getWorldHeight(), gameConfig.getTeamCount());
         this.terrainGenerator = new TerrainGenerator(gameConfig.getWorldWidth(), gameConfig.getWorldHeight());
+        
+        // Initialize round timer if rounds are enabled
+        if (gameConfig.hasRounds()) {
+            this.roundTimeRemaining = gameConfig.getRules().getRoundDuration();
+            log.info("Game {} initialized with rounds: {} seconds per round, {} seconds rest",
+                    gameId, gameConfig.getRules().getRoundDuration(), gameConfig.getRules().getRestDuration());
+        }
 
         this.world = new World<>();
 
@@ -117,6 +136,7 @@ public class GameManager implements StepListener<Body> {
         createWorldBoundaries();
 //        createStrategicLocations();
         createObstacles();
+        createFlags();
 
         // Add initial AI players to make the game more interesting from the start
         int initialAICount = getMaxPlayers();
@@ -188,6 +208,144 @@ public class GameManager implements StepListener<Body> {
 
     public int getPlayerCount() {
         return gameEntities.getPlayerSessions().size();
+    }
+    
+    /**
+     * Get the current round time remaining in seconds.
+     * Returns -1 if rounds are not enabled.
+     */
+    public double getRoundTimeRemaining() {
+        if (!gameConfig.hasRounds()) {
+            return -1;
+        }
+        return roundTimeRemaining;
+    }
+    
+    // ===== Round State Management =====
+    
+    /**
+     * Update round state based on elapsed time.
+     */
+    private void updateRoundState(double deltaTime) {
+        switch (gameState) {
+            case PLAYING:
+                updatePlayingState(deltaTime);
+                break;
+            case ROUND_END:
+                updateRoundEndState(deltaTime);
+                break;
+            case REST_PERIOD:
+                updateRestPeriodState(deltaTime);
+                break;
+        }
+    }
+    
+    /**
+     * Update the playing state - count down the round timer.
+     */
+    private void updatePlayingState(double deltaTime) {
+        roundTimeRemaining -= deltaTime;
+        
+        if (roundTimeRemaining <= 0) {
+            endRound();
+        }
+    }
+    
+    /**
+     * End the current round, capture scores, and transition to ROUND_END state.
+     */
+    private void endRound() {
+        gameState = GameState.ROUND_END;
+        roundTimeRemaining = 0;
+        
+        // Capture current scores
+        roundScores.clear();
+        for (Player player : gameEntities.getAllPlayers()) {
+            RoundScore score = RoundScore.builder()
+                    .playerId(player.getId())
+                    .playerName(player.getPlayerName())
+                    .team(player.getTeam())
+                    .kills(player.getKills())
+                    .deaths(player.getDeaths())
+                    .captures(player.getCaptures())
+                    .build();
+            roundScores.put(player.getId(), score);
+        }
+        
+        log.info("Round {} ended in game {}. {} players scored.", currentRound, gameId, roundScores.size());
+        
+        // Broadcast round end event with scores
+        Map<String, Object> roundEndEvent = new HashMap<>();
+        roundEndEvent.put("type", "roundEnd");
+        roundEndEvent.put("round", currentRound);
+        roundEndEvent.put("scores", new ArrayList<>(roundScores.values()));
+        roundEndEvent.put("restDuration", gameConfig.getRules().getRestDuration());
+        broadcast(roundEndEvent);
+        
+        // Start rest period
+        restTimeRemaining = gameConfig.getRules().getRestDuration();
+    }
+    
+    /**
+     * Update the round end state - brief pause before rest period.
+     * Currently transitions immediately to REST_PERIOD.
+     */
+    private void updateRoundEndState(double deltaTime) {
+        // Transition immediately to rest period
+        gameState = GameState.REST_PERIOD;
+    }
+    
+    /**
+     * Update the rest period state - count down until next round starts.
+     */
+    private void updateRestPeriodState(double deltaTime) {
+        restTimeRemaining -= deltaTime;
+        
+        if (restTimeRemaining <= 0) {
+            startNextRound();
+        }
+    }
+    
+    /**
+     * Start the next round - reset player states and begin new round.
+     */
+    private void startNextRound() {
+        currentRound++;
+        gameState = GameState.PLAYING;
+        roundTimeRemaining = gameConfig.getRules().getRoundDuration();
+        restTimeRemaining = 0;
+        
+        // Reset all players
+        for (Player player : gameEntities.getAllPlayers()) {
+            player.setKills(0);
+            player.setDeaths(0);
+            player.setHealth(gameConfig.getPlayerMaxHealth());
+            player.setActive(true);
+            player.setRespawnTime(0);
+            
+            // Respawn player at their spawn point
+            Vector2 spawnPoint = player.getRespawnPoint();
+            if (spawnPoint != null) {
+                player.getBody().getTransform().setTranslation(spawnPoint.x, spawnPoint.y);
+                player.getBody().setLinearVelocity(0, 0);
+                player.getBody().setAngularVelocity(0);
+            }
+            
+            // Reload weapons
+            if (player.getWeapon() != null) {
+                player.getWeapon().reload();
+                player.setReloading(false);
+            }
+        }
+        
+        log.info("Round {} started in game {}", currentRound, gameId);
+        
+        // Broadcast round start event
+        Map<String, Object> roundStartEvent = new HashMap<>();
+        roundStartEvent.put("type", "roundStart");
+        roundStartEvent.put("round", currentRound);
+        roundStartEvent.put("roundDuration", gameConfig.getRules().getRoundDuration());
+        broadcast(roundStartEvent);
     }
 
     public void shutdown() {
@@ -388,6 +546,12 @@ public class GameManager implements StepListener<Body> {
             double currentTime = System.nanoTime() / 1e9;
             double deltaTime = currentTime - lastUpdateTime;
             lastUpdateTime = currentTime;
+            
+            // Update round state if rounds are enabled
+            if (gameConfig.hasRounds()) {
+                updateRoundState(deltaTime);
+            }
+            
             aiPlayerManager.update(gameEntities, deltaTime);
             aiPlayerManager.getAllPlayerInputs().forEach((playerId, input) -> {
                 gameEntities.getPlayerInputs().put(playerId, input);
@@ -396,6 +560,7 @@ public class GameManager implements StepListener<Body> {
 
             gameEntities.getPlayerInputs().forEach(this::processPlayerInput);
             gameEntities.updateAll(deltaTime);
+            updateCarriedFlags(); // Update flag positions for carried flags
             gameEntities.getProjectiles().entrySet().removeIf(entry -> {
                 Projectile projectile = entry.getValue();
                 if (!projectile.isActive()) {
@@ -1006,11 +1171,119 @@ public class GameManager implements StepListener<Body> {
             world.addBody(obstacle.getBody());
         }
     }
+    
+    /**
+     * Create flags for capture-the-flag gameplay if configured.
+     */
+    private void createFlags() {
+        if (!gameConfig.getRules().hasFlags()) {
+            return; // No flags configured
+        }
+        
+        if (gameConfig.isFreeForAll()) {
+            log.warn("Flags are not supported in FFA mode");
+            return;
+        }
+        
+        int flagsPerTeam = gameConfig.getRules().getFlagsPerTeam();
+        int teamCount = gameConfig.getTeamCount();
+        
+        log.info("Creating {} flags per team for {} teams", flagsPerTeam, teamCount);
+        
+        int flagId = 1;
+        for (int team = 1; team <= teamCount; team++) {
+            TeamSpawnArea teamArea = teamSpawnManager.getTeamArea(team);
+            if (teamArea == null) {
+                log.warn("No spawn area found for team {}, skipping flag creation", team);
+                continue;
+            }
+            
+            // Create flags for this team
+            for (int i = 0; i < flagsPerTeam; i++) {
+                Vector2 flagPosition = calculateFlagPosition(teamArea, i, flagsPerTeam);
+                
+                // Ensure flag position is clear of obstacles
+                if (!terrainGenerator.isPositionClear(flagPosition, 30.0)) {
+                    // Try alternative positions
+                    for (int attempt = 0; attempt < 5; attempt++) {
+                        flagPosition = teamArea.generateSpawnPoint();
+                        if (terrainGenerator.isPositionClear(flagPosition, 30.0)) {
+                            break;
+                        }
+                    }
+                }
+                
+                Flag flag = new Flag(flagId++, team, flagPosition.x, flagPosition.y);
+                gameEntities.addFlag(flag);
+                world.addBody(flag.getBody());
+                
+                log.info("Created flag {} for team {} at position ({}, {})", 
+                        flag.getId(), team, flagPosition.x, flagPosition.y);
+            }
+        }
+    }
+    
+    /**
+     * Calculate flag position within a team's area.
+     * For multiple flags, distributes them around the team center.
+     */
+    private Vector2 calculateFlagPosition(TeamSpawnArea teamArea, int flagIndex, int totalFlags) {
+        Vector2 center = teamArea.getCenter();
+        
+        if (totalFlags == 1) {
+            // Single flag: place at team center
+            return center.copy();
+        }
+        
+        // Multiple flags: distribute in a circle around center
+        double radius = Math.min(teamArea.getWidth(), teamArea.getHeight()) * 0.3;
+        double angleStep = (2 * Math.PI) / totalFlags;
+        double angle = flagIndex * angleStep;
+        
+        double x = center.x + radius * Math.cos(angle);
+        double y = center.y + radius * Math.sin(angle);
+        
+        return new Vector2(x, y);
+    }
+    
+    /**
+     * Update positions of flags that are being carried by players.
+     */
+    private void updateCarriedFlags() {
+        for (Flag flag : gameEntities.getAllFlags()) {
+            if (flag.isCarried()) {
+                int carrierId = flag.getCarriedByPlayerId();
+                Player carrier = gameEntities.getPlayer(carrierId);
+                
+                if (carrier != null && carrier.isActive()) {
+                    // Move flag to player's position
+                    Vector2 playerPos = carrier.getPosition();
+                    flag.getBody().getTransform().setTranslation(playerPos.x, playerPos.y);
+                } else {
+                    // Carrier is no longer active, drop the flag
+                    flag.drop();
+                    log.info("Flag {} dropped at ({}, {}) - carrier {} inactive", 
+                            flag.getId(), flag.getPosition().x, flag.getPosition().y, carrierId);
+                }
+            }
+        }
+    }
 
     private void sendGameState() {
         Map<String, Object> gameState = new HashMap<>();
         gameState.put("type", "gameState");
         gameState.put("timestamp", System.currentTimeMillis());
+        
+        // Include round information if rounds are enabled
+        if (gameConfig.hasRounds()) {
+            gameState.put("roundEnabled", true);
+            gameState.put("currentRound", currentRound);
+            gameState.put("gameState", this.gameState.name());
+            gameState.put("roundTimeRemaining", roundTimeRemaining);
+            gameState.put("restTimeRemaining", restTimeRemaining);
+        } else {
+            gameState.put("roundEnabled", false);
+        }
 
         List<Map<String, Object>> playerStates = new ArrayList<>();
         for (Player player : gameEntities.getAllPlayers()) {
@@ -1031,6 +1304,7 @@ public class GameManager implements StepListener<Body> {
             playerState.put("reloading", player.isReloading());
             playerState.put("kills", player.getKills());
             playerState.put("deaths", player.getDeaths());
+            playerState.put("captures", player.getCaptures());
             playerState.put("respawnTime", player.getRespawnTime());
             playerStates.add(playerState);
         }
@@ -1199,6 +1473,27 @@ public class GameManager implements StepListener<Body> {
             beamStates.add(beamState);
         }
         gameState.put("beams", beamStates);
+        
+        // Include flag states if flags are enabled
+        if (gameConfig.getRules().hasFlags()) {
+            List<Map<String, Object>> flagStates = new ArrayList<>();
+            for (Flag flag : gameEntities.getAllFlags()) {
+                Vector2 pos = flag.getPosition();
+                Map<String, Object> flagState = new HashMap<>();
+                flagState.put("id", flag.getId());
+                flagState.put("x", pos.x);
+                flagState.put("y", pos.y);
+                flagState.put("ownerTeam", flag.getOwnerTeam());
+                flagState.put("state", flag.getState().name());
+                flagState.put("carriedBy", flag.getCarriedByPlayerId());
+                flagState.put("homeX", flag.getHomePosition().x);
+                flagState.put("homeY", flag.getHomePosition().y);
+                flagState.put("captureCount", flag.getCaptureCount());
+                flagStates.add(flagState);
+            }
+            gameState.put("flags", flagStates);
+            gameState.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
+        }
 
         broadcast(gameState);
     }
@@ -1372,6 +1667,22 @@ public class GameManager implements StepListener<Body> {
             obstacles.add(obsData);
         }
         state.put("obstacles", obstacles);
+        
+        // Add flag information if flags are enabled
+        if (gameConfig.getRules().hasFlags()) {
+            List<Map<String, Object>> flagsData = new ArrayList<>();
+            for (Flag flag : gameEntities.getAllFlags()) {
+                Map<String, Object> flagData = new HashMap<>();
+                flagData.put("id", flag.getId());
+                flagData.put("ownerTeam", flag.getOwnerTeam());
+                flagData.put("homeX", flag.getHomePosition().x);
+                flagData.put("homeY", flag.getHomePosition().y);
+                flagsData.add(flagData);
+            }
+            state.put("flags", flagsData);
+            state.put("flagsPerTeam", gameConfig.getRules().getFlagsPerTeam());
+            state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
+        }
 
         return state;
     }
@@ -1381,6 +1692,14 @@ public class GameManager implements StepListener<Body> {
             shooter.addKill();
         }
         victim.die();
+        
+        // Drop any flag the victim was carrying
+        for (Flag flag : gameEntities.getAllFlags()) {
+            if (flag.isCarried() && flag.getCarriedByPlayerId() == victim.getId()) {
+                flag.drop();
+                log.info("Player {} died, dropped flag {}", victim.getId(), flag.getId());
+            }
+        }
 
         // Assign a new spawn point for the victim when they respawn
         Vector2 newSpawnPoint = findVariedSpawnPointForTeam(victim.getTeam());
@@ -1447,6 +1766,38 @@ public class GameManager implements StepListener<Body> {
      */
     public void broadcastGameEvent(GameEvent event) {
         gameEventManager.broadcastEvent(event);
+    }
+    
+    /**
+     * Broadcast a custom game event (convenience overload).
+     */
+    public void broadcastGameEvent(String message, String category, String color) {
+        GameEvent.EventCategory eventCategory = GameEvent.EventCategory.INFO;
+        try {
+            eventCategory = GameEvent.EventCategory.valueOf(category);
+        } catch (IllegalArgumentException e) {
+            // Use default INFO category if invalid
+        }
+        
+        GameEvent event = GameEvent.builder()
+                .message(message)
+                .category(eventCategory)
+                .color(color)
+                .target(GameEvent.EventTarget.builder()
+                        .type(GameEvent.EventTarget.TargetType.ALL)
+                        .build())
+                .displayDuration(5000L)
+                .build();
+        gameEventManager.broadcastEvent(event);
+    }
+    
+    /**
+     * Award a capture to a player and their team.
+     */
+    public void awardCapture(Player player, int capturedFlagTeam) {
+        player.addCapture();
+        log.info("Player {} (team {}) awarded capture. Total captures: {}", 
+                player.getId(), player.getTeam(), player.getCaptures());
     }
 
     /**
