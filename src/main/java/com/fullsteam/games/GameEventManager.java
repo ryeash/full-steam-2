@@ -157,10 +157,11 @@ public class GameEventManager {
     }
     
     /**
-     * Convenience method to broadcast a kill event
+     * Convenience method to broadcast a kill event with team colors
      */
-    public void broadcastKill(String killerName, String victimName, String weaponName) {
-        broadcastEvent(GameEvent.createKillEvent(killerName, victimName, weaponName));
+    public void broadcastKill(String killerName, String victimName, String weaponName, 
+                             Integer killerTeam, Integer victimTeam) {
+        broadcastEvent(GameEvent.createKillEvent(killerName, victimName, weaponName, killerTeam, victimTeam));
     }
     
     /**

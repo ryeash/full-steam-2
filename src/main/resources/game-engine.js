@@ -1010,6 +1010,9 @@ class GameEngine {
             case 'roundStart':
                 this.handleRoundStart(data);
                 break;
+            case 'gameOver':
+                this.handleGameOver(data);
+                break;
         }
     }
     
@@ -1346,7 +1349,15 @@ class GameEngine {
         const eventElement = document.createElement('div');
         eventElement.className = 'game-event';
         eventElement.style.color = event.color || '#FFFFFF';
-        eventElement.textContent = event.message;
+        
+        // Parse and render colored text
+        // Format: <color:#RRGGBB>Text</color>
+        const coloredMessage = this.parseColoredMessage(event.message);
+        if (coloredMessage) {
+            eventElement.innerHTML = coloredMessage;
+        } else {
+            eventElement.textContent = event.message;
+        }
         
         // Add category-specific styling
         if (event.category) {
@@ -1379,6 +1390,30 @@ class GameEngine {
                 this.removeGameEvent(events[i]);
             }
         }
+    }
+    
+    /**
+     * Parse message with color tags and convert to HTML spans
+     * Format: <color:#RRGGBB>Text</color> -> <span style="color:#RRGGBB">Text</span>
+     */
+    parseColoredMessage(message) {
+        if (!message || !message.includes('<color:')) {
+            return null;
+        }
+        
+        // Replace color tags with styled spans
+        const colorPattern = /<color:(#[0-9A-Fa-f]{6})>(.*?)<\/color>/g;
+        const htmlMessage = message.replace(colorPattern, (match, color, text) => {
+            // Escape HTML in the text content to prevent XSS
+            const escapedText = text.replace(/&/g, '&amp;')
+                                   .replace(/</g, '&lt;')
+                                   .replace(/>/g, '&gt;')
+                                   .replace(/"/g, '&quot;')
+                                   .replace(/'/g, '&#039;');
+            return `<span style="color:${color}; font-weight:bold;">${escapedText}</span>`;
+        });
+        
+        return htmlMessage;
     }
     
     createEventDisplay() {
@@ -1685,6 +1720,272 @@ class GameEngine {
         if (overlay) {
             overlay.style.display = 'none';
         }
+    }
+    
+    /**
+     * Handle game over event - show victory screen
+     */
+    handleGameOver(data) {
+        console.log('Game Over:', data);
+        this.showGameOverScreen(data);
+    }
+    
+    /**
+     * Show game over screen with final results
+     */
+    showGameOverScreen(data) {
+        // Create or get game over overlay
+        let overlay = document.getElementById('game-over-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'game-over-overlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.9);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 20000;
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+            `;
+            document.body.appendChild(overlay);
+        }
+        
+        // Create content container
+        const content = document.createElement('div');
+        content.style.cssText = `
+            background: linear-gradient(135deg, rgba(30, 30, 40, 0.98), rgba(50, 50, 70, 0.98));
+            border: 3px solid #FFD700;
+            border-radius: 15px;
+            padding: 50px;
+            max-width: 900px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(255, 215, 0, 0.3);
+            text-align: center;
+        `;
+        
+        // Victory title
+        const title = document.createElement('h1');
+        title.textContent = '🏆 GAME OVER';
+        title.style.cssText = `
+            color: #FFD700;
+            font-size: 48px;
+            margin: 0 0 20px 0;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+            animation: pulse 2s ease-in-out infinite;
+        `;
+        content.appendChild(title);
+        
+        // Victory message
+        const message = document.createElement('p');
+        message.textContent = data.message || 'The battle has ended!';
+        message.style.cssText = `
+            color: #ffffff;
+            font-size: 24px;
+            margin: 20px 0 40px 0;
+            font-weight: bold;
+        `;
+        content.appendChild(message);
+        
+        // Victory condition info
+        const vcInfo = document.createElement('p');
+        const vcName = this.getVictoryConditionName(data.victoryCondition);
+        vcInfo.textContent = `Victory Condition: ${vcName}`;
+        vcInfo.style.cssText = `
+            color: #aaa;
+            font-size: 16px;
+            margin: 0 0 30px 0;
+        `;
+        content.appendChild(vcInfo);
+        
+        // Final scores
+        if (data.finalScores && data.finalScores.length > 0) {
+            const scoresTitle = document.createElement('h2');
+            scoresTitle.textContent = 'Final Scores';
+            scoresTitle.style.cssText = `
+                color: #FFD700;
+                font-size: 28px;
+                margin: 30px 0 20px 0;
+            `;
+            content.appendChild(scoresTitle);
+            
+            const scoresContainer = document.createElement('div');
+            scoresContainer.style.cssText = `
+                background: rgba(0, 0, 0, 0.4);
+                border-radius: 10px;
+                padding: 20px;
+                margin: 20px 0;
+            `;
+            
+            // Sort scores by score value
+            const sortedScores = [...data.finalScores].sort((a, b) => b.score - a.score);
+            
+            sortedScores.forEach((score, index) => {
+                const scoreRow = this.createFinalScoreRow(score, index + 1, data);
+                scoresContainer.appendChild(scoreRow);
+            });
+            
+            content.appendChild(scoresContainer);
+        }
+        
+        // Return to lobby button
+        const lobbyButton = document.createElement('button');
+        lobbyButton.textContent = '← Return to Lobby';
+        lobbyButton.style.cssText = `
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 30px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        `;
+        lobbyButton.onmouseover = () => {
+            lobbyButton.style.transform = 'scale(1.05)';
+            lobbyButton.style.boxShadow = '0 5px 20px rgba(102, 126, 234, 0.4)';
+        };
+        lobbyButton.onmouseout = () => {
+            lobbyButton.style.transform = 'scale(1)';
+            lobbyButton.style.boxShadow = 'none';
+        };
+        lobbyButton.onclick = () => {
+            window.location.href = '/lobby.html';
+        };
+        content.appendChild(lobbyButton);
+        
+        overlay.innerHTML = '';
+        overlay.appendChild(content);
+        overlay.style.display = 'flex';
+    }
+    
+    /**
+     * Create a score row for the game over screen
+     */
+    createFinalScoreRow(score, rank, gameOverData) {
+        const row = document.createElement('div');
+        row.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            margin: 8px 0;
+            background: ${rank === 1 ? 'rgba(255, 215, 0, 0.15)' : 'rgba(255, 255, 255, 0.05)'};
+            border-radius: 8px;
+            border-left: 4px solid ${this.getRankColor(rank)};
+        `;
+        
+        // Rank and name
+        const nameSection = document.createElement('div');
+        nameSection.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex: 1;
+        `;
+        
+        const rankBadge = document.createElement('span');
+        rankBadge.textContent = this.getRankBadge(rank);
+        rankBadge.style.cssText = `
+            font-size: 24px;
+            min-width: 40px;
+        `;
+        nameSection.appendChild(rankBadge);
+        
+        const nameText = document.createElement('span');
+        if (score.team !== undefined) {
+            nameText.textContent = `Team ${score.team}`;
+            nameText.style.color = this.getTeamColorCSS(score.team);
+        } else {
+            nameText.textContent = score.playerName || `Player ${score.playerId}`;
+            nameText.style.color = '#ffffff';
+        }
+        nameText.style.cssText += `
+            font-size: 20px;
+            font-weight: bold;
+        `;
+        nameSection.appendChild(nameText);
+        
+        row.appendChild(nameSection);
+        
+        // Stats
+        const stats = document.createElement('div');
+        stats.style.cssText = `
+            display: flex;
+            gap: 25px;
+            color: #cccccc;
+            font-size: 16px;
+        `;
+        
+        const scoreSpan = document.createElement('span');
+        scoreSpan.style.color = '#FFD700';
+        scoreSpan.style.fontWeight = 'bold';
+        scoreSpan.style.fontSize = '20px';
+        scoreSpan.textContent = `${score.score} pts`;
+        stats.appendChild(scoreSpan);
+        
+        const killsSpan = document.createElement('span');
+        killsSpan.style.color = '#4ade80';
+        killsSpan.textContent = `${score.kills} K`;
+        stats.appendChild(killsSpan);
+        
+        const deathsSpan = document.createElement('span');
+        deathsSpan.style.color = '#f87171';
+        deathsSpan.textContent = `${score.deaths} D`;
+        stats.appendChild(deathsSpan);
+        
+        if (score.captures > 0) {
+            const capturesSpan = document.createElement('span');
+            capturesSpan.style.color = '#FFD700';
+            capturesSpan.textContent = `${score.captures} 🚩`;
+            stats.appendChild(capturesSpan);
+        }
+        
+        row.appendChild(stats);
+        
+        return row;
+    }
+    
+    /**
+     * Get victory condition display name
+     */
+    getVictoryConditionName(condition) {
+        const names = {
+            'SCORE_LIMIT': 'Score Limit',
+            'TIME_LIMIT': 'Time Limit',
+            'OBJECTIVE': 'Objective',
+            'ELIMINATION': 'Elimination',
+            'ENDLESS': 'Endless'
+        };
+        return names[condition] || condition;
+    }
+    
+    /**
+     * Get color for rank position
+     */
+    getRankColor(rank) {
+        if (rank === 1) return '#FFD700'; // Gold
+        if (rank === 2) return '#C0C0C0'; // Silver
+        if (rank === 3) return '#CD7F32'; // Bronze
+        return '#666666'; // Gray
+    }
+    
+    /**
+     * Get badge emoji for rank
+     */
+    getRankBadge(rank) {
+        if (rank === 1) return '🥇';
+        if (rank === 2) return '🥈';
+        if (rank === 3) return '🥉';
+        return `#${rank}`;
     }
     
     createPlayer(playerData) {

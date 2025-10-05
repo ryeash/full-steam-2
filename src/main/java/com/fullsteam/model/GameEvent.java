@@ -117,16 +117,53 @@ public class GameEvent {
     // Convenience factory methods for common event types
     
     /**
-     * Create a kill event
+     * Create a kill event with team-colored player names
      */
-    public static GameEvent createKillEvent(String killerName, String victimName, String weaponName) {
+    public static GameEvent createKillEvent(String killerName, String victimName, String weaponName, 
+                                           Integer killerTeam, Integer victimTeam) {
+        // Format: <color:#RRGGBB>PlayerName</color> x <color:#RRGGBB>PlayerName</color>  WeaponName
+        StringBuilder messageBuilder = new StringBuilder();
+        
+        // Add killer name with team color
+        if (killerTeam != null && killerTeam >= 0) {
+            String killerColor = getTeamColorHex(killerTeam);
+            messageBuilder.append(String.format("<color:%s>%s</color>", killerColor, killerName));
+        } else {
+            messageBuilder.append(killerName);
+        }
+        
+        messageBuilder.append(" x ");
+        
+        // Add victim name with team color
+        if (victimTeam != null && victimTeam >= 0) {
+            String victimColor = getTeamColorHex(victimTeam);
+            messageBuilder.append(String.format("<color:%s>%s</color>", victimColor, victimName));
+        } else {
+            messageBuilder.append(victimName);
+        }
+        
+        messageBuilder.append("  ").append(weaponName);
+        
         return GameEvent.builder()
-                .message(String.format("[%s] x [%s]  %s", killerName, victimName, weaponName))
+                .message(messageBuilder.toString())
                 .category(EventCategory.KILL)
                 .color(EventCategory.KILL.getDefaultColor())
                 .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
                 .displayDuration(3000L)
                 .build();
+    }
+    
+    /**
+     * Helper method to get team color hex codes
+     */
+    private static String getTeamColorHex(int teamNumber) {
+        return switch (teamNumber) {
+            case 0 -> "#4CAF50";  // Green (Team 1)
+            case 1 -> "#F44336";  // Red (Team 2)
+            case 2 -> "#2196F3";  // Blue (Team 3)
+            case 3 -> "#FF9800";  // Orange (Team 4)
+            default -> "#FFFFFF"; // White (FFA/Unknown)
+        };
     }
     
     /**

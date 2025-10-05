@@ -39,6 +39,10 @@ public class Player extends GameEntity {
     private Vector2 respawnPoint;
     private double maxSpeed = Config.PLAYER_SPEED;
     private final Set<AttributeModification> attributeModifications = new HashSet<>();
+    
+    // Respawn rules tracking
+    private int livesRemaining = -1; // -1 = unlimited, 0 = eliminated
+    private boolean eliminated = false; // Permanently eliminated (no more respawns)
 
     public Player(int id, String playerName, double x, double y, int team) {
         super(id, createPlayerBody(x, y), 100.0);
@@ -184,6 +188,14 @@ public class Player extends GameEntity {
         long now = System.currentTimeMillis();
         double cooldownMs = utilityWeapon.getCooldown() * 1000.0;
         return (now - lastUtilityUseTime) >= cooldownMs;
+    }
+    
+    /**
+     * Refund the utility cooldown (e.g., when placement fails).
+     * Resets the cooldown timer to allow immediate reuse.
+     */
+    public void refundUtilityCooldown() {
+        lastUtilityUseTime = 0;
     }
 
     public List<Projectile> shoot() {
@@ -348,6 +360,50 @@ public class Player extends GameEntity {
     
     public void addCapture() {
         captures++;
+    }
+    
+    /**
+     * Initialize lives for LIMITED respawn mode.
+     */
+    public void initializeLives(int maxLives) {
+        this.livesRemaining = maxLives;
+        this.eliminated = false;
+    }
+    
+    /**
+     * Consume one life. Returns true if player is now eliminated.
+     */
+    public boolean loseLife() {
+        if (livesRemaining > 0) {
+            livesRemaining--;
+            if (livesRemaining == 0) {
+                eliminated = true;
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Check if player has lives remaining.
+     */
+    public boolean hasLivesRemaining() {
+        return livesRemaining != 0; // -1 (unlimited) or > 0
+    }
+    
+    /**
+     * Check if player is permanently eliminated.
+     */
+    public boolean isEliminated() {
+        return eliminated;
+    }
+    
+    /**
+     * Mark player as eliminated (for ELIMINATION mode).
+     */
+    public void eliminate() {
+        this.eliminated = true;
+        this.active = false;
     }
 
     public Weapon getCurrentWeapon() {

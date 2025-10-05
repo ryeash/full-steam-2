@@ -283,6 +283,64 @@
                         </select>
                     </div>
                 </div>
+                
+                <div class="config-section">
+                    <h3>🏆 Victory Conditions</h3>
+                    <div class="config-item">
+                        <label for="victoryCondition">Win Condition:</label>
+                        <select id="victoryCondition" onchange="updateVictoryFields()">
+                            <option value="ENDLESS">Endless (No Win Condition)</option>
+                            <option value="SCORE_LIMIT">Score Limit (First to X)</option>
+                            <option value="TIME_LIMIT">Time Limit (Most at Time)</option>
+                            <option value="OBJECTIVE">Objective (CTF/KOTH)</option>
+                        </select>
+                    </div>
+                    <div class="config-item" id="scoreLimitField" style="display: none;">
+                        <label for="scoreLimit">Score Limit:</label>
+                        <input type="number" id="scoreLimit" min="1" max="200" value="50">
+                        <small style="color: #888; font-size: 0.8em;">First to reach this score wins</small>
+                    </div>
+                    <div class="config-item" id="timeLimitField" style="display: none;">
+                        <label for="timeLimit">Time Limit (seconds):</label>
+                        <input type="number" id="timeLimit" min="60" max="3600" step="60" value="600">
+                        <small style="color: #888; font-size: 0.8em;">Game duration (10 min default)</small>
+                    </div>
+                    <div class="config-item" id="suddenDeathField" style="display: none;">
+                        <label for="suddenDeath">
+                            <input type="checkbox" id="suddenDeath" style="width: auto; margin-right: 5px;">
+                            Enable Sudden Death (Next score wins on tie)
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="config-section">
+                    <h3>🔄 Respawn Rules</h3>
+                    <div class="config-item">
+                        <label for="respawnMode">Respawn Mode:</label>
+                        <select id="respawnMode" onchange="updateRespawnFields()">
+                            <option value="INSTANT">Instant (Respawn after delay)</option>
+                            <option value="WAVE">Wave (Team respawns together)</option>
+                            <option value="NEXT_ROUND">Next Round (No respawn until round ends)</option>
+                            <option value="ELIMINATION">Elimination (One life only)</option>
+                            <option value="LIMITED">Limited (X lives per player)</option>
+                        </select>
+                    </div>
+                    <div class="config-item" id="respawnDelayField">
+                        <label for="respawnDelay">Respawn Delay (seconds):</label>
+                        <input type="number" id="respawnDelay" min="0" max="30" step="1" value="5">
+                        <small style="color: #888; font-size: 0.8em;">Time before respawn</small>
+                    </div>
+                    <div class="config-item" id="waveIntervalField" style="display: none;">
+                        <label for="waveRespawnInterval">Wave Interval (seconds):</label>
+                        <input type="number" id="waveRespawnInterval" min="10" max="120" step="10" value="30">
+                        <small style="color: #888; font-size: 0.8em;">Time between wave respawns</small>
+                    </div>
+                    <div class="config-item" id="maxLivesField" style="display: none;">
+                        <label for="maxLives">Max Lives Per Player:</label>
+                        <input type="number" id="maxLives" min="1" max="10" value="3">
+                        <small style="color: #888; font-size: 0.8em;">Lives before elimination</small>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="modal-footer">
@@ -364,6 +422,16 @@
         ctfButton.textContent = '🚩 Capture The Flag';
         ctfButton.onclick = () => createPresetGame('ctf');
         createButtons.appendChild(ctfButton);
+        
+        const eliminationButton = document.createElement('button');
+        eliminationButton.textContent = '💀 Elimination';
+        eliminationButton.onclick = () => createPresetGame('elimination');
+        createButtons.appendChild(eliminationButton);
+        
+        const stockBattleButton = document.createElement('button');
+        stockBattleButton.textContent = '❤️ Stock Battle';
+        stockBattleButton.onclick = () => createPresetGame('stock-battle');
+        createButtons.appendChild(stockBattleButton);
         
         // Add custom game button
         const customButton = document.createElement('button');
@@ -473,7 +541,15 @@
                     roundDuration: 120,
                     restDuration: 10,
                     flagsPerTeam: 0,
-                    scoreStyle: 'TOTAL_KILLS'
+                    scoreStyle: 'TOTAL_KILLS',
+                    victoryCondition: 'TIME_LIMIT',
+                    scoreLimit: 50,
+                    timeLimit: 600,  // 10 minutes
+                    suddenDeath: true,
+                    respawnMode: 'INSTANT',
+                    respawnDelay: 5,
+                    waveRespawnInterval: 30,
+                    maxLives: -1
                 }
             };
         } else if (presetType === 'ffa') {
@@ -493,7 +569,15 @@
                     roundDuration: 120,
                     restDuration: 10,
                     flagsPerTeam: 0,
-                    scoreStyle: 'TOTAL_KILLS'
+                    scoreStyle: 'TOTAL_KILLS',
+                    victoryCondition: 'SCORE_LIMIT',
+                    scoreLimit: 25,  // First to 25 kills
+                    timeLimit: 600,
+                    suddenDeath: false,
+                    respawnMode: 'INSTANT',
+                    respawnDelay: 3,  // Faster respawn for FFA
+                    waveRespawnInterval: 30,
+                    maxLives: -1
                 }
             };
         } else if (presetType === 'ctf') {
@@ -510,10 +594,74 @@
                 captureTime: 3,
                 aiCheckIntervalMs: 10000,
                 rules: {
-                    roundDuration: 300,     // 5 minute rounds
-                    restDuration: 15,        // 15 second rest
-                    flagsPerTeam: 1,         // Classic CTF - 1 flag per team
-                    scoreStyle: 'CAPTURES'   // Score by captures only
+                    roundDuration: 300,         // 5 minute rounds
+                    restDuration: 15,           // 15 second rest
+                    flagsPerTeam: 1,            // Classic CTF - 1 flag per team
+                    scoreStyle: 'CAPTURES',     // Score by captures only
+                    victoryCondition: 'OBJECTIVE',
+                    scoreLimit: 3,              // First to 3 captures wins
+                    timeLimit: 600,
+                    suddenDeath: true,          // Sudden death if tied
+                    respawnMode: 'WAVE',        // Wave respawns for coordinated pushes
+                    respawnDelay: 5,
+                    waveRespawnInterval: 20,    // 20 second waves for CTF
+                    maxLives: -1
+                }
+            };
+        } else if (presetType === 'elimination') {
+            gameConfig = {
+                maxPlayers: 20,                 // Battle royale scale
+                teamCount: 0,                   // Every player for themselves
+                worldWidth: 2000,
+                worldHeight: 2000,
+                playerSpeed: 160,               // Slightly faster for tactical movement
+                playerMaxHealth: 100,
+                playerSize: 10,
+                strategicLocationsCount: 8,     // More loot/strategic points
+                captureRadius: 50,
+                captureTime: 3,
+                aiCheckIntervalMs: 10000,
+                rules: {
+                    roundDuration: 0,           // No rounds - single continuous game
+                    restDuration: 10,
+                    flagsPerTeam: 0,            // No flags
+                    scoreStyle: 'TOTAL_KILLS',  // Kills matter for placement
+                    victoryCondition: 'ELIMINATION',  // Last player standing wins!
+                    scoreLimit: 50,
+                    timeLimit: 900,             // 15 minute max (safety limit)
+                    suddenDeath: false,
+                    respawnMode: 'ELIMINATION', // ONE LIFE - Battle Royale style!
+                    respawnDelay: 0,
+                    waveRespawnInterval: 30,
+                    maxLives: -1
+                }
+            };
+        } else if (presetType === 'stock-battle') {
+            gameConfig = {
+                maxPlayers: 16,
+                teamCount: 4,                   // 4 teams, Smash Bros style
+                worldWidth: 1800,
+                worldHeight: 1800,
+                playerSpeed: 155,
+                playerMaxHealth: 100,
+                playerSize: 10,
+                strategicLocationsCount: 6,
+                captureRadius: 50,
+                captureTime: 3,
+                aiCheckIntervalMs: 10000,
+                rules: {
+                    roundDuration: 180,         // 3 minute rounds
+                    restDuration: 12,
+                    flagsPerTeam: 0,
+                    scoreStyle: 'TOTAL_KILLS',
+                    victoryCondition: 'ELIMINATION',  // Last team with lives wins
+                    scoreLimit: 50,
+                    timeLimit: 600,             // 10 minute fallback
+                    suddenDeath: true,          // Sudden death if time runs out
+                    respawnMode: 'LIMITED',     // Limited lives per player
+                    respawnDelay: 3,            // Quick respawn to keep action flowing
+                    waveRespawnInterval: 30,
+                    maxLives: 5                 // 5 stocks per player (like Smash Bros!)
                 }
             };
         }
@@ -596,12 +744,32 @@
                 document.getElementById('restDuration').value = defaultConfig.rules.restDuration || 10;
                 document.getElementById('flagsPerTeam').value = defaultConfig.rules.flagsPerTeam || 0;
                 document.getElementById('scoreStyle').value = defaultConfig.rules.scoreStyle || 'TOTAL_KILLS';
+                document.getElementById('victoryCondition').value = defaultConfig.rules.victoryCondition || 'ENDLESS';
+                document.getElementById('scoreLimit').value = defaultConfig.rules.scoreLimit || 50;
+                document.getElementById('timeLimit').value = defaultConfig.rules.timeLimit || 600;
+                document.getElementById('suddenDeath').checked = defaultConfig.rules.suddenDeath || false;
+                document.getElementById('respawnMode').value = defaultConfig.rules.respawnMode || 'INSTANT';
+                document.getElementById('respawnDelay').value = defaultConfig.rules.respawnDelay || 5;
+                document.getElementById('waveRespawnInterval').value = defaultConfig.rules.waveRespawnInterval || 30;
+                document.getElementById('maxLives').value = defaultConfig.rules.maxLives || 3;
             } else {
                 document.getElementById('roundDuration').value = 0;
                 document.getElementById('restDuration').value = 10;
                 document.getElementById('flagsPerTeam').value = 0;
                 document.getElementById('scoreStyle').value = 'TOTAL_KILLS';
+                document.getElementById('victoryCondition').value = 'ENDLESS';
+                document.getElementById('scoreLimit').value = 50;
+                document.getElementById('timeLimit').value = 600;
+                document.getElementById('suddenDeath').checked = false;
+                document.getElementById('respawnMode').value = 'INSTANT';
+                document.getElementById('respawnDelay').value = 5;
+                document.getElementById('waveRespawnInterval').value = 30;
+                document.getElementById('maxLives').value = 3;
             }
+            
+            // Update field visibility
+            updateVictoryFields();
+            updateRespawnFields();
             
             // Show modal
             document.getElementById('custom-game-modal').classList.remove('hidden');
@@ -611,6 +779,60 @@
         }
     }
 
+    function updateVictoryFields() {
+        const victoryCondition = document.getElementById('victoryCondition').value;
+        const scoreLimitField = document.getElementById('scoreLimitField');
+        const timeLimitField = document.getElementById('timeLimitField');
+        const suddenDeathField = document.getElementById('suddenDeathField');
+        
+        // Hide all fields by default
+        scoreLimitField.style.display = 'none';
+        timeLimitField.style.display = 'none';
+        suddenDeathField.style.display = 'none';
+        
+        // Show relevant fields based on selection
+        switch (victoryCondition) {
+            case 'SCORE_LIMIT':
+                scoreLimitField.style.display = 'block';
+                break;
+            case 'TIME_LIMIT':
+                timeLimitField.style.display = 'block';
+                suddenDeathField.style.display = 'block';
+                break;
+            case 'OBJECTIVE':
+                scoreLimitField.style.display = 'block';
+                suddenDeathField.style.display = 'block';
+                break;
+        }
+    }
+    
+    function updateRespawnFields() {
+        const respawnMode = document.getElementById('respawnMode').value;
+        const respawnDelayField = document.getElementById('respawnDelayField');
+        const waveIntervalField = document.getElementById('waveIntervalField');
+        const maxLivesField = document.getElementById('maxLivesField');
+        
+        // Hide all fields by default
+        respawnDelayField.style.display = 'none';
+        waveIntervalField.style.display = 'none';
+        maxLivesField.style.display = 'none';
+        
+        // Show relevant fields based on selection
+        switch (respawnMode) {
+            case 'INSTANT':
+                respawnDelayField.style.display = 'block';
+                break;
+            case 'WAVE':
+                waveIntervalField.style.display = 'block';
+                break;
+            case 'LIMITED':
+                respawnDelayField.style.display = 'block';
+                maxLivesField.style.display = 'block';
+                break;
+            // NEXT_ROUND and ELIMINATION don't need extra fields
+        }
+    }
+    
     function closeCustomGameModal() {
         document.getElementById('custom-game-modal').classList.add('hidden');
     }
@@ -632,7 +854,15 @@
                 roundDuration: parseFloat(document.getElementById('roundDuration').value),
                 restDuration: parseFloat(document.getElementById('restDuration').value),
                 flagsPerTeam: parseInt(document.getElementById('flagsPerTeam').value),
-                scoreStyle: document.getElementById('scoreStyle').value
+                scoreStyle: document.getElementById('scoreStyle').value,
+                victoryCondition: document.getElementById('victoryCondition').value,
+                scoreLimit: parseInt(document.getElementById('scoreLimit').value),
+                timeLimit: parseFloat(document.getElementById('timeLimit').value),
+                suddenDeath: document.getElementById('suddenDeath').checked,
+                respawnMode: document.getElementById('respawnMode').value,
+                respawnDelay: parseFloat(document.getElementById('respawnDelay').value),
+                waveRespawnInterval: parseFloat(document.getElementById('waveRespawnInterval').value),
+                maxLives: parseInt(document.getElementById('maxLives').value)
             }
         };
 

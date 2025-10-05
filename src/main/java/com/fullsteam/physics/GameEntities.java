@@ -118,9 +118,12 @@ public class GameEntities {
     /**
      * Remove inactive entities across all collections.
      * This is useful for cleanup operations.
+     * 
+     * Note: Players and Projectiles are handled separately in GameManager.update()
+     * for more fine-grained control over their lifecycle and effects.
      */
     public void removeInactiveEntities() {
-        // Remove inactive players
+        // Remove inactive players (commented out - handled by GameManager for player lifecycle management)
 //        players.entrySet().removeIf(entry -> {
 //            if (!entry.getValue().isActive()) {
 //                world.removeBody(entry.getValue().getBody());
@@ -128,7 +131,7 @@ public class GameEntities {
 //            return !entry.getValue().isActive();
 //        });
 
-        // Remove inactive projectiles
+        // Remove inactive projectiles (commented out - handled by GameManager for explosion effects)
 //        projectiles.entrySet().removeIf(entry -> {
 //            Projectile projectile = entry.getValue();
 //            if (!projectile.isActive()) {
@@ -142,6 +145,7 @@ public class GameEntities {
 //            return false;
 //        });
 
+        // Remove expired obstacles
         obstacles.entrySet().removeIf(entry -> {
             Obstacle o = entry.getValue();
             if (o.isExpired()) {
@@ -170,6 +174,7 @@ public class GameEntities {
             }
             return false;
         });
+        
         netProjectiles.entrySet().removeIf(entry -> {
             NetProjectile o = entry.getValue();
             if (o.isExpired()) {
@@ -178,6 +183,7 @@ public class GameEntities {
             }
             return false;
         });
+        
         teleportPads.entrySet().removeIf(entry -> {
             TeleportPad o = entry.getValue();
             if (o.isExpired()) {
@@ -187,6 +193,7 @@ public class GameEntities {
             }
             return false;
         });
+        
         beams.entrySet().removeIf(entry -> {
             Beam o = entry.getValue();
             if (o.isExpired()) {
@@ -195,6 +202,9 @@ public class GameEntities {
             }
             return false;
         });
+        
+        // Note: Flags are intentionally NOT cleaned up here as they persist for the entire game
+        // Flags are only removed when a game ends or when explicitly removed via removeFlag()
     }
 
     /**
@@ -210,6 +220,7 @@ public class GameEntities {
         netProjectiles.values().forEach(net -> net.update(deltaTime));
         teleportPads.values().forEach(pad -> pad.update(deltaTime));
         beams.values().forEach(beam -> beam.update(deltaTime));
+        // Note: Flags don't need updates - their state is managed by game logic in CollisionProcessor
     }
 
     public PlayerSession removePlayerSession(int playerId) {
