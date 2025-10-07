@@ -96,7 +96,7 @@ public class UtilitySystem {
         gameEntities.addFieldEffect(fieldEffect);
         world.addBody(fieldEffect.getBody());
 
-        log.info("Created {} field effect at ({}, {}) with radius {} for player {}",
+        log.debug("Created {} field effect at ({}, {}) with radius {} for player {}",
                 effectType.name(), targetPos.x, targetPos.y, utility.getRadius(), activation.playerId);
     }
 
@@ -150,8 +150,6 @@ public class UtilitySystem {
                 // Refund the cooldown since placement failed
                 player.refundUtilityCooldown();
             }
-
-            broadcastWarning("Cannot place turret - position blocked!");
             return;
         }
 
@@ -165,7 +163,7 @@ public class UtilitySystem {
 
         gameEntities.addTurret(turret);
         world.addBody(turret.getBody());
-        log.info("Player {} deployed turret at ({}, {})", activation.playerId, placement.x, placement.y);
+        log.debug("Player {} deployed turret at ({}, {})", activation.playerId, placement.x, placement.y);
     }
 
     /**
@@ -189,8 +187,8 @@ public class UtilitySystem {
 
         gameEntities.addObstacle(barrier);
         world.addBody(barrier.getBody());
-        
-        log.info("Player {} created barrier at ({}, {})", activation.playerId, placement.x, placement.y);
+
+        log.debug("Player {} created barrier at ({}, {})", activation.playerId, placement.x, placement.y);
     }
 
     /**
@@ -212,7 +210,7 @@ public class UtilitySystem {
 
         gameEntities.addNetProjectile(netProjectile);
         world.addBody(netProjectile.getBody());
-        
+
         log.debug("Player {} launched net projectile", activation.playerId);
     }
 
@@ -234,7 +232,7 @@ public class UtilitySystem {
 
         gameEntities.addFieldEffect(mine);
         world.addBody(mine.getBody());
-        log.info("Player {} placed proximity mine at ({}, {})", 
+        log.debug("Player {} placed proximity mine at ({}, {})",
                 activation.playerId, activation.position.x, activation.position.y);
     }
 
@@ -262,7 +260,7 @@ public class UtilitySystem {
         // Try to link with existing teleport pad from same player
         linkTeleportPads(teleportPad, activation.playerId);
 
-        log.info("Player {} placed teleport pad at ({}, {})", 
+        log.debug("Player {} placed teleport pad at ({}, {})",
                 activation.playerId, placement.x, placement.y);
     }
 
@@ -279,7 +277,7 @@ public class UtilitySystem {
 
                 // Link the pads
                 newPad.linkTo(existingPad);
-                log.info("Linked teleport pads {} and {} for player {}", 
+                log.debug("Linked teleport pads {} and {} for player {}",
                         newPad.getId(), existingPad.getId(), playerId);
                 break; // Only link to one pad
             }
@@ -307,7 +305,7 @@ public class UtilitySystem {
 
         // Update beam's effective end point based on obstacle collisions
         Vector2 effectiveEnd = weaponSystem.findBeamObstacleIntersectionPublic(
-                utilityBeam.getStartPoint(), 
+                utilityBeam.getStartPoint(),
                 utilityBeam.getEndPoint()
         );
         utilityBeam.setEffectiveEndPoint(effectiveEnd);
@@ -319,7 +317,7 @@ public class UtilitySystem {
         if (utilityBeam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
             weaponSystem.processBeamInitialHitPublic(utilityBeam);
         }
-        
+
         log.debug("Player {} fired utility beam: {}", activation.playerId, utility.getDisplayName());
     }
 
@@ -357,5 +355,6 @@ public class UtilitySystem {
             int totalTeleportPads,
             int totalNetProjectiles,
             int totalFieldEffects
-    ) {}
+    ) {
+    }
 }

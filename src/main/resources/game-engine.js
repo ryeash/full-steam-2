@@ -1135,6 +1135,15 @@ class GameEngine {
                 } else {
                     this.createObstacle(obstacleData);
                 }
+                
+                // Create health bar for player barriers if it doesn't exist
+                if (obstacleData.type === 'PLAYER_BARRIER' && obstacleData.ownerId > 0) {
+                    this.obstacleHealthBars = this.obstacleHealthBars || new Map();
+                    if (!this.obstacleHealthBars.has(obstacleData.id)) {
+                        const healthBarContainer = this.createObstacleHealthBar(obstacleData);
+                        this.obstacleHealthBars.set(obstacleData.id, healthBarContainer);
+                    }
+                }
             });
 
             for (let [obstacleId, obstacle] of this.obstacles) {
@@ -2883,6 +2892,13 @@ class GameEngine {
         graphics.zIndex = 5;
         this.obstacles.set(obstacleData.id, graphics);
         this.gameContainer.addChild(graphics);
+        
+        // Create health bar for player-created obstacles (barriers)
+        if (obstacleData.type === 'PLAYER_BARRIER' && obstacleData.ownerId > 0) {
+            const healthBarContainer = this.createObstacleHealthBar(obstacleData);
+            this.obstacleHealthBars = this.obstacleHealthBars || new Map();
+            this.obstacleHealthBars.set(obstacleData.id, healthBarContainer);
+        }
     }
 
     /**
@@ -3013,6 +3029,12 @@ class GameEngine {
         graphics.position.set(isoPos.x, isoPos.y);
         // Consistent with createObstacle - invert rotation for PIXI coordinate system
         graphics.rotation = -(obstacleData.rotation || 0);
+        
+        // Update health bar if it exists
+        if (this.obstacleHealthBars && this.obstacleHealthBars.has(obstacleData.id)) {
+            const healthBar = this.obstacleHealthBars.get(obstacleData.id);
+            this.updateObstacleHealthBar(healthBar, obstacleData);
+        }
     }
 
     removeObstacle(obstacleId) {
@@ -3021,6 +3043,84 @@ class GameEngine {
             this.gameContainer.removeChild(sprite);
             this.obstacles.delete(obstacleId);
         }
+        
+        // Remove health bar if it exists
+        if (this.obstacleHealthBars && this.obstacleHealthBars.has(obstacleId)) {
+            const healthBar = this.obstacleHealthBars.get(obstacleId);
+            this.nameContainer.removeChild(healthBar);
+            this.obstacleHealthBars.delete(obstacleId);
+        }
+    }
+    
+    /**
+     * Create health bar for player-created obstacles (barriers).
+     * Uses a smaller, more subtle design to distinguish from player health bars.
+     */
+    createObstacleHealthBar(obstacleData) {
+        const healthBarContainer = new PIXI.Container();
+        
+        // Smaller health bar background (half the size of player health bars)
+        const healthBg = new PIXI.Graphics();
+        healthBg.beginFill(0x222222, 0.8); // Darker, more subtle background
+        healthBg.drawRoundedRect(-15, 0, 30, 4, 1); // Smaller dimensions
+        healthBg.endFill();
+        healthBarContainer.addChild(healthBg);
+        
+        // Health bar fill
+        const healthFill = new PIXI.Graphics();
+        healthFill.beginFill(0x4a90e2); // Blue color to distinguish from player health
+        healthFill.drawRoundedRect(-15, 0, 30, 4, 1);
+        healthFill.endFill();
+        healthBarContainer.addChild(healthFill);
+        
+        // Store references for updates
+        healthBarContainer.healthBg = healthBg;
+        healthBarContainer.healthFill = healthFill;
+        
+        // Position above obstacle (will be updated in updateObstacleHealthBar)
+        const isoPos = this.worldToIsometric(obstacleData.x, obstacleData.y);
+        healthBarContainer.position.set(isoPos.x, isoPos.y - 25); // Closer to obstacle than player health bars
+        
+        // Add to name container so it doesn't rotate with obstacle
+        this.nameContainer.addChild(healthBarContainer);
+        
+        return healthBarContainer;
+    }
+    
+    /**
+     * Update obstacle health bar appearance and position.
+     */
+    updateObstacleHealthBar(healthBarContainer, obstacleData) {
+        if (!healthBarContainer || !healthBarContainer.healthFill) return;
+        
+        // Update position above obstacle using current graphics position
+        const graphics = this.obstacles.get(obstacleData.id);
+        if (graphics) {
+            healthBarContainer.position.set(graphics.x, graphics.y - 25);
+        }
+        healthBarContainer.visible = obstacleData.active;
+        
+        // Only show health bar if obstacle is damaged (not at full health)
+        const healthPercent = Math.max(0, Math.min(1, obstacleData.health / obstacleData.maxHealth));
+        const isDamaged = healthPercent < 1.0;
+        healthBarContainer.visible = obstacleData.active && isDamaged;
+        
+        if (!isDamaged) return; // Don't update if not damaged
+        
+        // Update health bar fill
+        healthBarContainer.healthFill.clear();
+        
+        // Color based on health level - different colors from player health bars
+        let healthColor = 0x4a90e2; // Blue (healthy)
+        if (healthPercent < 0.3) {
+            healthColor = 0xe74c3c; // Red (critical)
+        } else if (healthPercent < 0.6) {
+            healthColor = 0xf39c12; // Orange (damaged)
+        }
+        
+        healthBarContainer.healthFill.beginFill(healthColor);
+        healthBarContainer.healthFill.drawRoundedRect(-15, 0, 30 * healthPercent, 4, 1);
+        healthBarContainer.healthFill.endFill();
     }
     
     /**

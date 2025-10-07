@@ -863,7 +863,7 @@ public class GameManager {
      */
     private void createKothZones() {
         Rules rules = gameConfig.getRules();
-        if (!rules.hasKothZones()) {
+        if (!rules.hasKothZones() || !gameConfig.isTeamMode()) {
             return; // KOTH disabled
         }
 
@@ -908,79 +908,36 @@ public class GameManager {
     private Vector2 calculateKothZonePosition(int zoneIndex, int totalZones, int teamCount) {
         double worldWidth = gameConfig.getWorldWidth();
         double worldHeight = gameConfig.getWorldHeight();
+        double standardSpread = 0.33;
 
         if (totalZones == 1) {
             // Single zone: place at world center
             return new Vector2(0, 0);
         }
 
-        if (teamCount <= 1) {
-            // FFA mode: distribute zones in a grid pattern
-            if (totalZones == 2) {
-                // Two zones: left and right of center
-                double x = (zoneIndex == 0) ? -worldWidth * 0.25 : worldWidth * 0.25;
-                return new Vector2(x, 0);
-            } else if (totalZones == 3) {
-                // Three zones: triangle pattern
-                double angleStep = (2 * Math.PI) / 3;
-                double angle = zoneIndex * angleStep;
-                double radius = Math.min(worldWidth, worldHeight) * 0.25;
-                return new Vector2(radius * Math.cos(angle), radius * Math.sin(angle));
-            } else { // 4 zones
-                // Four zones: square pattern
-                double x = (zoneIndex % 2 == 0) ? -worldWidth * 0.25 : worldWidth * 0.25;
-                double y = (zoneIndex < 2) ? -worldHeight * 0.25 : worldHeight * 0.25;
-                return new Vector2(x, y);
-            }
-        }
-
-        // Team mode: place zones between team spawn areas
+        // Team mode: place zones in neutral space between team spawn areas
         if (teamCount == 2) {
-            // 2 teams: zones along the center line between teams
-            if (totalZones == 1) {
-                return new Vector2(0, 0); // Center
-            } else if (totalZones == 2) {
-                double y = (zoneIndex == 0) ? -worldHeight * 0.2 : worldHeight * 0.2;
-                return new Vector2(0, y);
-            } else if (totalZones == 3) {
-                double y = (zoneIndex - 1) * worldHeight * 0.2; // -0.2, 0, 0.2
-                return new Vector2(0, y);
-            } else { // 4 zones
-                double y = ((zoneIndex % 2) - 0.5) * worldHeight * 0.3;
-                double x = (zoneIndex < 2) ? -worldWidth * 0.15 : worldWidth * 0.15;
-                return new Vector2(x, y);
-            }
+            // aligned on the y-axis to avoid all team zones
+            double increment = worldHeight / (totalZones + 1);
+            double y = increment * (zoneIndex + 1) - (worldHeight / 2);
+            return new Vector2(0, y);
         } else if (teamCount == 3) {
-            // 3 teams: zones in center, forming triangle
-            if (totalZones == 1) {
-                return new Vector2(0, 0);
-            } else {
-                double angleStep = (2 * Math.PI) / totalZones;
-                double angle = zoneIndex * angleStep;
-                double radius = Math.min(worldWidth, worldHeight) * 0.2;
-                return new Vector2(radius * Math.cos(angle), radius * Math.sin(angle));
-            }
+            // aligned on the x-axis to avoid all team zones
+            double increment = worldWidth / (totalZones + 1);
+            double x = increment * (zoneIndex + 1) - (worldWidth / 2);
+            return new Vector2(x, 0);
         } else { // 4 teams
-            // 4 teams: zones at cardinal points between team corners
-            if (totalZones == 1) {
-                return new Vector2(0, 0); // Center
-            } else if (totalZones == 2) {
-                // Two zones: opposite sides
-                double x = (zoneIndex == 0) ? -worldWidth * 0.2 : worldWidth * 0.2;
+            // align on the longer axis
+            if (worldHeight > worldWidth) {
+                // aligned on the y-axis to avoid all team zones
+                double increment = worldHeight / (totalZones + 1);
+                double y = increment * (zoneIndex + 1) - (worldHeight / 2);
+                return new Vector2(0, y);
+            } else {
+                // aligned on the x-axis to avoid all team zones
+                double increment = worldWidth / (totalZones + 1);
+                double x = increment * (zoneIndex + 1) - (worldWidth / 2);
                 return new Vector2(x, 0);
-            } else if (totalZones == 3) {
-                // Three zones: center + two sides
-                if (zoneIndex == 0) {
-                    return new Vector2(0, 0);
-                } else {
-                    double x = (zoneIndex == 1) ? -worldWidth * 0.2 : worldWidth * 0.2;
-                    return new Vector2(x, 0);
-                }
-            } else { // 4 zones
-                // Four zones: cross pattern between team corners
-                double x = (zoneIndex % 2 == 0) ? -worldWidth * 0.2 : worldWidth * 0.2;
-                double y = (zoneIndex < 2) ? -worldHeight * 0.2 : worldHeight * 0.2;
-                return new Vector2(x, y);
             }
         }
     }
@@ -1136,6 +1093,13 @@ public class GameManager {
             obsState.put("shapeCategory", obstacle.getShapeCategory().name());
             obsState.put("boundingRadius", obstacle.getBoundingRadius());
             obsState.put("rotation", obstacle.getBody().getTransform().getRotation().toRadians());
+            if (obstacle.getType() == Obstacle.ObstacleType.PLAYER_BARRIER) {
+                obsState.put("health", obstacle.getHealth());
+                obsState.put("maxHealth", obstacle.getMaxHealth());
+                obsState.put("active", obstacle.isActive());
+                obsState.put("ownerId", obstacle.getOwnerId());
+                obsState.put("ownerTeam", obstacle.getOwnerTeam());
+            }
 
             // Add detailed shape data for client rendering
             obsState.putAll(obstacle.getShapeData());
@@ -1508,6 +1472,11 @@ public class GameManager {
             obsData.put("shapeCategory", obstacle.getShapeCategory().name());
             obsData.put("boundingRadius", obstacle.getBoundingRadius());
             obsData.put("rotation", obstacle.getBody().getTransform().getRotation().toRadians());
+            obsData.put("health", obstacle.getHealth());
+            obsData.put("maxHealth", obstacle.getMaxHealth());
+            obsData.put("active", obstacle.isActive());
+            obsData.put("ownerId", obstacle.getOwnerId());
+            obsData.put("ownerTeam", obstacle.getOwnerTeam());
 
             // Add detailed shape data for client rendering
             obsData.putAll(obstacle.getShapeData());

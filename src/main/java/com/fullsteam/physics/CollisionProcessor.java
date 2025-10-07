@@ -170,6 +170,18 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         // Process bullet effects on obstacle hit
         bulletEffectProcessor.processEffectHit(projectile, hitPosition);
 
+        // Apply damage to player-created obstacles (barriers)
+        if (obstacle.getType() == Obstacle.ObstacleType.PLAYER_BARRIER) {
+            // Check if projectile can damage this obstacle (team rules)
+            if (canProjectileDamageObstacle(projectile, obstacle)) {
+                boolean obstacleDestroyed = obstacle.takeDamage(projectile.getDamage());
+                if (obstacleDestroyed) {
+                    log.debug("Projectile {} destroyed player barrier {} (owner: {})", 
+                            projectile.getId(), obstacle.getId(), obstacle.getOwnerId());
+                }
+            }
+        }
+
         // Check if projectile should bounce
         boolean shouldBounce = bulletEffectProcessor.shouldBounceOffObstacle(projectile, obstacle);
 
@@ -595,5 +607,24 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
     @Override
     public void postSolve(ContactCollisionData<Body> collision, SolvedContact contact) {
 
+    }
+
+    /**
+     * Check if a projectile can damage an obstacle based on team rules.
+     * Projectiles cannot damage obstacles created by teammates.
+     */
+    private boolean canProjectileDamageObstacle(Projectile projectile, Obstacle obstacle) {
+        // Can't damage obstacles created by the same player
+        if (projectile.getOwnerId() == obstacle.getOwnerId()) {
+            return false;
+        }
+
+        // In FFA mode (team 0), can damage any obstacle except own
+        if (projectile.getOwnerTeam() == 0 || obstacle.getOwnerTeam() == 0) {
+            return true;
+        }
+
+        // In team mode, can only damage obstacles created by different teams
+        return projectile.getOwnerTeam() != obstacle.getOwnerTeam();
     }
 }

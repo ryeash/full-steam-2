@@ -59,8 +59,12 @@ public class Application {
         @Override
         public void serialize(Double value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
             if (value != null) {
-                BigDecimal bd = BigDecimal.valueOf(value);
-                gen.writeNumber(bd.setScale(1, RoundingMode.FLOOR));
+                if (value.isInfinite()) {
+                    gen.writeNumber(999999); // a large number
+                } else {
+                    BigDecimal bd = BigDecimal.valueOf(value);
+                    gen.writeNumber(bd.setScale(1, RoundingMode.FLOOR));
+                }
             } else {
                 gen.writeNull();
             }
