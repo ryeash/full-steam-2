@@ -228,6 +228,11 @@
                             <option value="4">4 Teams</option>
                         </select>
                     </div>
+                    <div class="config-item">
+                        <label for="enableAIFilling">🤖 Fill with AI Players:</label>
+                        <input type="checkbox" id="enableAIFilling" checked>
+                        <span class="checkbox-label">Automatically fill empty slots with AI players</span>
+                    </div>
                 </div>
                 
                 <div class="config-section">
@@ -281,6 +286,20 @@
                             <option value="CAPTURES">Captures Only (CTF)</option>
                             <option value="TOTAL">Total (Kills + Captures)</option>
                         </select>
+                    </div>
+                </div>
+                
+                <div class="config-section">
+                    <h3>👑 King of the Hill</h3>
+                    <div class="config-item">
+                        <label for="kothZones">Number of Zones:</label>
+                        <input type="number" id="kothZones" min="0" max="4" value="0">
+                        <small style="color: #888; font-size: 0.8em;">0 = disabled, 1-4 = KOTH zones</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="kothPointsPerSecond">Points Per Second:</label>
+                        <input type="number" id="kothPointsPerSecond" min="0.5" max="5" step="0.5" value="1.0">
+                        <small style="color: #888; font-size: 0.8em;">Points awarded for controlling a zone</small>
                     </div>
                 </div>
                 
@@ -423,6 +442,11 @@
         ctfButton.onclick = () => createPresetGame('ctf');
         createButtons.appendChild(ctfButton);
         
+        const dominationButton = document.createElement('button');
+        dominationButton.textContent = '👑 Domination';
+        dominationButton.onclick = () => createPresetGame('domination');
+        createButtons.appendChild(dominationButton);
+        
         const eliminationButton = document.createElement('button');
         eliminationButton.textContent = '💀 Elimination';
         eliminationButton.onclick = () => createPresetGame('elimination');
@@ -537,6 +561,7 @@
                 captureRadius: 50,
                 captureTime: 3,
                 aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
                 rules: {
                     roundDuration: 120,
                     restDuration: 10,
@@ -549,7 +574,9 @@
                     respawnMode: 'INSTANT',
                     respawnDelay: 5,
                     waveRespawnInterval: 30,
-                    maxLives: -1
+                    maxLives: -1,
+                    kothZones: 0,
+                    kothPointsPerSecond: 1.0
                 }
             };
         } else if (presetType === 'ffa') {
@@ -565,6 +592,7 @@
                 captureRadius: 50,
                 captureTime: 3,
                 aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
                 rules: {
                     roundDuration: 120,
                     restDuration: 10,
@@ -577,7 +605,9 @@
                     respawnMode: 'INSTANT',
                     respawnDelay: 3,  // Faster respawn for FFA
                     waveRespawnInterval: 30,
-                    maxLives: -1
+                    maxLives: -1,
+                    kothZones: 0,
+                    kothPointsPerSecond: 1.0
                 }
             };
         } else if (presetType === 'ctf') {
@@ -593,6 +623,7 @@
                 captureRadius: 50,
                 captureTime: 3,
                 aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
                 rules: {
                     roundDuration: 300,         // 5 minute rounds
                     restDuration: 15,           // 15 second rest
@@ -605,7 +636,40 @@
                     respawnMode: 'WAVE',        // Wave respawns for coordinated pushes
                     respawnDelay: 5,
                     waveRespawnInterval: 20,    // 20 second waves for CTF
-                    maxLives: -1
+                    maxLives: -1,
+                    kothZones: 0,               // No KOTH zones in CTF
+                    kothPointsPerSecond: 1.0
+                }
+            };
+        } else if (presetType === 'domination') {
+            gameConfig = {
+                maxPlayers: 16,
+                teamCount: 3,                   // 3-way battle for zones
+                worldWidth: 2200,
+                worldHeight: 2200,
+                playerSpeed: 150,
+                playerMaxHealth: 100,
+                playerSize: 10,
+                strategicLocationsCount: 5,
+                captureRadius: 50,
+                captureTime: 3,
+                aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
+                rules: {
+                    roundDuration: 240,         // 4 minute rounds
+                    restDuration: 15,
+                    flagsPerTeam: 0,            // No flags in domination
+                    scoreStyle: 'TOTAL_KILLS',  // Points from kills + zone control
+                    victoryCondition: 'SCORE_LIMIT',
+                    scoreLimit: 200,            // First to 200 points (zone control + kills)
+                    timeLimit: 900,             // 15 minute fallback
+                    suddenDeath: true,
+                    respawnMode: 'INSTANT',
+                    respawnDelay: 4,
+                    waveRespawnInterval: 30,
+                    maxLives: -1,
+                    kothZones: 3,               // 3 zones to fight over!
+                    kothPointsPerSecond: 2.0    // 2 points/second for holding zones
                 }
             };
         } else if (presetType === 'elimination') {
@@ -621,6 +685,7 @@
                 captureRadius: 50,
                 captureTime: 3,
                 aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
                 rules: {
                     roundDuration: 0,           // No rounds - single continuous game
                     restDuration: 10,
@@ -633,7 +698,9 @@
                     respawnMode: 'ELIMINATION', // ONE LIFE - Battle Royale style!
                     respawnDelay: 0,
                     waveRespawnInterval: 30,
-                    maxLives: -1
+                    maxLives: -1,
+                    kothZones: 0,
+                    kothPointsPerSecond: 1.0
                 }
             };
         } else if (presetType === 'stock-battle') {
@@ -649,6 +716,7 @@
                 captureRadius: 50,
                 captureTime: 3,
                 aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
                 rules: {
                     roundDuration: 180,         // 3 minute rounds
                     restDuration: 12,
@@ -661,7 +729,9 @@
                     respawnMode: 'LIMITED',     // Limited lives per player
                     respawnDelay: 3,            // Quick respawn to keep action flowing
                     waveRespawnInterval: 30,
-                    maxLives: 5                 // 5 stocks per player (like Smash Bros!)
+                    maxLives: 5,                // 5 stocks per player (like Smash Bros!)
+                    kothZones: 0,
+                    kothPointsPerSecond: 1.0
                 }
             };
         }
@@ -737,6 +807,7 @@
             document.getElementById('worldHeight').value = defaultConfig.worldHeight;
             document.getElementById('playerSpeed').value = defaultConfig.playerSpeed;
             document.getElementById('playerMaxHealth').value = defaultConfig.playerMaxHealth;
+            document.getElementById('enableAIFilling').checked = defaultConfig.enableAIFilling;
             
             // Populate rules fields
             if (defaultConfig.rules) {
@@ -752,6 +823,8 @@
                 document.getElementById('respawnDelay').value = defaultConfig.rules.respawnDelay || 5;
                 document.getElementById('waveRespawnInterval').value = defaultConfig.rules.waveRespawnInterval || 30;
                 document.getElementById('maxLives').value = defaultConfig.rules.maxLives || 3;
+                document.getElementById('kothZones').value = defaultConfig.rules.kothZones || 0;
+                document.getElementById('kothPointsPerSecond').value = defaultConfig.rules.kothPointsPerSecond || 1.0;
             } else {
                 document.getElementById('roundDuration').value = 0;
                 document.getElementById('restDuration').value = 10;
@@ -763,6 +836,8 @@
                 document.getElementById('suddenDeath').checked = false;
                 document.getElementById('respawnMode').value = 'INSTANT';
                 document.getElementById('respawnDelay').value = 5;
+                document.getElementById('kothZones').value = 0;
+                document.getElementById('kothPointsPerSecond').value = 1.0;
                 document.getElementById('waveRespawnInterval').value = 30;
                 document.getElementById('maxLives').value = 3;
             }
@@ -850,6 +925,7 @@
             captureRadius: 50.0,
             captureTime: 3.0,
             aiCheckIntervalMs: 10000,
+            enableAIFilling: document.getElementById('enableAIFilling').checked,
             rules: {
                 roundDuration: parseFloat(document.getElementById('roundDuration').value),
                 restDuration: parseFloat(document.getElementById('restDuration').value),
@@ -862,7 +938,9 @@
                 respawnMode: document.getElementById('respawnMode').value,
                 respawnDelay: parseFloat(document.getElementById('respawnDelay').value),
                 waveRespawnInterval: parseFloat(document.getElementById('waveRespawnInterval').value),
-                maxLives: parseInt(document.getElementById('maxLives').value)
+                maxLives: parseInt(document.getElementById('maxLives').value),
+                kothZones: parseInt(document.getElementById('kothZones').value),
+                kothPointsPerSecond: parseFloat(document.getElementById('kothPointsPerSecond').value)
             }
         };
 

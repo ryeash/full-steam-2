@@ -21,14 +21,14 @@ public class AIPlayer extends Player {
     private int targetPlayerId = -1;
     private int targetLocationId = -1;
     private boolean isHuman = false; // Always false for AI players
-    
+
     // Movement smoothing state
     private Vector2 lastMoveDirection = new Vector2(0, 0);
     private Vector2 targetMoveDirection = new Vector2(0, 0);
     private double movementSmoothingFactor = 0.7; // How much to blend between old and new movement
 
-    public AIPlayer(int id, String playerName, double x, double y, AIPersonality personality, int team) {
-        super(id, playerName, x, y, team);
+    public AIPlayer(int id, String playerName, double x, double y, AIPersonality personality, int team, double maxHealth) {
+        super(id, playerName, x, y, team, maxHealth);
         this.personality = personality;
         this.memory = new AIMemory();
         this.currentBehavior = new IdleBehavior();
@@ -37,14 +37,14 @@ public class AIPlayer extends Player {
     @Override
     public void update(double deltaTime) {
         super.update(deltaTime);
-        
+
         // Update AI decision making
         lastDecisionTime += deltaTime;
         if (lastDecisionTime >= decisionCooldown && isActive()) {
             // AI decision making will be handled by AIPlayerManager
             lastDecisionTime = 0;
         }
-        
+
         // Update memory with current game state
         memory.update(deltaTime);
     }
@@ -66,34 +66,34 @@ public class AIPlayer extends Player {
     public void resetDecisionTimer() {
         lastDecisionTime = 0;
     }
-    
+
     /**
      * Apply movement smoothing to reduce jerky AI movement.
      */
     public void smoothMovement(PlayerInput input) {
         // Get the new target movement direction
         targetMoveDirection.set(input.getMoveX(), input.getMoveY());
-        
+
         // Smooth transition between last and target movement
         double smoothing = movementSmoothingFactor;
         double newX = lastMoveDirection.x * (1.0 - smoothing) + targetMoveDirection.x * smoothing;
         double newY = lastMoveDirection.y * (1.0 - smoothing) + targetMoveDirection.y * smoothing;
-        
+
         // Update the input with smoothed movement
         input.setMoveX(newX);
         input.setMoveY(newY);
-        
+
         // Store current movement for next frame
         lastMoveDirection.set(newX, newY);
     }
-    
+
     /**
      * Get current movement direction for continuous motion.
      */
     public Vector2 getCurrentMovementDirection() {
         return lastMoveDirection.copy();
     }
-    
+
     /**
      * Set movement smoothing factor (0.0 = no smoothing, 1.0 = maximum smoothing).
      */

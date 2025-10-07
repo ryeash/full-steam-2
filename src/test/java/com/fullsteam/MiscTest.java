@@ -10,11 +10,11 @@ import java.lang.reflect.Field;
 
 import static org.junit.jupiter.api.Assertions.fail;
 
-@MicronautTest
-public class MiscTest {
+@MicronautTest(startApplication = false)
+public class MiscTest extends BaseTestClass {
 
     @Test
-    public void validatePresets() throws IllegalAccessException, ClassNotFoundException, NoSuchFieldException {
+    public void validatePresets() throws IllegalAccessException {
         // Get all static final WeaponConfig fields from WeaponConfig class
         Field[] fields = WeaponConfig.class.getDeclaredFields();
 

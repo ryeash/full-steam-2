@@ -13,6 +13,7 @@ import org.dyn4j.geometry.Vector2;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -35,15 +36,15 @@ public class Beam extends GameEntity {
     protected final double damageInterval;
     protected final double beamDuration;
     protected final Ordinance ordinance; // Type of beam (laser, plasma, heal, etc.)
-    
+
     // Track affected players for DOT and burst beams
     protected final Set<Integer> affectedPlayers = new HashSet<>();
     protected final Map<Integer, Long> lastDamageTime = new HashMap<>();
-    
+
     private double timeRemaining;
     private double timeSinceLastDamage = 0.0;
 
-    public Beam(int id, Vector2 startPoint, Vector2 direction, double range, double damage, 
+    public Beam(int id, Vector2 startPoint, Vector2 direction, double range, double damage,
                 int ownerId, int ownerTeam, Ordinance ordinance) {
         super(id, createBeamBody(startPoint, direction, range), Double.POSITIVE_INFINITY); // Beams don't have health
         this.startPoint = startPoint.copy();
@@ -58,13 +59,13 @@ public class Beam extends GameEntity {
         this.damageInterval = ordinance.getDamageInterval();
         this.beamDuration = ordinance.getBeamDuration();
         this.timeRemaining = beamDuration;
-        
+
         // Calculate end point
         Vector2 offset = this.direction.copy();
         offset = offset.multiply(range);
         this.endPoint = startPoint.copy();
         this.endPoint.add(offset);
-        
+
         // Initially, effective end point is the same as end point
         // This will be updated by GameManager after obstacle collision detection
         this.effectiveEndPoint = this.endPoint.copy();
@@ -77,16 +78,16 @@ public class Beam extends GameEntity {
         BodyFixture bodyFixture = body.addFixture(rectangle);
         bodyFixture.setSensor(true);
         body.setMass(MassType.INFINITE); // Stationary
-        
+
         // Position and orient the beam
         Vector2 center = startPoint.copy();
         Vector2 offset = direction.copy();
         offset = offset.multiply(range / 2.0);
         center.add(offset);
-        
+
         body.getTransform().setTranslation(center.x, center.y);
         body.getTransform().setRotation(Math.atan2(direction.y, direction.x));
-        
+
         return body;
     }
 
@@ -126,14 +127,14 @@ public class Beam extends GameEntity {
     public void updateTimeSinceLastDamage(double deltaTime) {
         timeSinceLastDamage += deltaTime;
     }
-    
+
     /**
      * Check if burst damage should be applied based on timing
      */
     public boolean shouldApplyBurstDamage() {
         return timeSinceLastDamage >= damageInterval;
     }
-    
+
     /**
      * Reset the burst damage timer after applying damage
      */
@@ -179,7 +180,7 @@ public class Beam extends GameEntity {
         if (!canAffectPlayer(player)) {
             return 0.0;
         }
-        
+
         switch (ordinance) {
             case LASER:
             case RAILGUN:
@@ -207,20 +208,11 @@ public class Beam extends GameEntity {
         if (!canAffectPlayer(player)) {
             return 0.0;
         }
-        
-        switch (ordinance) {
-            case PLASMA_BEAM:
-                // Continuous plasma damage
-                double plasmaPerSecond = damage / beamDuration;
-                return plasmaPerSecond * deltaTime;
-            case HEAL_BEAM:
-                // Continuous healing (negative damage)
-                double healPerSecond = damage / beamDuration; // damage field used for heal amount
-                return -(healPerSecond * deltaTime); // Negative for healing
-            default:
-                // Other beam types don't do continuous damage
-                return 0.0;
-        }
+        if (Objects.requireNonNull(ordinance) == Ordinance.PLASMA_BEAM) {// Continuous plasma damage
+            double plasmaPerSecond = damage / beamDuration;
+            return plasmaPerSecond * deltaTime;
+        }// Other beam types don't do continuous damage
+        return 0.0;
     }
 
     /**
@@ -231,7 +223,7 @@ public class Beam extends GameEntity {
         if (!canAffectPlayer(player)) {
             return 0.0;
         }
-        
+
         switch (ordinance) {
             case PULSE_LASER:
                 // Pulse laser burst damage

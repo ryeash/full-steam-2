@@ -45,6 +45,9 @@ public class GameEntities {
     
     // Capture the Flag entities
     private final Map<Integer, Flag> flags = new ConcurrentSkipListMap<>();
+    
+    // King of the Hill entities
+    private final Map<Integer, KothZone> kothZones = new ConcurrentSkipListMap<>();
 
     private final Deque<Runnable> postWorldUpdateHooks = new ConcurrentLinkedDeque<>();
 
@@ -220,6 +223,7 @@ public class GameEntities {
         netProjectiles.values().forEach(net -> net.update(deltaTime));
         teleportPads.values().forEach(pad -> pad.update(deltaTime));
         beams.values().forEach(beam -> beam.update(deltaTime));
+        kothZones.values().forEach(zone -> zone.update(deltaTime));
         // Note: Flags don't need updates - their state is managed by game logic in CollisionProcessor
     }
 
@@ -341,6 +345,31 @@ public class GameEntities {
     
     public Map<Integer, Flag> getFlags() {
         return flags;
+    }
+    
+    // ===== KOTH Zone Management =====
+    
+    public void addKothZone(KothZone zone) {
+        kothZones.put(zone.getId(), zone);
+    }
+    
+    public void removeKothZone(int zoneId) {
+        KothZone zone = kothZones.remove(zoneId);
+        if (zone != null && zone.getBody() != null) {
+            world.removeBody(zone.getBody());
+        }
+    }
+    
+    public KothZone getKothZone(int zoneId) {
+        return kothZones.get(zoneId);
+    }
+    
+    public Collection<KothZone> getAllKothZones() {
+        return kothZones.values();
+    }
+    
+    public Map<Integer, KothZone> getKothZones() {
+        return kothZones;
     }
 
     public void addPostUpdateHook(Runnable runnable) {

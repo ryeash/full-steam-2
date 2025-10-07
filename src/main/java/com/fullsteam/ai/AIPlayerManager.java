@@ -114,7 +114,7 @@ public class AIPlayerManager {
     /**
      * Create an AI player with a specific personality type, team, and personality-appropriate weapons.
      */
-    public static AIPlayer createAIPlayerWithPersonality(int id, double x, double y, String personalityType, int team) {
+    public static AIPlayer createAIPlayerWithPersonality(int id, double x, double y, String personalityType, int team, double maxHealth) {
         AIPersonality personality = switch (personalityType.toLowerCase()) {
             case "aggressive" -> AIPersonality.createAggressive();
             case "defensive" -> AIPersonality.createDefensive();
@@ -123,7 +123,7 @@ public class AIPlayerManager {
             default -> AIPersonality.createBalanced();
         };
 
-        AIPlayer aiPlayer = new AIPlayer(id, RandomNames.randomName(), x, y, personality, team);
+        AIPlayer aiPlayer = new AIPlayer(id, RandomNames.randomName(), x, y, personality, team, maxHealth);
 
         // Assign weapons based on personality
         com.fullsteam.model.WeaponConfig[] weapons = AIWeaponSelector.selectWeaponLoadoutForPersonality(personality);

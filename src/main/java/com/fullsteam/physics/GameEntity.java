@@ -9,6 +9,7 @@ public abstract class GameEntity {
     protected final int id;
     protected final Body body;
     protected double health;
+    protected double maxHealth;
     protected boolean active = true;
     protected long lastUpdateTime;
     protected final long created = System.currentTimeMillis();
@@ -17,6 +18,7 @@ public abstract class GameEntity {
         this.id = id;
         this.body = body;
         this.health = health;
+        this.maxHealth = health;
         this.lastUpdateTime = System.currentTimeMillis();
         body.setAtRest(false);
         body.setAtRestDetectionEnabled(false);
@@ -64,7 +66,7 @@ public abstract class GameEntity {
     }
 
     public void heal(double amount) {
-        health = Math.min(100.0, health + amount);
+        health = Math.min(maxHealth, health + amount);
     }
 }
 

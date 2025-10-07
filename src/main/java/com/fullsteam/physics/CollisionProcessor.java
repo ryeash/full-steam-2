@@ -116,6 +116,12 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         } else if (entity1 instanceof Flag flag && entity2 instanceof Player player) {
             handlePlayerFlagCollision(player, flag);
             return true; // Flags are sensors, no physics resolution
+        } else if (entity1 instanceof Player player && entity2 instanceof KothZone zone) {
+            handlePlayerKothZoneCollision(player, zone);
+            return true; // KOTH zones are sensors, no physics resolution
+        } else if (entity1 instanceof KothZone zone && entity2 instanceof Player player) {
+            handlePlayerKothZoneCollision(player, zone);
+            return true; // KOTH zones are sensors, no physics resolution
         }
         return true;
     }
@@ -158,7 +164,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         }
 
         // Get hit position for effects
-        org.dyn4j.geometry.Vector2 hitPos = projectile.getBody().getTransform().getTranslation();
+        Vector2 hitPos = projectile.getBody().getTransform().getTranslation();
         Vector2 hitPosition = new Vector2(hitPos.x, hitPos.y);
 
         // Process bullet effects on obstacle hit
@@ -351,7 +357,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         }
 
         // Get hit position for effects
-        org.dyn4j.geometry.Vector2 hitPos = projectile.getBody().getTransform().getTranslation();
+        Vector2 hitPos = projectile.getBody().getTransform().getTranslation();
         Vector2 hitPosition = new Vector2(hitPos.x, hitPos.y);
 
         // Process bullet effects on turret hit
@@ -407,7 +413,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             return !(entity instanceof Projectile);
         }
     }
-    
+
     /**
      * Handle player touching a flag - pickup or capture logic.
      */
@@ -415,14 +421,14 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         if (!player.isActive()) {
             return;
         }
-        
+
         int playerTeam = player.getTeam();
         int flagTeam = flag.getOwnerTeam();
-        
+
         // Check if player is already carrying a flag
         boolean alreadyCarrying = gameEntities.getAllFlags().stream()
                 .anyMatch(f -> f.isCarried() && f.getCarriedByPlayerId() == player.getId());
-        
+
         if (alreadyCarrying) {
             // Player is already carrying a flag, check if they're in their own base for capture
             if (playerTeam == flagTeam && flag.isAtHome()) {
@@ -431,7 +437,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             }
             return;
         }
-        
+
         // Try to pick up the flag
         if (flag.canBeCapturedBy(playerTeam)) {
             pickUpFlag(player, flag);
@@ -440,26 +446,26 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             returnFlag(flag);
         }
     }
-    
+
     /**
      * Player picks up an enemy flag.
      */
     private void pickUpFlag(Player player, Flag flag) {
         flag.pickUp(player.getId());
-        
-        log.info("Player {} (team {}) picked up flag {} (team {})", 
+
+        log.info("Player {} (team {}) picked up flag {} (team {})",
                 player.getId(), player.getTeam(), flag.getId(), flag.getOwnerTeam());
-        
+
         // Broadcast pickup event
         gameManager.broadcastGameEvent(
-                String.format("%s picked up %s flag!", 
-                        player.getPlayerName(), 
+                String.format("%s picked up %s flag!",
+                        player.getPlayerName(),
                         getTeamName(flag.getOwnerTeam())),
                 "FLAG_PICKUP",
                 "#ffaa00"
         );
     }
-    
+
     /**
      * Player captures a flag (brings enemy flag to own base).
      */
@@ -468,38 +474,38 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         Optional<Flag> carriedFlagOpt = gameEntities.getAllFlags().stream()
                 .filter(f -> f.isCarried() && f.getCarriedByPlayerId() == player.getId())
                 .findFirst();
-        
+
         if (carriedFlagOpt.isEmpty()) {
             return;
         }
-        
+
         Flag carriedFlag = carriedFlagOpt.get();
         carriedFlag.capture();
-        
+
         // Award points to player
         gameManager.awardCapture(player, carriedFlag.getOwnerTeam());
-        
-        log.info("Player {} (team {}) captured flag {} (team {})!", 
+
+        log.info("Player {} (team {}) captured flag {} (team {})!",
                 player.getId(), player.getTeam(), carriedFlag.getId(), carriedFlag.getOwnerTeam());
-        
+
         // Broadcast capture event
         gameManager.broadcastGameEvent(
-                String.format("%s captured the %s flag! +1 CAPTURE", 
-                        player.getPlayerName(), 
+                String.format("%s captured the %s flag! +1 CAPTURE",
+                        player.getPlayerName(),
                         getTeamName(carriedFlag.getOwnerTeam())),
                 "FLAG_CAPTURE",
                 "#00ff00"
         );
     }
-    
+
     /**
      * Return a flag to its home position.
      */
     private void returnFlag(Flag flag) {
         flag.returnToHome();
-        
+
         log.info("Flag {} (team {}) returned to home", flag.getId(), flag.getOwnerTeam());
-        
+
         // Broadcast return event
         gameManager.broadcastGameEvent(
                 String.format("%s flag returned!", getTeamName(flag.getOwnerTeam())),
@@ -507,12 +513,53 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
                 "#4444ff"
         );
     }
-    
+
     /**
      * Get team name for display.
      */
     private String getTeamName(int team) {
         return "Team " + team;
+    }
+
+    /**
+     * Handle player entering/staying in a KOTH zone.
+     * Tracks player presence for zone control calculations.
+     */
+    private void handlePlayerKothZoneCollision(Player player, KothZone zone) {
+        if (!player.isActive() || player.getHealth() <= 0) {
+            return;
+        }
+        // Add player to zone tracking
+        zone.addPlayer(player.getId(), player.getTeam());
+    }
+
+    /**
+     * Update all KOTH zones - called once per physics step with proper deltaTime.
+     * This ensures scoring is frame-rate independent.
+     */
+    public void updateKothZones(double deltaTime) {
+        for (KothZone zone : gameEntities.getAllKothZones()) {
+            // Store previous state for change detection
+            int previousController = zone.getControllingTeam();
+            KothZone.ZoneState previousState = zone.getState();
+
+            // Award points if zone is controlled (using proper deltaTime)
+            if (zone.shouldAwardPoints()) {
+                double points = zone.getPointsPerSecond() * deltaTime;
+                if (points > 0) {
+                    // Award points directly to the zone's team score tracking
+                    zone.awardPointsToTeam(zone.getControllingTeam(), points);
+                }
+            }
+
+            // Check for zone control changes and broadcast events
+            if (zone.getControllingTeam() != previousController || zone.getState() != previousState) {
+                gameManager.broadcastZoneControlChange(zone, previousController, previousState);
+            }
+
+            // Clear player tracking for next frame (collision detection will re-add them)
+            zone.clearPlayers();
+        }
     }
 
     // ContactListener methods

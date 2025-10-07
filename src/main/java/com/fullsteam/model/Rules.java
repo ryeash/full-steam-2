@@ -91,11 +91,33 @@ public class Rules {
     @Builder.Default
     private double waveRespawnInterval = 30.0;
     
+    // ===== King of the Hill Rules =====
+    
+    /**
+     * Number of King of the Hill zones. 0 = disabled, 1-4 = number of zones.
+     * Zones are placed equidistant between team spawn areas for fairness.
+     */
+    @Builder.Default
+    private int kothZones = 0;
+    
+    /**
+     * Points awarded per second for controlling a KOTH zone.
+     */
+    @Builder.Default
+    private double kothPointsPerSecond = 1.0;
+    
     /**
      * Check if this game mode uses flags.
      */
     public boolean hasFlags() {
         return flagsPerTeam > 0;
+    }
+    
+    /**
+     * Check if this game mode uses King of the Hill zones.
+     */
+    public boolean hasKothZones() {
+        return kothZones > 0;
     }
     
     /**

@@ -6,27 +6,21 @@ import com.fullsteam.Config;
 import com.fullsteam.ai.AIGameHelper;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
-import com.fullsteam.model.DamageApplicationType;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.GameInfo;
-import com.fullsteam.model.GameState;
-import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
-import com.fullsteam.model.RoundScore;
-import com.fullsteam.model.RespawnMode;
 import com.fullsteam.model.Rules;
-import com.fullsteam.model.ScoreStyle;
 import com.fullsteam.model.UtilityWeapon;
-import com.fullsteam.model.VictoryCondition;
 import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.CollisionProcessor;
 import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
+import com.fullsteam.physics.KothZone;
 import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
@@ -41,15 +35,12 @@ import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.dynamics.Settings;
-import org.dyn4j.dynamics.TimeStep;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Ray;
 import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.DetectFilter;
-import org.dyn4j.world.PhysicsWorld;
 import org.dyn4j.world.World;
-import org.dyn4j.world.listener.StepListener;
 import org.dyn4j.world.result.RaycastResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,7 +54,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-public class GameManager implements StepListener<Body> {
+public class GameManager {
     protected static final Logger log = LoggerFactory.getLogger(GameManager.class);
 
     @Getter
@@ -80,6 +71,12 @@ public class GameManager implements StepListener<Body> {
     protected final TerrainGenerator terrainGenerator;
     @Getter
     protected final GameEventManager gameEventManager;
+    @Getter
+    protected final RuleSystem ruleSystem;
+    @Getter
+    protected final WeaponSystem weaponSystem;
+    @Getter
+    protected final UtilitySystem utilitySystem;
 
     protected final ObjectMapper objectMapper;
 
@@ -88,29 +85,10 @@ public class GameManager implements StepListener<Body> {
     protected boolean gameRunning = false;
     private final long aiCheckIntervalMs;
     private long lastAICheckTime = 0;
+    private boolean aiAdjustmentEnabled = true;
     private final World<Body> world;
     private final ScheduledFuture<?> shutdownHook;
     private double lastUpdateTime = System.nanoTime() / 1e9;
-    
-    // Round-based game state
-    @Getter
-    private GameState gameState = GameState.PLAYING;
-    @Getter
-    private int currentRound = 1;
-    private double roundTimeRemaining = 0.0; // seconds remaining in current round
-    private double restTimeRemaining = 0.0; // seconds remaining in rest period
-    private Map<Integer, RoundScore> roundScores = new HashMap<>(); // playerId -> score snapshot
-    
-    // Victory condition tracking
-    private double gameTimeElapsed = 0.0; // Total game time in seconds
-    private boolean gameOver = false;
-    private String victoryMessage = null;
-    private Integer winningTeam = null; // null for FFA, team number for team modes
-    private Integer winningPlayerId = null; // For FFA modes
-    
-    // Respawn rules tracking
-    private double waveRespawnTimer = 0.0; // Time until next wave respawn
-    private List<Player> deadPlayersWaitingForWave = new ArrayList<>();
 
     public GameManager(String gameId, GameConfig gameConfig, ObjectMapper objectMapper) {
         this.gameId = gameId;
@@ -123,20 +101,6 @@ public class GameManager implements StepListener<Body> {
         this.aiCheckIntervalMs = gameConfig.getAiCheckIntervalMs();
         this.teamSpawnManager = new TeamSpawnManager(gameConfig.getWorldWidth(), gameConfig.getWorldHeight(), gameConfig.getTeamCount());
         this.terrainGenerator = new TerrainGenerator(gameConfig.getWorldWidth(), gameConfig.getWorldHeight());
-        
-        // Initialize round timer if rounds are enabled
-        if (gameConfig.hasRounds()) {
-            this.roundTimeRemaining = gameConfig.getRules().getRoundDuration();
-            log.info("Game {} initialized with rounds: {} seconds per round, {} seconds rest",
-                    gameId, gameConfig.getRules().getRoundDuration(), gameConfig.getRules().getRestDuration());
-        }
-        
-        // Initialize wave respawn timer if using wave respawns
-        if (gameConfig.getRules().usesWaveRespawn()) {
-            this.waveRespawnTimer = gameConfig.getRules().getWaveRespawnInterval();
-            log.info("Game {} initialized with wave respawns: {} seconds between waves",
-                    gameId, gameConfig.getRules().getWaveRespawnInterval());
-        }
 
         this.world = new World<>();
 
@@ -150,21 +114,47 @@ public class GameManager implements StepListener<Body> {
         CollisionProcessor collisionProcessor = new CollisionProcessor(this, this.gameEntities);
         this.world.addCollisionListener(collisionProcessor);
         this.world.addContactListener(collisionProcessor);
-        this.world.addStepListener(this);
 
         // Initialize game event manager
         this.gameEventManager = new GameEventManager(gameEntities, this::send);
 
+        // Initialize rule system
+        this.ruleSystem = new RuleSystem(
+                gameId,
+                gameConfig.getRules(),
+                gameEntities,
+                gameEventManager,
+                this::broadcast,
+                gameConfig.getTeamCount(),
+                gameConfig.getPlayerMaxHealth()
+        );
+
+        // Initialize weapon system
+        this.weaponSystem = new WeaponSystem(gameEntities, world);
+
+        // Initialize utility system
+        this.utilitySystem = new UtilitySystem(
+                gameEntities,
+                world,
+                pos -> isPositionClearOfObstacles(pos, 15.0),
+                (msg, category) -> broadcastGameEvent(msg, category, "#FF8800"),
+                weaponSystem
+        );
+
         createWorldBoundaries();
-//        createStrategicLocations();
         createObstacles();
         createFlags();
+        createKothZones();
 
-        // Add initial AI players to make the game more interesting from the start
-        int initialAICount = getMaxPlayers();
-        int added = AIGameHelper.addMixedAIPlayers(this, initialAICount);
-        if (added > 0) {
-            log.info("Added {} initial AI players to game {} for better gameplay", added, gameId);
+        // Add initial AI players to make the game more interesting from the start (if enabled)
+        if (gameConfig.isEnableAIFilling()) {
+            int initialAICount = getMaxPlayers();
+            int added = AIGameHelper.addMixedAIPlayers(this, initialAICount);
+            if (added > 0) {
+                log.info("Added {} initial AI players to game {} for better gameplay", added, gameId);
+            }
+        } else {
+            log.info("AI filling disabled for game {} - no initial AI players added", gameId);
         }
 
         this.shutdownHook = Config.EXECUTOR.scheduleAtFixedRate(this::update, 0, 16, TimeUnit.MILLISECONDS);
@@ -231,536 +221,13 @@ public class GameManager implements StepListener<Body> {
     public int getPlayerCount() {
         return gameEntities.getPlayerSessions().size();
     }
-    
+
     /**
      * Get the current round time remaining in seconds.
      * Returns -1 if rounds are not enabled.
      */
     public double getRoundTimeRemaining() {
-        if (!gameConfig.hasRounds()) {
-            return -1;
-        }
-        return roundTimeRemaining;
-    }
-    
-    // ===== Round State Management =====
-    
-    /**
-     * Update round state based on elapsed time.
-     */
-    private void updateRoundState(double deltaTime) {
-        switch (gameState) {
-            case PLAYING:
-                updatePlayingState(deltaTime);
-                break;
-            case ROUND_END:
-                updateRoundEndState(deltaTime);
-                break;
-            case REST_PERIOD:
-                updateRestPeriodState(deltaTime);
-                break;
-        }
-    }
-    
-    /**
-     * Update the playing state - count down the round timer.
-     */
-    private void updatePlayingState(double deltaTime) {
-        roundTimeRemaining -= deltaTime;
-        
-        if (roundTimeRemaining <= 0) {
-            endRound();
-        }
-    }
-    
-    /**
-     * End the current round, capture scores, and transition to ROUND_END state.
-     */
-    private void endRound() {
-        gameState = GameState.ROUND_END;
-        roundTimeRemaining = 0;
-        
-        // Capture current scores
-        roundScores.clear();
-        for (Player player : gameEntities.getAllPlayers()) {
-            RoundScore score = RoundScore.builder()
-                    .playerId(player.getId())
-                    .playerName(player.getPlayerName())
-                    .team(player.getTeam())
-                    .kills(player.getKills())
-                    .deaths(player.getDeaths())
-                    .captures(player.getCaptures())
-                    .build();
-            roundScores.put(player.getId(), score);
-        }
-        
-        log.info("Round {} ended in game {}. {} players scored.", currentRound, gameId, roundScores.size());
-        
-        // Broadcast round end event with scores
-        Map<String, Object> roundEndEvent = new HashMap<>();
-        roundEndEvent.put("type", "roundEnd");
-        roundEndEvent.put("round", currentRound);
-        roundEndEvent.put("scores", new ArrayList<>(roundScores.values()));
-        roundEndEvent.put("restDuration", gameConfig.getRules().getRestDuration());
-        broadcast(roundEndEvent);
-        
-        // Start rest period
-        restTimeRemaining = gameConfig.getRules().getRestDuration();
-    }
-    
-    /**
-     * Update the round end state - brief pause before rest period.
-     * Currently transitions immediately to REST_PERIOD.
-     */
-    private void updateRoundEndState(double deltaTime) {
-        // Transition immediately to rest period
-        gameState = GameState.REST_PERIOD;
-    }
-    
-    /**
-     * Update the rest period state - count down until next round starts.
-     */
-    private void updateRestPeriodState(double deltaTime) {
-        restTimeRemaining -= deltaTime;
-        
-        if (restTimeRemaining <= 0) {
-            startNextRound();
-        }
-    }
-    
-    /**
-     * Start the next round - reset player states and begin new round.
-     */
-    private void startNextRound() {
-        currentRound++;
-        gameState = GameState.PLAYING;
-        roundTimeRemaining = gameConfig.getRules().getRoundDuration();
-        restTimeRemaining = 0;
-        
-        // Reset all players
-        for (Player player : gameEntities.getAllPlayers()) {
-            player.setKills(0);
-            player.setDeaths(0);
-            
-            // Respawn players who died (for NEXT_ROUND mode) or were eliminated
-            if (!player.isActive() && !player.isEliminated()) {
-                player.setHealth(gameConfig.getPlayerMaxHealth());
-                player.setActive(true);
-                player.setRespawnTime(0);
-                
-                // Respawn player at their spawn point
-                Vector2 spawnPoint = findVariedSpawnPointForTeam(player.getTeam());
-                player.setRespawnPoint(spawnPoint);
-                player.getBody().getTransform().setTranslation(spawnPoint.x, spawnPoint.y);
-                player.getBody().setLinearVelocity(0, 0);
-                player.getBody().setAngularVelocity(0);
-                
-                log.info("Player {} respawned for new round", player.getId());
-            }
-            
-            // Reload weapons for all active players
-            if (player.getWeapon() != null) {
-                player.getWeapon().reload();
-                player.setReloading(false);
-            }
-        }
-        
-        log.info("Round {} started in game {}", currentRound, gameId);
-        
-        // Broadcast round start event
-        Map<String, Object> roundStartEvent = new HashMap<>();
-        roundStartEvent.put("type", "roundStart");
-        roundStartEvent.put("round", currentRound);
-        roundStartEvent.put("roundDuration", gameConfig.getRules().getRoundDuration());
-        broadcast(roundStartEvent);
-    }
-    
-    // ===== Respawn Management =====
-    
-    /**
-     * Update wave respawn timer and respawn all waiting players when timer expires.
-     */
-    private void updateWaveRespawn(double deltaTime) {
-        waveRespawnTimer -= deltaTime;
-        
-        if (waveRespawnTimer <= 0 && !deadPlayersWaitingForWave.isEmpty()) {
-            // Respawn all waiting players
-            log.info("Wave respawn triggered! Respawning {} players", deadPlayersWaitingForWave.size());
-            
-            for (Player player : deadPlayersWaitingForWave) {
-                if (!player.isEliminated()) {
-                    // Respawn player
-                    player.setActive(true);
-                    player.setHealth(gameConfig.getPlayerMaxHealth());
-                    player.setRespawnTime(0);
-                    
-                    // Move to spawn point
-                    Vector2 spawnPoint = findVariedSpawnPointForTeam(player.getTeam());
-                    player.getBody().getTransform().setTranslation(spawnPoint.x, spawnPoint.y);
-                    player.getBody().setLinearVelocity(0, 0);
-                    player.getBody().setAngularVelocity(0);
-                    
-                    log.debug("Wave respawned player {} at ({}, {})", 
-                        player.getId(), spawnPoint.x, spawnPoint.y);
-                }
-            }
-            
-            // Clear the waiting list and reset timer
-            deadPlayersWaitingForWave.clear();
-            waveRespawnTimer = gameConfig.getRules().getWaveRespawnInterval();
-            
-            // Broadcast wave respawn event
-            gameEventManager.broadcastSystemMessage("⚡ Wave Respawn!");
-        }
-    }
-    
-    // ===== Victory Condition Management =====
-    
-    /**
-     * Check if any victory condition has been met.
-     */
-    private void checkVictoryConditions() {
-        if (gameOver) return; // Already determined winner
-        
-        Rules rules = gameConfig.getRules();
-        if (rules.getVictoryCondition() == null || rules.getVictoryCondition() == VictoryCondition.ENDLESS) {
-            return; // No victory condition
-        }
-        
-        switch (rules.getVictoryCondition()) {
-            case SCORE_LIMIT:
-                checkScoreLimitVictory();
-                break;
-            case TIME_LIMIT:
-                checkTimeLimitVictory();
-                break;
-            case ELIMINATION:
-                checkEliminationVictory();
-                break;
-            case OBJECTIVE:
-                checkObjectiveVictory();
-                break;
-        }
-    }
-    
-    /**
-     * Check if any player/team has reached the score limit.
-     */
-    private void checkScoreLimitVictory() {
-        Rules rules = gameConfig.getRules();
-        int scoreLimit = rules.getScoreLimit();
-        
-        if (gameConfig.getTeamCount() > 0) {
-            // Team mode - check team scores
-            Map<Integer, Integer> teamScores = calculateTeamScores();
-            for (Map.Entry<Integer, Integer> entry : teamScores.entrySet()) {
-                if (entry.getValue() >= scoreLimit) {
-                    declareTeamVictory(entry.getKey(), 
-                        String.format("Team %d wins with %d %s!", 
-                            entry.getKey(), entry.getValue(), getScoreTypeName()));
-                    return;
-                }
-            }
-        } else {
-            // FFA mode - check individual scores
-            for (Player player : gameEntities.getAllPlayers()) {
-                int score = getPlayerScore(player);
-                if (score >= scoreLimit) {
-                    declarePlayerVictory(player.getId(), player.getPlayerName(),
-                        String.format("%s wins with %d %s!", 
-                            player.getPlayerName(), score, getScoreTypeName()));
-                    return;
-                }
-            }
-        }
-    }
-    
-    /**
-     * Check if time limit has been reached and determine winner.
-     */
-    private void checkTimeLimitVictory() {
-        Rules rules = gameConfig.getRules();
-        if (gameTimeElapsed < rules.getTimeLimit()) {
-            return; // Time not up yet
-        }
-        
-        if (gameConfig.getTeamCount() > 0) {
-            // Team mode - find team with highest score
-            Map<Integer, Integer> teamScores = calculateTeamScores();
-            int winningTeamNum = -1;
-            int highestScore = -1;
-            int teamsWithHighScore = 0;
-            
-            for (Map.Entry<Integer, Integer> entry : teamScores.entrySet()) {
-                if (entry.getValue() > highestScore) {
-                    highestScore = entry.getValue();
-                    winningTeamNum = entry.getKey();
-                    teamsWithHighScore = 1;
-                } else if (entry.getValue() == highestScore) {
-                    teamsWithHighScore++;
-                }
-            }
-            
-            if (teamsWithHighScore > 1 && rules.isSuddenDeath()) {
-                // Tie - enable sudden death mode
-                enableSuddenDeath();
-            } else if (winningTeamNum != -1) {
-                declareTeamVictory(winningTeamNum, 
-                    String.format("Time's up! Team %d wins with %d %s!", 
-                        winningTeamNum, highestScore, getScoreTypeName()));
-            }
-        } else {
-            // FFA mode - find player with highest score
-            Player winner = null;
-            int highestScore = -1;
-            int playersWithHighScore = 0;
-            
-            for (Player player : gameEntities.getAllPlayers()) {
-                int score = getPlayerScore(player);
-                if (score > highestScore) {
-                    highestScore = score;
-                    winner = player;
-                    playersWithHighScore = 1;
-                } else if (score == highestScore) {
-                    playersWithHighScore++;
-                }
-            }
-            
-            if (playersWithHighScore > 1 && rules.isSuddenDeath()) {
-                enableSuddenDeath();
-            } else if (winner != null) {
-                declarePlayerVictory(winner.getId(), winner.getPlayerName(),
-                    String.format("Time's up! %s wins with %d %s!", 
-                        winner.getPlayerName(), highestScore, getScoreTypeName()));
-            }
-        }
-    }
-    
-    /**
-     * Check if only one team/player remains (no respawns mode).
-     */
-    private void checkEliminationVictory() {
-        RespawnMode respawnMode = gameConfig.getRules().getRespawnMode();
-        
-        // Only check elimination if using elimination or limited respawn modes
-        if (respawnMode != RespawnMode.ELIMINATION && respawnMode != RespawnMode.LIMITED) {
-            return;
-        }
-        
-        // Count active (non-eliminated) players per team
-        Map<Integer, Integer> activePlayersPerTeam = new HashMap<>();
-        int totalActivePlayers = 0;
-        
-        for (Player player : gameEntities.getAllPlayers()) {
-            if (!player.isEliminated() && player.hasLivesRemaining()) {
-                int team = player.getTeam();
-                activePlayersPerTeam.merge(team, 1, Integer::sum);
-                totalActivePlayers++;
-            }
-        }
-        
-        if (totalActivePlayers == 0) {
-            // Everyone eliminated - draw
-            declareTeamVictory(-1, "All players eliminated! It's a draw!");
-            return;
-        }
-        
-        if (gameConfig.getTeamCount() > 0) {
-            // Team mode - check if only one team has players left
-            if (activePlayersPerTeam.size() == 1) {
-                int winningTeam = activePlayersPerTeam.keySet().iterator().next();
-                int playerCount = activePlayersPerTeam.get(winningTeam);
-                declareTeamVictory(winningTeam, 
-                    String.format("Team %d wins! Last team standing with %d player%s!", 
-                        winningTeam, playerCount, playerCount == 1 ? "" : "s"));
-            }
-        } else {
-            // FFA mode - check if only one player left
-            if (totalActivePlayers == 1) {
-                for (Player player : gameEntities.getAllPlayers()) {
-                    if (!player.isEliminated() && player.hasLivesRemaining()) {
-                        declarePlayerVictory(player.getId(), player.getPlayerName(),
-                            String.format("%s wins! Last player standing!", player.getPlayerName()));
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    
-    /**
-     * Check objective-based victory (CTF, KOTH, etc).
-     */
-    private void checkObjectiveVictory() {
-        // Objectives use score tracking, so delegate to score limit check
-        checkScoreLimitVictory();
-    }
-    
-    /**
-     * Enable sudden death mode - next score wins.
-     */
-    private void enableSuddenDeath() {
-        if (gameOver) return;
-        
-        log.info("Game {} entering sudden death mode - next score wins!", gameId);
-        gameEventManager.broadcastSystemMessage("⚠️ SUDDEN DEATH! Next score wins!");
-        
-        // Lower score limit to current highest + 1
-        Rules rules = gameConfig.getRules();
-        int currentHighest = getCurrentHighestScore();
-        rules.setScoreLimit(currentHighest + 1);
-    }
-    
-    /**
-     * Get the current highest score in the game.
-     */
-    private int getCurrentHighestScore() {
-        if (gameConfig.getTeamCount() > 0) {
-            return calculateTeamScores().values().stream()
-                .max(Integer::compare).orElse(0);
-        } else {
-            return gameEntities.getAllPlayers().stream()
-                .mapToInt(this::getPlayerScore)
-                .max().orElse(0);
-        }
-    }
-    
-    /**
-     * Calculate total scores for each team.
-     */
-    private Map<Integer, Integer> calculateTeamScores() {
-        Map<Integer, Integer> teamScores = new HashMap<>();
-        for (Player player : gameEntities.getAllPlayers()) {
-            int team = player.getTeam();
-            int score = getPlayerScore(player);
-            teamScores.merge(team, score, Integer::sum);
-        }
-        return teamScores;
-    }
-    
-    /**
-     * Get a player's score based on the current score style.
-     */
-    private int getPlayerScore(Player player) {
-        ScoreStyle scoreStyle = gameConfig.getRules().getScoreStyle();
-        switch (scoreStyle) {
-            case TOTAL_KILLS:
-                return player.getKills();
-            case CAPTURES:
-                return player.getCaptures();
-            case TOTAL:
-                return player.getKills() + player.getCaptures();
-            default:
-                return player.getKills();
-        }
-    }
-    
-    /**
-     * Get the name of the current score type for messages.
-     */
-    private String getScoreTypeName() {
-        ScoreStyle scoreStyle = gameConfig.getRules().getScoreStyle();
-        switch (scoreStyle) {
-            case TOTAL_KILLS:
-                return "kills";
-            case CAPTURES:
-                return "captures";
-            case TOTAL:
-                return "points";
-            default:
-                return "points";
-        }
-    }
-    
-    /**
-     * Declare a team victory.
-     */
-    private void declareTeamVictory(int teamNumber, String message) {
-        gameOver = true;
-        winningTeam = teamNumber;
-        victoryMessage = message;
-        
-        log.info("Game {} ended - Team {} wins!", gameId, teamNumber);
-        
-        // Broadcast victory event
-        Map<String, Object> victoryEvent = new HashMap<>();
-        victoryEvent.put("type", "gameOver");
-        victoryEvent.put("winningTeam", teamNumber);
-        victoryEvent.put("message", message);
-        victoryEvent.put("victoryCondition", gameConfig.getRules().getVictoryCondition().name());
-        victoryEvent.put("finalScores", calculateFinalScores());
-        broadcast(victoryEvent);
-        
-        gameEventManager.broadcastSystemMessage("🏆 " + message);
-    }
-    
-    /**
-     * Declare a player victory (FFA mode).
-     */
-    private void declarePlayerVictory(int playerId, String playerName, String message) {
-        gameOver = true;
-        winningPlayerId = playerId;
-        victoryMessage = message;
-        
-        log.info("Game {} ended - Player {} ({}) wins!", gameId, playerId, playerName);
-        
-        // Broadcast victory event
-        Map<String, Object> victoryEvent = new HashMap<>();
-        victoryEvent.put("type", "gameOver");
-        victoryEvent.put("winningPlayerId", playerId);
-        victoryEvent.put("winningPlayerName", playerName);
-        victoryEvent.put("message", message);
-        victoryEvent.put("victoryCondition", gameConfig.getRules().getVictoryCondition().name());
-        victoryEvent.put("finalScores", calculateFinalScores());
-        broadcast(victoryEvent);
-        
-        gameEventManager.broadcastSystemMessage("🏆 " + message);
-    }
-    
-    /**
-     * Calculate final scores for all players/teams.
-     */
-    private List<Map<String, Object>> calculateFinalScores() {
-        List<Map<String, Object>> scores = new ArrayList<>();
-        
-        if (gameConfig.getTeamCount() > 0) {
-            // Team scores
-            Map<Integer, Integer> teamScores = calculateTeamScores();
-            Map<Integer, Integer> teamKills = new HashMap<>();
-            Map<Integer, Integer> teamDeaths = new HashMap<>();
-            Map<Integer, Integer> teamCaptures = new HashMap<>();
-            
-            for (Player player : gameEntities.getAllPlayers()) {
-                int team = player.getTeam();
-                teamKills.merge(team, player.getKills(), Integer::sum);
-                teamDeaths.merge(team, player.getDeaths(), Integer::sum);
-                teamCaptures.merge(team, player.getCaptures(), Integer::sum);
-            }
-            
-            for (Map.Entry<Integer, Integer> entry : teamScores.entrySet()) {
-                Map<String, Object> teamScore = new HashMap<>();
-                teamScore.put("team", entry.getKey());
-                teamScore.put("score", entry.getValue());
-                teamScore.put("kills", teamKills.getOrDefault(entry.getKey(), 0));
-                teamScore.put("deaths", teamDeaths.getOrDefault(entry.getKey(), 0));
-                teamScore.put("captures", teamCaptures.getOrDefault(entry.getKey(), 0));
-                scores.add(teamScore);
-            }
-        } else {
-            // Individual player scores
-            for (Player player : gameEntities.getAllPlayers()) {
-                Map<String, Object> playerScore = new HashMap<>();
-                playerScore.put("playerId", player.getId());
-                playerScore.put("playerName", player.getPlayerName());
-                playerScore.put("score", getPlayerScore(player));
-                playerScore.put("kills", player.getKills());
-                playerScore.put("deaths", player.getDeaths());
-                playerScore.put("captures", player.getCaptures());
-                scores.add(playerScore);
-            }
-        }
-        
-        return scores;
+        return ruleSystem.getRoundTimeRemaining();
     }
 
     public void shutdown() {
@@ -777,13 +244,11 @@ public class GameManager implements StepListener<Body> {
 
         int assignedTeam = assignPlayerToTeam();
         Vector2 spawnPoint = findVariedSpawnPointForTeam(assignedTeam);
-        AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithPersonality(Config.nextId(), spawnPoint.x, spawnPoint.y, personalityType, assignedTeam);
+        AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithPersonality(Config.nextId(), spawnPoint.x, spawnPoint.y, personalityType, assignedTeam, gameConfig.getPlayerMaxHealth());
         aiPlayer.setHealth(gameConfig.getPlayerMaxHealth());
-        
-        // Initialize lives based on respawn mode
-        if (gameConfig.getRules().hasLimitedLives()) {
-            aiPlayer.initializeLives(gameConfig.getRules().getMaxLives());
-        }
+
+        // Initialize lives based on respawn mode (delegated to RuleSystem)
+        ruleSystem.initializePlayerLives(aiPlayer);
 
         // Add to game entities
         gameEntities.addPlayer(aiPlayer);
@@ -904,6 +369,10 @@ public class GameManager implements StepListener<Body> {
      * Manually trigger AI player adjustment based on current settings.
      */
     public void adjustAIPlayers() {
+        if (!aiAdjustmentEnabled || !gameConfig.isEnableAIFilling()) {
+            return;
+        }
+
         int totalPlayers = gameEntities.getAllPlayers().size();
         int humanPlayers = totalPlayers - getAIPlayerCount();
 
@@ -925,6 +394,20 @@ public class GameManager implements StepListener<Body> {
                         removed, totalPlayers - removed);
             }
         }
+    }
+
+    /**
+     * Disable AI player adjustment (for testing).
+     */
+    public void disableAIAdjustment() {
+        this.aiAdjustmentEnabled = false;
+    }
+
+    /**
+     * Enable AI player adjustment (for testing).
+     */
+    public void enableAIAdjustment() {
+        this.aiAdjustmentEnabled = true;
     }
 
     /**
@@ -966,28 +449,20 @@ public class GameManager implements StepListener<Body> {
             double currentTime = System.nanoTime() / 1e9;
             double deltaTime = currentTime - lastUpdateTime;
             lastUpdateTime = currentTime;
-            
+
             // Skip updates if game is over
-            if (gameOver) {
+            if (ruleSystem.isGameOver()) {
                 return;
             }
-            
-            // Track total game time for time-limit victory condition
-            gameTimeElapsed += deltaTime;
-            
-            // Update round state if rounds are enabled
-            if (gameConfig.hasRounds()) {
-                updateRoundState(deltaTime);
+
+            // Update rule systems (rounds, victory conditions, respawns)
+            ruleSystem.update(deltaTime);
+
+            // Process wave respawns if timer expired
+            if (ruleSystem.shouldProcessWaveRespawn()) {
+                processWaveRespawns();
             }
-            
-            // Check victory conditions
-            checkVictoryConditions();
-            
-            // Update wave respawn timer if using wave mode
-            if (gameConfig.getRules().usesWaveRespawn()) {
-                updateWaveRespawn(deltaTime);
-            }
-            
+
             aiPlayerManager.update(gameEntities, deltaTime);
             aiPlayerManager.getAllPlayerInputs().forEach((playerId, input) -> {
                 gameEntities.getPlayerInputs().put(playerId, input);
@@ -997,6 +472,7 @@ public class GameManager implements StepListener<Body> {
             gameEntities.getPlayerInputs().forEach(this::processPlayerInput);
             gameEntities.updateAll(deltaTime);
             updateCarriedFlags(); // Update flag positions for carried flags
+            getCollisionProcessor().updateKothZones(deltaTime); // Update KOTH zone control and award points (using proper deltaTime)
             gameEntities.getProjectiles().entrySet().removeIf(entry -> {
                 Projectile projectile = entry.getValue();
                 if (!projectile.isActive()) {
@@ -1016,7 +492,10 @@ public class GameManager implements StepListener<Body> {
             gameEntities.runPostUpdateHooks();
             gameEntities.removeInactiveEntities();
 
-            processHomingProjectiles();
+            // Update weapon system (homing projectiles, weapon states)
+            weaponSystem.updateHomingProjectiles();
+            weaponSystem.updateWeaponStates(deltaTime);
+
             sendGameState();
         } catch (Throwable t) {
             log.error("Error in update loop", t);
@@ -1118,15 +597,15 @@ public class GameManager implements StepListener<Body> {
         log.info("Player {} joining game {} at spawn point ({}, {}) on team {}",
                 playerSession.getPlayerId(), gameId, spawnPoint.x, spawnPoint.y, assignedTeam);
 
-        Player player = new Player(playerSession.getPlayerId(), playerSession.getPlayerName(), spawnPoint.x, spawnPoint.y, assignedTeam);
+        Player player = new Player(playerSession.getPlayerId(), playerSession.getPlayerName(), spawnPoint.x, spawnPoint.y, assignedTeam, gameConfig.getPlayerMaxHealth());
         player.setHealth(gameConfig.getPlayerMaxHealth());
-        
+
         // Initialize lives based on respawn mode
         if (gameConfig.getRules().hasLimitedLives()) {
             player.initializeLives(gameConfig.getRules().getMaxLives());
             log.info("Player {} initialized with {} lives", player.getId(), gameConfig.getRules().getMaxLives());
         }
-        
+
         gameEntities.addPlayer(player);
         world.addBody(player.getBody());
 
@@ -1171,338 +650,27 @@ public class GameManager implements StepListener<Body> {
         if (player != null && input != null) {
             player.processInput(input);
 
-            // Handle primary weapon fire (left click)
-            if (input.isLeft()) {
-                // Check if weapon fires beams or projectiles
-                if (player.getCurrentWeapon().getOrdinance().isBeamType()) {
-                    // Handle beam weapons
-                    Beam beam = player.shootBeam();
-                    if (beam != null) {
-                        // Update beam's effective end point based on obstacle collisions
-                        Vector2 effectiveEnd = findBeamObstacleIntersection(beam.getStartPoint(), beam.getEndPoint());
-                        beam.setEffectiveEndPoint(effectiveEnd);
+            // Handle primary weapon fire (delegated to WeaponSystem)
+            weaponSystem.handlePrimaryFire(player, input);
 
-                        gameEntities.addBeam(beam);
-                        world.addBody(beam.getBody());
-
-                        // Process initial hit for instant damage beams
-                        if (beam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
-                            processBeamInitialHit(beam);
-                        }
-                    }
-                } else {
-                    // Handle projectile weapons
-                    for (Projectile projectile : player.shoot()) {
-                        if (projectile != null) {
-                            gameEntities.addProjectile(projectile);
-                            world.addBody(projectile.getBody());
-                        }
-                    }
-                }
-            }
-
-            // Handle utility weapon fire (right click/altFire)
+            // Handle utility weapon fire (delegated to UtilitySystem)
             if (input.isAltFire()) {
                 Player.UtilityActivation activation = player.useUtility();
                 if (activation != null) {
-                    processUtilityActivation(activation);
+                    utilitySystem.handleUtilityActivation(activation);
                 }
             }
         }
     }
 
-    /**
-     * Process utility weapon activation and create appropriate effects
-     */
-    protected void processUtilityActivation(Player.UtilityActivation activation) {
-        UtilityWeapon utility = activation.utilityWeapon;
-
-        if (utility.isFieldEffectBased()) {
-            // Create FieldEffect for area-based utilities
-            createUtilityFieldEffect(activation);
-        } else if (utility.isEntityBased()) {
-            // Create custom entity for complex utilities
-            createUtilityEntity(activation);
-        } else if (utility.isBeamBased()) {
-            // Create beam for line-of-sight utilities
-            createUtilityBeam(activation);
-        }
-    }
-
-    /**
-     * Create a FieldEffect for utility weapons that use the field effect system
-     */
-    private void createUtilityFieldEffect(Player.UtilityActivation activation) {
-        UtilityWeapon utility = activation.utilityWeapon;
-        FieldEffectType effectType = utility.getFieldEffectType();
-
-        // Calculate target position based on utility range and aim direction
-        Vector2 targetPos = activation.position.copy();
-        if (utility.getRange() > 0) {
-            Vector2 offset = activation.direction.copy();
-            offset.multiply(utility.getRange());
-            targetPos.add(offset);
-        }
-
-        // Create the field effect
-        FieldEffect fieldEffect = new FieldEffect(
-                Config.nextId(),
-                activation.playerId,
-                effectType,
-                targetPos,
-                utility.getRadius(), // Use explicit radius
-                utility.getDamage(),
-                effectType.getDefaultDuration(),
-                activation.team
-        );
-
-        gameEntities.addFieldEffect(fieldEffect);
-        world.addBody(fieldEffect.getBody());
-
-        log.info("Created {} field effect at ({}, {}) with radius {} for player {}",
-                effectType.name(), targetPos.x, targetPos.y, utility.getRadius(), activation.playerId);
-    }
-
-    /**
-     * Create custom entities for utility weapons that need complex behavior
-     */
-    private void createUtilityEntity(Player.UtilityActivation activation) {
-        UtilityWeapon utility = activation.utilityWeapon;
-
-        switch (utility) {
-            case TURRET_CONSTRUCTOR:
-                createTurret(activation);
-                break;
-            case WALL_BUILDER:
-                createBarrier(activation);
-                break;
-            case NET_LAUNCHER:
-                createNetProjectile(activation);
-                break;
-            case MINE_LAYER:
-                createProximityMine(activation);
-                break;
-            case TELEPORTER:
-                createTeleportPad(activation);
-                break;
-            default:
-                log.warn("Unknown entity-based utility weapon: {}", utility.getDisplayName());
-                break;
-        }
-    }
-
-    private void createTurret(Player.UtilityActivation activation) {
-        // Calculate placement position slightly in front of player
-        Vector2 placement = activation.position.copy();
-        Vector2 offset = activation.direction.copy();
-        offset.multiply(50.0); // Place 50 units in front
-        placement.add(offset);
-
-        // Check if placement position is clear of obstacles
-        double turretRadius = 15.0; // Turret radius from Turret class
-        if (!isPositionClearOfObstacles(placement, turretRadius)) {
-            log.debug("Player {} tried to place turret at ({}, {}) but position is blocked by obstacle", 
-                    activation.playerId, placement.x, placement.y);
-            
-            // Send feedback to player that placement failed
-            Player player = gameEntities.getPlayer(activation.playerId);
-            if (player != null) {
-                // Refund the cooldown since placement failed
-                player.refundUtilityCooldown();
-            }
-            
-            broadcastGameEvent(
-                    "Cannot place turret - position blocked!",
-                    "WARNING",
-                    "#FF8800"
-            );
-            return;
-        }
-
-        Turret turret = new Turret(
-                Config.nextId(),
-                activation.playerId,
-                activation.team,
-                placement,
-                15.0 // 15 second lifespan
-        );
-
-        gameEntities.addTurret(turret);
-        world.addBody(turret.getBody());
-        log.info("Player {} deployed turret at ({}, {})", activation.playerId, placement.x, placement.y);
-    }
-
-    private void createBarrier(Player.UtilityActivation activation) {
-        // Calculate placement position in front of player
-        Vector2 placement = activation.position.copy();
-        Vector2 offset = activation.direction.copy();
-        offset.multiply(40.0); // Place 40 units in front
-        placement.add(offset);
-
-        Obstacle barrier = Obstacle.createPlayerBarrier(
-                Config.nextId(),
-                activation.playerId,
-                activation.team,
-                placement,
-                activation.direction,
-                20.0 // 20 second lifespan
-        );
-
-        gameEntities.addObstacle(barrier);
-        world.addBody(barrier.getBody());
-    }
-
-    private void createNetProjectile(Player.UtilityActivation activation) {
-        // Fire net projectile in aim direction
-        Vector2 velocity = activation.direction.copy();
-        velocity.multiply(300.0); // Net projectile speed
-
-        NetProjectile netProjectile = new NetProjectile(
-                Config.nextId(),
-                activation.playerId,
-                activation.team,
-                activation.position,
-                velocity,
-                5.0 // 5 second time to live
-        );
-
-        gameEntities.addNetProjectile(netProjectile);
-        world.addBody(netProjectile.getBody());
-    }
-
-    private void createProximityMine(Player.UtilityActivation activation) {
-        // Place mine at player's current position
-        FieldEffect mine = new FieldEffect(
-                Config.nextId(),
-                activation.playerId,
-                FieldEffectType.PROXIMITY_MINE,
-                activation.position,
-                45.0, // Small visual radius for mine
-                1.0, // Damage (not used for mines, explosion handles damage)
-                15.0, // 30 second lifespan
-                activation.team
-        );
-
-        gameEntities.addFieldEffect(mine);
-        world.addBody(mine.getBody());
-        log.info("Player {} placed proximity mine at ({}, {})", activation.playerId, activation.position.x, activation.position.y);
-    }
-
-    private void createTeleportPad(Player.UtilityActivation activation) {
-        // Calculate placement position slightly in front of player
-        Vector2 placement = activation.position.copy();
-        Vector2 offset = activation.direction.copy();
-        offset.multiply(30.0); // Place 30 units in front
-        placement.add(offset);
-
-        TeleportPad teleportPad = new TeleportPad(
-                Config.nextId(),
-                activation.playerId,
-                activation.team,
-                placement,
-                60.0 // 60 second lifespan
-        );
-
-        gameEntities.addTeleportPad(teleportPad);
-        world.addBody(teleportPad.getBody());
-
-        // Try to link with existing teleport pad from same player
-        linkTeleportPads(teleportPad, activation.playerId);
-
-        log.info("Player {} placed teleport pad at ({}, {})", activation.playerId, placement.x, placement.y);
-    }
-
-    /**
-     * Link teleport pads from the same player
-     */
-    private void linkTeleportPads(TeleportPad newPad, int playerId) {
-        // Find existing unlinked teleport pad from same player
-        for (TeleportPad existingPad : gameEntities.getAllTeleportPads()) {
-            if (existingPad.getId() != newPad.getId() &&
-                existingPad.getOwnerId() == playerId &&
-                !existingPad.isLinked() &&
-                existingPad.isActive()) {
-
-                // Link the pads
-                newPad.linkTo(existingPad);
-                log.info("Linked teleport pads {} and {} for player {}", newPad.getId(), existingPad.getId(), playerId);
-                break; // Only link to one pad
-            }
-        }
-    }
-
-    /**
-     * Create a beam for utility weapons that use the beam system
-     */
-    private void createUtilityBeam(Player.UtilityActivation activation) {
-        UtilityWeapon utility = activation.utilityWeapon;
-        Ordinance beamOrdinance = utility.getBeamOrdinance();
-
-        // Create beam using the utility's beam ordinance
-        Beam utilityBeam = createBeamFromUtility(
-                Config.nextId(),
-                activation.position,
-                activation.direction,
-                utility.getRange(),
-                utility.getDamage(),
-                activation.playerId,
-                activation.team,
-                beamOrdinance
-        );
-
-        // Update beam's effective end point based on obstacle collisions
-        Vector2 effectiveEnd = findBeamObstacleIntersection(utilityBeam.getStartPoint(), utilityBeam.getEndPoint());
-        utilityBeam.setEffectiveEndPoint(effectiveEnd);
-
-        gameEntities.addBeam(utilityBeam);
-        world.addBody(utilityBeam.getBody());
-
-        // Process initial hit for instant damage beams
-        if (utilityBeam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
-            processBeamInitialHit(utilityBeam);
-        }
-    }
-
-    /**
-     * Factory method to create utility beams (simplified single-class approach)
-     */
-    private Beam createBeamFromUtility(int beamId, Vector2 startPoint, Vector2 direction,
-                                       double range, double damage, int ownerId, int ownerTeam,
-                                       Ordinance ordinance) {
-        // Single Beam class handles all beam types via ordinance
-        return new Beam(beamId, startPoint, direction, range, damage, ownerId, ownerTeam, ordinance);
-    }
+    // Utility weapon processing methods moved to UtilitySystem
 
     /**
      * Process initial hit for instant damage beams (like laser, railgun)
      */
-    private void processBeamInitialHit(Beam beam) {
-        List<Player> playersInPath = getPlayersInBeamPath(beam);
-        Player beamOwner = gameEntities.getPlayer(beam.getOwnerId());
-
-        for (Player player : playersInPath) {
-            if (beam.canAffectPlayer(player)) {
-                double damageAmount = beam.processInitialHit(player);
-
-                if (damageAmount > 0) {
-                    // Apply damage and check if player died
-                    if (player.takeDamage(damageAmount)) {
-                        killPlayer(player, beamOwner);
-                    }
-                }
-
-                // For non-piercing beams, stop after first hit
-                if (!beam.canPierceTargets()) {
-                    // TODO: raycast to set the end point of the beam to the intersection point on the player
-                    break;
-                }
-            }
-        }
-    }
-
     /**
-     * Get all players that intersect with a beam's path using dyn4j ray casting
-     * This method accounts for obstacles blocking the beam path and is much more accurate
+     * Get all players that intersect with a beam's path using dyn4j ray casting.
+     * This method is used for continuous beam damage updates.
      */
     private List<Player> getPlayersInBeamPath(Beam beam) {
         List<Player> playersInPath = new ArrayList<>();
@@ -1540,38 +708,17 @@ public class GameManager implements StepListener<Body> {
     }
 
     /**
-     * Find the intersection point between a beam and obstacles using dyn4j ray casting
-     * This is much more accurate and efficient than manual line-segment collision detection
+     * Find beam obstacle intersection - delegates to WeaponSystem.
      */
     private Vector2 findBeamObstacleIntersection(Vector2 beamStart, Vector2 beamEnd) {
-        // Create ray from beam start to beam end
-        Vector2 direction = beamEnd.copy();
-        direction.subtract(beamStart);
-        double maxDistance = direction.getMagnitude();
-        direction.normalize();
+        return weaponSystem.findBeamObstacleIntersectionPublic(beamStart, beamEnd);
+    }
 
-        Ray ray = new Ray(beamStart, direction);
-
-        // Use dyn4j's built-in ray casting to find the closest obstacle intersection
-        List<RaycastResult<Body, BodyFixture>> results = world.raycast(ray, maxDistance, new DetectFilter<>(true, true, null));
-        RaycastResult<Body, BodyFixture> result = null;
-        if (!results.isEmpty()) {
-            // Find the closest result
-            result = results.get(0);
-            for (RaycastResult<Body, BodyFixture> r : results) {
-                if (r.getBody().getUserData() instanceof Obstacle && r.getRaycast().getDistance() < result.getRaycast().getDistance()) {
-                    result = r;
-                }
-            }
-        }
-
-        if (result != null) {
-            // Return the intersection point
-            return result.getRaycast().getPoint();
-        } else {
-            // No obstacle intersection found, return original end point
-            return beamEnd.copy();
-        }
+    /**
+     * Process beam initial hit - delegates to WeaponSystem.
+     */
+    private void processBeamInitialHit(Beam beam) {
+        weaponSystem.processBeamInitialHitPublic(beam);
     }
 
     protected void processPlayerConfigChange(PlayerSession playerSession, PlayerConfigRequest request) {
@@ -1635,7 +782,7 @@ public class GameManager implements StepListener<Body> {
             world.addBody(obstacle.getBody());
         }
     }
-    
+
     /**
      * Create flags for capture-the-flag gameplay if configured.
      */
@@ -1643,17 +790,17 @@ public class GameManager implements StepListener<Body> {
         if (!gameConfig.getRules().hasFlags()) {
             return; // No flags configured
         }
-        
+
         if (gameConfig.isFreeForAll()) {
             log.warn("Flags are not supported in FFA mode");
             return;
         }
-        
+
         int flagsPerTeam = gameConfig.getRules().getFlagsPerTeam();
         int teamCount = gameConfig.getTeamCount();
-        
+
         log.info("Creating {} flags per team for {} teams", flagsPerTeam, teamCount);
-        
+
         int flagId = 1;
         for (int team = 1; team <= teamCount; team++) {
             TeamSpawnArea teamArea = teamSpawnManager.getTeamArea(team);
@@ -1661,11 +808,11 @@ public class GameManager implements StepListener<Body> {
                 log.warn("No spawn area found for team {}, skipping flag creation", team);
                 continue;
             }
-            
+
             // Create flags for this team
             for (int i = 0; i < flagsPerTeam; i++) {
                 Vector2 flagPosition = calculateFlagPosition(teamArea, i, flagsPerTeam);
-                
+
                 // Ensure flag position is clear of obstacles
                 if (!terrainGenerator.isPositionClear(flagPosition, 30.0)) {
                     // Try alternative positions
@@ -1676,40 +823,168 @@ public class GameManager implements StepListener<Body> {
                         }
                     }
                 }
-                
+
                 Flag flag = new Flag(flagId++, team, flagPosition.x, flagPosition.y);
                 gameEntities.addFlag(flag);
                 world.addBody(flag.getBody());
-                
-                log.info("Created flag {} for team {} at position ({}, {})", 
+
+                log.info("Created flag {} for team {} at position ({}, {})",
                         flag.getId(), team, flagPosition.x, flagPosition.y);
             }
         }
     }
-    
+
     /**
      * Calculate flag position within a team's area.
      * For multiple flags, distributes them around the team center.
      */
     private Vector2 calculateFlagPosition(TeamSpawnArea teamArea, int flagIndex, int totalFlags) {
         Vector2 center = teamArea.getCenter();
-        
+
         if (totalFlags == 1) {
             // Single flag: place at team center
             return center.copy();
         }
-        
+
         // Multiple flags: distribute in a circle around center
         double radius = Math.min(teamArea.getWidth(), teamArea.getHeight()) * 0.3;
         double angleStep = (2 * Math.PI) / totalFlags;
         double angle = flagIndex * angleStep;
-        
+
         double x = center.x + radius * Math.cos(angle);
         double y = center.y + radius * Math.sin(angle);
-        
+
         return new Vector2(x, y);
     }
-    
+
+    /**
+     * Create King of the Hill zones if enabled in rules.
+     * Zones are placed strategically between team spawn areas for fair gameplay.
+     */
+    private void createKothZones() {
+        Rules rules = gameConfig.getRules();
+        if (!rules.hasKothZones()) {
+            return; // KOTH disabled
+        }
+
+        int zoneCount = rules.getKothZones();
+        int teamCount = gameConfig.getTeamCount();
+
+        log.info("Creating {} KOTH zones for game {}", zoneCount, gameId);
+
+        int zoneId = Config.nextId();
+
+        // Calculate zone positions based on number of zones and teams
+        for (int i = 0; i < zoneCount; i++) {
+            Vector2 zonePosition = calculateKothZonePosition(i, zoneCount, teamCount);
+
+            // Ensure zone position is clear of obstacles
+            if (!terrainGenerator.isPositionClear(zonePosition, 100.0)) {
+                // Try to find a nearby clear position
+                for (int attempt = 0; attempt < 10; attempt++) {
+                    double offsetX = (Math.random() - 0.5) * 200;
+                    double offsetY = (Math.random() - 0.5) * 200;
+                    Vector2 candidate = new Vector2(zonePosition.x + offsetX, zonePosition.y + offsetY);
+
+                    if (terrainGenerator.isPositionClear(candidate, 100.0)) {
+                        zonePosition = candidate;
+                        break;
+                    }
+                }
+            }
+
+            KothZone zone = new KothZone(zoneId++, i, zonePosition.x, zonePosition.y, gameConfig.getRules().getKothPointsPerSecond());
+            gameEntities.addKothZone(zone);
+            world.addBody(zone.getBody());
+
+            log.info("Created KOTH zone {} at position ({}, {})", i, zonePosition.x, zonePosition.y);
+        }
+    }
+
+    /**
+     * Calculate fair positioning for KOTH zones.
+     * Zones are placed equidistant from team spawn areas to ensure no team has an advantage.
+     */
+    private Vector2 calculateKothZonePosition(int zoneIndex, int totalZones, int teamCount) {
+        double worldWidth = gameConfig.getWorldWidth();
+        double worldHeight = gameConfig.getWorldHeight();
+
+        if (totalZones == 1) {
+            // Single zone: place at world center
+            return new Vector2(0, 0);
+        }
+
+        if (teamCount <= 1) {
+            // FFA mode: distribute zones in a grid pattern
+            if (totalZones == 2) {
+                // Two zones: left and right of center
+                double x = (zoneIndex == 0) ? -worldWidth * 0.25 : worldWidth * 0.25;
+                return new Vector2(x, 0);
+            } else if (totalZones == 3) {
+                // Three zones: triangle pattern
+                double angleStep = (2 * Math.PI) / 3;
+                double angle = zoneIndex * angleStep;
+                double radius = Math.min(worldWidth, worldHeight) * 0.25;
+                return new Vector2(radius * Math.cos(angle), radius * Math.sin(angle));
+            } else { // 4 zones
+                // Four zones: square pattern
+                double x = (zoneIndex % 2 == 0) ? -worldWidth * 0.25 : worldWidth * 0.25;
+                double y = (zoneIndex < 2) ? -worldHeight * 0.25 : worldHeight * 0.25;
+                return new Vector2(x, y);
+            }
+        }
+
+        // Team mode: place zones between team spawn areas
+        if (teamCount == 2) {
+            // 2 teams: zones along the center line between teams
+            if (totalZones == 1) {
+                return new Vector2(0, 0); // Center
+            } else if (totalZones == 2) {
+                double y = (zoneIndex == 0) ? -worldHeight * 0.2 : worldHeight * 0.2;
+                return new Vector2(0, y);
+            } else if (totalZones == 3) {
+                double y = (zoneIndex - 1) * worldHeight * 0.2; // -0.2, 0, 0.2
+                return new Vector2(0, y);
+            } else { // 4 zones
+                double y = ((zoneIndex % 2) - 0.5) * worldHeight * 0.3;
+                double x = (zoneIndex < 2) ? -worldWidth * 0.15 : worldWidth * 0.15;
+                return new Vector2(x, y);
+            }
+        } else if (teamCount == 3) {
+            // 3 teams: zones in center, forming triangle
+            if (totalZones == 1) {
+                return new Vector2(0, 0);
+            } else {
+                double angleStep = (2 * Math.PI) / totalZones;
+                double angle = zoneIndex * angleStep;
+                double radius = Math.min(worldWidth, worldHeight) * 0.2;
+                return new Vector2(radius * Math.cos(angle), radius * Math.sin(angle));
+            }
+        } else { // 4 teams
+            // 4 teams: zones at cardinal points between team corners
+            if (totalZones == 1) {
+                return new Vector2(0, 0); // Center
+            } else if (totalZones == 2) {
+                // Two zones: opposite sides
+                double x = (zoneIndex == 0) ? -worldWidth * 0.2 : worldWidth * 0.2;
+                return new Vector2(x, 0);
+            } else if (totalZones == 3) {
+                // Three zones: center + two sides
+                if (zoneIndex == 0) {
+                    return new Vector2(0, 0);
+                } else {
+                    double x = (zoneIndex == 1) ? -worldWidth * 0.2 : worldWidth * 0.2;
+                    return new Vector2(x, 0);
+                }
+            } else { // 4 zones
+                // Four zones: cross pattern between team corners
+                double x = (zoneIndex % 2 == 0) ? -worldWidth * 0.2 : worldWidth * 0.2;
+                double y = (zoneIndex < 2) ? -worldHeight * 0.2 : worldHeight * 0.2;
+                return new Vector2(x, y);
+            }
+        }
+    }
+
     /**
      * Update positions of flags that are being carried by players.
      */
@@ -1718,7 +993,7 @@ public class GameManager implements StepListener<Body> {
             if (flag.isCarried()) {
                 int carrierId = flag.getCarriedByPlayerId();
                 Player carrier = gameEntities.getPlayer(carrierId);
-                
+
                 if (carrier != null && carrier.isActive()) {
                     // Move flag to player's position
                     Vector2 playerPos = carrier.getPosition();
@@ -1726,28 +1001,80 @@ public class GameManager implements StepListener<Body> {
                 } else {
                     // Carrier is no longer active, drop the flag
                     flag.drop();
-                    log.info("Flag {} dropped at ({}, {}) - carrier {} inactive", 
+                    log.info("Flag {} dropped at ({}, {}) - carrier {} inactive",
                             flag.getId(), flag.getPosition().x, flag.getPosition().y, carrierId);
                 }
             }
         }
     }
 
+    /**
+     * Broadcast zone control change events to players.
+     * Called by CollisionProcessor.
+     */
+    public void broadcastZoneControlChange(KothZone zone, int previousController, KothZone.ZoneState previousState) {
+        int currentController = zone.getControllingTeam();
+        KothZone.ZoneState currentState = zone.getState();
+        String zoneName = "Zone " + (zone.getZoneNumber() + 1);
+
+        // Zone captured
+        if (currentState == KothZone.ZoneState.CONTROLLED && previousState != KothZone.ZoneState.CONTROLLED) {
+            String teamName = getTeamName(currentController);
+            broadcastGameEvent(
+                    String.format("%s captured %s!", teamName, zoneName),
+                    "ZONE_CAPTURE",
+                    getTeamColorHex(currentController)
+            );
+            log.info("Zone {} captured by team {}", zone.getZoneNumber(), currentController);
+        }
+        // Zone contested
+        else if (currentState == KothZone.ZoneState.CONTESTED && previousState != KothZone.ZoneState.CONTESTED) {
+            broadcastGameEvent(
+                    String.format("%s is contested!", zoneName),
+                    "ZONE_CONTESTED",
+                    "#FF8800"
+            );
+        }
+        // Zone neutralized
+        else if (currentState == KothZone.ZoneState.NEUTRAL && previousController >= 0) {
+            broadcastGameEvent(
+                    String.format("%s neutralized", zoneName),
+                    "ZONE_NEUTRAL",
+                    "#888888"
+            );
+        }
+    }
+
+    /**
+     * Get team name for display.
+     */
+    private String getTeamName(int team) {
+        if (gameConfig.isFreeForAll()) {
+            return "Player";
+        }
+        return "Team " + (team + 1);
+    }
+
+    /**
+     * Get team color hex code for events.
+     */
+    private String getTeamColorHex(int team) {
+        return switch (team) {
+            case 0 -> "#4CAF50";  // Green
+            case 1 -> "#F44336";  // Red
+            case 2 -> "#2196F3";  // Blue
+            case 3 -> "#FF9800";  // Orange
+            default -> "#FFFFFF"; // White
+        };
+    }
+
     private void sendGameState() {
         Map<String, Object> gameState = new HashMap<>();
         gameState.put("type", "gameState");
         gameState.put("timestamp", System.currentTimeMillis());
-        
-        // Include round information if rounds are enabled
-        if (gameConfig.hasRounds()) {
-            gameState.put("roundEnabled", true);
-            gameState.put("currentRound", currentRound);
-            gameState.put("gameState", this.gameState.name());
-            gameState.put("roundTimeRemaining", roundTimeRemaining);
-            gameState.put("restTimeRemaining", restTimeRemaining);
-        } else {
-            gameState.put("roundEnabled", false);
-        }
+
+        // Include rule system state (rounds, victory, respawns)
+        gameState.putAll(ruleSystem.getStateData());
 
         List<Map<String, Object>> playerStates = new ArrayList<>();
         for (Player player : gameEntities.getAllPlayers()) {
@@ -1937,7 +1264,30 @@ public class GameManager implements StepListener<Body> {
             beamStates.add(beamState);
         }
         gameState.put("beams", beamStates);
-        
+
+        // Include KOTH zone states if enabled
+        if (gameConfig.getRules().hasKothZones()) {
+            List<Map<String, Object>> zoneStates = new ArrayList<>();
+            for (KothZone zone : gameEntities.getAllKothZones()) {
+                Vector2 pos = zone.getPosition();
+                Map<String, Object> zoneState = new HashMap<>();
+                zoneState.put("id", zone.getId());
+                zoneState.put("zoneNumber", zone.getZoneNumber());
+                zoneState.put("x", pos.x);
+                zoneState.put("y", pos.y);
+                zoneState.put("radius", 80.0); // ZONE_RADIUS from KothZone
+                zoneState.put("controllingTeam", zone.getControllingTeam());
+                zoneState.put("state", zone.getState().name());
+                zoneState.put("captureProgress", zone.getCaptureProgress());
+                zoneState.put("playerCount", zone.getTotalPlayerCount());
+                zoneStates.add(zoneState);
+            }
+            gameState.put("kothZones", zoneStates);
+            gameState.put("kothEnabled", true);
+        } else {
+            gameState.put("kothEnabled", false);
+        }
+
         // Include flag states if flags are enabled
         if (gameConfig.getRules().hasFlags()) {
             List<Map<String, Object>> flagStates = new ArrayList<>();
@@ -1967,35 +1317,35 @@ public class GameManager implements StepListener<Body> {
      * Used to prevent placing turrets, barriers, etc. inside obstacles.
      *
      * @param position Position to check
-     * @param radius Radius of the entity being placed
+     * @param radius   Radius of the entity being placed
      * @return true if position is clear, false if blocked by obstacle
      */
     private boolean isPositionClearOfObstacles(Vector2 position, double radius) {
         // Add a small buffer to prevent entities from being placed too close to obstacles
         double checkRadius = radius + 5.0;
-        
+
         // Check against all obstacles
         for (Obstacle obstacle : gameEntities.getAllObstacles()) {
             double distance = position.distance(obstacle.getPosition());
             double minDistance = checkRadius + obstacle.getBoundingRadius();
-            
+
             if (distance < minDistance) {
                 return false; // Position is blocked
             }
         }
-        
+
         // Also check against world boundaries
         double halfWidth = gameConfig.getWorldWidth() / 2.0;
         double halfHeight = gameConfig.getWorldHeight() / 2.0;
-        
+
         if (Math.abs(position.x) + checkRadius > halfWidth ||
             Math.abs(position.y) + checkRadius > halfHeight) {
             return false; // Too close to world boundary
         }
-        
+
         return true; // Position is clear
     }
-    
+
     /**
      * Find a varied spawn point for a specific team that avoids clustering.
      * Tries multiple locations to avoid spawning too close to other players.
@@ -2165,7 +1515,7 @@ public class GameManager implements StepListener<Body> {
             obstacles.add(obsData);
         }
         state.put("obstacles", obstacles);
-        
+
         // Add flag information if flags are enabled
         if (gameConfig.getRules().hasFlags()) {
             List<Map<String, Object>> flagsData = new ArrayList<>();
@@ -2185,12 +1535,34 @@ public class GameManager implements StepListener<Body> {
         return state;
     }
 
+    /**
+     * Process wave respawns - called when wave timer expires.
+     */
+    private void processWaveRespawns() {
+        for (Player player : ruleSystem.getDeadPlayersWaitingForWave()) {
+            if (!player.isEliminated()) {
+                player.setActive(true);
+                player.setHealth(gameConfig.getPlayerMaxHealth());
+                player.setRespawnTime(0);
+
+                // Move to spawn point
+                Vector2 spawnPoint = findVariedSpawnPointForTeam(player.getTeam());
+                player.getBody().getTransform().setTranslation(spawnPoint.x, spawnPoint.y);
+                player.getBody().setLinearVelocity(0, 0);
+                player.getBody().setAngularVelocity(0);
+
+                log.debug("Wave respawned player {} at ({}, {})",
+                        player.getId(), spawnPoint.x, spawnPoint.y);
+            }
+        }
+    }
+
     public void killPlayer(Player victim, Player shooter) {
         if (shooter != null) {
             shooter.addKill();
         }
         victim.die();
-        
+
         // Drop any flag the victim was carrying
         for (Flag flag : gameEntities.getAllFlags()) {
             if (flag.isCarried() && flag.getCarriedByPlayerId() == victim.getId()) {
@@ -2199,50 +1571,27 @@ public class GameManager implements StepListener<Body> {
             }
         }
 
-        // Handle respawn based on respawn mode
-        Rules rules = gameConfig.getRules();
-        RespawnMode respawnMode = rules.getRespawnMode();
-        
-        switch (respawnMode) {
-            case INSTANT:
+        // Handle respawn based on respawn mode (delegated to RuleSystem)
+        RuleSystem.RespawnAction action = ruleSystem.handlePlayerDeath(victim);
+
+        switch (action) {
+            case RESPAWN_AFTER_DELAY:
                 // Standard respawn with delay
-                victim.setRespawnTime(rules.getRespawnDelay());
+                victim.setRespawnTime(gameConfig.getRules().getRespawnDelay());
                 Vector2 newSpawnPoint = findVariedSpawnPointForTeam(victim.getTeam());
                 victim.setRespawnPoint(newSpawnPoint);
                 break;
-                
-            case WAVE:
-                // Add to wave waiting list
-                if (!deadPlayersWaitingForWave.contains(victim)) {
-                    deadPlayersWaitingForWave.add(victim);
-                    log.info("Player {} added to wave respawn queue. Queue size: {}", 
-                        victim.getId(), deadPlayersWaitingForWave.size());
-                }
+
+            case WAIT_FOR_WAVE:
+                // Player added to wave queue by RuleSystem
                 break;
-                
-            case NEXT_ROUND:
-                // Player stays dead until round ends
-                log.info("Player {} will respawn next round", victim.getId());
+
+            case WAIT_FOR_ROUND:
+                // Player will respawn at round start
                 break;
-                
-            case ELIMINATION:
-                // Permanent death
-                victim.eliminate();
-                log.info("Player {} permanently eliminated", victim.getId());
-                break;
-                
-            case LIMITED:
-                // Check if player has lives remaining
-                boolean eliminated = victim.loseLife();
-                if (eliminated) {
-                    log.info("Player {} is out of lives and eliminated", victim.getId());
-                } else {
-                    // Still has lives, respawn with delay
-                    victim.setRespawnTime(rules.getRespawnDelay());
-                    Vector2 respawnPoint = findVariedSpawnPointForTeam(victim.getTeam());
-                    victim.setRespawnPoint(respawnPoint);
-                    log.info("Player {} died. Lives remaining: {}", victim.getId(), victim.getLivesRemaining());
-                }
+
+            case ELIMINATE:
+                // Player is permanently eliminated
                 break;
         }
 
@@ -2308,7 +1657,7 @@ public class GameManager implements StepListener<Body> {
     public void broadcastGameEvent(GameEvent event) {
         gameEventManager.broadcastEvent(event);
     }
-    
+
     /**
      * Broadcast a custom game event (convenience overload).
      */
@@ -2319,7 +1668,7 @@ public class GameManager implements StepListener<Body> {
         } catch (IllegalArgumentException e) {
             // Use default INFO category if invalid
         }
-        
+
         GameEvent event = GameEvent.builder()
                 .message(message)
                 .category(eventCategory)
@@ -2331,29 +1680,20 @@ public class GameManager implements StepListener<Body> {
                 .build();
         gameEventManager.broadcastEvent(event);
     }
-    
+
     /**
      * Award a capture to a player and their team.
      */
     public void awardCapture(Player player, int capturedFlagTeam) {
         player.addCapture();
-        log.info("Player {} (team {}) awarded capture. Total captures: {}", 
+        log.info("Player {} (team {}) awarded capture. Total captures: {}",
                 player.getId(), player.getTeam(), player.getCaptures());
     }
 
     /**
      * Apply homing behavior to projectiles with homing effect
      */
-    private void processHomingProjectiles() {
-        CollisionProcessor collisionProcessor = getCollisionProcessor();
-        if (collisionProcessor != null) {
-            for (Projectile projectile : gameEntities.getAllProjectiles()) {
-                if (projectile.isActive()) {
-                    collisionProcessor.getBulletEffectProcessor().applyHomingBehavior(projectile);
-                }
-            }
-        }
-    }
+    // Homing projectile processing moved to WeaponSystem
 
     /**
      * Get the collision processor from the world's collision listeners
@@ -2366,25 +1706,5 @@ public class GameManager implements StepListener<Body> {
                 .map(listener -> (CollisionProcessor) listener)
                 .findFirst()
                 .orElse(null);
-    }
-
-    @Override
-    public void begin(TimeStep step, PhysicsWorld<Body, ?> world) {
-
-    }
-
-    @Override
-    public void updatePerformed(TimeStep step, PhysicsWorld<Body, ?> world) {
-
-    }
-
-    @Override
-    public void postSolve(TimeStep step, PhysicsWorld<Body, ?> world) {
-
-    }
-
-    @Override
-    public void end(TimeStep step, PhysicsWorld<Body, ?> world) {
-        processHomingProjectiles();
     }
 }

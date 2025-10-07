@@ -44,8 +44,8 @@ public class Player extends GameEntity {
     private int livesRemaining = -1; // -1 = unlimited, 0 = eliminated
     private boolean eliminated = false; // Permanently eliminated (no more respawns)
 
-    public Player(int id, String playerName, double x, double y, int team) {
-        super(id, createPlayerBody(x, y), 100.0);
+    public Player(int id, String playerName, double x, double y, int team, double maxHealth) {
+        super(id, createPlayerBody(x, y), maxHealth);
         this.playerName = playerName != null ? playerName : "Player " + id;
         this.team = team;
         this.respawnPoint = new Vector2(x, y);
@@ -270,7 +270,7 @@ public class Player extends GameEntity {
         direction.normalize();
 
         Ordinance ordinance = weapon.getOrdinance();
-        double range = weapon.getRange();
+        double range = weapon.getRange() * 0.5; // Beams have 50% the range of bullets
         double damage = weapon.getDamage();
 
         // Create the appropriate beam type based on ordinance

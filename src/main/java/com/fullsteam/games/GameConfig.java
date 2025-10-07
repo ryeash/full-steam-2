@@ -33,6 +33,8 @@ public class GameConfig {
     // AI Management Settings
     @Builder.Default
     private long aiCheckIntervalMs = 10000; // 10 seconds
+    @Builder.Default
+    private boolean enableAIFilling = true; // Whether to automatically fill game with AI players
     
     // Game Rules (rounds, timing, etc.)
     @Builder.Default

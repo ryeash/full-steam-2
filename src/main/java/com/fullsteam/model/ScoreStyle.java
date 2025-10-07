@@ -15,7 +15,12 @@ public enum ScoreStyle {
     CAPTURES,
     
     /**
-     * Score based on everything: kills + captures + any future scoring mechanisms
+     * Score based only on KOTH zone control
+     */
+    KOTH_ZONES,
+    
+    /**
+     * Score based on everything: kills + captures + KOTH zones + any future scoring mechanisms
      */
     TOTAL
 }

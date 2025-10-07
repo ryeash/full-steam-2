@@ -312,6 +312,7 @@ class GameEngine {
         this.beams = new Map();
         this.utilityEntities = new Map(); // For turrets, barriers, nets, mines, teleport pads
         this.flags = new Map(); // CTF flags
+        this.kothZones = new Map(); // King of the Hill zones
         this.myPlayerId = null;
         this.lastPlayerInput = null; // Store last input for prediction
         this.gameState = null;
@@ -1196,6 +1197,25 @@ class GameEngine {
             for (let [flagId, flag] of this.flags) {
                 if (!currentFlagIds.has(flagId)) {
                     this.removeFlag(flagId);
+                }
+            }
+        }
+        
+        // Handle KOTH zones
+        if (data.kothZones) {
+            const currentZoneIds = new Set();
+            data.kothZones.forEach(zoneData => {
+                currentZoneIds.add(zoneData.id);
+                if (this.kothZones.has(zoneData.id)) {
+                    this.updateKothZone(zoneData);
+                } else {
+                    this.createKothZone(zoneData);
+                }
+            });
+            
+            for (let [zoneId, zone] of this.kothZones) {
+                if (!currentZoneIds.has(zoneId)) {
+                    this.removeKothZone(zoneId);
                 }
             }
         }
@@ -3290,6 +3310,224 @@ class GameEngine {
             flagContainer.destroy({ children: true });
             this.gameContainer.removeChild(flagContainer);
             this.flags.delete(flagId);
+        }
+    }
+    
+    // ===== KOTH Zone Management =====
+    
+    /**
+     * Create a KOTH zone
+     */
+    createKothZone(zoneData) {
+        const zoneContainer = new PIXI.Container();
+        
+        // Convert world coordinates to screen coordinates
+        const pos = this.worldToIsometric(zoneData.x, zoneData.y);
+        zoneContainer.position.set(pos.x, pos.y);
+        
+        // Create zone circle (base layer)
+        const baseCircle = new PIXI.Graphics();
+        zoneContainer.baseCircle = baseCircle;
+        zoneContainer.addChild(baseCircle);
+        
+        // Create capture progress ring
+        const progressRing = new PIXI.Graphics();
+        zoneContainer.progressRing = progressRing;
+        zoneContainer.addChild(progressRing);
+        
+        // Create inner glow effect
+        const glow = new PIXI.Graphics();
+        zoneContainer.glow = glow;
+        zoneContainer.addChild(glow);
+        
+        // Create zone number text
+        const zoneText = new PIXI.Text(`${zoneData.zoneNumber + 1}`, {
+            fontSize: 24,
+            fill: 0xffffff,
+            fontWeight: 'bold',
+            stroke: 0x000000,
+            strokeThickness: 3
+        });
+        zoneText.anchor.set(0.5);
+        zoneContainer.addChild(zoneText);
+        zoneContainer.zoneText = zoneText;
+        
+        // Create status text (below number)
+        const statusText = new PIXI.Text('NEUTRAL', {
+            fontSize: 12,
+            fill: 0xaaaaaa,
+            fontWeight: 'bold',
+            stroke: 0x000000,
+            strokeThickness: 2
+        });
+        statusText.anchor.set(0.5);
+        statusText.position.set(0, 20);
+        zoneContainer.addChild(statusText);
+        zoneContainer.statusText = statusText;
+        
+        // Create player count text
+        const playerCountText = new PIXI.Text('', {
+            fontSize: 10,
+            fill: 0xffffff,
+            stroke: 0x000000,
+            strokeThickness: 2
+        });
+        playerCountText.anchor.set(0.5);
+        playerCountText.position.set(0, 35);
+        zoneContainer.addChild(playerCountText);
+        zoneContainer.playerCountText = playerCountText;
+        
+        // Set z-index (below players, above ground)
+        zoneContainer.zIndex = 1;
+        
+        // Store zone data
+        zoneContainer.zoneData = zoneData;
+        zoneContainer.animationPhase = 0;
+        
+        // Add to game
+        this.kothZones.set(zoneData.id, zoneContainer);
+        this.gameContainer.addChild(zoneContainer);
+        
+        // Initial render
+        this.updateKothZone(zoneData);
+    }
+    
+    /**
+     * Update a KOTH zone's visual state
+     */
+    updateKothZone(zoneData) {
+        const zoneContainer = this.kothZones.get(zoneData.id);
+        if (!zoneContainer) return;
+        
+        // Update position
+        const pos = this.worldToIsometric(zoneData.x, zoneData.y);
+        zoneContainer.position.set(pos.x, pos.y);
+        
+        // Store updated data
+        zoneContainer.zoneData = zoneData;
+        
+        // Get colors based on state
+        const colors = this.getKothZoneColors(zoneData);
+        const radius = zoneData.radius || 80;
+        
+        // Redraw base circle
+        const baseCircle = zoneContainer.baseCircle;
+        baseCircle.clear();
+        baseCircle.lineStyle(3, colors.border, 1);
+        baseCircle.beginFill(colors.fill, 0.2);
+        baseCircle.drawCircle(0, 0, radius);
+        baseCircle.endFill();
+        
+        // Draw capture progress ring
+        const progressRing = zoneContainer.progressRing;
+        progressRing.clear();
+        if (zoneData.captureProgress > 0 && zoneData.state !== 'NEUTRAL') {
+            const progressAngle = zoneData.captureProgress * Math.PI * 2;
+            progressRing.lineStyle(5, colors.progress, 1);
+            progressRing.arc(0, 0, radius + 5, -Math.PI / 2, -Math.PI / 2 + progressAngle);
+        }
+        
+        // Draw inner glow
+        const glow = zoneContainer.glow;
+        glow.clear();
+        glow.beginFill(colors.glow, 0.3);
+        glow.drawCircle(0, 0, radius * 0.7);
+        glow.endFill();
+        
+        // Update zone number color
+        zoneContainer.zoneText.style.fill = colors.text;
+        
+        // Update status text
+        const statusText = zoneContainer.statusText;
+        statusText.text = this.getKothZoneStatusText(zoneData);
+        statusText.style.fill = colors.statusText;
+        
+        // Update player count
+        const playerCountText = zoneContainer.playerCountText;
+        if (zoneData.playerCount > 0) {
+            playerCountText.text = `👥 ${zoneData.playerCount}`;
+            playerCountText.visible = true;
+        } else {
+            playerCountText.visible = false;
+        }
+    }
+    
+    /**
+     * Get colors for KOTH zone based on state
+     */
+    getKothZoneColors(zoneData) {
+        switch (zoneData.state) {
+            case 'CONTROLLED':
+                const teamColor = this.getTeamColor(zoneData.controllingTeam);
+                return {
+                    fill: teamColor,
+                    border: teamColor,
+                    progress: teamColor,
+                    glow: teamColor,
+                    text: teamColor,
+                    statusText: teamColor
+                };
+            
+            case 'CAPTURING':
+                const capturingColor = this.getTeamColor(zoneData.controllingTeam);
+                return {
+                    fill: 0xFFAA00,
+                    border: capturingColor,
+                    progress: capturingColor,
+                    glow: 0xFFAA00,
+                    text: 0xFFFFFF,
+                    statusText: 0xFFAA00
+                };
+            
+            case 'CONTESTED':
+                return {
+                    fill: 0xFF4444,
+                    border: 0xFF4444,
+                    progress: 0xFF4444,
+                    glow: 0xFF4444,
+                    text: 0xFFFFFF,
+                    statusText: 0xFF4444
+                };
+            
+            case 'NEUTRAL':
+            default:
+                return {
+                    fill: 0x888888,
+                    border: 0x888888,
+                    progress: 0x888888,
+                    glow: 0x444444,
+                    text: 0xCCCCCC,
+                    statusText: 0x888888
+                };
+        }
+    }
+    
+    /**
+     * Get status text for KOTH zone
+     */
+    getKothZoneStatusText(zoneData) {
+        switch (zoneData.state) {
+            case 'CONTROLLED':
+                return `TEAM ${zoneData.controllingTeam + 1}`;
+            case 'CAPTURING':
+                return 'CAPTURING...';
+            case 'CONTESTED':
+                return 'CONTESTED!';
+            case 'NEUTRAL':
+            default:
+                return 'NEUTRAL';
+        }
+    }
+    
+    /**
+     * Remove a KOTH zone
+     */
+    removeKothZone(zoneId) {
+        const zoneContainer = this.kothZones.get(zoneId);
+        if (zoneContainer) {
+            zoneContainer.destroy({ children: true });
+            this.gameContainer.removeChild(zoneContainer);
+            this.kothZones.delete(zoneId);
         }
     }
     
