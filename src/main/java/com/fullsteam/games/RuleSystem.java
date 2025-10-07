@@ -624,6 +624,9 @@ public class RuleSystem {
 
         // Team scores
         data.put("teamScores", calculateTeamScores());
+        
+        // Scoring style info
+        data.put("scoreStyle", rules.getScoreStyle().name());
 
         return data;
     }

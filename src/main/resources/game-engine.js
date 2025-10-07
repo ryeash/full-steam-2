@@ -3518,14 +3518,10 @@ class GameEngine {
         baseCircle.drawCircle(0, 0, radius);
         baseCircle.endFill();
         
-        // Draw capture progress ring
+        // Draw capture progress ring (no longer needed - removed capture time)
         const progressRing = zoneContainer.progressRing;
         progressRing.clear();
-        if (zoneData.captureProgress > 0 && zoneData.state !== 'NEUTRAL') {
-            const progressAngle = zoneData.captureProgress * Math.PI * 2;
-            progressRing.lineStyle(5, colors.progress, 1);
-            progressRing.arc(0, 0, radius + 5, -Math.PI / 2, -Math.PI / 2 + progressAngle);
-        }
+        // No progress ring since zones are controlled immediately
         
         // Draw inner glow
         const glow = zoneContainer.glow;
@@ -3568,17 +3564,6 @@ class GameEngine {
                     statusText: teamColor
                 };
             
-            case 'CAPTURING':
-                const capturingColor = this.getTeamColor(zoneData.controllingTeam);
-                return {
-                    fill: 0xFFAA00,
-                    border: capturingColor,
-                    progress: capturingColor,
-                    glow: 0xFFAA00,
-                    text: 0xFFFFFF,
-                    statusText: 0xFFAA00
-                };
-            
             case 'CONTESTED':
                 return {
                     fill: 0xFF4444,
@@ -3609,8 +3594,6 @@ class GameEngine {
         switch (zoneData.state) {
             case 'CONTROLLED':
                 return `TEAM ${zoneData.controllingTeam + 1}`;
-            case 'CAPTURING':
-                return 'CAPTURING...';
             case 'CONTESTED':
                 return 'CONTESTED!';
             case 'NEUTRAL':
@@ -5605,14 +5588,26 @@ class GameEngine {
         // Check if any player has captures (CTF mode)
         const hasCaptures = players.some(p => (p.captures || 0) > 0);
         
-        // Sort teams by total kills
+        // Get effective team scores from game state (includes all scoring mechanisms)
+        const effectiveTeamScores = this.gameState?.teamScores || {};
+        
+        // Sort teams by effective team score (from server rules)
         const sortedTeams = Object.entries(teams).sort((a, b) => {
-            const aKills = a[1].reduce((sum, p) => sum + (p.kills || 0), 0);
-            const bKills = b[1].reduce((sum, p) => sum + (p.kills || 0), 0);
-            return bKills - aKills;
+            const teamA = parseInt(a[0]);
+            const teamB = parseInt(b[0]);
+            const scoreA = effectiveTeamScores[teamA] || 0;
+            const scoreB = effectiveTeamScores[teamB] || 0;
+            return scoreB - scoreA;
         });
         
-        let html = '<div style="color: white;">';
+        // Get scoring style info for display
+        const scoreStyle = this.gameState?.scoreStyle || 'TOTAL_KILLS';
+        const scoreTypeName = this.getScoreTypeName(scoreStyle);
+        
+        let html = `<div style="color: white;">
+            <div style="text-align: center; margin-bottom: 10px; font-size: 12px; color: #aaa;">
+                Scoring: ${scoreTypeName}
+            </div>`;
         
         sortedTeams.forEach(([teamNum, teamPlayers]) => {
             const teamKills = teamPlayers.reduce((sum, p) => sum + (p.kills || 0), 0);
@@ -5621,10 +5616,13 @@ class GameEngine {
             const teamName = teamNum == 0 ? 'Free For All' : `Team ${teamNum}`;
             const teamColor = this.getTeamColorCSS(parseInt(teamNum));
             
-            // Build team header with captures if applicable
+            // Get effective team score from server
+            const effectiveScore = effectiveTeamScores[parseInt(teamNum)] || 0;
+            
+            // Build team header with effective score prominently displayed
             const teamStats = hasCaptures 
-                ? `K: ${teamKills} | D: ${teamDeaths} | 🚩: ${teamCaptures}`
-                : `${teamKills}/${teamDeaths}`;
+                ? `Score: ${effectiveScore} | K: ${teamKills} | D: ${teamDeaths} | 🚩: ${teamCaptures}`
+                : `Score: ${effectiveScore} | K: ${teamKills} | D: ${teamDeaths}`;
             
             html += `
                 <div style="margin-bottom: 15px; border: 1px solid ${teamColor}; border-radius: 5px; padding: 8px;">
@@ -5648,6 +5646,16 @@ class GameEngine {
         
         html += '</div>';
         content.innerHTML = html;
+    }
+    
+    getScoreTypeName(scoreStyle) {
+        switch (scoreStyle) {
+            case 'TOTAL_KILLS': return 'Kills Only';
+            case 'CAPTURES': return 'Flag Captures Only';
+            case 'KOTH_ZONES': return 'Zone Control Only';
+            case 'TOTAL': return 'All Scoring Methods';
+            default: return 'Kills Only';
+        }
     }
     
     updateMinimap() {

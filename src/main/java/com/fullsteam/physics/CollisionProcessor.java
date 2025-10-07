@@ -379,7 +379,8 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         boolean turretDestroyed = turret.takeDamage(projectile.getDamage());
 
         if (turretDestroyed) {
-            // Turret was destroyed, could trigger explosion or other effects
+            // Turret was destroyed, create visual explosion effect
+            createTurretDestructionExplosion(turret);
             log.debug("Turret {} destroyed by projectile from player {}",
                     turret.getId(), projectile.getOwnerId());
         }
@@ -626,5 +627,33 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
 
         // In team mode, can only damage obstacles created by different teams
         return projectile.getOwnerTeam() != obstacle.getOwnerTeam();
+    }
+
+    /**
+     * Create a visual explosion effect when a turret is destroyed.
+     * The explosion has zero damage and is purely visual feedback.
+     */
+    private void createTurretDestructionExplosion(Turret turret) {
+        Vector2 turretPosition = turret.getPosition();
+        double explosionRadius = 15.0; // Same size as turret
+        
+        // Create zero-damage explosion field effect
+        FieldEffect explosion = new FieldEffect(
+                Config.nextId(),
+                turret.getOwnerId(), // Use turret owner for attribution
+                FieldEffectType.EXPLOSION,
+                turretPosition,
+                explosionRadius,
+                0.0, // Zero damage - purely visual
+                FieldEffectType.EXPLOSION.getDefaultDuration(),
+                turret.getOwnerTeam()
+        );
+        
+        // Add to game world
+        gameEntities.getWorld().addBody(explosion.getBody());
+        gameEntities.addFieldEffect(explosion);
+        
+        log.debug("Created turret destruction explosion at ({}, {}) with radius {}",
+                turretPosition.x, turretPosition.y, explosionRadius);
     }
 }

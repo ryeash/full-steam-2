@@ -26,7 +26,6 @@ public class KothZone extends GameEntity {
     // Control tracking
     private int controllingTeam = -1; // -1 = contested/neutral, 0+ = team number
     private ZoneState state = ZoneState.NEUTRAL;
-    private double captureProgress = 0.0; // 0.0 to 1.0
 
     /**
      * -- GETTER --
@@ -57,17 +56,11 @@ public class KothZone extends GameEntity {
 
     @Override
     public void update(double deltaTime) {
-        // Update capture progress and state based on players in zone
+        // Update control state based on players in zone
         if (playersInZone.isEmpty()) {
-            // No players - zone is neutral or stays with current controller
-            if (state == ZoneState.CAPTURING) {
-                // Decay capture progress when zone is empty
-                captureProgress = Math.max(0, captureProgress - deltaTime * 0.5);
-                if (captureProgress <= 0) {
-                    state = ZoneState.NEUTRAL;
-                    controllingTeam = -1;
-                }
-            }
+            // No players - zone becomes neutral
+            state = ZoneState.NEUTRAL;
+            controllingTeam = -1;
             return;
         }
 
@@ -93,32 +86,13 @@ public class KothZone extends GameEntity {
         }
 
         if (contested) {
-            // Zone is contested - no progress
+            // Zone is contested - no team gets points
             state = ZoneState.CONTESTED;
-            // Slowly decay capture progress during contest
-            captureProgress = Math.max(0, captureProgress - deltaTime * 0.2);
-        } else if (dominantTeam == controllingTeam) {
-            // Same team controlling - zone is controlled
-            state = ZoneState.CONTROLLED;
-            captureProgress = 1.0;
+            controllingTeam = -1;
         } else {
-            // Different team trying to capture
-            state = ZoneState.CAPTURING;
-
-            if (controllingTeam == -1) {
-                // Capturing from neutral - faster
-                captureProgress += deltaTime * 0.5; // 2 seconds to capture from neutral
-            } else {
-                // Capturing from enemy - slower
-                captureProgress += deltaTime * 0.25; // 4 seconds to capture from enemy
-            }
-
-            if (captureProgress >= 1.0) {
-                // Capture complete!
-                captureProgress = 1.0;
-                controllingTeam = dominantTeam;
-                state = ZoneState.CONTROLLED;
-            }
+            // One team has majority - they control the zone immediately
+            state = ZoneState.CONTROLLED;
+            controllingTeam = dominantTeam;
         }
     }
 
@@ -145,7 +119,7 @@ public class KothZone extends GameEntity {
 
     /**
      * Check if the zone should award points.
-     * Only awards points when fully controlled (not contested or capturing).
+     * Awards points when a team has majority control (not contested).
      */
     public boolean shouldAwardPoints() {
         return state == ZoneState.CONTROLLED && controllingTeam >= 0;
@@ -213,7 +187,6 @@ public class KothZone extends GameEntity {
     public void reset() {
         controllingTeam = -1;
         state = ZoneState.NEUTRAL;
-        captureProgress = 0.0;
         playersInZone.clear();
     }
 
@@ -222,8 +195,7 @@ public class KothZone extends GameEntity {
      */
     public enum ZoneState {
         NEUTRAL,      // No team controls the zone
-        CAPTURING,    // A team is capturing the zone
-        CONTROLLED,   // A team fully controls the zone
-        CONTESTED     // Multiple teams fighting for control
+        CONTROLLED,   // A team controls the zone (has majority)
+        CONTESTED     // Multiple teams fighting for control (tied)
     }
 }
