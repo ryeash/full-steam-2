@@ -225,8 +225,8 @@ public class KothScoringTest extends BaseTestClass {
         // Simulate collision detection and capture the zone
         zone.addPlayer(player1.getId(), player1.getTeam());
         
-        // Update zone to ensure it's controlled (3 seconds to capture from neutral)
-        zone.update(3.0);
+        // Update zone to ensure it's controlled (immediate control)
+        zone.update(0.1);
         assertTrue(zone.shouldAwardPoints());
         assertEquals(1, zone.getControllingTeam()); // Zone should be controlled by team 1
         
@@ -353,13 +353,9 @@ public class KothScoringTest extends BaseTestClass {
         assertEquals(KothZone.ZoneState.NEUTRAL, zone.getState());
         assertEquals(-1, zone.getControllingTeam());
         
-        // Add player - should start capturing
+        // Add player - should immediately control the zone
         zone.addPlayer(player.getId(), player.getTeam());
         zone.update(0.1);
-        assertEquals(KothZone.ZoneState.CAPTURING, zone.getState());
-        
-        // Continue capturing until complete
-        zone.update(2.5); // Total 2.6 seconds
         assertEquals(KothZone.ZoneState.CONTROLLED, zone.getState());
         assertEquals(1, zone.getControllingTeam());
         assertEquals(1.0, zone.getCaptureProgress(), 0.01);

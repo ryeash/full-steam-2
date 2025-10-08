@@ -9,9 +9,6 @@ public enum UtilityWeapon {
     HEAL_ZONE("Heal Zone", "Creates a stationary healing area that restores ally health over time",
             FieldEffectType.HEAL_ZONE, null, 3.0, 60.0, 45.0, 15.0, UtilityCategory.SUPPORT),
 
-    SMOKE_GRENADE("Smoke Grenade", "Deploys a vision-blocking smoke cloud",
-            FieldEffectType.SMOKE_CLOUD, null, 2.0, 80.0, 60.0, 0.0, UtilityCategory.TACTICAL),
-
     GRAVITY_WELL("Gravity Well", "Creates a field that pulls enemies toward the center",
             FieldEffectType.GRAVITY_WELL, null, 4.0, 170.0, 150.0, 1.0, UtilityCategory.CROWD_CONTROL),
 
@@ -38,11 +35,7 @@ public enum UtilityWeapon {
             null, "TeleportPad", 8.0, 120.0, 35.0, 0.0, UtilityCategory.TACTICAL),
 
     MINE_LAYER("Mine Layer", "Places proximity mines that explode when enemies approach",
-            null, "ProximityMine", 2.0, 50.0, 40.0, 40.0, UtilityCategory.DEFENSIVE),
-
-    // Beam-based utilities (line-of-sight effects)
-    DISRUPTOR_BEAM("Disruptor Beam", "Targeted beam that disables enemy weapons temporarily",
-            null, null, 5.0, 70.0, 6.0, 0.0, UtilityCategory.CROWD_CONTROL, Ordinance.LASER);
+            null, "ProximityMine", 2.0, 50.0, 40.0, 40.0, UtilityCategory.DEFENSIVE);
 
     private final String displayName;
     private final String description;

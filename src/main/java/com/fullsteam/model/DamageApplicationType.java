@@ -12,12 +12,7 @@ public enum DamageApplicationType {
     /**
      * Applies damage continuously while beam is active (e.g., plasma beam, heal beam)
      */
-    DAMAGE_OVER_TIME("Applies damage continuously while beam is active"),
-    
-    /**
-     * Applies damage in discrete intervals while active (e.g., pulse laser)
-     */
-    BURST("Applies damage in discrete intervals while active");
+    DAMAGE_OVER_TIME("Applies damage continuously while beam is active");
     
     private final String description;
     

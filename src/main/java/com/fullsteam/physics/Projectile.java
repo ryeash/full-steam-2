@@ -27,10 +27,11 @@ public class Projectile extends GameEntity {
 
     // prevent double hits
     private final Set<Integer> affectedPlayers;
+    private final Set<Integer> affectedObstacles;
 
     public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange,
                       int ownerTeam, double linearDamping, Set<BulletEffect> bulletEffects, Ordinance ordinance) {
-        super(Config.nextId(), createProjectileBody(x, y, vx, vy, linearDamping, ordinance), 1.0);
+        super(Config.nextId(), createProjectileBody(x, y, vx, vy, linearDamping, ordinance, bulletEffects), 1.0);
         this.ownerId = ownerId;
         this.ownerTeam = ownerTeam;
         this.damage = damage;
@@ -46,12 +47,21 @@ public class Projectile extends GameEntity {
             this.timeToLive = 0; // Deactivate immediately if speed is zero
         }
         this.affectedPlayers = new HashSet<>();
+        this.affectedObstacles = new HashSet<>();
     }
 
-    private static Body createProjectileBody(double x, double y, double vx, double vy, double linearDamping, Ordinance ordinance) {
+    private static Body createProjectileBody(double x, double y, double vx, double vy, double linearDamping, Ordinance ordinance, Set<BulletEffect> bulletEffects) {
         Body body = new Body();
         Circle circle = new Circle(ordinance.getSize());
         body.addFixture(circle);
+        
+        // Set restitution for bouncy projectiles
+        if (bulletEffects.contains(BulletEffect.BOUNCY)) {
+            body.getFixture(0).setRestitution(0.8); // High bounce - retains 80% of velocity
+        } else {
+            body.getFixture(0).setRestitution(0.0); // No bounce for non-bouncy projectiles
+        }
+        
         body.setMass(MassType.NORMAL);
         body.getTransform().setTranslation(x, y);
         body.setLinearVelocity(vx, vy);
@@ -117,6 +127,10 @@ public class Projectile extends GameEntity {
 
     public Set<BulletEffect> getBulletEffects() {
         return new HashSet<>(bulletEffects);
+    }
+
+    public Set<Integer> getAffectedObstacles() {
+        return affectedObstacles;
     }
 
     public void markAsExploded() {

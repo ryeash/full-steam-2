@@ -100,6 +100,10 @@ public class Obstacle extends GameEntity {
         Body body = new Body();
         Convex shape = createShapeForType(type);
         body.addFixture(shape);
+        
+        // Set restitution for obstacles - moderate bounce to make projectiles bounce off nicely
+        body.getFixture(0).setRestitution(0.6); // Retains 60% of velocity on bounce
+        
         body.setMass(MassType.INFINITE);
         body.getTransform().setTranslation(x, y);
 

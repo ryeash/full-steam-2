@@ -8,6 +8,8 @@ import com.fullsteam.model.Ordinance;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.World;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -17,6 +19,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * Handles the processing of bullet effects when projectiles hit targets or obstacles
  */
 public class BulletEffectProcessor {
+    private static final Logger log = LoggerFactory.getLogger(BulletEffectProcessor.class);
 
     private final World<Body> world;
     private final GameEntities gameEntities;
@@ -137,6 +140,8 @@ public class BulletEffectProcessor {
         );
         world.addBody(poison.getBody());
         gameEntities.addFieldEffect(poison);
+        log.debug("Created poison field effect at ({}, {}) with radius {} and damage {}", 
+                position.x, position.y, poison.getRadius(), poison.getDamage());
     }
 
     private void createFragmentation(Projectile projectile, Vector2 position) {
@@ -271,5 +276,133 @@ public class BulletEffectProcessor {
         }
 
         return nearest;
+    }
+
+    /**
+     * Process bullet effects for beam weapons when they hit targets
+     */
+    public void processBeamEffectHit(Beam beam, Vector2 hitPosition) {
+        // Process AOE effects for beam weapons
+        for (BulletEffect effect : beam.getBulletEffects()) {
+            switch (effect) {
+                case EXPLOSIVE:
+                    createExplosionForBeam(beam, hitPosition);
+                    break;
+                case INCENDIARY:
+                    createFireEffectForBeam(beam, hitPosition);
+                    break;
+                case ELECTRIC:
+                    createElectricEffectForBeam(beam, hitPosition);
+                    break;
+                case FREEZING:
+                    createFreezeEffectForBeam(beam, hitPosition);
+                    break;
+                case POISON:
+                    createPoisonEffectForBeam(beam, hitPosition);
+                    break;
+                case PIERCING:
+                    // Piercing is handled in beam collision detection
+                    break;
+                case HOMING:
+                    // Homing doesn't apply to beams
+                    break;
+                case BOUNCY:
+                    // Bouncy doesn't apply to beams
+                    break;
+                case FRAGMENTING:
+                    // Fragmenting doesn't apply to beams
+                    break;
+            }
+        }
+    }
+
+    /**
+     * Create explosion effect for beam weapons
+     */
+    private void createExplosionForBeam(Beam beam, Vector2 position) {
+        FieldEffect explosion = new FieldEffect(
+                Config.nextId(),
+                beam.getOwnerId(),
+                FieldEffectType.EXPLOSION,
+                position,
+                BulletEffect.EXPLOSIVE.calculateRadius(beam.getDamage(), beam.getOrdinance()),
+                BulletEffect.EXPLOSIVE.calculateDamage(beam.getDamage()),
+                FieldEffectType.EXPLOSION.getDefaultDuration(),
+                beam.getOwnerTeam()
+        );
+        world.addBody(explosion.getBody());
+        gameEntities.addFieldEffect(explosion);
+    }
+
+    /**
+     * Create fire effect for beam weapons
+     */
+    private void createFireEffectForBeam(Beam beam, Vector2 position) {
+        FieldEffect fire = new FieldEffect(
+                Config.nextId(),
+                beam.getOwnerId(),
+                FieldEffectType.FIRE,
+                position,
+                BulletEffect.INCENDIARY.calculateRadius(beam.getDamage(), beam.getOrdinance()),
+                BulletEffect.INCENDIARY.calculateDamage(beam.getDamage()),
+                FieldEffectType.FIRE.getDefaultDuration(),
+                beam.getOwnerTeam()
+        );
+        world.addBody(fire.getBody());
+        gameEntities.addFieldEffect(fire);
+    }
+
+    /**
+     * Create electric effect for beam weapons
+     */
+    private void createElectricEffectForBeam(Beam beam, Vector2 position) {
+        FieldEffect electric = new FieldEffect(
+                Config.nextId(),
+                beam.getOwnerId(),
+                FieldEffectType.ELECTRIC,
+                position,
+                BulletEffect.ELECTRIC.calculateRadius(beam.getDamage(), beam.getOrdinance()),
+                BulletEffect.ELECTRIC.calculateDamage(beam.getDamage()),
+                FieldEffectType.ELECTRIC.getDefaultDuration(),
+                beam.getOwnerTeam()
+        );
+        world.addBody(electric.getBody());
+        gameEntities.addFieldEffect(electric);
+    }
+
+    /**
+     * Create freeze effect for beam weapons
+     */
+    private void createFreezeEffectForBeam(Beam beam, Vector2 position) {
+        FieldEffect freeze = new FieldEffect(
+                Config.nextId(),
+                beam.getOwnerId(),
+                FieldEffectType.FREEZE,
+                position,
+                BulletEffect.FREEZING.calculateRadius(beam.getDamage(), beam.getOrdinance()),
+                BulletEffect.FREEZING.calculateDamage(beam.getDamage()),
+                FieldEffectType.FREEZE.getDefaultDuration(),
+                beam.getOwnerTeam()
+        );
+        world.addBody(freeze.getBody());
+        gameEntities.addFieldEffect(freeze);
+    }
+
+    /**
+     * Create poison effect for beam weapons
+     */
+    private void createPoisonEffectForBeam(Beam beam, Vector2 position) {
+        FieldEffect poison = new FieldEffect(
+                Config.nextId(),
+                beam.getOwnerId(),
+                FieldEffectType.POISON,
+                position,
+                BulletEffect.POISON.calculateRadius(beam.getDamage(), beam.getOrdinance()),
+                BulletEffect.POISON.calculateDamage(beam.getDamage()),
+                FieldEffectType.POISON.getDefaultDuration(),
+                beam.getOwnerTeam()
+        );
+        world.addBody(poison.getBody());
+        gameEntities.addFieldEffect(poison);
     }
 }

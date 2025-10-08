@@ -698,7 +698,6 @@
                 const value = parseInt(e.target.value);
                 valueSpan.textContent = value;
                 currentWeapon.attributes[key] = value;
-                console.log('DEBUG: Slider changed - key:', key, 'value:', value, 'currentWeapon.attributes:', currentWeapon.attributes);
                 updatePointDisplay();
             });
         });

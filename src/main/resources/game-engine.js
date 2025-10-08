@@ -19,10 +19,8 @@ class PlayerInterpolator {
         this.lastServerUpdate = performance.now();
         this.isFirstUpdate = true; // Flag to handle initial positioning
         
-        // REMOVED: Prediction state - no longer needed since we don't use client-side prediction
-        
-        // Interpolation settings (simplified - no prediction)
-        this.smoothingFactor = 0.15; // Same for all players since no prediction
+        // Interpolation settings
+        this.smoothingFactor = 0.15;
         this.maxInterpolationDistance = 200; // pixels - beyond this, assume teleport/respawn
         
         // Performance optimization
@@ -48,12 +46,10 @@ class PlayerInterpolator {
             this.sprite.y = y;
             this.sprite.rotation = -rotation; // Invert for PIXI
             
-            // No prediction state to reset since we don't use client-side prediction
-            
             // Player teleported/respawned - no logging needed for performance
             this.isFirstUpdate = false;
         } else {
-            // Normal movement - use interpolation for all players (no prediction)
+            // Normal movement - use interpolation
             // Treat local player the same as remote players for smooth interpolation
             this.interpolateToServer(x, y, rotation, timeSinceLastUpdate);
             this.isFirstUpdate = false;
@@ -66,8 +62,6 @@ class PlayerInterpolator {
         this.lastServerUpdate = now;
     }
     
-    // REMOVED: reconcileWithServer() - no longer needed since we don't use client-side prediction
-    
     interpolateToServer(serverX, serverY, serverRotation, deltaTime) {
         // Smooth interpolation to server position for all players
         const lerpFactor = Math.min(1.0, this.smoothingFactor * (deltaTime * 60)); // Adjust for frame rate
@@ -75,60 +69,6 @@ class PlayerInterpolator {
         this.sprite.x += (serverX - this.sprite.x) * lerpFactor;
         this.sprite.y += (serverY - this.sprite.y) * lerpFactor;
         this.sprite.rotation = this.lerpAngle(this.sprite.rotation, -serverRotation, lerpFactor);
-        
-        // Debug: Log interpolation for local player
-        if (this.isLocalPlayer && Math.random() < 0.005) { // Log 0.5% of the time
-            console.log('Interpolation - serverPos:', serverX.toFixed(2), serverY.toFixed(2),
-                       'spritePos:', this.sprite.x.toFixed(2), this.sprite.y.toFixed(2),
-                       'lerpFactor:', lerpFactor.toFixed(3), 'rotation:', serverRotation.toFixed(2));
-        }
-    }
-    
-    predictMovement(input, deltaTime) {
-        if (!this.isLocalPlayer || !input) return;
-        
-        // Client-side prediction for local player
-        const moveSpeed = 150; // Should match server movement speed
-        
-        // Calculate predicted velocity in world coordinates
-        this.velocity.x = input.moveX * moveSpeed;
-        this.velocity.y = input.moveY * moveSpeed;
-        
-        // Apply predicted movement in world coordinates
-        // Convert current screen position to world coordinates first
-        const currentWorldPos = this.convertScreenToWorld(this.predictedPos.x, this.predictedPos.y);
-        
-        // Apply movement in world coordinates
-        currentWorldPos.x += this.velocity.x * deltaTime;
-        currentWorldPos.y += this.velocity.y * deltaTime;
-        
-        // Convert back to screen coordinates for display
-        const screenPos = this.convertWorldToScreen(currentWorldPos.x, currentWorldPos.y);
-        this.predictedPos.x = screenPos.x;
-        this.predictedPos.y = screenPos.y;
-        
-        // Update sprite position with prediction
-        this.sprite.x = this.predictedPos.x;
-        this.sprite.y = this.predictedPos.y;
-        
-        // Update rotation based on mouse input
-        if (input.worldX !== undefined && input.worldY !== undefined) {
-            // Use the world position we calculated above for consistent coordinates
-            const worldPos = this.convertScreenToWorld(this.predictedPos.x, this.predictedPos.y);
-            
-            const dx = input.worldX - worldPos.x;
-            const dy = input.worldY - worldPos.y;
-            this.predictedRotation = Math.atan2(dy, dx);
-            this.sprite.rotation = -this.predictedRotation; // Invert for PIXI
-            
-            // Debug: Log rotation for local player (reduced frequency)
-            if (this.isLocalPlayer && Math.random() < 0.005) { // Log 0.5% of the time
-                console.log('Client prediction - worldPos:', worldPos.x.toFixed(2), worldPos.y.toFixed(2),
-                           'dx:', dx.toFixed(2), 'dy:', dy.toFixed(2), 
-                           'predictedRot:', this.predictedRotation.toFixed(2), 
-                           'spriteRot:', this.sprite.rotation.toFixed(2));
-            }
-        }
     }
     
     lerpAngle(from, to, factor) {
@@ -314,7 +254,6 @@ class GameEngine {
         this.flags = new Map(); // CTF flags
         this.kothZones = new Map(); // King of the Hill zones
         this.myPlayerId = null;
-        this.lastPlayerInput = null; // Store last input for prediction
         this.gameState = null;
         this.websocket = null;
         this.inputManager = null;
@@ -372,6 +311,18 @@ class GameEngine {
 
         document.getElementById('pixi-container').appendChild(this.app.view);
 
+        // Handle WebGL context loss
+        this.app.renderer.gl.canvas.addEventListener('webglcontextlost', (event) => {
+            console.warn('WebGL context lost');
+            event.preventDefault();
+            this.handleWebGLContextLost();
+        });
+
+        this.app.renderer.gl.canvas.addEventListener('webglcontextrestored', () => {
+            console.log('WebGL context restored');
+            this.handleWebGLContextRestored();
+        });
+
         // Set up interpolation ticker for smooth movement
         this.app.ticker.add((deltaTime) => {
             const dt = deltaTime / 60.0; // Convert to seconds
@@ -380,17 +331,6 @@ class GameEngine {
             this.projectileInterpolators.forEach(interpolator => {
                 interpolator.update(deltaTime);
             });
-            
-            // TEMPORARY: Disable client-side prediction to test
-            const USE_PREDICTION = false;
-            
-            // Update player predictions (only for local player)
-            if (USE_PREDICTION && this.myPlayerId && this.lastPlayerInput) {
-                const localInterpolator = this.playerInterpolators.get(this.myPlayerId);
-                if (localInterpolator) {
-                    localInterpolator.predictMovement(this.lastPlayerInput, dt);
-                }
-            }
             
             // Animate plasma effects
             this.projectiles.forEach(projectileContainer => {
@@ -730,26 +670,9 @@ class GameEngine {
      * Get the color for a player based on their team.
      * Uses easily distinguishable colors for team-based gameplay.
      */
-    getPlayerColor(playerData) {
-        // Special highlight for the current player
-        if (playerData.id === this.myPlayerId) {
-            // Make the current player brighter but still show their team color
-            const baseColor = this.getTeamColor(playerData.team || 0);
-            // Brighten the color for the current player
-            return this.brightenColor(baseColor);
-        }
-        
-        return this.getTeamColor(playerData.team || 0);
-    }
-    
     /**
-     * Get the current player's data for gamepad aiming
+     * Color utility methods for consistent color handling
      */
-    getMyPlayer() {
-        if (!this.myPlayerId) return null;
-        const sprite = this.players.get(this.myPlayerId);
-        return sprite ? sprite.playerData : null;
-    }
     
     /**
      * Get the base color for a team.
@@ -766,14 +689,32 @@ class GameEngine {
     }
     
     /**
-     * Get team color as hex number (for PIXI Graphics)
+     * Get team color as CSS color string for HTML elements.
      */
-    getTeamColorHex(teamNumber) {
-        return this.getTeamColor(teamNumber);
+    getTeamColorCSS(teamNumber) {
+        const color = this.getTeamColor(teamNumber);
+        const r = (color >> 16) & 0xFF;
+        const g = (color >> 8) & 0xFF;
+        const b = color & 0xFF;
+        return `rgb(${r}, ${g}, ${b})`;
     }
     
     /**
-     * Brighten a color for the current player highlight.
+     * Get player color with special highlighting for current player.
+     */
+    getPlayerColor(playerData) {
+        const baseColor = this.getTeamColor(playerData.team || 0);
+        
+        // Special highlight for the current player
+        if (playerData.id === this.myPlayerId) {
+            return this.brightenColor(baseColor);
+        }
+        
+        return baseColor;
+    }
+    
+    /**
+     * Brighten a color by adding 60 to each RGB component.
      */
     brightenColor(color) {
         const r = Math.min(255, ((color >> 16) & 0xFF) + 60);
@@ -783,14 +724,41 @@ class GameEngine {
     }
     
     /**
-     * Get team color as CSS color string for minimap.
+     * Darken a color by subtracting 40 from each RGB component.
      */
-    getTeamColorCSS(teamNumber) {
-        const color = this.getTeamColor(teamNumber);
-        const r = (color >> 16) & 0xFF;
-        const g = (color >> 8) & 0xFF;
-        const b = color & 0xFF;
-        return `rgb(${r}, ${g}, ${b})`;
+    darkenColor(color) {
+        const r = Math.max(0, ((color >> 16) & 0xFF) - 40);
+        const g = Math.max(0, ((color >> 8) & 0xFF) - 40);
+        const b = Math.max(0, (color & 0xFF) - 40);
+        return (r << 16) | (g << 8) | b;
+    }
+    
+    /**
+     * Blend two colors together using a factor (0.0 = color1, 1.0 = color2).
+     */
+    blendColors(color1, color2, factor) {
+        const r1 = (color1 >> 16) & 0xFF;
+        const g1 = (color1 >> 8) & 0xFF;
+        const b1 = color1 & 0xFF;
+        
+        const r2 = (color2 >> 16) & 0xFF;
+        const g2 = (color2 >> 8) & 0xFF;
+        const b2 = color2 & 0xFF;
+        
+        const r = Math.round(r1 * (1 - factor) + r2 * factor);
+        const g = Math.round(g1 * (1 - factor) + g2 * factor);
+        const b = Math.round(b1 * (1 - factor) + b2 * factor);
+        
+        return (r << 16) | (g << 8) | b;
+    }
+    
+    /**
+     * Get the current player's data for gamepad aiming
+     */
+    getMyPlayer() {
+        if (!this.myPlayerId) return null;
+        const sprite = this.players.get(this.myPlayerId);
+        return sprite ? sprite.playerData : null;
     }
     
     setupCamera() {
@@ -812,8 +780,6 @@ class GameEngine {
         
         this.inputManager = new InputManager();
         this.inputManager.onInputChange = (input) => {
-            // Store input for client-side prediction
-            this.lastPlayerInput = input;
             this.sendPlayerInput(input);
         };
         
@@ -2036,7 +2002,7 @@ class GameEngine {
         sprite.visible = true; // Explicitly set visible
         
         // Create health bar above player
-        const healthBarContainer = this.createHealthBar(playerData);
+        const healthBarContainer = this.createPlayerHealthBar(playerData);
         sprite.healthBar = healthBarContainer;
         
         // Create reload indicator (initially hidden)
@@ -2117,13 +2083,6 @@ class GameEngine {
             const isoPos = this.worldToIsometric(playerData.x, playerData.y);
             sprite.position.set(isoPos.x, isoPos.y);
             sprite.rotation = -(playerData.rotation || 0);
-            
-            // Debug: Log direct updates for local player
-            if (playerData.id === this.myPlayerId && Math.random() < 0.01) {
-                console.log('Direct update - serverPos:', playerData.x.toFixed(2), playerData.y.toFixed(2),
-                           'screenPos:', isoPos.x.toFixed(2), isoPos.y.toFixed(2),
-                           'rotation:', playerData.rotation.toFixed(2));
-            }
         }
         
         // Handle death marker logic
@@ -2149,7 +2108,7 @@ class GameEngine {
 
         // Update health bar (hide for dead players)
         if (sprite.healthBar) {
-            this.updateHealthBar(sprite.healthBar, playerData);
+            this.updateHealthBar(sprite.healthBar, playerData, sprite, sprite.healthBar.config);
             sprite.healthBar.visible = playerData.active && playerData.health > 0;
         }
         
@@ -2244,35 +2203,144 @@ class GameEngine {
     /**
      * Create health bar for a player.
      */
-    createHealthBar(playerData) {
+    /**
+     * Create a health bar for any entity (player, obstacle, turret, etc.)
+     * @param {Object} entityData - The entity data
+     * @param {Object} config - Health bar configuration
+     * @param {number} config.width - Width of the health bar
+     * @param {number} config.height - Height of the health bar
+     * @param {number} config.yOffset - Y offset from entity position
+     * @param {number} config.bgColor - Background color
+     * @param {number} config.fillColor - Fill color
+     * @param {number} config.cornerRadius - Corner radius for rounded rectangle
+     * @param {boolean} config.showWhenFull - Whether to show when at full health
+     * @returns {PIXI.Container} The health bar container
+     */
+    createHealthBar(entityData, config) {
         const healthBarContainer = new PIXI.Container();
         
         // Health bar background
         const healthBg = new PIXI.Graphics();
-        healthBg.beginFill(0x333333);
-        healthBg.drawRoundedRect(-25, 0, 50, 6, 2);
+        healthBg.beginFill(config.bgColor);
+        healthBg.drawRoundedRect(-config.width/2, 0, config.width, config.height, config.cornerRadius);
         healthBg.endFill();
         healthBarContainer.addChild(healthBg);
         
         // Health bar fill
         const healthFill = new PIXI.Graphics();
-        healthFill.beginFill(0x2ecc71);
-        healthFill.drawRoundedRect(-25, 0, 50, 6, 2);
+        healthFill.beginFill(config.fillColor);
+        healthFill.drawRoundedRect(-config.width/2, 0, config.width, config.height, config.cornerRadius);
         healthFill.endFill();
         healthBarContainer.addChild(healthFill);
         
         // Store references for updates
         healthBarContainer.healthBg = healthBg;
         healthBarContainer.healthFill = healthFill;
+        healthBarContainer.config = config;
         
-        // Position above player (will be updated in updatePlayer)
-        const isoPos = this.worldToIsometric(playerData.x, playerData.y);
-        healthBarContainer.position.set(isoPos.x, isoPos.y - 35);
+        // Position above entity
+        const isoPos = this.worldToIsometric(entityData.x, entityData.y);
+        healthBarContainer.position.set(isoPos.x, isoPos.y - (config.yOffset || 0));
         
-        // Add to name container so it doesn't rotate with player
+        // Add to name container so it doesn't rotate with entity
         this.nameContainer.addChild(healthBarContainer);
         
         return healthBarContainer;
+    }
+    
+    /**
+     * Update a health bar for any entity
+     * @param {PIXI.Container} healthBarContainer - The health bar container
+     * @param {Object} entityData - The entity data
+     * @param {Object} sprite - The entity sprite for positioning
+     * @param {Object} config - Health bar configuration
+     */
+    updateHealthBar(healthBarContainer, entityData, sprite, config) {
+        if (!healthBarContainer || !healthBarContainer.healthFill) return;
+        
+        // Update position above entity
+        if (sprite) {
+            const yOffset = (config && config.yOffset) || 0;
+            healthBarContainer.position.set(sprite.x, sprite.y - yOffset);
+        }
+        
+        // Calculate health percentage
+        const maxHealth = entityData.maxHealth || 100;
+        const healthPercent = Math.max(0, Math.min(1, entityData.health / maxHealth));
+        
+        // Determine visibility
+        const isDamaged = healthPercent < 1.0;
+        healthBarContainer.visible = entityData.active && (config.showWhenFull || isDamaged);
+        
+        if (!healthBarContainer.visible) return;
+        
+        // Update health bar fill
+        healthBarContainer.healthFill.clear();
+        
+        // Color based on health level (for players)
+        let healthColor = config.fillColor;
+        if (config.dynamicColor && healthPercent < 0.3) {
+            healthColor = 0xe74c3c; // Red
+        } else if (config.dynamicColor && healthPercent < 0.6) {
+            healthColor = 0xf39c12; // Orange
+        }
+        
+        healthBarContainer.healthFill.beginFill(healthColor);
+        healthBarContainer.healthFill.drawRoundedRect(
+            -config.width/2, 0, 
+            config.width * healthPercent, 
+            config.height, 
+            config.cornerRadius
+        );
+        healthBarContainer.healthFill.endFill();
+    }
+    
+    /**
+     * Create health bar for a player
+     */
+    createPlayerHealthBar(playerData) {
+        return this.createHealthBar(playerData, {
+            width: 50,
+            height: 6,
+            yOffset: 35,
+            bgColor: 0x333333,
+            fillColor: 0x2ecc71,
+            cornerRadius: 2,
+            showWhenFull: true,
+            dynamicColor: true
+        });
+    }
+    
+    /**
+     * Create health bar for an obstacle
+     */
+    createObstacleHealthBar(obstacleData) {
+        return this.createHealthBar(obstacleData, {
+            width: 30,
+            height: 4,
+            yOffset: 25,
+            bgColor: 0x222222,
+            fillColor: 0x4a90e2,
+            cornerRadius: 1,
+            showWhenFull: false,
+            dynamicColor: false
+        });
+    }
+    
+    /**
+     * Create health bar for a turret
+     */
+    createTurretHealthBar(entityData) {
+        return this.createHealthBar(entityData, {
+            width: 40,
+            height: 5,
+            yOffset: 30,
+            bgColor: 0x333333,
+            fillColor: 0x2ecc71,
+            cornerRadius: 2,
+            showWhenFull: true,
+            dynamicColor: false
+        });
     }
     
     /**
@@ -2316,37 +2384,6 @@ class GameEngine {
         this.nameContainer.addChild(reloadContainer);
         
         return reloadContainer;
-    }
-    
-    /**
-     * Update health bar appearance and position.
-     */
-    updateHealthBar(healthBarContainer, playerData) {
-        if (!healthBarContainer || !healthBarContainer.healthFill) return;
-        
-        // Update position above player using current sprite position (may be interpolated)
-        const sprite = this.players.get(playerData.id);
-        if (sprite) {
-            healthBarContainer.position.set(sprite.x, sprite.y - 35);
-        }
-        healthBarContainer.visible = playerData.active;
-        
-        // Update health bar fill
-        const healthPercent = Math.max(0, Math.min(100, playerData.health)) / 100;
-        
-        healthBarContainer.healthFill.clear();
-        
-        // Color based on health level
-        let healthColor = 0x2ecc71; // Green
-        if (healthPercent < 0.3) {
-            healthColor = 0xe74c3c; // Red
-        } else if (healthPercent < 0.6) {
-            healthColor = 0xf39c12; // Orange
-        }
-        
-        healthBarContainer.healthFill.beginFill(healthColor);
-        healthBarContainer.healthFill.drawRoundedRect(-25, 0, 50 * healthPercent, 6, 2);
-        healthBarContainer.healthFill.endFill();
     }
     
     /**
@@ -3033,7 +3070,7 @@ class GameEngine {
         // Update health bar if it exists
         if (this.obstacleHealthBars && this.obstacleHealthBars.has(obstacleData.id)) {
             const healthBar = this.obstacleHealthBars.get(obstacleData.id);
-            this.updateObstacleHealthBar(healthBar, obstacleData);
+            this.updateHealthBar(healthBar, obstacleData, graphics, healthBar.config);
         }
     }
 
@@ -3076,6 +3113,16 @@ class GameEngine {
         // Store references for updates
         healthBarContainer.healthBg = healthBg;
         healthBarContainer.healthFill = healthFill;
+        healthBarContainer.config = {
+            width: 30,
+            height: 4,
+            yOffset: 25,
+            bgColor: 0x222222,
+            fillColor: 0x4a90e2,
+            cornerRadius: 1,
+            showWhenFull: false,
+            dynamicColor: false
+        };
         
         // Position above obstacle (will be updated in updateObstacleHealthBar)
         const isoPos = this.worldToIsometric(obstacleData.x, obstacleData.y);
@@ -3090,39 +3137,6 @@ class GameEngine {
     /**
      * Update obstacle health bar appearance and position.
      */
-    updateObstacleHealthBar(healthBarContainer, obstacleData) {
-        if (!healthBarContainer || !healthBarContainer.healthFill) return;
-        
-        // Update position above obstacle using current graphics position
-        const graphics = this.obstacles.get(obstacleData.id);
-        if (graphics) {
-            healthBarContainer.position.set(graphics.x, graphics.y - 25);
-        }
-        healthBarContainer.visible = obstacleData.active;
-        
-        // Only show health bar if obstacle is damaged (not at full health)
-        const healthPercent = Math.max(0, Math.min(1, obstacleData.health / obstacleData.maxHealth));
-        const isDamaged = healthPercent < 1.0;
-        healthBarContainer.visible = obstacleData.active && isDamaged;
-        
-        if (!isDamaged) return; // Don't update if not damaged
-        
-        // Update health bar fill
-        healthBarContainer.healthFill.clear();
-        
-        // Color based on health level - different colors from player health bars
-        let healthColor = 0x4a90e2; // Blue (healthy)
-        if (healthPercent < 0.3) {
-            healthColor = 0xe74c3c; // Red (critical)
-        } else if (healthPercent < 0.6) {
-            healthColor = 0xf39c12; // Orange (damaged)
-        }
-        
-        healthBarContainer.healthFill.beginFill(healthColor);
-        healthBarContainer.healthFill.drawRoundedRect(-15, 0, 30 * healthPercent, 4, 1);
-        healthBarContainer.healthFill.endFill();
-    }
-    
     /**
      * Create a field effect (explosion, fire, electric, etc.)
      */
@@ -3214,7 +3228,7 @@ class GameEngine {
         beamContainer.addChild(beamGraphics);
         
         // Add beam effects based on damage type
-        if (beamData.damageType === 'DAMAGE_OVER_TIME' || beamData.damageType === 'BURST') {
+        if (beamData.damageType === 'DAMAGE_OVER_TIME') {
             this.addBeamEffects(beamContainer, beamData, length, angle);
         }
         
@@ -3312,7 +3326,7 @@ class GameEngine {
         
         // Create flag sprite (triangle)
         const flag = new PIXI.Graphics();
-        const teamColor = this.getTeamColorHex(flagData.ownerTeam);
+        const teamColor = this.getTeamColor(flagData.ownerTeam);
         flag.beginFill(teamColor);
         flag.moveTo(0, -30);
         flag.lineTo(20, -20);
@@ -3626,10 +3640,10 @@ class GameEngine {
             beamType = 'HEAL_BEAM';
         } else if (beamData.damageType === 'DAMAGE_OVER_TIME') {
             beamType = 'PLASMA_BEAM';
-        } else if (beamData.canPierce) {
+        } else if (beamData.canPierceObstacles) {
             beamType = 'RAILGUN';
-        } else if (beamData.damageType === 'BURST') {
-            beamType = 'PULSE_LASER';
+        } else if (beamData.canPiercePlayers) {
+            beamType = 'LASER';
         }
         
         switch (beamType) {
@@ -3641,8 +3655,6 @@ class GameEngine {
                 return this.createHealBeamGraphics(graphics, length, beamData);
             case 'RAILGUN':
                 return this.createRailgunGraphics(graphics, length, beamData);
-            case 'PULSE_LASER':
-                return this.createPulseLaserGraphics(graphics, length, beamData);
             default:
                 return this.createGenericBeamGraphics(graphics, length, beamData);
         }
@@ -3763,35 +3775,6 @@ class GameEngine {
     }
     
     /**
-     * Create pulse laser graphics
-     */
-    createPulseLaserGraphics(graphics, length, beamData) {
-        // Main pulse beam - orange/red
-        graphics.lineStyle(4, 0xff8844, 0.8);
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        
-        // Pulse core - bright yellow
-        graphics.lineStyle(2, 0xffaa44, 1.0);
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        
-        // Pulse segments (burst effect)
-        const pulseCount = Math.floor(length / 30);
-        for (let i = 0; i < pulseCount; i++) {
-            const pulseStart = i * 30;
-            const pulseEnd = pulseStart + 20;
-            const intensity = 0.5 + Math.random() * 0.5;
-            
-            graphics.lineStyle(6, 0xff8844, intensity * 0.6);
-            graphics.moveTo(pulseStart, 0);
-            graphics.lineTo(Math.min(pulseEnd, length), 0);
-        }
-        
-        return graphics;
-    }
-    
-    /**
      * Create generic beam graphics
      */
     createGenericBeamGraphics(graphics, length, beamData) {
@@ -3809,7 +3792,7 @@ class GameEngine {
     }
     
     /**
-     * Add special effects to beams (for DOT and burst types)
+     * Add special effects to beams (for DOT types)
      */
     addBeamEffects(beamContainer, beamData, length, angle) {
         // Add pulsing or crackling effects for continuous beams
@@ -4214,7 +4197,7 @@ class GameEngine {
         
         // Update health bar if it exists
         if (container.healthBar) {
-            this.updateTurretHealthBar(container.healthBar, entityData);
+            this.updateHealthBar(container.healthBar, entityData, container, container.healthBar.config);
         }
     }
 
@@ -4245,6 +4228,16 @@ class GameEngine {
         // Store references for updates
         healthBarContainer.healthBg = healthBg;
         healthBarContainer.healthFill = healthFill;
+        healthBarContainer.config = {
+            width: 40,
+            height: 5,
+            yOffset: 30,
+            bgColor: 0x333333,
+            fillColor: 0x2ecc71,
+            cornerRadius: 2,
+            showWhenFull: true,
+            dynamicColor: true
+        };
         
         // Position above turret
         const isoPos = this.worldToIsometric(entityData.x, entityData.y);
@@ -4256,35 +4249,6 @@ class GameEngine {
     /**
      * Update turret health bar
      */
-    updateTurretHealthBar(healthBarContainer, entityData) {
-        if (!healthBarContainer || !entityData.health) return;
-        
-        // Calculate health percentage (assuming max health of 50 for turrets)
-        const maxHealth = 50;
-        const healthPercent = Math.max(0, Math.min(1, entityData.health / maxHealth));
-        
-        // Update health bar fill width
-        const fillWidth = 40 * healthPercent;
-        healthBarContainer.healthFill.clear();
-        healthBarContainer.healthFill.beginFill(0x2ecc71);
-        healthBarContainer.healthFill.drawRoundedRect(-20, 0, fillWidth, 5, 2);
-        healthBarContainer.healthFill.endFill();
-        
-        // Change color based on health level
-        let healthColor = 0x2ecc71; // Green
-        if (healthPercent < 0.3) {
-            healthColor = 0xf44336; // Red
-        } else if (healthPercent < 0.6) {
-            healthColor = 0xffc107; // Yellow
-        }
-        
-        healthBarContainer.healthFill.tint = healthColor;
-        
-        // Update position
-        const isoPos = this.worldToIsometric(entityData.x, entityData.y);
-        healthBarContainer.position.set(isoPos.x, isoPos.y - 30);
-    }
-
     /**
      * Clean up utility entity container
      */
@@ -4409,8 +4373,6 @@ class GameEngine {
             // Utility effect types
             case 'HEAL_ZONE':
                 return this.createHealZoneGraphics(graphics, radius, effectData);
-            case 'SMOKE_CLOUD':
-                return this.createSmokeCloudGraphics(graphics, radius, effectData);
             case 'SLOW_FIELD':
                 return this.createSlowFieldGraphics(graphics, radius, effectData);
             case 'SHIELD_BARRIER':
@@ -4709,55 +4671,6 @@ class GameEngine {
         return graphics;
     }
     
-    /**
-     * Create smoke cloud effect graphics
-     */
-    createSmokeCloudGraphics(graphics, radius, effectData) {
-        // Create multiple overlapping smoke puffs for realistic cloud effect
-        const puffCount = 12;
-        
-        for (let i = 0; i < puffCount; i++) {
-            const angle = (i / puffCount) * Math.PI * 2 + Math.random() * 0.5;
-            const distance = Math.random() * radius * 0.6;
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const puffRadius = radius * (0.3 + Math.random() * 0.4);
-            
-            // Vary smoke colors from dark to light gray
-            const smokeColors = [0x2c3e50, 0x34495e, 0x5d6d7e, 0x85929e];
-            const smokeColor = smokeColors[Math.floor(Math.random() * smokeColors.length)];
-            const alpha = 0.3 + Math.random() * 0.4;
-            
-            graphics.beginFill(smokeColor, alpha);
-            graphics.drawCircle(x, y, puffRadius);
-            graphics.endFill();
-        }
-        
-        // Add swirling smoke tendrils
-        graphics.lineStyle(2, 0x566573, 0.3);
-        for (let i = 0; i < 6; i++) {
-            const startAngle = (i / 6) * Math.PI * 2;
-            const spiralRadius = radius * 0.8;
-            
-            graphics.moveTo(
-                Math.cos(startAngle) * spiralRadius * 0.2,
-                Math.sin(startAngle) * spiralRadius * 0.2
-            );
-            
-            // Create spiral smoke pattern
-            for (let j = 1; j <= 10; j++) {
-                const angle = startAngle + (j / 10) * Math.PI * 0.8;
-                const currentRadius = spiralRadius * (0.2 + (j / 10) * 0.6);
-                const jitter = (Math.random() - 0.5) * 8; // Add randomness
-                graphics.lineTo(
-                    Math.cos(angle) * currentRadius + jitter,
-                    Math.sin(angle) * currentRadius + jitter
-                );
-            }
-        }
-        
-        return graphics;
-    }
     
     /**
      * Create slow field effect graphics
@@ -5086,9 +4999,6 @@ class GameEngine {
             case 'HEAL_ZONE':
                 this.animateHealZone(container);
                 break;
-            case 'SMOKE_CLOUD':
-                this.animateSmokeCloud(container);
-                break;
             case 'SLOW_FIELD':
                 this.animateSlowField(container);
                 break;
@@ -5263,30 +5173,6 @@ class GameEngine {
         container.rotation = time * 0.5;
     }
     
-    /**
-     * Animate smoke cloud effects
-     */
-    animateSmokeCloud(container) {
-        const time = container.animationTime;
-        
-        // Slow billowing effect
-        const billow1 = Math.sin(time * 2) * 0.05;
-        const billow2 = Math.sin(time * 1.3) * 0.03;
-        container.scale.set(0.95 + billow1 + billow2);
-        
-        // Gradual drift
-        if (!container.originalX) {
-            container.originalX = container.x;
-            container.originalY = container.y;
-        }
-        
-        const drift = time * 0.2;
-        container.x = container.originalX + Math.sin(drift) * 3;
-        container.y = container.originalY + Math.cos(drift * 0.7) * 2;
-        
-        // Slowly fade in and maintain
-        container.alpha = Math.min(0.8, time * 0.5);
-    }
     
     /**
      * Animate slow field effects
@@ -5396,8 +5282,6 @@ class GameEngine {
             case 'HEAL_ZONE':
             case 'SLOW_FIELD':
                 return 0.08; // Slow, gentle animation
-            case 'SMOKE_CLOUD':
-                return 0.05; // Very slow, natural movement
             case 'SHIELD_BARRIER':
             case 'SPEED_BOOST':
                 return 0.12; // Medium-fast, energetic
@@ -5956,40 +5840,92 @@ class GameEngine {
     /**
      * Blend two colors together.
      */
-    blendColors(color1, color2, factor) {
-        const r1 = (color1 >> 16) & 0xFF;
-        const g1 = (color1 >> 8) & 0xFF;
-        const b1 = color1 & 0xFF;
-        
-        const r2 = (color2 >> 16) & 0xFF;
-        const g2 = (color2 >> 8) & 0xFF;
-        const b2 = color2 & 0xFF;
-        
-        const r = Math.round(r1 * (1 - factor) + r2 * factor);
-        const g = Math.round(g1 * (1 - factor) + g2 * factor);
-        const b = Math.round(b1 * (1 - factor) + b2 * factor);
-        
-        return (r << 16) | (g << 8) | b;
-    }
-    
-    /**
-     * Darken a color for outlines.
-     */
-    darkenColor(color) {
-        const r = Math.max(0, ((color >> 16) & 0xFF) - 40);
-        const g = Math.max(0, ((color >> 8) & 0xFF) - 40);
-        const b = Math.max(0, (color & 0xFF) - 40);
-        return (r << 16) | (g << 8) | b;
-    }
-
     handleResize() {
         this.app.renderer.resize(window.innerWidth, window.innerHeight);
     }
     
     /**
+     * Handle WebGL context loss
+     */
+    handleWebGLContextLost() {
+        console.warn('WebGL context lost - stopping game engine');
+        
+        // Clear the memory cleanup interval to prevent errors
+        if (this.memoryCleanupInterval) {
+            clearInterval(this.memoryCleanupInterval);
+            this.memoryCleanupInterval = null;
+        }
+        
+        // Stop the ticker to prevent further updates
+        if (this.app && this.app.ticker) {
+            this.app.ticker.stop();
+        }
+        
+        // Show user message
+        this.updateLoadingProgress(0, "Graphics context lost. Please refresh the page.");
+    }
+
+    /**
+     * Handle WebGL context restoration
+     */
+    handleWebGLContextRestored() {
+        console.log('WebGL context restored - restarting game engine');
+        
+        // Restart the ticker
+        if (this.app && this.app.ticker) {
+            this.app.ticker.start();
+        }
+        
+        // Restart memory cleanup
+        if (!this.memoryCleanupInterval) {
+            this.memoryCleanupInterval = setInterval(() => this.performMemoryCleanup(), 30000);
+        }
+        
+        // Clear the loading message
+        this.updateLoadingProgress(100, "Graphics context restored.");
+    }
+
+    /**
+     * Clean up the game engine and stop all intervals
+     */
+    destroy() {
+        console.log('Destroying game engine...');
+        
+        // Clear memory cleanup interval
+        if (this.memoryCleanupInterval) {
+            clearInterval(this.memoryCleanupInterval);
+            this.memoryCleanupInterval = null;
+        }
+        
+        // Stop ticker
+        if (this.app && this.app.ticker) {
+            this.app.ticker.stop();
+        }
+        
+        // Destroy PIXI app
+        if (this.app) {
+            this.app.destroy(true);
+            this.app = null;
+        }
+        
+        // Clear all collections
+        this.players.clear();
+        this.projectiles.clear();
+        this.fieldEffects.clear();
+        this.projectileInterpolators.clear();
+        this.playerInterpolators.clear();
+    }
+
+    /**
      * Perform periodic memory cleanup to prevent leaks
      */
     performMemoryCleanup() {
+        // Safety check - don't perform cleanup if the app is destroyed
+        if (!this.app || !this.app.ticker) {
+            console.warn('Cannot perform memory cleanup - app is destroyed');
+            return;
+        }
+        
         console.log('Performing memory cleanup...');
         
         // Clean up any orphaned interpolators
@@ -6158,6 +6094,11 @@ class InputManager {
         // Gamepad connection events
         window.addEventListener('gamepadconnected', (e) => this.handleGamepadConnected(e));
         window.addEventListener('gamepaddisconnected', (e) => this.handleGamepadDisconnected(e));
+        
+        // Window events
+        window.addEventListener('resize', () => this.handleResize());
+        window.addEventListener('beforeunload', () => this.handleBeforeUnload());
+        window.addEventListener('unload', () => this.destroy());
         
         // Send input at fixed 20ms intervals (50 FPS)
         setInterval(() => this.sendInput(), this.inputInterval);

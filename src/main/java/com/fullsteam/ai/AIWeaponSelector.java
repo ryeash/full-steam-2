@@ -295,8 +295,7 @@ public class AIWeaponSelector {
                         UtilityWeapon.GRAVITY_WELL,
                         UtilityWeapon.SLOW_FIELD,
                         UtilityWeapon.NET_LAUNCHER,
-                        UtilityWeapon.MINE_LAYER,
-                        UtilityWeapon.DISRUPTOR_BEAM
+                        UtilityWeapon.MINE_LAYER
                 );
                 yield berserkerUtilities.get(random.nextInt(berserkerUtilities.size()));
             }
@@ -306,7 +305,6 @@ public class AIWeaponSelector {
                         UtilityWeapon.TURRET_CONSTRUCTOR,
                         UtilityWeapon.WALL_BUILDER,
                         UtilityWeapon.MINE_LAYER,
-                        UtilityWeapon.SMOKE_GRENADE,
                         UtilityWeapon.TELEPORTER
                 );
                 yield sniperUtilities.get(random.nextInt(sniperUtilities.size()));
@@ -315,10 +313,8 @@ public class AIWeaponSelector {
                 // Rushers prefer mobility and quick deployment utilities
                 List<UtilityWeapon> rusherUtilities = List.of(
                         UtilityWeapon.SPEED_BOOST_PAD,
-                        UtilityWeapon.SMOKE_GRENADE,
                         UtilityWeapon.NET_LAUNCHER,
-                        UtilityWeapon.TELEPORTER,
-                        UtilityWeapon.DISRUPTOR_BEAM
+                        UtilityWeapon.TELEPORTER
                 );
                 yield rusherUtilities.get(random.nextInt(rusherUtilities.size()));
             }

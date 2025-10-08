@@ -1,5 +1,6 @@
 package com.fullsteam.physics;
 
+import com.fullsteam.Config;
 import com.fullsteam.model.StatusEffects;
 import lombok.Getter;
 import lombok.Setter;
@@ -17,8 +18,9 @@ public class NetProjectile extends GameEntity {
     private final int ownerId;
     private final int ownerTeam;
     private final double damage;
-    private final double slowEffect; // How much to slow the target (0.0 = stopped, 1.0 = normal speed)
+    private final double slowEffect; // Linear damping multiplier for slowing effect (higher = more slowed)
     private final double slowDuration; // How long the slow effect lasts
+    private final double pushbackForce; // Force applied to push player backward
     private final double timeToLive;
 
     private double timeRemaining;
@@ -31,8 +33,9 @@ public class NetProjectile extends GameEntity {
         this.ownerTeam = ownerTeam;
         this.velocity = velocity.copy();
         this.damage = 0;
-        this.slowEffect = 7;
+        this.slowEffect = 3.0; // Moderate slowdown - 3x normal damping
         this.slowDuration = 3.0; // 3 second immobilization
+        this.pushbackForce = Config.NET_PUSHBACK_FORCE; // Force to push player backward
         this.timeToLive = timeToLive;
         this.timeRemaining = timeToLive;
     }
@@ -77,9 +80,12 @@ public class NetProjectile extends GameEntity {
         }
         hasHit = true;
         active = false; // Net is consumed on hit
-        // Apply immobilization effect
+
+        // Apply immobilization effect after pushback
         String ownerName = "Net"; // Default name if owner not found
         StatusEffects.applySlowEffect(player, slowEffect, slowDuration, ownerName);
+        // Apply pushback force - push player in opposite direction of net's velocity
+        player.getBody().applyForce(velocity.getNormalized().multiply(-pushbackForce));
     }
 
     /**

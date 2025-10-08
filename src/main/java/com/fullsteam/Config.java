@@ -28,10 +28,9 @@ public class Config {
     public static final double PLAYER_BRAKING_FORCE = 700.0; // Force applied when stopping
     public static final double PLAYER_LINEAR_DAMPING = 1.2; // Physics damping for responsive movement
     public static final double PLAYER_ANGULAR_DAMPING = 1.0; // Rotation control damping
-    
-    // Game constants
-    public static final double CAPTURE_RADIUS = 50.0;
-    public static final double CAPTURE_TIME = 3.0; // seconds
+
+    // Net projectile configuration
+    public static final double NET_PUSHBACK_FORCE = 15000000.0; // Force applied when net hits player
 }
 
 

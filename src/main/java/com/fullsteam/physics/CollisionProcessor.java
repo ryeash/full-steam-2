@@ -143,6 +143,8 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         }
 
         // Process bullet effects before handling the hit
+        log.debug("Projectile {} hit player {} at ({}, {}) - processing effects", 
+                projectile.getId(), player.getId(), player.getPosition().x, player.getPosition().y);
         bulletEffectProcessor.processEffectHit(projectile, player.getPosition());
 
         if (player.takeDamage(projectile.getDamage())) {
@@ -163,11 +165,21 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             return true;
         }
 
+        // Check if this projectile has already hit this obstacle
+        // This prevents piercing bullets from triggering effects multiple times on the same obstacle
+        if (!projectile.getAffectedObstacles().add(obstacle.getId())) {
+            // Already hit this obstacle, skip effect processing
+            boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, obstacle);
+            return !shouldPierce; // Don't resolve collision if piercing
+        }
+
         // Get hit position for effects
         Vector2 hitPos = projectile.getBody().getTransform().getTranslation();
         Vector2 hitPosition = new Vector2(hitPos.x, hitPos.y);
 
-        // Process bullet effects on obstacle hit
+        // Process bullet effects on obstacle hit (only on first hit)
+        log.debug("Projectile {} hit obstacle {} at ({}, {}) - processing effects", 
+                projectile.getId(), obstacle.getId(), hitPosition.x, hitPosition.y);
         bulletEffectProcessor.processEffectHit(projectile, hitPosition);
 
         // Apply damage to player-created obstacles (barriers)
@@ -276,9 +288,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
                 double healAmount = effectValue * deltaTime;
                 player.setHealth(Math.min(gameManager.getGameConfig().getPlayerMaxHealth(), player.getHealth() + healAmount));
             }
-            case SMOKE_CLOUD -> {
-                // TODO: fix vision
-            }
             case SLOW_FIELD -> {
                 StatusEffects.applySlowEffect(player, 10, 1.0,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Slow Field"));
@@ -363,6 +372,14 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             return true;
         }
 
+        // Check if this projectile has already hit this turret
+        // This prevents piercing bullets from triggering effects multiple times on the same turret
+        if (!projectile.getAffectedObstacles().add(turret.getId())) {
+            // Already hit this turret, skip effect processing
+            boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, turret);
+            return !shouldPierce; // Don't resolve collision if piercing
+        }
+
         // Check if projectile can damage the turret (team rules)
         if (!canProjectileDamageTurret(projectile, turret)) {
             return false; // Let projectile pass through
@@ -372,7 +389,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         Vector2 hitPos = projectile.getBody().getTransform().getTranslation();
         Vector2 hitPosition = new Vector2(hitPos.x, hitPos.y);
 
-        // Process bullet effects on turret hit
+        // Process bullet effects on turret hit (only on first hit)
         bulletEffectProcessor.processEffectHit(projectile, hitPosition);
 
         // Apply damage to turret

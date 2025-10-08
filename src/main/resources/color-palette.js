@@ -197,13 +197,6 @@ const GameColors = {
         medium: 'rgba(119, 136, 153, 0.4)', // Light slate gray
         dark: 'rgba(70, 130, 180, 0)'       // Steel blue fade
       }
-    },
-    smoke: {
-      light: 'rgba(180, 180, 180, 0.5)',   // Light gray
-      medium: 'rgba(120, 120, 120, 0.4)',  // Medium gray
-      dark: 'rgba(80, 80, 80, 0.3)',       // Dark gray
-      fade: 'rgba(60, 60, 60, 0)',         // Fade to transparent
-      swirl: 'rgba(160, 160, 160, 0.3)'    // Swirl effect
     }
   },
 

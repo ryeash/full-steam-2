@@ -189,20 +189,6 @@ class UtilitySystemTest extends BaseTestClass {
     // Utility Beam Tests
     // ============================================================================
 
-    @Test
-    @DisplayName("Should create utility beam")
-    void testUtilityBeamCreation() {
-        // Arrange
-        Player player = createTestPlayer(1, 1);
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.DISRUPTOR_BEAM);
-
-        // Act
-        utilitySystem.handleUtilityActivation(activation);
-
-        // Assert
-        assertFalse(gameEntities.getBeams().isEmpty(), "Utility beam should be created");
-        assertEquals(1, gameEntities.getBeams().size(), "Exactly one beam should be created");
-    }
 
     // ============================================================================
     // Utility Statistics Tests

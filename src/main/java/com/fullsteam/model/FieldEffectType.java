@@ -11,7 +11,6 @@ public enum FieldEffectType {
     
     // Utility effects (new)
     HEAL_ZONE(5.0, false),     // Continuous healing area for allies
-    SMOKE_CLOUD(8.0, false),   // Vision blocking area
     SLOW_FIELD(6.0, false),    // Movement reduction field
     SHIELD_BARRIER(10.0, false), // Damage absorption zone
     GRAVITY_WELL(7.0, false),  // Pull entities toward center

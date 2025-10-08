@@ -19,6 +19,8 @@ import org.dyn4j.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Set;
+
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
@@ -300,7 +302,8 @@ public class UtilitySystem {
                 utility.getDamage(),
                 activation.playerId,
                 activation.team,
-                beamOrdinance
+                beamOrdinance,
+                Set.of() // Utility beams don't have bullet effects
         );
 
         // Update beam's effective end point based on obstacle collisions

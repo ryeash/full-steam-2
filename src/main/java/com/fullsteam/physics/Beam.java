@@ -1,5 +1,6 @@
 package com.fullsteam.physics;
 
+import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.DamageApplicationType;
 import com.fullsteam.model.Ordinance;
 import lombok.Getter;
@@ -13,7 +14,6 @@ import org.dyn4j.geometry.Vector2;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -36,16 +36,16 @@ public class Beam extends GameEntity {
     protected final double damageInterval;
     protected final double beamDuration;
     protected final Ordinance ordinance; // Type of beam (laser, plasma, heal, etc.)
+    protected final Set<BulletEffect> bulletEffects; // Special effects this beam has
 
-    // Track affected players for DOT and burst beams
+    // Track affected players for DOT beams
     protected final Set<Integer> affectedPlayers = new HashSet<>();
     protected final Map<Integer, Long> lastDamageTime = new HashMap<>();
 
     private double timeRemaining;
-    private double timeSinceLastDamage = 0.0;
 
     public Beam(int id, Vector2 startPoint, Vector2 direction, double range, double damage,
-                int ownerId, int ownerTeam, Ordinance ordinance) {
+                int ownerId, int ownerTeam, Ordinance ordinance, Set<BulletEffect> bulletEffects) {
         super(id, createBeamBody(startPoint, direction, range), Double.POSITIVE_INFINITY); // Beams don't have health
         this.startPoint = startPoint.copy();
         this.direction = direction.copy();
@@ -55,6 +55,7 @@ public class Beam extends GameEntity {
         this.ownerId = ownerId;
         this.ownerTeam = ownerTeam;
         this.ordinance = ordinance;
+        this.bulletEffects = new HashSet<>(bulletEffects);
         this.damageApplicationType = ordinance.getDamageApplicationType();
         this.damageInterval = ordinance.getDamageInterval();
         this.beamDuration = ordinance.getBeamDuration();
@@ -112,35 +113,12 @@ public class Beam extends GameEntity {
             case DAMAGE_OVER_TIME:
                 // DOT damage is now handled by GameManager with proper collision detection
                 break;
-            case BURST:
-                // BURST damage is now handled by GameManager with proper collision detection
-                break;
         }
 
         lastUpdateTime = System.currentTimeMillis();
     }
 
 
-    /**
-     * Update the time since last damage application (used by GameManager for BURST beams)
-     */
-    public void updateTimeSinceLastDamage(double deltaTime) {
-        timeSinceLastDamage += deltaTime;
-    }
-
-    /**
-     * Check if burst damage should be applied based on timing
-     */
-    public boolean shouldApplyBurstDamage() {
-        return timeSinceLastDamage >= damageInterval;
-    }
-
-    /**
-     * Reset the burst damage timer after applying damage
-     */
-    public void resetBurstTimer() {
-        timeSinceLastDamage = 0.0;
-    }
 
 
     /**
@@ -186,14 +164,6 @@ public class Beam extends GameEntity {
             case RAILGUN:
                 // Standard instant damage
                 return damage;
-            case PULSE_LASER:
-                // Pulse laser does initial burst damage
-                double pulseCount = beamDuration / damageInterval;
-                return damage / pulseCount;
-            case ARC_BEAM:
-                // Arc beam does initial arc damage
-                double arcCount = beamDuration / damageInterval;
-                return damage / arcCount;
             default:
                 // Other beam types don't do initial damage
                 return 0.0;
@@ -208,37 +178,22 @@ public class Beam extends GameEntity {
         if (!canAffectPlayer(player)) {
             return 0.0;
         }
-        if (Objects.requireNonNull(ordinance) == Ordinance.PLASMA_BEAM) {// Continuous plasma damage
-            double plasmaPerSecond = damage / beamDuration;
-            return plasmaPerSecond * deltaTime;
-        }// Other beam types don't do continuous damage
-        return 0.0;
-    }
-
-    /**
-     * Process burst damage at intervals
-     * Returns the damage amount to be applied by GameManager
-     */
-    public double processBurstDamage(Player player) {
-        if (!canAffectPlayer(player)) {
-            return 0.0;
-        }
-
+        
         switch (ordinance) {
-            case PULSE_LASER:
-                // Pulse laser burst damage
-                double pulseCount = beamDuration / damageInterval;
-                return damage / pulseCount;
-            case ARC_BEAM:
-                // Arc beam burst damage with potential chain effect
-                double arcCount = beamDuration / damageInterval;
-                // TODO: Implement chain lightning logic to nearby enemies
-                return damage / arcCount;
+            case PLASMA_BEAM:
+                // Continuous plasma damage
+                double plasmaPerSecond = damage / beamDuration;
+                return plasmaPerSecond * deltaTime;
+            case HEAL_BEAM:
+                // Continuous healing (return negative value for healing)
+                double healPerSecond = damage / beamDuration;
+                return -(healPerSecond * deltaTime);
             default:
-                // Other beam types don't do burst damage
+                // Other beam types don't do continuous damage
                 return 0.0;
         }
     }
+
 
     /**
      * Check if this is a healing beam
@@ -262,12 +217,33 @@ public class Beam extends GameEntity {
     }
 
     /**
-     * Check if this beam can pierce through targets
+     * Check if this beam can pierce through players
      */
-    public boolean canPierceTargets() {
+    public boolean canPiercePlayers() {
         return switch (ordinance) {
-            case RAILGUN, ARC_BEAM -> true; // Railgun pierces, Arc beam chains to multiple targets
-            default -> false; // Most beams stop after first hit
+            case LASER, RAILGUN, PLASMA_BEAM, HEAL_BEAM -> true; // Laser, Railgun, Plasma beam, and Heal beam pierce through players
+            default -> false; // Other beams stop at first player hit
         };
+    }
+
+    /**
+     * Check if this beam can pierce through obstacles
+     */
+    public boolean canPierceObstacles() {
+        return ordinance == Ordinance.RAILGUN;
+    }
+
+    /**
+     * Check if this beam has a specific bullet effect
+     */
+    public boolean hasBulletEffect(BulletEffect effect) {
+        return bulletEffects.contains(effect);
+    }
+
+    /**
+     * Get all bullet effects for this beam
+     */
+    public Set<BulletEffect> getBulletEffects() {
+        return new HashSet<>(bulletEffects);
     }
 }

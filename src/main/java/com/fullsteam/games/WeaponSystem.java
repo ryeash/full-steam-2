@@ -1,9 +1,13 @@
 package com.fullsteam.games;
 
 import com.fullsteam.model.DamageApplicationType;
+import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.physics.Beam;
+import com.fullsteam.physics.BulletEffectProcessor;
 import com.fullsteam.physics.GameEntities;
+import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Projectile;
@@ -18,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.function.BiConsumer;
 
 /**
  * Manages all weapon-related functionality including primary weapons, projectiles, and beams.
@@ -28,10 +33,21 @@ public class WeaponSystem {
 
     private final GameEntities gameEntities;
     private final World<Body> world;
+    private final BulletEffectProcessor bulletEffectProcessor;
+    private BiConsumer<Player, Player> killCallback;
 
     public WeaponSystem(GameEntities gameEntities, World<Body> world) {
         this.gameEntities = gameEntities;
         this.world = world;
+        this.bulletEffectProcessor = new BulletEffectProcessor(gameEntities);
+    }
+
+    /**
+     * Set the kill callback to be invoked when a player is killed by a beam weapon.
+     * @param killCallback Function that takes (victim, killer) parameters
+     */
+    public void setKillCallback(BiConsumer<Player, Player> killCallback) {
+        this.killCallback = killCallback;
     }
 
     /**
@@ -61,7 +77,7 @@ public class WeaponSystem {
         }
 
         // Update beam's effective end point based on obstacle collisions
-        Vector2 effectiveEnd = findBeamObstacleIntersection(beam.getStartPoint(), beam.getEndPoint());
+        Vector2 effectiveEnd = findBeamObstacleIntersection(beam);
         beam.setEffectiveEndPoint(effectiveEnd);
 
         gameEntities.addBeam(beam);
@@ -141,10 +157,92 @@ public class WeaponSystem {
     }
 
     /**
+     * Find where a beam intersects with obstacles, considering beam-specific piercing behavior.
+     * Returns the effective end point of the beam (either full range or obstacle intersection).
+     */
+    private Vector2 findBeamObstacleIntersection(Beam beam) {
+        Vector2 startPoint = beam.getStartPoint();
+        Vector2 endPoint = beam.getEndPoint();
+        Vector2 direction = endPoint.copy().subtract(startPoint);
+        double maxDistance = direction.getMagnitude();
+        direction.normalize();
+
+        Ray ray = new Ray(startPoint, direction);
+
+        // Raycast to find all entities
+        List<RaycastResult<Body, BodyFixture>> results = world.raycast(
+                ray,
+                maxDistance,
+                new DetectFilter<Body, BodyFixture>(true, true, null)
+        );
+
+        if (results.isEmpty()) {
+            return endPoint; // No entities, beam reaches full range
+        }
+
+        // Find the closest blocking entity based on beam type
+        double closestDistance = maxDistance;
+        for (RaycastResult<Body, ?> result : results) {
+            Body body = result.getBody();
+            Object userData = body.getUserData();
+            double distance = result.getRaycast().getDistance();
+
+            // Check if this entity blocks the beam based on beam type
+            if (shouldEntityBlockBeam(beam, userData)) {
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                }
+            }
+        }
+
+        // Calculate effective end point
+        Vector2 effectiveEnd = startPoint.copy();
+        effectiveEnd.add(direction.copy().multiply(closestDistance));
+        return effectiveEnd;
+    }
+
+    /**
+     * Check if an entity should block a beam based on the beam's piercing behavior.
+     */
+    private boolean shouldEntityBlockBeam(Beam beam, Object entity) {
+        if (entity instanceof Obstacle) {
+            return !beam.canPierceObstacles();
+        } else if (entity instanceof Player) {
+            return !beam.canPiercePlayers();
+        } else if (entity instanceof Projectile) {
+            // Projectiles should never block beams - they're small, fast-moving objects
+            return false;
+        } else if (entity instanceof NetProjectile) {
+            // Net projectiles should never block beams
+            return false;
+        } else if (entity instanceof FieldEffect fieldEffect) {
+            // Handle shield barriers - block non-piercing beams
+            if (fieldEffect.getType() == FieldEffectType.SHIELD_BARRIER) {
+                // Shield barriers block non-piercing beams (LASER, PLASMA_BEAM) 
+                // but allow piercing beams (RAILGUN) to pass through
+                return !beam.canPierceObstacles();
+            }
+            // Other field effects don't block beams
+            return false;
+        } else if (entity.getClass().getSimpleName().equals("Turret")) {
+            return !beam.canPiercePlayers();
+        }
+        // Default: block unknown entities
+        return true;
+    }
+
+    /**
      * Process initial hit for instant damage beams.
-     * Applies damage to the first entity hit by the beam.
+     * Handles different beam types with their specific piercing behaviors.
      */
     private void processBeamInitialHit(Beam beam) {
+        processStandardBeamHit(beam);
+    }
+
+    /**
+     * Process standard beam hits (laser, railgun, etc.)
+     */
+    private void processStandardBeamHit(Beam beam) {
         Vector2 startPoint = beam.getStartPoint();
         Vector2 endPoint = beam.getEffectiveEndPoint();
         Vector2 direction = endPoint.copy().subtract(startPoint);
@@ -153,49 +251,115 @@ public class WeaponSystem {
 
         Ray ray = new Ray(startPoint, direction);
 
-        // Raycast to find first entity hit
+        // Raycast to find all entities in beam path
         List<RaycastResult<Body, BodyFixture>> results = world.raycast(
                 ray,
                 distance,
                 new DetectFilter<Body, BodyFixture>(true, true, null)
         );
 
-        boolean hit = !results.isEmpty();
-
-        if (!hit || results.isEmpty()) {
+        if (results.isEmpty()) {
             return;
         }
 
-        // Find the closest player hit
-        double closestDistance = distance;
-        Player closestPlayer = null;
+        // Sort results by distance for proper piercing order
+        results.sort((r1, r2) -> Double.compare(r1.getRaycast().getDistance(), r2.getRaycast().getDistance()));
 
+        // Process each hit based on beam piercing behavior
         for (RaycastResult<Body, ?> result : results) {
             Body body = result.getBody();
             Object userData = body.getUserData();
 
             if (userData instanceof Player player) {
-                // Check if beam can affect this player (team rules)
                 if (beam.canAffectPlayer(player)) {
-                    double hitDistance = result.getRaycast().getDistance();
-                    if (hitDistance < closestDistance) {
-                        closestDistance = hitDistance;
-                        closestPlayer = player;
+                    applyBeamDamageToPlayer(beam, player);
+                    
+                    // Stop at first player if beam doesn't pierce players
+                    if (!beam.canPiercePlayers()) {
+                        break;
                     }
+                }
+            } else if (userData instanceof Obstacle obstacle) {
+                // Apply damage to player-created obstacles if beam can damage them
+                if (obstacle.getType() == Obstacle.ObstacleType.PLAYER_BARRIER && 
+                    canBeamDamageObstacle(beam, obstacle)) {
+                    obstacle.takeDamage(beam.getDamage());
+                }
+                
+                // Stop at obstacle if beam doesn't pierce obstacles
+                if (!beam.canPierceObstacles()) {
+                    break;
+                }
+            } else if (userData.getClass().getSimpleName().equals("Turret")) {
+                // Handle turret damage if beam can damage turrets
+                if (canBeamDamageTurret(beam, userData)) {
+                    // Apply damage to turret (would need turret reference)
+                    log.debug("Beam {} hit turret", beam.getId());
+                }
+                
+                // Stop at turret if beam doesn't pierce turrets
+                if (!beam.canPiercePlayers()) {
+                    break;
                 }
             }
         }
+    }
 
-        // Apply damage to the closest player hit
-        if (closestPlayer != null) {
-            beam.getAffectedPlayers().add(closestPlayer.getId());
-            boolean killed = closestPlayer.takeDamage(beam.getDamage());
-            
-            log.debug("Beam {} hit player {} for {} damage (killed: {})",
-                    beam.getId(), closestPlayer.getId(), beam.getDamage(), killed);
 
-            // Note: Kill handling is done by GameManager through collision system
+    /**
+     * Apply beam damage to a player
+     */
+    private void applyBeamDamageToPlayer(Beam beam, Player player) {
+        beam.getAffectedPlayers().add(player.getId());
+        boolean killed = player.takeDamage(beam.getDamage());
+        
+        // Process AOE bullet effects for beam weapons
+        bulletEffectProcessor.processBeamEffectHit(beam, player.getPosition());
+        
+        // Handle kill if player died
+        if (killed && killCallback != null) {
+            Player killer = gameEntities.getPlayer(beam.getOwnerId());
+            killCallback.accept(player, killer);
         }
+        
+        log.debug("Beam {} hit player {} for {} damage (killed: {})",
+                beam.getId(), player.getId(), beam.getDamage(), killed);
+    }
+
+    /**
+     * Check if a beam can damage an obstacle based on team rules
+     */
+    private boolean canBeamDamageObstacle(Beam beam, Obstacle obstacle) {
+        // Can't damage obstacles created by the same player
+        if (beam.getOwnerId() == obstacle.getOwnerId()) {
+            return false;
+        }
+
+        // In FFA mode (team 0), can damage any obstacle except own
+        if (beam.getOwnerTeam() == 0 || obstacle.getOwnerTeam() == 0) {
+            return true;
+        }
+
+        // In team mode, can only damage obstacles created by different teams
+        return beam.getOwnerTeam() != obstacle.getOwnerTeam();
+    }
+
+    /**
+     * Check if a beam can damage a turret based on team rules
+     */
+    private boolean canBeamDamageTurret(Beam beam, Object turret) {
+        // This would need to be implemented based on turret team rules
+        // For now, assume beams can damage enemy turrets
+        return true;
+    }
+
+
+    /**
+     * Public method for GameManager to find beam obstacle intersection.
+     * This delegates to the beam-specific collision detection.
+     */
+    public Vector2 findBeamObstacleIntersectionPublic(Vector2 beamStart, Vector2 beamEnd) {
+        return findBeamObstacleIntersection(beamStart, beamEnd);
     }
 
     /**
@@ -229,14 +393,6 @@ public class WeaponSystem {
     public void updateWeaponStates(double deltaTime) {
         // Weapon state updates (reloading, cooldowns) are handled by Player class
         // This method is kept for potential future weapon system features
-    }
-
-    /**
-     * Find beam obstacle intersection - exposed for utility weapon use.
-     * Public method for GameManager to use when creating utility beams.
-     */
-    public Vector2 findBeamObstacleIntersectionPublic(Vector2 beamStart, Vector2 beamEnd) {
-        return findBeamObstacleIntersection(beamStart, beamEnd);
     }
 
     /**

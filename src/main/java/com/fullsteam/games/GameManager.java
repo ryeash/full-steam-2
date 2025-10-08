@@ -131,6 +131,8 @@ public class GameManager {
 
         // Initialize weapon system
         this.weaponSystem = new WeaponSystem(gameEntities, world);
+        // Set kill callback for beam weapons
+        this.weaponSystem.setKillCallback(this::killPlayer);
 
         // Initialize utility system
         this.utilitySystem = new UtilitySystem(
@@ -536,14 +538,12 @@ public class GameManager {
 
                 double distance = padPos.distance(player.getPosition());
                 if (distance <= teleportPad.getActivationRadius()) {
-                    if (teleportPad.teleportPlayer(player)) {
-                        log.info("Player {} teleported via pad {}", player.getId(), teleportPad.getId());
-                    }
+                    teleportPad.teleportPlayer(player);
                 }
             }
         }
 
-        // Process beam damage for DOT and burst beams
+        // Process beam damage for DOT beams
         for (Beam beam : gameEntities.getAllBeams()) {
             if (!beam.isActive()) {
                 continue;
@@ -566,20 +566,6 @@ public class GameManager {
                             } else if (dotDamage < 0) {
                                 // Apply healing (negative damage)
                                 player.heal(-dotDamage);
-                            }
-                            break;
-                        case BURST:
-                            // Handle burst damage with proper timing
-                            beam.updateTimeSinceLastDamage(deltaTime);
-                            if (beam.shouldApplyBurstDamage()) {
-                                double burstDamage = beam.processBurstDamage(player);
-                                if (burstDamage > 0) {
-                                    // Apply damage and check if player died
-                                    if (player.takeDamage(burstDamage)) {
-                                        killPlayer(player, beamOwner);
-                                    }
-                                }
-                                beam.resetBurstTimer();
                             }
                             break;
                         case INSTANT:
@@ -670,7 +656,7 @@ public class GameManager {
      */
     /**
      * Get all players that intersect with a beam's path using dyn4j ray casting.
-     * This method is used for continuous beam damage updates.
+     * This method is used for continuous beam damage updates and handles different piercing behaviors.
      */
     private List<Player> getPlayersInBeamPath(Beam beam) {
         List<Player> playersInPath = new ArrayList<>();
@@ -687,6 +673,7 @@ public class GameManager {
 
         // Use dyn4j's ray casting to find all players in the beam path
         List<RaycastResult<Body, BodyFixture>> results = world.raycast(ray, maxDistance, new DetectFilter<>(true, true, null));
+
         // Convert results to players and sort by distance
         for (RaycastResult<Body, BodyFixture> result : results) {
             Body body = result.getBody();
@@ -703,6 +690,11 @@ public class GameManager {
             double dist2 = beamStart.distanceSquared(p2.getPosition());
             return Double.compare(dist1, dist2);
         });
+
+        // For beams that don't pierce players, only return the first player
+        if (!beam.canPiercePlayers() && !playersInPath.isEmpty()) {
+            return List.of(playersInPath.get(0));
+        }
 
         return playersInPath;
     }
@@ -1224,7 +1216,8 @@ public class GameManager {
             beamState.put("damageType", beam.getDamageApplicationType().name());
             beamState.put("durationPercent", beam.getDurationPercent());
             beamState.put("isHealingBeam", beam.isHealingBeam());
-            beamState.put("canPierce", beam.canPierceTargets());
+            beamState.put("canPiercePlayers", beam.canPiercePlayers());
+            beamState.put("canPierceObstacles", beam.canPierceObstacles());
             beamStates.add(beamState);
         }
         gameState.put("beams", beamStates);
@@ -1302,12 +1295,8 @@ public class GameManager {
         double halfWidth = gameConfig.getWorldWidth() / 2.0;
         double halfHeight = gameConfig.getWorldHeight() / 2.0;
 
-        if (Math.abs(position.x) + checkRadius > halfWidth ||
-            Math.abs(position.y) + checkRadius > halfHeight) {
-            return false; // Too close to world boundary
-        }
-
-        return true; // Position is clear
+        return !(Math.abs(position.x) + checkRadius > halfWidth)
+               && !(Math.abs(position.y) + checkRadius > halfHeight);
     }
 
     /**
@@ -1658,11 +1647,6 @@ public class GameManager {
         log.info("Player {} (team {}) awarded capture. Total captures: {}",
                 player.getId(), player.getTeam(), player.getCaptures());
     }
-
-    /**
-     * Apply homing behavior to projectiles with homing effect
-     */
-    // Homing projectile processing moved to WeaponSystem
 
     /**
      * Get the collision processor from the world's collision listeners

@@ -42,6 +42,10 @@ public class Player extends GameEntity {
     
     // Respawn rules tracking
     private int livesRemaining = -1; // -1 = unlimited, 0 = eliminated
+    /**
+     * -- GETTER --
+     *  Check if player is permanently eliminated.
+     */
     private boolean eliminated = false; // Permanently eliminated (no more respawns)
 
     public Player(int id, String playerName, double x, double y, int team, double maxHealth) {
@@ -75,10 +79,10 @@ public class Player extends GameEntity {
         attributeModifications.removeIf(am -> {
             if (am.isExpired()) {
                 am.revert(this);
-                return false;
+                return true; // Remove expired modifications
             }
             am.update(this, deltaTime);
-            return false;
+            return false; // Keep active modifications
         });
 
         // Handle reloading
@@ -191,7 +195,7 @@ public class Player extends GameEntity {
     }
     
     /**
-     * Refund the utility cooldown (e.g., when placement fails).
+     * Refund the utility cooldown (e.g. when placement fails).
      * Resets the cooldown timer to allow immediate reuse.
      */
     public void refundUtilityCooldown() {
@@ -285,7 +289,7 @@ public class Player extends GameEntity {
         int beamId = Config.nextId();
 
         // Single Beam class handles all beam types via ordinance
-        return new Beam(beamId, startPoint, direction, range, damage, getId(), getTeam(), ordinance);
+        return new Beam(beamId, startPoint, direction, range, damage, getId(), getTeam(), ordinance, weapon.getBulletEffects());
     }
 
     /**
@@ -390,14 +394,7 @@ public class Player extends GameEntity {
     public boolean hasLivesRemaining() {
         return livesRemaining != 0; // -1 (unlimited) or > 0
     }
-    
-    /**
-     * Check if player is permanently eliminated.
-     */
-    public boolean isEliminated() {
-        return eliminated;
-    }
-    
+
     /**
      * Mark player as eliminated (for ELIMINATION mode).
      */
@@ -455,55 +452,5 @@ public class Player extends GameEntity {
         setVelocity(0, 0);
         weapon.reload();
         isReloading = false;
-    }
-
-    /**
-     * Apply knockback force to the player using physics impulse
-     */
-    public void applyKnockback(Vector2 direction, double force) {
-        if (!active) {
-            return;
-        }
-
-        Vector2 knockbackDirection = direction.copy();
-        knockbackDirection.normalize();
-        Vector2 impulse = knockbackDirection.multiply(force);
-        body.applyImpulse(impulse);
-    }
-
-    /**
-     * Apply a continuous force to the player (for effects like wind, conveyor belts, gravity wells)
-     */
-    public void applyForce(Vector2 force) {
-        if (!active) {
-            return;
-        }
-
-        body.applyForce(force);
-    }
-
-    /**
-     * Temporarily modify linear damping for environmental effects (like slow fields)
-     */
-    public void applyTemporaryDamping(double dampingMultiplier) {
-        if (!active) {
-            return;
-        }
-
-        double newDamping = Config.PLAYER_LINEAR_DAMPING * dampingMultiplier;
-        // Clamp damping to reasonable values (0.0 to 0.99)
-        newDamping = Math.max(0.0, Math.min(0.99, newDamping));
-        body.setLinearDamping(newDamping);
-    }
-
-    /**
-     * Reset linear damping to default value
-     */
-    public void resetDamping() {
-        if (!active) {
-            return;
-        }
-
-        body.setLinearDamping(Config.PLAYER_LINEAR_DAMPING);
     }
 }
