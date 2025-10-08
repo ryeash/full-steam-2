@@ -1679,23 +1679,23 @@ class GameEngine {
         
         const kills = document.createElement('span');
         kills.style.color = '#4ade80';
-        kills.textContent = `${score.kills} K`;
+        kills.textContent = `${score.kills || 0} K`;
         
         const deaths = document.createElement('span');
         deaths.style.color = '#f87171';
-        deaths.textContent = `${score.deaths} D`;
+        deaths.textContent = `${score.deaths || 0} D`;
         
         // Add captures if player has any
         if (score.captures && score.captures > 0) {
             const captures = document.createElement('span');
             captures.style.color = '#FFD700';
-            captures.textContent = `${score.captures} 🚩`;
+            captures.textContent = `${score.captures || 0} 🚩`;
             stats.appendChild(captures);
         }
         
         const kd = document.createElement('span');
         kd.style.color = '#fbbf24';
-        kd.textContent = `${(score.kills / Math.max(1, score.deaths)).toFixed(2)} K/D`;
+        kd.textContent = `${((score.kills || 0) / Math.max(1, (score.deaths || 0))).toFixed(2)} K/D`;
         
         stats.appendChild(kills);
         stats.appendChild(deaths);

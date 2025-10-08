@@ -58,12 +58,12 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         Object userData2 = body2.getUserData();
 
         // Check for projectile hitting a world boundary
-        if (userData1 instanceof Projectile && "boundary".equals(userData2)) {
-            ((Projectile) userData1).setActive(false);
+        if ((userData1 instanceof Projectile || userData1 instanceof NetProjectile) && "boundary".equals(userData2)) {
+            ((GameEntity) userData1).setActive(false);
             return false; // Prevent bounce
         }
-        if (userData2 instanceof Projectile && "boundary".equals(userData1)) {
-            ((Projectile) userData2).setActive(false);
+        if ((userData2 instanceof Projectile || userData2 instanceof NetProjectile) && "boundary".equals(userData1)) {
+            ((GameEntity) userData2).setActive(false);
             return false; // Prevent bounce
         }
 
@@ -143,7 +143,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         }
 
         // Process bullet effects before handling the hit
-        log.debug("Projectile {} hit player {} at ({}, {}) - processing effects", 
+        log.debug("Projectile {} hit player {} at ({}, {}) - processing effects",
                 projectile.getId(), player.getId(), player.getPosition().x, player.getPosition().y);
         bulletEffectProcessor.processEffectHit(projectile, player.getPosition());
 
@@ -178,7 +178,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         Vector2 hitPosition = new Vector2(hitPos.x, hitPos.y);
 
         // Process bullet effects on obstacle hit (only on first hit)
-        log.debug("Projectile {} hit obstacle {} at ({}, {}) - processing effects", 
+        log.debug("Projectile {} hit obstacle {} at ({}, {}) - processing effects",
                 projectile.getId(), obstacle.getId(), hitPosition.x, hitPosition.y);
         bulletEffectProcessor.processEffectHit(projectile, hitPosition);
 
@@ -188,7 +188,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             if (canProjectileDamageObstacle(projectile, obstacle)) {
                 boolean obstacleDestroyed = obstacle.takeDamage(projectile.getDamage());
                 if (obstacleDestroyed) {
-                    log.debug("Projectile {} destroyed player barrier {} (owner: {})", 
+                    log.debug("Projectile {} destroyed player barrier {} (owner: {})",
                             projectile.getId(), obstacle.getId(), obstacle.getOwnerId());
                 }
             }
@@ -652,8 +652,8 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
      */
     private void createTurretDestructionExplosion(Turret turret) {
         Vector2 turretPosition = turret.getPosition();
-        double explosionRadius = 15.0; // Same size as turret
-        
+        double explosionRadius = turret.getBody().getFixture(0).getShape().getRadius(); // Same size as turret
+
         // Create zero-damage explosion field effect
         FieldEffect explosion = new FieldEffect(
                 Config.nextId(),
@@ -665,11 +665,11 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
                 FieldEffectType.EXPLOSION.getDefaultDuration(),
                 turret.getOwnerTeam()
         );
-        
+
         // Add to game world
         gameEntities.getWorld().addBody(explosion.getBody());
         gameEntities.addFieldEffect(explosion);
-        
+
         log.debug("Created turret destruction explosion at ({}, {}) with radius {}",
                 turretPosition.x, turretPosition.y, explosionRadius);
     }

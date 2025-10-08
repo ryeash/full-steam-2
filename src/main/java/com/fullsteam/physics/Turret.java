@@ -1,5 +1,6 @@
 package com.fullsteam.physics;
 
+import com.fullsteam.Config;
 import com.fullsteam.model.Ordinance;
 import lombok.Getter;
 import lombok.Setter;
@@ -43,7 +44,7 @@ public class Turret extends GameEntity {
 
     private static Body createTurretBody(Vector2 position) {
         Body body = new Body();
-        Circle circle = new Circle(15.0); // Slightly smaller than player
+        Circle circle = new Circle(Config.PLAYER_RADIUS * .75); // Slightly smaller than player
         body.addFixture(circle);
         body.setMass(MassType.INFINITE); // Stationary
         body.getTransform().setTranslation(position.x, position.y);

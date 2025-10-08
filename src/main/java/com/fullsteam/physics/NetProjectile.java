@@ -33,8 +33,8 @@ public class NetProjectile extends GameEntity {
         this.ownerTeam = ownerTeam;
         this.velocity = velocity.copy();
         this.damage = 0;
-        this.slowEffect = 3.0; // Moderate slowdown - 3x normal damping
-        this.slowDuration = 3.0; // 3 second immobilization
+        this.slowEffect = 10.0; // Moderate slowdown - 3x normal damping
+        this.slowDuration = 2.0; // 2 second immobilization
         this.pushbackForce = Config.NET_PUSHBACK_FORCE; // Force to push player backward
         this.timeToLive = timeToLive;
         this.timeRemaining = timeToLive;
@@ -84,8 +84,8 @@ public class NetProjectile extends GameEntity {
         // Apply immobilization effect after pushback
         String ownerName = "Net"; // Default name if owner not found
         StatusEffects.applySlowEffect(player, slowEffect, slowDuration, ownerName);
-        // Apply pushback force - push player in opposite direction of net's velocity
-        player.getBody().applyForce(velocity.getNormalized().multiply(-pushbackForce));
+        // Apply pushback impulse - push player in opposite direction of net's velocity
+        player.getBody().applyImpulse(velocity.getNormalized().multiply(pushbackForce));
     }
 
     /**

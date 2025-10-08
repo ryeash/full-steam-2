@@ -30,7 +30,7 @@ public class Config {
     public static final double PLAYER_ANGULAR_DAMPING = 1.0; // Rotation control damping
 
     // Net projectile configuration
-    public static final double NET_PUSHBACK_FORCE = 15000000.0; // Force applied when net hits player
+    public static final double NET_PUSHBACK_FORCE = 2_000_000.0; // Force applied when net hits player
 }
 
 
