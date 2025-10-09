@@ -58,8 +58,7 @@ class RuleSystemTest extends BaseTestClass {
                 gameEntities,
                 gameEventManager,
                 broadcaster,
-                testConfig.getTeamCount(),
-                testConfig.getPlayerMaxHealth()
+                testConfig.getTeamCount()
         );
     }
 
@@ -188,8 +187,7 @@ class RuleSystemTest extends BaseTestClass {
                 gameEntities,
                 gameEventManager,
                 broadcaster,
-                timeLimitConfig.getTeamCount(),
-                timeLimitConfig.getPlayerMaxHealth()
+                timeLimitConfig.getTeamCount()
         );
         
         Player player1 = createTestPlayer(1, 1);
@@ -226,8 +224,7 @@ class RuleSystemTest extends BaseTestClass {
                 gameEntities,
                 gameEventManager,
                 broadcaster,
-                eliminationConfig.getTeamCount(),
-                eliminationConfig.getPlayerMaxHealth()
+                eliminationConfig.getTeamCount()
         );
         
         Player player1 = createTestPlayer(1, 1);
@@ -280,8 +277,7 @@ class RuleSystemTest extends BaseTestClass {
                 gameEntities,
                 gameEventManager,
                 broadcaster,
-                eliminationConfig.getTeamCount(),
-                eliminationConfig.getPlayerMaxHealth()
+                eliminationConfig.getTeamCount()
         );
         
         Player player = createTestPlayer(1, 1);
@@ -313,8 +309,7 @@ class RuleSystemTest extends BaseTestClass {
                 gameEntities,
                 gameEventManager,
                 broadcaster,
-                limitedLivesConfig.getTeamCount(),
-                limitedLivesConfig.getPlayerMaxHealth()
+                limitedLivesConfig.getTeamCount()
         );
         
         Player player = createTestPlayer(1, 1);
@@ -373,8 +368,7 @@ class RuleSystemTest extends BaseTestClass {
                 gameEntities,
                 gameEventManager,
                 broadcaster,
-                capturesConfig.getTeamCount(),
-                capturesConfig.getPlayerMaxHealth()
+                capturesConfig.getTeamCount()
         );
         
         Player player = createTestPlayer(1, 1);

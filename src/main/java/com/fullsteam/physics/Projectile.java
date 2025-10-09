@@ -129,10 +129,6 @@ public class Projectile extends GameEntity {
         return new HashSet<>(bulletEffects);
     }
 
-    public Set<Integer> getAffectedObstacles() {
-        return affectedObstacles;
-    }
-
     public void markAsExploded() {
         this.hasExploded = true;
     }

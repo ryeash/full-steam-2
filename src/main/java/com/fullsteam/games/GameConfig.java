@@ -24,8 +24,6 @@ public class GameConfig {
     @Builder.Default
     private double playerMaxHealth = 100.0;
     @Builder.Default
-    private int strategicLocationsCount = 5;
-    @Builder.Default
     private double captureRadius = 50.0;
     @Builder.Default
     private double captureTime = 3.0; // seconds

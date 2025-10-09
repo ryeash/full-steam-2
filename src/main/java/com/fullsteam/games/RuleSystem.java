@@ -34,7 +34,6 @@ public class RuleSystem {
     private final GameEventManager gameEventManager;
     private final Consumer<Map<String, Object>> broadcaster; // For broadcasting raw messages
     private final int teamCount;
-    private final double playerMaxHealth;
 
     // Round state
     @Getter
@@ -67,14 +66,13 @@ public class RuleSystem {
 
     public RuleSystem(String gameId, Rules rules, GameEntities gameEntities,
                       GameEventManager gameEventManager, Consumer<Map<String, Object>> broadcaster,
-                      int teamCount, double playerMaxHealth) {
+                      int teamCount) {
         this.gameId = gameId;
         this.rules = rules;
         this.gameEntities = gameEntities;
         this.gameEventManager = gameEventManager;
         this.broadcaster = broadcaster;
         this.teamCount = teamCount;
-        this.playerMaxHealth = playerMaxHealth;
 
         // Initialize round timer if rounds are enabled
         if (rules.getRoundDuration() > 0) {

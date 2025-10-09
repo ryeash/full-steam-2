@@ -32,7 +32,7 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         world = new World<>();
         gameEntities = new GameEntities(createTestConfig(), world);
         broadcaster = new TestBroadcaster();
-        ruleSystem = new RuleSystem("test-game", createTestRules(), gameEntities, null, broadcaster, 2, 100);
+        ruleSystem = new RuleSystem("test-game", createTestRules(), gameEntities, null, broadcaster, 2);
     }
 
     private Rules createTestRules() {
@@ -105,7 +105,7 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
                 .kothZones(2)
                 .kothPointsPerSecond(5.0)
                 .build();
-        ruleSystem = new RuleSystem("test-game", totalRules, gameEntities, null, broadcaster, 2, 100);
+        ruleSystem = new RuleSystem("test-game", totalRules, gameEntities, null, broadcaster, 2);
 
         // Create players with kills and captures
         Player player1 = new Player(1, "Player1", 100, 100, 1, 100.0);
@@ -154,7 +154,7 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
                 .kothZones(2)
                 .kothPointsPerSecond(5.0)
                 .build();
-        ruleSystem = new RuleSystem("test-game", killsRules, gameEntities, null, broadcaster, 2, 100);
+        ruleSystem = new RuleSystem("test-game", killsRules, gameEntities, null, broadcaster, 2);
 
         // Create players with kills
         Player player1 = new Player(1, "Player1", 100, 100, 1, 100.0);

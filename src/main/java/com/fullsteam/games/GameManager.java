@@ -125,8 +125,7 @@ public class GameManager {
                 gameEntities,
                 gameEventManager,
                 this::broadcast,
-                gameConfig.getTeamCount(),
-                gameConfig.getPlayerMaxHealth()
+                gameConfig.getTeamCount()
         );
 
         // Initialize weapon system
@@ -649,11 +648,6 @@ public class GameManager {
         }
     }
 
-    // Utility weapon processing methods moved to UtilitySystem
-
-    /**
-     * Process initial hit for instant damage beams (like laser, railgun)
-     */
     /**
      * Get all players that intersect with a beam's path using dyn4j ray casting.
      * This method is used for continuous beam damage updates and handles different piercing behaviors.

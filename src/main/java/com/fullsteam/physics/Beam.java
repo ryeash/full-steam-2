@@ -151,26 +151,6 @@ public class Beam extends GameEntity {
     }
 
     /**
-     * Process initial hit when beam is first created (for instant damage)
-     * Returns the damage amount to be applied by GameManager
-     */
-    public double processInitialHit(Player player) {
-        if (!canAffectPlayer(player)) {
-            return 0.0;
-        }
-
-        switch (ordinance) {
-            case LASER:
-            case RAILGUN:
-                // Standard instant damage
-                return damage;
-            default:
-                // Other beam types don't do initial damage
-                return 0.0;
-        }
-    }
-
-    /**
      * Process continuous damage over time
      * Returns the damage amount to be applied by GameManager (negative for healing)
      */
@@ -178,20 +158,22 @@ public class Beam extends GameEntity {
         if (!canAffectPlayer(player)) {
             return 0.0;
         }
-        
-        switch (ordinance) {
-            case PLASMA_BEAM:
+
+        return switch (ordinance) {
+            case PLASMA_BEAM -> {
                 // Continuous plasma damage
                 double plasmaPerSecond = damage / beamDuration;
-                return plasmaPerSecond * deltaTime;
-            case HEAL_BEAM:
+                yield plasmaPerSecond * deltaTime;
+            }
+            case HEAL_BEAM -> {
                 // Continuous healing (return negative value for healing)
                 double healPerSecond = damage / beamDuration;
-                return -(healPerSecond * deltaTime);
-            default:
+                yield -(healPerSecond * deltaTime);
+            }
+            default ->
                 // Other beam types don't do continuous damage
-                return 0.0;
-        }
+                    0.0;
+        };
     }
 
 
@@ -231,13 +213,6 @@ public class Beam extends GameEntity {
      */
     public boolean canPierceObstacles() {
         return ordinance == Ordinance.RAILGUN;
-    }
-
-    /**
-     * Check if this beam has a specific bullet effect
-     */
-    public boolean hasBulletEffect(BulletEffect effect) {
-        return bulletEffects.contains(effect);
     }
 
     /**

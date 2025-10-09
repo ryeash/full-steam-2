@@ -1,6 +1,6 @@
 /**
- * Full Steam - Isometric Battle Arena Game Engine
- * Built with PixiJS for 2.5D isometric rendering
+ * Full Steam - Battle Arena Game Engine
+ * Built with PixiJS
  */
 
 /**
@@ -77,24 +77,6 @@ class PlayerInterpolator {
         if (diff > Math.PI) diff -= 2 * Math.PI;
         if (diff < -Math.PI) diff += 2 * Math.PI;
         return from + diff * factor;
-    }
-    
-    convertScreenToWorld(screenX, screenY) {
-        // Convert from screen coordinates (PIXI) back to world coordinates (physics)
-        // This is the inverse of worldToIsometric transformation
-        return {
-            x: screenX,
-            y: -screenY  // Invert Y to convert from PIXI coordinates to physics coordinates
-        };
-    }
-    
-    convertWorldToScreen(worldX, worldY) {
-        // Convert from world coordinates (physics) to screen coordinates (PIXI)
-        // This matches the worldToIsometric transformation in GameEngine
-        return {
-            x: worldX,
-            y: -worldY  // Invert Y to convert from physics coordinates to PIXI coordinates
-        };
     }
     
     destroy() {
@@ -246,13 +228,13 @@ class GameEngine {
         this.playerInterpolators = new Map();
         this.projectiles = new Map();
         this.projectileInterpolators = new Map();
-        this.strategicLocations = new Map();
         this.obstacles = new Map();
         this.fieldEffects = new Map();
         this.beams = new Map();
         this.utilityEntities = new Map(); // For turrets, barriers, nets, mines, teleport pads
         this.flags = new Map(); // CTF flags
         this.kothZones = new Map(); // King of the Hill zones
+        this.teleportConnections = new Map(); // Track teleport pad connections
         this.myPlayerId = null;
         this.gameState = null;
         this.websocket = null;
@@ -836,15 +818,6 @@ class GameEngine {
         projectileGraphics.drawCircle(0, 0, 3);
         projectileGraphics.endFill();
         this.projectileTexture = this.app.renderer.generateTexture(projectileGraphics);
-        
-        // Strategic location - clean circular area
-        const locationGraphics = new PIXI.Graphics();
-        locationGraphics.beginFill(0x8e44ad, 0.3);
-        locationGraphics.drawCircle(0, 0, 50);
-        locationGraphics.endFill();
-        locationGraphics.lineStyle(3, 0x9b59b6);
-        locationGraphics.drawCircle(0, 0, 50);
-        this.locationTexture = this.app.renderer.generateTexture(locationGraphics);
 
         // Obstacle - boulder
         const boulderGraphics = new PIXI.Graphics();
@@ -946,14 +919,10 @@ class GameEngine {
     }
     
     worldToIsometric(worldX, worldY) {
-        // Simple 2D top-down view with inverted Y axis to match screen coordinates
-        // In physics: +Y = up, in screen: +Y = down
         return { x: worldX, y: -worldY };
     }
     
     worldVelocityToIsometric(vx, vy) {
-        // Convert velocity from world coordinates to isometric screen coordinates
-        // Same transformation as position: invert Y axis
         return { x: vx, y: -vy };
     }
     
@@ -995,12 +964,6 @@ class GameEngine {
         
         // Store terrain information
         this.terrainData = data.terrain || null;
-        
-        if (data.locations) {
-            data.locations.forEach(location => {
-                this.createStrategicLocation(location);
-            });
-        }
 
         if (data.obstacles) {
             data.obstacles.forEach(obstacle => {
@@ -1070,25 +1033,6 @@ class GameEngine {
                 if (!currentProjectileIds.has(projectileId)) {
                     this.removeProjectile(projectileId);
                 }
-            }
-        }
-        
-        if (data.locations) {
-            // Check if any location is being captured
-            let anyLocationBeingCaptured = false;
-            
-            data.locations.forEach(locationData => {
-                this.updateStrategicLocation(locationData);
-                
-                if (locationData.capturingPlayer && locationData.captureProgress > 0) {
-                    anyLocationBeingCaptured = true;
-                    this.showCaptureProgress(locationData);
-                }
-            });
-            
-            // Hide capture progress if no location is being captured
-            if (!anyLocationBeingCaptured) {
-                this.hideCaptureProgress();
             }
         }
 
@@ -1290,6 +1234,11 @@ class GameEngine {
         entityContainer.entityGraphics = entityGraphics;
         this.utilityEntities.set(entityData.id, entityContainer);
         this.gameContainer.addChild(entityContainer);
+        
+        // Handle teleport pad connections
+        if (entityData.type === 'TELEPORT_PAD') {
+            this.updateTeleportPadConnections(entityData);
+        }
         
         // Enable sorting
         this.gameContainer.sortableChildren = true;
@@ -2879,45 +2828,6 @@ class GameEngine {
         // Destroy the container itself
         projectileContainer.destroy({ children: true, texture: false, baseTexture: false });
     }
-    
-    createStrategicLocation(locationData) {
-        const sprite = new PIXI.Sprite(this.locationTexture);
-        sprite.anchor.set(0.5);
-        
-        const isoPos = this.worldToIsometric(locationData.x, locationData.y);
-        sprite.position.set(isoPos.x, isoPos.y);
-        
-        const nameLabel = new PIXI.Text(locationData.name, {
-            fontSize: 16,
-            fill: 0xffffff,
-            stroke: 0x000000,
-            strokeThickness: 3,
-            fontWeight: 'bold'
-        });
-        nameLabel.anchor.set(0.5);
-        nameLabel.position.set(0, 0);
-        sprite.addChild(nameLabel);
-        
-        // Set strategic location z-index below players
-        sprite.zIndex = 1;
-        
-        sprite.locationData = locationData;
-        this.strategicLocations.set(locationData.id, sprite);
-        this.gameContainer.addChild(sprite);
-    }
-    
-    updateStrategicLocation(locationData) {
-        const sprite = this.strategicLocations.get(locationData.id);
-        if (!sprite) return;
-        
-        if (locationData.controllingPlayer) {
-            sprite.tint = locationData.controllingPlayer === this.myPlayerId ? 0x2ecc71 : 0xe74c3c;
-        } else {
-            sprite.tint = 0x8e44ad;
-        }
-        
-        sprite.locationData = locationData;
-    }
 
     createObstacle(obstacleData) {
         const graphics = this.createObstacleGraphics(obstacleData);
@@ -3077,14 +2987,27 @@ class GameEngine {
     removeObstacle(obstacleId) {
         const sprite = this.obstacles.get(obstacleId);
         if (sprite) {
+            // Clean up graphics content
+            if (sprite.clear && typeof sprite.clear === 'function') {
+                sprite.clear();
+            }
+            
+            // Remove from game container
             this.gameContainer.removeChild(sprite);
             this.obstacles.delete(obstacleId);
+            
+            // Clear references
+            sprite.obstacleData = null;
+            sprite.destroy();
         }
         
         // Remove health bar if it exists
         if (this.obstacleHealthBars && this.obstacleHealthBars.has(obstacleId)) {
             const healthBar = this.obstacleHealthBars.get(obstacleId);
-            this.nameContainer.removeChild(healthBar);
+            if (healthBar.parent) {
+                healthBar.parent.removeChild(healthBar);
+            }
+            healthBar.destroy();
             this.obstacleHealthBars.delete(obstacleId);
         }
     }
@@ -4076,13 +3999,19 @@ class GameEngine {
         
         // Link indicator
         if (isLinked) {
-            // Draw connection symbols
+            // Draw connection symbols - more prominent
             for (let i = 0; i < 4; i++) {
                 const angle = (i / 4) * Math.PI * 2;
-                const x = Math.cos(angle) * 14;
-                const y = Math.sin(angle) * 14;
+                const x = Math.cos(angle) * 16;
+                const y = Math.sin(angle) * 16;
                 
-                graphics.beginFill(0x9b59b6, 0.8);
+                // Outer glow effect
+                graphics.beginFill(0x9b59b6, 0.3);
+                graphics.drawCircle(x, y, 6);
+                graphics.endFill();
+                
+                // Arrow pointing outward
+                graphics.beginFill(0x9b59b6, 0.9);
                 graphics.drawPolygon([
                     x - 2, y - 2,
                     x + 2, y - 2,
@@ -4090,9 +4019,14 @@ class GameEngine {
                     x + 2, y + 2,
                     x - 2, y + 2,
                     x - 4, y
-                ]); // Arrow pointing outward
+                ]);
                 graphics.endFill();
             }
+            
+            // Add pulsing connection ring
+            const connectionRingAlpha = pulseValue * 0.6;
+            graphics.lineStyle(2, 0x9b59b6, connectionRingAlpha);
+            graphics.drawCircle(0, 0, 25);
         }
         
         return graphics;
@@ -4187,6 +4121,141 @@ class GameEngine {
         const newGraphics = this.createTeleportPadGraphics(new PIXI.Graphics(), entityData);
         container.addChild(newGraphics);
         container.entityGraphics = newGraphics;
+        
+        // Update connection lines if this pad is linked
+        this.updateTeleportPadConnections(entityData);
+    }
+    
+    /**
+     * Update teleport pad connection lines
+     */
+    updateTeleportPadConnections(entityData) {
+        const padId = entityData.id;
+        const linkedPadId = entityData.linkedPadId;
+        
+        // Remove existing connection for this pad
+        if (this.teleportConnections.has(padId)) {
+            const connection = this.teleportConnections.get(padId);
+            if (connection.parent) {
+                connection.parent.removeChild(connection);
+            }
+            connection.destroy();
+            this.teleportConnections.delete(padId);
+        }
+        
+        // Create new connection if this pad is linked
+        if (linkedPadId && this.utilityEntities.has(linkedPadId)) {
+            const linkedPad = this.utilityEntities.get(linkedPadId);
+            if (linkedPad && linkedPad.entityData && linkedPad.entityData.type === 'TELEPORT_PAD') {
+                this.createTeleportConnection(padId, linkedPadId, entityData, linkedPad.entityData);
+            }
+        }
+    }
+    
+    /**
+     * Create a visual connection line between two teleport pads
+     */
+    createTeleportConnection(padId1, padId2, padData1, padData2) {
+        const connectionGraphics = new PIXI.Graphics();
+        
+        // Convert world positions to screen coordinates
+        const pos1 = this.worldToIsometric(padData1.x, padData1.y);
+        const pos2 = this.worldToIsometric(padData2.x, padData2.y);
+        
+        // Create animated connection line
+        this.drawAnimatedConnectionLine(connectionGraphics, pos1, pos2);
+        
+        // Add to game container (behind other entities)
+        connectionGraphics.zIndex = 1;
+        this.gameContainer.addChild(connectionGraphics);
+        
+        // Store connection for cleanup
+        this.teleportConnections.set(padId1, connectionGraphics);
+        
+        // Add animation ticker for the connection line
+        const animateConnection = () => {
+            if (!connectionGraphics.parent) {
+                return; // Connection was removed
+            }
+            
+            connectionGraphics.clear();
+            this.drawAnimatedConnectionLine(connectionGraphics, pos1, pos2);
+        };
+        
+        connectionGraphics.animationFunction = animateConnection;
+        this.app.ticker.add(animateConnection);
+    }
+    
+    /**
+     * Draw an animated connection line between two points
+     */
+    drawAnimatedConnectionLine(graphics, pos1, pos2) {
+        const time = performance.now() * 0.003; // Slow animation
+        const distance = Math.sqrt((pos2.x - pos1.x) ** 2 + (pos2.y - pos1.y) ** 2);
+        
+        // Create flowing energy effect along the line
+        const segments = Math.max(8, Math.floor(distance / 20));
+        const segmentLength = distance / segments;
+        
+        // Calculate direction vector
+        const dx = (pos2.x - pos1.x) / distance;
+        const dy = (pos2.y - pos1.y) / distance;
+        
+        // Draw animated segments
+        for (let i = 0; i < segments; i++) {
+            const progress = i / segments;
+            const segmentStart = progress * distance;
+            const segmentEnd = (progress + 1 / segments) * distance;
+            
+            // Animate the segment opacity
+            const waveOffset = (time + progress * 3) % (Math.PI * 2);
+            const alpha = 0.3 + 0.4 * Math.sin(waveOffset);
+            
+            // Calculate segment positions
+            const startX = pos1.x + dx * segmentStart;
+            const startY = pos1.y + dy * segmentStart;
+            const endX = pos1.x + dx * segmentEnd;
+            const endY = pos1.y + dy * segmentEnd;
+            
+            // Draw segment with gradient effect
+            graphics.lineStyle(3, 0x9b59b6, alpha);
+            graphics.moveTo(startX, startY);
+            graphics.lineTo(endX, endY);
+            
+            // Add energy particles along the line
+            if (i % 2 === 0) {
+                const particleProgress = (progress + 0.5 / segments) % 1;
+                const particleX = pos1.x + dx * particleProgress * distance;
+                const particleY = pos1.y + dy * particleProgress * distance;
+                
+                graphics.beginFill(0xffffff, alpha * 0.8);
+                graphics.drawCircle(particleX, particleY, 2);
+                graphics.endFill();
+            }
+        }
+        
+        // Add connection indicators at both ends
+        graphics.beginFill(0x9b59b6, 0.6);
+        graphics.drawCircle(pos1.x, pos1.y, 3);
+        graphics.drawCircle(pos2.x, pos2.y, 3);
+        graphics.endFill();
+        
+        // Add directional arrows
+        const midX = (pos1.x + pos2.x) / 2;
+        const midY = (pos1.y + pos2.y) / 2;
+        
+        // Arrow pointing from pad1 to pad2
+        const arrowSize = 4;
+        const perpX = -dy * arrowSize;
+        const perpY = dx * arrowSize;
+        
+        graphics.beginFill(0x9b59b6, 0.8);
+        graphics.drawPolygon([
+            midX + dx * arrowSize, midY + dy * arrowSize,
+            midX - dx * arrowSize + perpX, midY - dy * arrowSize + perpY,
+            midX - dx * arrowSize - perpX, midY - dy * arrowSize - perpY
+        ]);
+        graphics.endFill();
     }
     
     /**
@@ -4253,6 +4322,38 @@ class GameEngine {
      * Clean up utility entity container
      */
     cleanupUtilityEntityContainer(container) {
+        // Clean up teleport pad connections if this is a teleport pad
+        if (container.entityData && container.entityData.type === 'TELEPORT_PAD') {
+            const padId = container.entityData.id;
+            
+            // Remove connection from this pad
+            if (this.teleportConnections.has(padId)) {
+                const connection = this.teleportConnections.get(padId);
+                if (connection.animationFunction) {
+                    this.app.ticker.remove(connection.animationFunction);
+                }
+                if (connection.parent) {
+                    connection.parent.removeChild(connection);
+                }
+                connection.destroy();
+                this.teleportConnections.delete(padId);
+            }
+            
+            // Remove any connections TO this pad
+            for (let [otherPadId, connection] of this.teleportConnections) {
+                if (connection.entityData && connection.entityData.linkedPadId === padId) {
+                    if (connection.animationFunction) {
+                        this.app.ticker.remove(connection.animationFunction);
+                    }
+                    if (connection.parent) {
+                        connection.parent.removeChild(connection);
+                    }
+                    connection.destroy();
+                    this.teleportConnections.delete(otherPadId);
+                }
+            }
+        }
+        
         // Clean up graphics
         if (container.entityGraphics) {
             container.entityGraphics.clear();
@@ -5568,22 +5669,7 @@ class GameEngine {
         // Calculate offsets to center the scaled world within the available minimap space
         const offsetX = (mapWidth - scaledWorldWidth) / 2;
         const offsetY = (mapHeight - scaledWorldHeight) / 2;
-        
-        // Draw strategic locations
-        this.strategicLocations.forEach(location => {
-            const data = location.locationData;
-            const x = (data.x + this.worldBounds.width / 2) * scale + offsetX;
-            const y = ((-data.y) + this.worldBounds.height / 2) * scale + offsetY; // Invert Y for minimap
-            
-            const locationDot = new PIXI.Graphics();
-            locationDot.beginFill(data.controllingPlayer === this.myPlayerId ? 0x2ecc71 : 
-                                 data.controllingPlayer ? 0xe74c3c : 0x8e44ad);
-            locationDot.drawCircle(x, y, 3);
-            locationDot.endFill();
-            
-            this.minimapContent.addChild(locationDot);
-        });
-        
+
         // Draw players
         this.players.forEach(player => {
             const data = player.playerData;
@@ -5613,25 +5699,6 @@ class GameEngine {
         });
         
         this.hudMinimap.addChild(this.minimapContent);
-    }
-    
-    showCaptureProgress(locationData) {
-        const progressEl = document.getElementById('capture-progress');
-        const fillEl = document.getElementById('capture-fill');
-        const textEl = document.getElementById('capture-text');
-        
-        if (progressEl && fillEl && textEl) {
-            progressEl.style.display = 'block';
-            fillEl.style.width = `${locationData.captureProgress * 100}%`;
-            textEl.textContent = `Capturing ${locationData.name}...`;
-        }
-    }
-    
-    hideCaptureProgress() {
-        const progressEl = document.getElementById('capture-progress');
-        if (progressEl) {
-            progressEl.style.display = 'none';
-        }
     }
     
     showDeathScreen(data) {
@@ -5959,6 +6026,20 @@ class GameEngine {
             }
         });
         
+        // Clean up orphaned obstacle health bars
+        if (this.obstacleHealthBars) {
+            this.obstacleHealthBars.forEach((healthBar, obstacleId) => {
+                if (!this.obstacles.has(obstacleId)) {
+                    console.warn(`Found orphaned obstacle health bar for ID ${obstacleId}, cleaning up`);
+                    if (healthBar.parent) {
+                        healthBar.parent.removeChild(healthBar);
+                    }
+                    healthBar.destroy();
+                    this.obstacleHealthBars.delete(obstacleId);
+                }
+            });
+        }
+
         // Force garbage collection if available (Chrome DevTools)
         if (window.gc) {
             window.gc();
@@ -6003,6 +6084,51 @@ class GameEngine {
         
         this.utilityEntities.forEach(entity => this.cleanupUtilityEntityContainer(entity));
         this.utilityEntities.clear();
+
+        // Clean up obstacles
+        this.obstacles.forEach(obstacle => {
+            if (obstacle.clear && typeof obstacle.clear === 'function') {
+                obstacle.clear();
+            }
+            obstacle.obstacleData = null;
+            obstacle.destroy();
+        });
+        this.obstacles.clear();
+        
+        // Clean up obstacle health bars
+        if (this.obstacleHealthBars) {
+            this.obstacleHealthBars.forEach(healthBar => {
+                if (healthBar.parent) {
+                    healthBar.parent.removeChild(healthBar);
+                }
+                healthBar.destroy();
+            });
+            this.obstacleHealthBars.clear();
+        }
+        
+        // Clean up flags
+        this.flags.forEach(flag => {
+            flag.destroy({ children: true });
+        });
+        this.flags.clear();
+        
+        // Clean up KOTH zones
+        this.kothZones.forEach(zone => {
+            zone.destroy({ children: true });
+        });
+        this.kothZones.clear();
+        
+        // Clean up teleport pad connections
+        this.teleportConnections.forEach(connection => {
+            if (connection.animationFunction) {
+                this.app.ticker.remove(connection.animationFunction);
+            }
+            if (connection.parent) {
+                connection.parent.removeChild(connection);
+            }
+            connection.destroy();
+        });
+        this.teleportConnections.clear();
         
         // Clean up PIXI app
         if (this.app) {

@@ -51,6 +51,12 @@ public class Obstacle extends GameEntity {
     private final Shape primaryShape;
     @Getter
     private final double boundingRadius;
+    /**
+     * -- GETTER --
+     * Get shape-specific data for client rendering.
+     * Returns a map containing shape information for the client.
+     */
+    @Getter
     private final Map<String, Object> shapeData;
 
     // Player barrier specific fields
@@ -100,10 +106,10 @@ public class Obstacle extends GameEntity {
         Body body = new Body();
         Convex shape = createShapeForType(type);
         body.addFixture(shape);
-        
+
         // Set restitution for obstacles - moderate bounce to make projectiles bounce off nicely
         body.getFixture(0).setRestitution(0.6); // Retains 60% of velocity on bounce
-        
+
         body.setMass(MassType.INFINITE);
         body.getTransform().setTranslation(x, y);
 
@@ -509,14 +515,6 @@ public class Obstacle extends GameEntity {
         return data;
     }
 
-    /**
-     * Get shape-specific data for client rendering.
-     * Returns a map containing shape information for the client.
-     */
-    public Map<String, Object> getShapeData() {
-        return new HashMap<>(shapeData);
-    }
-
     @Override
     public void update(double deltaTime) {
         // Handle temporary barriers
@@ -532,7 +530,6 @@ public class Obstacle extends GameEntity {
 
             lastUpdateTime = System.currentTimeMillis();
         }
-        // Permanent obstacles are static and don't need updates
     }
 
     /**
@@ -555,8 +552,6 @@ public class Obstacle extends GameEntity {
         };
 
         ObstacleType randomType = chaoticTypes[random.nextInt(chaoticTypes.length)];
-
-        // More dramatic position chaos
         double xOffset = random.nextGaussian() * 15;
         double yOffset = random.nextGaussian() * 15;
 
@@ -589,16 +584,6 @@ public class Obstacle extends GameEntity {
     }
 
     /**
-     * Get the remaining lifespan as a percentage (for temporary barriers)
-     */
-    public double getLifespanPercent() {
-        if (type != ObstacleType.PLAYER_BARRIER || lifespan <= 0) {
-            return 1.0; // Permanent obstacles are always at 100%
-        }
-        return Math.max(0, timeRemaining / lifespan);
-    }
-
-    /**
      * Override damage handling - barriers can be destroyed, permanent obstacles cannot
      */
     @Override
@@ -607,16 +592,12 @@ public class Obstacle extends GameEntity {
             if (!active) {
                 return false;
             }
-
-            boolean wasActive = active;
             health -= damage;
             if (health <= 0) {
                 active = false;
             }
-            return wasActive && !active; // Return true if barrier was destroyed
+            return !active; // Return true if barrier was destroyed
         }
-
-        // Permanent obstacles are indestructible
         return false;
     }
 }
