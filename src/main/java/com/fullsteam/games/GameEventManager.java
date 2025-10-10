@@ -165,6 +165,13 @@ public class GameEventManager {
     }
     
     /**
+     * Convenience method to broadcast a player join event with team color
+     */
+    public void broadcastPlayerJoin(String playerName, int teamNumber) {
+        broadcastEvent(GameEvent.createPlayerJoinEvent(playerName, teamNumber));
+    }
+    
+    /**
      * Convenience method to broadcast a capture event
      */
     public void broadcastCapture(String playerName, String locationName) {

@@ -668,8 +668,10 @@
         createUtilityWeaponSelection();
         createPresetButtons();
         
-        // Initialize with default values
-        resetToDefaults();
+        // Try to load saved configuration, otherwise use defaults
+        if (!loadSavedConfiguration()) {
+            resetToDefaults();
+        }
         updatePointDisplay();
     }
 
@@ -1003,6 +1005,92 @@
             validationElement.classList.remove('hidden');
             startButton.disabled = false;
         }
+        
+        // Auto-save configuration when valid
+        if (totalPoints <= maxPoints) {
+            saveConfiguration();
+        }
+    }
+
+    function saveConfiguration() {
+        try {
+            const config = {
+                weapon: currentWeapon,
+                utilityWeapon: currentUtilityWeapon,
+                timestamp: Date.now()
+            };
+            localStorage.setItem('weaponConfig', JSON.stringify(config));
+        } catch (error) {
+            console.error('Failed to save configuration:', error);
+        }
+    }
+
+    function loadSavedConfiguration() {
+        try {
+            const saved = localStorage.getItem('weaponConfig');
+            if (!saved) {
+                return false;
+            }
+
+            const config = JSON.parse(saved);
+            
+            // Validate the saved configuration structure
+            if (!config.weapon || !config.weapon.attributes || !config.weapon.effects || !config.weapon.ordinance) {
+                return false;
+            }
+
+            // Load weapon configuration
+            currentWeapon = {
+                attributes: { ...config.weapon.attributes },
+                effects: [...config.weapon.effects],
+                ordinance: config.weapon.ordinance
+            };
+
+            // Load utility weapon
+            if (config.utilityWeapon) {
+                currentUtilityWeapon = config.utilityWeapon;
+            }
+
+            // Apply to UI
+            applyConfigurationToUI();
+            
+            return true;
+        } catch (error) {
+            console.error('Failed to load saved configuration:', error);
+            return false;
+        }
+    }
+
+    function applyConfigurationToUI() {
+        // Apply attributes to sliders
+        Object.entries(currentWeapon.attributes).forEach(([key, value]) => {
+            const slider = document.getElementById(`attr-${key}`);
+            const valueSpan = document.getElementById(`value-${key}`);
+            if (slider && valueSpan) {
+                slider.value = value;
+                valueSpan.textContent = value;
+            }
+        });
+
+        // Apply effects to checkboxes
+        weaponData.effects.forEach(effect => {
+            const checkbox = document.getElementById(`effect-${effect.name}`);
+            if (checkbox) {
+                checkbox.checked = currentWeapon.effects.includes(effect.name);
+            }
+        });
+
+        // Apply ordinance to radio buttons
+        const radio = document.getElementById(`ord-${currentWeapon.ordinance}`);
+        if (radio) {
+            radio.checked = true;
+        }
+
+        // Apply utility weapon to radio buttons
+        const utilityRadio = document.getElementById(`utility-${currentUtilityWeapon}`);
+        if (utilityRadio) {
+            utilityRadio.checked = true;
+        }
     }
 
     function getPlayerConfig() {
@@ -1054,6 +1142,9 @@
 
     // Start game button handler
     document.getElementById('start-game').addEventListener('click', () => {
+        // Save current configuration before starting game
+        saveConfiguration();
+        
         const playerConfig = getPlayerConfig();
         const encodedConfig = encodePlayerConfig(playerConfig);
         

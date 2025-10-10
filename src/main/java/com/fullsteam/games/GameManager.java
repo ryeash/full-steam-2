@@ -598,8 +598,8 @@ public class GameManager {
         log.info("Player {} ({}) joined game {} successfully. Total players: {}, Total sessions: {}",
                 playerSession.getPlayerId(), playerSession.getPlayerName(), gameId, gameEntities.getPlayers().size(), gameEntities.getPlayerSessions().size());
 
-        // Broadcast player join event
-        gameEventManager.broadcastSystemMessage(playerSession.getPlayerName() + " joined the game");
+        // Broadcast player join event with team color
+        broadcastPlayerJoin(playerSession.getPlayerName(), assignedTeam);
 
         // Adjust AI players when a human player joins
         adjustAIPlayers();
@@ -1003,10 +1003,10 @@ public class GameManager {
      */
     private String getTeamColorHex(int team) {
         return switch (team) {
-            case 0 -> "#4CAF50";  // Green
-            case 1 -> "#F44336";  // Red
-            case 2 -> "#2196F3";  // Blue
-            case 3 -> "#FF9800";  // Orange
+            case 1 -> "#4CAF50";  // Green
+            case 2 -> "#F44336";  // Red
+            case 3 -> "#2196F3";  // Blue
+            case 4 -> "#FF9800";  // Orange
             default -> "#FFFFFF"; // White
         };
     }
@@ -1566,6 +1566,13 @@ public class GameManager {
     }
 
     // Game Event Broadcasting Convenience Methods
+
+    /**
+     * Broadcast a player join event with team color
+     */
+    public void broadcastPlayerJoin(String playerName, int teamNumber) {
+        gameEventManager.broadcastPlayerJoin(playerName, teamNumber);
+    }
 
     /**
      * Broadcast a system message to all players

@@ -158,12 +158,37 @@ public class GameEvent {
      */
     private static String getTeamColorHex(int teamNumber) {
         return switch (teamNumber) {
-            case 0 -> "#4CAF50";  // Green (Team 1)
-            case 1 -> "#F44336";  // Red (Team 2)
-            case 2 -> "#2196F3";  // Blue (Team 3)
-            case 3 -> "#FF9800";  // Orange (Team 4)
+            case 1 -> "#4CAF50";  // Green (Team 1)
+            case 2 -> "#F44336";  // Red (Team 2)
+            case 3 -> "#2196F3";  // Blue (Team 3)
+            case 4 -> "#FF9800";  // Orange (Team 4)
             default -> "#FFFFFF"; // White (FFA/Unknown)
         };
+    }
+    
+    /**
+     * Create a player join event with team-colored player name
+     */
+    public static GameEvent createPlayerJoinEvent(String playerName, int teamNumber) {
+        StringBuilder messageBuilder = new StringBuilder();
+        
+        // Add player name with team color
+        if (teamNumber > 0) {
+            String teamColor = getTeamColorHex(teamNumber);
+            messageBuilder.append(String.format("<color:%s>%s</color>", teamColor, playerName));
+        } else {
+            messageBuilder.append(playerName);
+        }
+        
+        messageBuilder.append(" joined the game");
+        
+        return GameEvent.builder()
+                .message(messageBuilder.toString())
+                .category(EventCategory.SYSTEM)
+                .color(EventCategory.SYSTEM.getDefaultColor())
+                .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
+                .displayDuration(3000L)
+                .build();
     }
     
     /**
