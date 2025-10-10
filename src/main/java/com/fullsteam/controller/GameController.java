@@ -165,6 +165,15 @@ public class GameController {
         presets.put("TOXIC_SPRAYER", createPresetData(WeaponConfig.TOXIC_SPRAYER_PRESET));
         presets.put("ICE_CANNON", createPresetData(WeaponConfig.ICE_CANNON_PRESET));
 
+        // New weapon presets
+        presets.put("TWIN_SIXES", createPresetData(WeaponConfig.TWIN_SIXES_PRESET));
+
+        // Beam weapon presets
+        presets.put("LASER_RIFLE", createPresetData(WeaponConfig.LASER_RIFLE_PRESET));
+        presets.put("PLASMA_CANNON", createPresetData(WeaponConfig.PLASMA_CANNON_PRESET));
+        presets.put("MEDIC_BEAM", createPresetData(WeaponConfig.MEDIC_BEAM_PRESET));
+        presets.put("RAIL_CANNON", createPresetData(WeaponConfig.RAIL_CANNON_PRESET));
+
         data.put("presets", presets);
 
         // Point budget

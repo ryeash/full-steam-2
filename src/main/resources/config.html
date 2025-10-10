@@ -569,6 +569,7 @@
                         <button class="preset-tab" data-category="ordinance">Ordinance</button>
                         <button class="preset-tab" data-category="effects">Effects</button>
                         <button class="preset-tab" data-category="explosive">Explosive</button>
+                        <button class="preset-tab" data-category="beam">Beam</button>
                     </div>
                     
                     <div class="preset-category active" id="category-basic">
@@ -592,6 +593,12 @@
                     <div class="preset-category" id="category-explosive">
                         <div class="preset-buttons" id="preset-buttons-explosive">
                             <!-- Explosive preset buttons will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div class="preset-category" id="category-beam">
+                        <div class="preset-buttons" id="preset-buttons-beam">
+                            <!-- Beam preset buttons will be populated by JavaScript -->
                         </div>
                     </div>
                 </div>
@@ -834,10 +841,11 @@
     function createPresetButtons() {
         // Define preset categories
         const categories = {
-            basic: ['ASSAULT_RIFLE', 'HAND_CANNON', 'PLASMA_RIFLE'],
+            basic: ['ASSAULT_RIFLE', 'HAND_CANNON', 'PLASMA_RIFLE', 'TWIN_SIXES'],
             ordinance: ['SIEGE_CANNON', 'PRECISION_DART_GUN', 'FLAME_PROJECTOR'],
             effects: ['BOUNCY_SMG', 'PIERCING_RIFLE', 'INCENDIARY_SHOTGUN', 'SEEKER_DART', 'ARC_PISTOL', 'TOXIC_SPRAYER', 'ICE_CANNON'],
-            explosive: ['EXPLOSIVE_SNIPER', 'ROCKET_LAUNCHER', 'GRENADE_LAUNCHER', 'CLUSTER_MORTAR']
+            explosive: ['EXPLOSIVE_SNIPER', 'ROCKET_LAUNCHER', 'GRENADE_LAUNCHER', 'CLUSTER_MORTAR'],
+            beam: ['LASER_RIFLE', 'PLASMA_CANNON', 'MEDIC_BEAM', 'RAIL_CANNON']
         };
         
         // Create buttons for each category

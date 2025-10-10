@@ -16,7 +16,8 @@ public class AIWeaponSelector {
     private static final List<WeaponConfig> BASIC_WEAPONS = List.of(
             WeaponConfig.ASSAULT_RIFLE_PRESET,
             WeaponConfig.HAND_CANNON_PRESET,
-            WeaponConfig.PLASMA_RIFLE_PRESET
+            WeaponConfig.PLASMA_RIFLE_PRESET,
+            WeaponConfig.TWIN_SIXES_PRESET
     );
 
     private static final List<WeaponConfig> ORDINANCE_WEAPONS = List.of(
@@ -42,12 +43,19 @@ public class AIWeaponSelector {
             WeaponConfig.CLUSTER_MORTAR_PRESET
     );
 
+    private static final List<WeaponConfig> BEAM_WEAPONS = List.of(
+            WeaponConfig.LASER_RIFLE_PRESET,
+            WeaponConfig.PLASMA_CANNON_PRESET,
+            WeaponConfig.RAIL_CANNON_PRESET
+    );
+
     // Combined list of all weapon presets for completely random selection
     private static final List<WeaponConfig> ALL_WEAPONS = List.of(
             // Basic weapons
             WeaponConfig.ASSAULT_RIFLE_PRESET,
             WeaponConfig.HAND_CANNON_PRESET,
             WeaponConfig.PLASMA_RIFLE_PRESET,
+            WeaponConfig.TWIN_SIXES_PRESET,
 
             // Ordinance weapons
             WeaponConfig.SIEGE_CANNON_PRESET,
@@ -67,7 +75,12 @@ public class AIWeaponSelector {
             WeaponConfig.EXPLOSIVE_SNIPER_PRESET,
             WeaponConfig.ROCKET_LAUNCHER_PRESET,
             WeaponConfig.GRENADE_LAUNCHER_PRESET,
-            WeaponConfig.CLUSTER_MORTAR_PRESET
+            WeaponConfig.CLUSTER_MORTAR_PRESET,
+
+            // Beam weapons
+            WeaponConfig.LASER_RIFLE_PRESET,
+            WeaponConfig.PLASMA_CANNON_PRESET,
+            WeaponConfig.RAIL_CANNON_PRESET
     );
 
     /**
@@ -104,7 +117,9 @@ public class AIWeaponSelector {
                         WeaponConfig.PIERCING_RIFLE_PRESET,
                         WeaponConfig.EXPLOSIVE_SNIPER_PRESET,
                         WeaponConfig.PRECISION_DART_GUN_PRESET,
-                        WeaponConfig.SIEGE_CANNON_PRESET
+                        WeaponConfig.SIEGE_CANNON_PRESET,
+                        WeaponConfig.LASER_RIFLE_PRESET,
+                        WeaponConfig.RAIL_CANNON_PRESET
                 );
                 return sniperWeapons.get(random.nextInt(sniperWeapons.size()));
 
@@ -115,7 +130,8 @@ public class AIWeaponSelector {
                         WeaponConfig.INCENDIARY_SHOTGUN_PRESET,
                         WeaponConfig.FLAME_PROJECTOR_PRESET,
                         WeaponConfig.ARC_PISTOL_PRESET,
-                        WeaponConfig.ASSAULT_RIFLE_PRESET
+                        WeaponConfig.ASSAULT_RIFLE_PRESET,
+                        WeaponConfig.TWIN_SIXES_PRESET
                 );
                 return rusherWeapons.get(random.nextInt(rusherWeapons.size()));
 
@@ -236,7 +252,8 @@ public class AIWeaponSelector {
                     WeaponConfig.FLAME_PROJECTOR_PRESET,
                     WeaponConfig.TOXIC_SPRAYER_PRESET,
                     WeaponConfig.BOUNCY_SMG_PRESET,
-                    WeaponConfig.ARC_PISTOL_PRESET
+                    WeaponConfig.ARC_PISTOL_PRESET,
+                    WeaponConfig.TWIN_SIXES_PRESET
             );
             return shortRange.get(random.nextInt(shortRange.size()));
         }
@@ -247,7 +264,9 @@ public class AIWeaponSelector {
                     WeaponConfig.PIERCING_RIFLE_PRESET,
                     WeaponConfig.EXPLOSIVE_SNIPER_PRESET,
                     WeaponConfig.PRECISION_DART_GUN_PRESET,
-                    WeaponConfig.SIEGE_CANNON_PRESET
+                    WeaponConfig.SIEGE_CANNON_PRESET,
+                    WeaponConfig.LASER_RIFLE_PRESET,
+                    WeaponConfig.RAIL_CANNON_PRESET
             );
             return longRange.get(random.nextInt(longRange.size()));
         }
@@ -259,13 +278,16 @@ public class AIWeaponSelector {
     private static boolean isLongRangeWeapon(WeaponConfig weapon) {
         return weapon.range >= 15 || weapon == WeaponConfig.PIERCING_RIFLE_PRESET
                || weapon == WeaponConfig.EXPLOSIVE_SNIPER_PRESET
-               || weapon == WeaponConfig.SIEGE_CANNON_PRESET;
+               || weapon == WeaponConfig.SIEGE_CANNON_PRESET
+               || weapon == WeaponConfig.LASER_RIFLE_PRESET
+               || weapon == WeaponConfig.RAIL_CANNON_PRESET;
     }
 
     private static boolean isShortRangeWeapon(WeaponConfig weapon) {
         return weapon.range <= 6 || weapon == WeaponConfig.INCENDIARY_SHOTGUN_PRESET
                || weapon == WeaponConfig.FLAME_PROJECTOR_PRESET
-               || weapon == WeaponConfig.TOXIC_SPRAYER_PRESET;
+               || weapon == WeaponConfig.TOXIC_SPRAYER_PRESET
+               || weapon == WeaponConfig.TWIN_SIXES_PRESET;
     }
 
     /**

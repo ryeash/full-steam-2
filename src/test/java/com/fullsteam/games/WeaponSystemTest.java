@@ -232,20 +232,20 @@ class WeaponSystemTest extends BaseTestClass {
      */
     private Player createTestPlayerWithBeamWeapon(int id, int team) {
         // Create a weapon config with a beam ordinance
-        // Total: 75 points (attributes) + 25 points (LASER ordinance) = 100 points
+        // Total: 60 points (attributes) + 40 points (LASER ordinance) = 100 points
         WeaponConfig beamConfig = new WeaponConfig(
                 "Test Laser",
-                20, // damage (20 points)
-                10, // fire rate (10 points)
-                15, // range (15 points)
+                15, // damage (15 points)
+                8,  // fire rate (8 points)
+                12, // range (12 points)
                 0,  // accuracy (0 points)
-                20, // magazine size (20 points)
+                15, // magazine size (15 points)
                 10, // reload time (10 points)
                 0,  // projectile speed (not used for beams, 0 points)
                 0,  // bullets per shot (0 points)
-                0,  // linear damping (0 points, must be negative or 0)
+                -10,  // linear damping (0 points, must be negative or 0)
                 Set.of(),
-                Ordinance.LASER // Beam weapon (25 points)
+                Ordinance.LASER // Beam weapon (40 points)
         );
 
         Player player = new Player(id, "TestPlayer" + id, 0, 0, team, 100.0);

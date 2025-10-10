@@ -309,6 +309,86 @@ public class WeaponConfig {
             Ordinance.BULLET  // 0 points, total: 71 + 14 = 85
     );
 
+    // Twin Sixes - Dual-barrel high-damage weapon with spread
+    public static final WeaponConfig TWIN_SIXES_PRESET = new WeaponConfig(
+            "Twin Sixes",
+            40,     // Very high damage
+            14,     // Medium fire rate
+            12,     // Good range
+            -5,     // Imperfect accuracy (spread)
+            7,      // 12 rounds per magazine
+            15,     // Fast reload
+            12,     // Medium projectile speed
+            5,      // 2 bullets per shot
+            0,      // No damping
+            Set.of(),  // No effects
+            Ordinance.BULLET  // 0 points, total: 100 + 0 = 100
+    );
+
+    // Laser Rifle - Instant-hit precision beam weapon
+    public static final WeaponConfig LASER_RIFLE_PRESET = new WeaponConfig(
+            "Laser Rifle",
+            20,     // High damage
+            6,      // Medium fire rate
+            12,     // Long range
+            0,      // Perfect accuracy (beams are always accurate)
+            15,     // Medium magazine
+            7,      // Fast reload
+            0,      // Not used for beams
+            0,      // Single beam
+            -10,      // Not used for beams
+            Set.of(),  // No effects
+            Ordinance.LASER
+    );
+
+    // Plasma Cannon - Continuous damage beam weapon
+    public static final WeaponConfig PLASMA_CANNON_PRESET = new WeaponConfig(
+            "Plasma Cannon",
+            20,     // Medium damage
+            8,      // Medium fire rate
+            10,     // Good range
+            0,      // Perfect accuracy
+            12,     // Medium magazine
+            15,     // Medium reload
+            0,      // Not used for beams
+            0,      // Single beam
+            -10,      // Not used for beams
+            Set.of(),  // No effects
+            Ordinance.PLASMA_BEAM
+    );
+
+    // Medic Beam - Healing support weapon
+    public static final WeaponConfig MEDIC_BEAM_PRESET = new WeaponConfig(
+            "Medic Beam",
+            20,     // Low damage (healing focused)
+            15,     // Medium fire rate
+            12,     // Medium range
+            0,      // Perfect accuracy
+            20,     // Large magazine for sustained healing
+            8,      // Very fast reload
+            0,      // Not used for beams
+            0,      // Single beam
+            -10,      // Not used for beams
+            Set.of(),  // No effects
+            Ordinance.HEAL_BEAM
+    );
+
+    // Rail Cannon - Piercing instant beam weapon
+    public static final WeaponConfig RAIL_CANNON_PRESET = new WeaponConfig(
+            "Rail Cannon",
+            15,     // High damage
+            4,      // Slow fire rate
+            15,     // Very long range
+            0,      // Perfect accuracy
+            6,      // Small magazine
+            15,     // Long reload
+            0,      // Not used for beams
+            0,      // Single beam
+            -10,      // Not used for beams
+            Set.of(),  // No effects
+            Ordinance.RAILGUN
+    );
+
     public int getAttributePoints() {
         return damage + fireRate + range + accuracy + magazineSize + reloadTime + projectileSpeed + bulletsPerShot + linearDamping;
     }
