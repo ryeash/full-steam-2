@@ -193,6 +193,9 @@ public class RuleSystem {
         roundTimeRemaining = rules.getRoundDuration();
         restTimeRemaining = 0;
 
+        // Reset player lives for stock mode (LIMITED respawn mode)
+        resetPlayerLivesForNewRound();
+
         log.info("Round {} started in game {}", currentRound, gameId);
 
         // Broadcast round start event
@@ -274,6 +277,36 @@ public class RuleSystem {
      */
     public boolean shouldProcessWaveRespawn() {
         return waveRespawnTimer <= 0 && !deadPlayersWaitingForWave.isEmpty();
+    }
+
+    /**
+     * Check if a player should be allowed to respawn based on current rules.
+     * This centralizes all respawn logic in the RuleSystem.
+     */
+    public boolean shouldPlayerRespawn(Player player) {
+        if (player.isActive()) {
+            return false; // Player is already active
+        }
+
+        RespawnMode respawnMode = rules.getRespawnMode();
+        
+        switch (respawnMode) {
+            case INSTANT:
+                return player.hasLivesRemaining() && !player.isEliminated();
+                
+            case WAVE:
+                return !player.isEliminated() && deadPlayersWaitingForWave.contains(player);
+                
+            case NEXT_ROUND:
+                return gameState == GameState.PLAYING && !player.isEliminated();
+                
+            case ELIMINATION:
+            case LIMITED:
+                return !player.isEliminated() && player.hasLivesRemaining();
+                
+            default:
+                return true; // Fallback to allow respawn
+        }
     }
 
     // ===== VICTORY CONDITION MANAGEMENT =====
@@ -636,6 +669,25 @@ public class RuleSystem {
         if (rules.hasLimitedLives()) {
             player.initializeLives(rules.getMaxLives());
             log.info("Player {} initialized with {} lives", player.getId(), rules.getMaxLives());
+        }
+    }
+
+    /**
+     * Reset all player lives for a new round (stock mode).
+     * This ensures players get their lives back at the start of each round.
+     */
+    private void resetPlayerLivesForNewRound() {
+        if (rules.hasLimitedLives()) {
+            for (Player player : gameEntities.getAllPlayers()) {
+                player.initializeLives(rules.getMaxLives());
+                log.info("Player {} lives reset to {} for round {}", 
+                        player.getId(), rules.getMaxLives(), currentRound);
+            }
+            
+            // Broadcast lives reset message
+            gameEventManager.broadcastSystemMessage(
+                    String.format("🔄 Round %d - All players have %d lives!", 
+                            currentRound, rules.getMaxLives()));
         }
     }
 

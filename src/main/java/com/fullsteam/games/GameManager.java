@@ -464,6 +464,9 @@ public class GameManager {
                 processWaveRespawns();
             }
 
+            // Process individual player respawns based on rules
+            processPlayerRespawns();
+
             aiPlayerManager.update(gameEntities, deltaTime);
             aiPlayerManager.getAllPlayerInputs().forEach((playerId, input) -> {
                 gameEntities.getPlayerInputs().put(playerId, input);
@@ -1031,8 +1034,6 @@ public class GameManager {
             playerState.put("rotation", player.getRotation());
             playerState.put("health", player.getHealth());
             playerState.put("active", player.isActive());
-            playerState.put("weapon", 0); // Always primary weapon now
-            playerState.put("utilityWeapon", player.getUtilityWeapon().name());
             playerState.put("ammo", player.getCurrentWeapon().getCurrentAmmo());
             playerState.put("maxAmmo", player.getCurrentWeapon().getMagazineSize());
             playerState.put("reloading", player.isReloading());
@@ -1040,6 +1041,8 @@ public class GameManager {
             playerState.put("deaths", player.getDeaths());
             playerState.put("captures", player.getCaptures());
             playerState.put("respawnTime", player.getRespawnTime());
+            playerState.put("livesRemaining", player.getLivesRemaining());
+            playerState.put("eliminated", player.isEliminated());
             playerStates.add(playerState);
         }
         gameState.put("players", playerStates);
@@ -1127,7 +1130,6 @@ public class GameManager {
             turretState.put("active", turret.isActive());
             turretState.put("ownerId", turret.getOwnerId());
             turretState.put("ownerTeam", turret.getOwnerTeam());
-            turretState.put("lifespanPercent", turret.getLifespanPercent());
             turretStates.add(turretState);
         }
         gameState.put("turrets", turretStates);
@@ -1184,7 +1186,6 @@ public class GameManager {
             padState.put("isLinked", teleportPad.isLinked());
             padState.put("isCharging", teleportPad.isCharging());
             padState.put("chargingProgress", teleportPad.getChargingProgress());
-            padState.put("lifespanPercent", teleportPad.getLifespanPercent());
             padState.put("pulseValue", teleportPad.getPulseValue());
             if (teleportPad.getLinkedPad() != null) {
                 padState.put("linkedPadId", teleportPad.getLinkedPad().getId());
@@ -1505,6 +1506,33 @@ public class GameManager {
 
                 log.debug("Wave respawned player {} at ({}, {})",
                         player.getId(), spawnPoint.x, spawnPoint.y);
+            }
+        }
+    }
+
+    /**
+     * Process individual player respawns based on respawn rules.
+     * This centralizes respawn logic in GameManager where RuleSystem is accessible.
+     */
+    private void processPlayerRespawns() {
+        for (Player player : gameEntities.getAllPlayers()) {
+            if (!player.isActive() && player.getRespawnTime() <= 0) {
+                // Player's respawn timer has expired, check if they should respawn
+                if (ruleSystem.shouldPlayerRespawn(player)) {
+                    // Player should respawn - perform respawn
+                    player.setActive(true);
+                    player.setHealth(gameConfig.getPlayerMaxHealth());
+                    player.setRespawnTime(0);
+
+                    // Move to spawn point
+                    Vector2 spawnPoint = findVariedSpawnPointForTeam(player.getTeam());
+                    player.getBody().getTransform().setTranslation(spawnPoint.x, spawnPoint.y);
+                    player.getBody().setLinearVelocity(0, 0);
+                    player.getBody().setAngularVelocity(0);
+
+                    log.debug("Respawned player {} at ({}, {})",
+                            player.getId(), spawnPoint.x, spawnPoint.y);
+                }
             }
         }
     }

@@ -94,12 +94,10 @@ public class Player extends GameEntity {
             }
         }
 
-        // Handle respawning
+        // Handle respawning - timer countdown only, respawn logic handled by GameManager
         if (!active && respawnTime > 0) {
             respawnTime -= deltaTime;
-            if (respawnTime <= 0) {
-                respawn();
-            }
+            // Note: Actual respawn decision is made by GameManager using RuleSystem
         }
 
         lastUpdateTime = System.currentTimeMillis();
@@ -444,7 +442,9 @@ public class Player extends GameEntity {
 
     /**
      * Respawn the player with proper health and state reset.
+     * Note: This method is now deprecated - respawn logic is handled by GameManager.
      */
+    @Deprecated
     public void respawn() {
         active = true;
         health = 100;

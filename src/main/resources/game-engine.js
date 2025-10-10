@@ -259,12 +259,12 @@ class GameEngine {
             this.setupCamera();
             
             this.updateLoadingProgress(30, "Initializing input system...");
-        this.setupInput();
-        
-        this.updateLoadingProgress(40, "Setting up UI...");
-        this.setupUI();
-        this.createConsolidatedHUD();
-        this.createRoundTimer();
+            this.setupInput();
+
+            this.updateLoadingProgress(40, "Setting up UI...");
+            this.setupUI();
+            this.createConsolidatedHUD();
+            this.createRoundTimer();
             
             this.updateLoadingProgress(60, "Loading assets...");
             await this.loadAssets();
@@ -341,8 +341,6 @@ class GameEngine {
 
         // Enable sorting for proper z-index handling
         this.app.stage.sortableChildren = true;
-
-        // Note: Grid creation moved to handleInitialState() to use correct world dimensions
 
         // Handle window resize
         window.addEventListener('resize', () => {
@@ -638,12 +636,30 @@ class GameEngine {
         inputText.position.set(195, 15);
         infoContainer.addChild(inputText);
         
+        // Lives indicator (for stock mode)
+        const livesLabel = new PIXI.Text('LIVES', {
+            fontSize: 10,
+            fill: 0xffffff,
+            fontWeight: 'bold'
+        });
+        livesLabel.position.set(0, 30);
+        infoContainer.addChild(livesLabel);
+        
+        const livesText = new PIXI.Text('∞', {
+            fontSize: 12,
+            fill: 0x44ff44,
+            fontWeight: 'bold'
+        });
+        livesText.position.set(40, 30);
+        infoContainer.addChild(livesText);
+        
         // Store references for updates (removed health references)
         this.hudWeaponText = weaponText;
         this.hudAmmoText = ammoText;
         this.hudReloadText = reloadText;
         this.hudTeamText = teamText;
         this.hudInputText = inputText;
+        this.hudLivesText = livesText;
         
         this.hudContainer.addChild(infoContainer);
     }
@@ -5458,7 +5474,7 @@ class GameEngine {
         this.updateConsolidatedHUD(myPlayer);
         
         if (!myPlayer.active && myPlayer.respawnTime > 0) {
-            this.showRespawnTimer(myPlayer.respawnTime);
+            this.showRespawnTimer(myPlayer.respawnTime, myPlayer);
         } else {
             this.hideDeathScreen();
         }
@@ -5509,6 +5525,24 @@ class GameEngine {
             } else {
                 this.hudInputText.text = 'Keyboard';
                 this.hudInputText.style.fill = 0xffffff; // White for keyboard
+            }
+        }
+        
+        // Update lives info
+        if (this.hudLivesText) {
+            const livesRemaining = myPlayer.livesRemaining || -1;
+            if (livesRemaining === -1) {
+                // Unlimited lives (default mode)
+                this.hudLivesText.text = '∞';
+                this.hudLivesText.style.fill = 0x44ff44; // Green for unlimited
+            } else if (livesRemaining === 0) {
+                // Eliminated
+                this.hudLivesText.text = 'ELIM';
+                this.hudLivesText.style.fill = 0xff4444; // Red for eliminated
+            } else {
+                // Limited lives (stock mode)
+                this.hudLivesText.text = livesRemaining.toString();
+                this.hudLivesText.style.fill = 0xffaa00; // Orange for limited lives
             }
         }
     }
@@ -5713,13 +5747,49 @@ class GameEngine {
         }
     }
     
-    showRespawnTimer(timeRemaining) {
+    showRespawnTimer(timeRemaining, playerData) {
         const deathScreen = document.getElementById('death-screen');
         const countdown = document.getElementById('respawn-countdown');
+        const deathInfo = document.getElementById('death-info');
         
         if (deathScreen && countdown) {
             deathScreen.style.display = 'flex';
-            countdown.textContent = Math.ceil(timeRemaining);
+            
+            // Check if player is eliminated or out of lives
+            const livesRemaining = playerData?.livesRemaining || -1;
+            const isEliminated = playerData?.eliminated || false;
+            
+            if (isEliminated || livesRemaining === 0) {
+                // Player is eliminated - show elimination message
+                countdown.textContent = 'ELIMINATED';
+                countdown.style.color = '#ff4444';
+                countdown.style.fontWeight = 'bold';
+                
+                if (deathInfo) {
+                    deathInfo.innerHTML = `
+                        <p style="color: #ff6666; margin: 10px 0;">
+                            You have been eliminated from this round.
+                        </p>
+                        <p style="color: #cccccc; font-size: 14px;">
+                            Wait for the next round to respawn.
+                        </p>
+                    `;
+                }
+            } else {
+                // Normal respawn countdown
+                countdown.textContent = Math.ceil(timeRemaining);
+                countdown.style.color = '#f39c12';
+                countdown.style.fontWeight = 'normal';
+                
+                if (deathInfo) {
+                    const livesText = livesRemaining === -1 ? '∞' : livesRemaining;
+                    deathInfo.innerHTML = `
+                        <p style="color: #cccccc; margin: 10px 0;">
+                            Lives remaining: <span style="color: #ffaa00; font-weight: bold;">${livesText}</span>
+                        </p>
+                    `;
+                }
+            }
         }
     }
     
@@ -5936,8 +6006,6 @@ class GameEngine {
      * Handle WebGL context restoration
      */
     handleWebGLContextRestored() {
-        console.log('WebGL context restored - restarting game engine');
-        
         // Restart the ticker
         if (this.app && this.app.ticker) {
             this.app.ticker.start();
