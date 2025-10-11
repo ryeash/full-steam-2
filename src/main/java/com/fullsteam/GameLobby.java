@@ -64,8 +64,8 @@ public class GameLobby {
         String gameId = "game_" + gameIdCounter.getAndIncrement();
         GameManager game = new GameManager(gameId, gameConfig, objectMapper);
         activeGames.put(gameId, game);
-        log.info("Created new game: {} with config: maxPlayers={}, teamCount={}, world={}x{}", 
-                gameId, gameConfig.getMaxPlayers(), gameConfig.getTeamCount(), 
+        log.info("Created new game: {} with config: maxPlayers={}, teamCount={}, world={}x{}",
+                gameId, gameConfig.getMaxPlayers(), gameConfig.getTeamCount(),
                 gameConfig.getWorldWidth(), gameConfig.getWorldHeight());
         return game;
     }
@@ -78,6 +78,7 @@ public class GameLobby {
         GameManager removed = activeGames.remove(gameId);
         if (removed != null) {
             log.info("Removed game: {}", gameId);
+            removed.shutdown();
         }
     }
 

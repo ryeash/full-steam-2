@@ -1215,6 +1215,18 @@ class GameEngine {
             });
         }
         
+        // Handle defense lasers
+        if (data.defenseLasers) {
+            data.defenseLasers.forEach(laserData => {
+                currentEntityIds.add(laserData.id);
+                if (this.utilityEntities.has(laserData.id)) {
+                    this.updateUtilityEntity(laserData);
+                } else {
+                    this.createUtilityEntity(laserData);
+                }
+            });
+        }
+        
         // Remove entities that no longer exist
         for (let [entityId, entity] of this.utilityEntities) {
             if (!currentEntityIds.has(entityId)) {
@@ -3764,6 +3776,8 @@ class GameEngine {
                 return this.createMineGraphics(graphics, entityData);
             case 'TELEPORT_PAD':
                 return this.createTeleportPadGraphics(graphics, entityData);
+            case 'DEFENSE_LASER':
+                return this.createDefenseLaserGraphics(graphics, entityData);
             default:
                 return this.createGenericUtilityGraphics(graphics, entityData);
         }
@@ -4049,6 +4063,32 @@ class GameEngine {
     }
     
     /**
+     * Create defense laser graphics
+     */
+    createDefenseLaserGraphics(graphics, entityData) {
+        // Base structure - blue-gray circle
+        graphics.beginFill(0x4444AA, 0.9);
+        graphics.drawCircle(0, 0, 15);
+        graphics.endFill();
+        
+        // Central core - brighter blue
+        graphics.beginFill(0x6666CC, 0.8);
+        graphics.drawCircle(0, 0, 8);
+        graphics.endFill();
+        
+        // Rotating indicator - shows current beam direction
+        graphics.beginFill(0x8888FF, 0.9);
+        graphics.drawRect(-2, -12, 4, 6);
+        graphics.endFill();
+        
+        // Outer ring to show it's active
+        graphics.lineStyle(2, 0xAAAAFF, 0.8);
+        graphics.drawCircle(0, 0, 18);
+        
+        return graphics;
+    }
+    
+    /**
      * Create generic utility graphics
      */
     createGenericUtilityGraphics(graphics, entityData) {
@@ -4069,6 +4109,8 @@ class GameEngine {
         switch (entityType) {
             case 'TURRET':
                 return 12; // Above players
+            case 'DEFENSE_LASER':
+                return 12; // Above players, same as turret
             case 'BARRIER':
                 return 6;  // Above obstacles, below players
             case 'NET':
@@ -4106,6 +4148,9 @@ class GameEngine {
                 break;
             case 'NET':
                 this.updateNetVisual(container, entityData);
+                break;
+            case 'DEFENSE_LASER':
+                this.updateDefenseLaserVisual(container, entityData);
                 break;
         }
     }
@@ -4288,6 +4333,19 @@ class GameEngine {
 
     updateNetVisual(container, entityData) {
         container.rotation = -(entityData.rotation || 0);
+    }
+    
+    /**
+     * Update defense laser visual effects
+     */
+    updateDefenseLaserVisual(container, entityData) {
+        // Update rotation of the visual indicator to show beam direction
+        container.rotation = -(entityData.rotation || 0);
+        
+        // Add pulsing effect to show it's active
+        const time = Date.now() * 0.003; // Slow pulse
+        const pulseValue = 0.8 + 0.2 * Math.sin(time);
+        container.alpha = pulseValue;
     }
     
     /**
@@ -6052,6 +6110,28 @@ class GameEngine {
     }
 
     /**
+     * Performance monitoring for entity management optimization
+     */
+    logEntityManagementStats() {
+        const stats = {
+            players: this.players.size,
+            projectiles: this.projectiles.size,
+            obstacles: this.obstacles.size,
+            fieldEffects: this.fieldEffects.size,
+            beams: this.beams.size,
+            utilityEntities: this.utilityEntities.size,
+            flags: this.flags.size,
+            kothZones: this.kothZones.size,
+            totalEntities: this.players.size + this.projectiles.size + this.obstacles.size + 
+                          this.fieldEffects.size + this.beams.size + this.utilityEntities.size + 
+                          this.flags.size + this.kothZones.size
+        };
+        
+        console.log('Entity Management Stats:', stats);
+        return stats;
+    }
+
+    /**
      * Perform periodic memory cleanup to prevent leaks
      */
     performMemoryCleanup() {
@@ -6062,6 +6142,9 @@ class GameEngine {
         }
         
         console.log('Performing memory cleanup...');
+        
+        // Log entity management stats for monitoring
+        this.logEntityManagementStats();
         
         // Clean up any orphaned interpolators
         this.projectileInterpolators.forEach((interpolator, id) => {
@@ -6272,9 +6355,6 @@ class InputManager {
         
         // Start gamepad polling
         this.pollGamepads();
-        
-        // Start periodic memory cleanup (every 30 seconds)
-        this.memoryCleanupInterval = setInterval(() => this.performMemoryCleanup(), 30000);
     }
     
     setupEventListeners() {
@@ -6290,7 +6370,6 @@ class InputManager {
         window.addEventListener('gamepaddisconnected', (e) => this.handleGamepadDisconnected(e));
         
         // Window events
-        window.addEventListener('resize', () => this.handleResize());
         window.addEventListener('beforeunload', () => this.handleBeforeUnload());
         window.addEventListener('unload', () => this.destroy());
         

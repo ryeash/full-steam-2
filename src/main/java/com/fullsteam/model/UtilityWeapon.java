@@ -35,7 +35,10 @@ public enum UtilityWeapon {
             null, "TeleportPad", 8.0, 120.0, 35.0, 0.0, UtilityCategory.TACTICAL),
 
     MINE_LAYER("Mine Layer", "Places proximity mines that explode when enemies approach",
-            null, "ProximityMine", 2.0, 50.0, 40.0, 40.0, UtilityCategory.DEFENSIVE);
+            null, "ProximityMine", 2.0, 50.0, 40.0, 40.0, UtilityCategory.DEFENSIVE),
+
+    DEFENSE_LASER("Defense Laser", "Deploys rotating laser beams that sweep around the area",
+            null, "DefenseLaser", 8.0, 60.0, 40.0, 20.0, UtilityCategory.DEFENSIVE);
 
     private final String displayName;
     private final String description;

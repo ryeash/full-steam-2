@@ -25,7 +25,7 @@ import java.util.Set;
 @Setter
 public class Beam extends GameEntity {
     protected final Vector2 startPoint;
-    protected final Vector2 endPoint;
+    protected Vector2 endPoint;
     protected Vector2 effectiveEndPoint; // Actual end point after obstacle collision
     protected final Vector2 direction;
     protected final double range;
@@ -34,15 +34,14 @@ public class Beam extends GameEntity {
     protected final int ownerTeam;
     protected final DamageApplicationType damageApplicationType;
     protected final double damageInterval;
-    protected final double beamDuration;
     protected final Ordinance ordinance; // Type of beam (laser, plasma, heal, etc.)
     protected final Set<BulletEffect> bulletEffects; // Special effects this beam has
+    protected long expires;
 
     // Track affected players for DOT beams
     protected final Set<Integer> affectedPlayers = new HashSet<>();
     protected final Map<Integer, Long> lastDamageTime = new HashMap<>();
 
-    private double timeRemaining;
 
     public Beam(int id, Vector2 startPoint, Vector2 direction, double range, double damage,
                 int ownerId, int ownerTeam, Ordinance ordinance, Set<BulletEffect> bulletEffects) {
@@ -58,8 +57,7 @@ public class Beam extends GameEntity {
         this.bulletEffects = new HashSet<>(bulletEffects);
         this.damageApplicationType = ordinance.getDamageApplicationType();
         this.damageInterval = ordinance.getDamageInterval();
-        this.beamDuration = ordinance.getBeamDuration();
-        this.timeRemaining = beamDuration;
+        this.expires = (long) (System.currentTimeMillis() + (1000 * ordinance.getBeamDuration()));
 
         // Calculate end point
         Vector2 offset = this.direction.copy();
@@ -98,9 +96,7 @@ public class Beam extends GameEntity {
             return;
         }
 
-        // Update beam duration
-        timeRemaining -= deltaTime;
-        if (timeRemaining <= 0) {
+        if (isExpired()) {
             active = false;
             return;
         }
@@ -117,8 +113,6 @@ public class Beam extends GameEntity {
 
         lastUpdateTime = System.currentTimeMillis();
     }
-
-
 
 
     /**
@@ -158,6 +152,7 @@ public class Beam extends GameEntity {
         if (!canAffectPlayer(player)) {
             return 0.0;
         }
+        double beamDuration = (double) (expires - created) / 1000;
 
         return switch (ordinance) {
             case PLASMA_BEAM -> {
@@ -188,14 +183,15 @@ public class Beam extends GameEntity {
      * Check if the beam has expired
      */
     public boolean isExpired() {
-        return !active || timeRemaining <= 0;
+        return !active || System.currentTimeMillis() > expires;
     }
 
     /**
      * Get the remaining duration as a percentage
      */
     public double getDurationPercent() {
-        return beamDuration > 0 ? Math.max(0, timeRemaining / beamDuration) : 0;
+        double beamDuration = (double) (expires - created) / 1000;
+        return beamDuration > 0 ? Math.max(0, (expires - System.currentTimeMillis()) / beamDuration) : 0;
     }
 
     /**
@@ -203,7 +199,8 @@ public class Beam extends GameEntity {
      */
     public boolean canPiercePlayers() {
         return switch (ordinance) {
-            case LASER, RAILGUN, PLASMA_BEAM, HEAL_BEAM -> true; // Laser, Railgun, Plasma beam, and Heal beam pierce through players
+            case LASER, RAILGUN, PLASMA_BEAM, HEAL_BEAM ->
+                    true; // Laser, Railgun, Plasma beam, and Heal beam pierce through players
             default -> false; // Other beams stop at first player hit
         };
     }

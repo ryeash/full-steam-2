@@ -7,6 +7,7 @@ import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.physics.Beam;
+import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Obstacle;
@@ -20,7 +21,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Set;
-
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
@@ -107,7 +107,6 @@ public class UtilitySystem {
      */
     private void createEntityUtility(Player.UtilityActivation activation) {
         UtilityWeapon utility = activation.utilityWeapon;
-
         switch (utility) {
             case TURRET_CONSTRUCTOR:
                 createTurret(activation);
@@ -123,6 +122,9 @@ public class UtilitySystem {
                 break;
             case TELEPORTER:
                 createTeleportPad(activation);
+                break;
+            case DEFENSE_LASER:
+                createDefenseLaser(activation);
                 break;
             default:
                 log.warn("Unknown entity-based utility weapon: {}", utility.getDisplayName());
@@ -267,6 +269,50 @@ public class UtilitySystem {
     }
 
     /**
+     * Create a defense laser entity.
+     */
+    private void createDefenseLaser(Player.UtilityActivation activation) {
+        // Calculate placement position slightly in front of player
+        Vector2 placement = activation.position.copy();
+        Vector2 offset = activation.direction.copy();
+        offset.multiply(60.0); // Place 60 units in front
+        placement.add(offset);
+
+        // Check if placement position is clear of obstacles
+        double laserRadius = 20.0; // Defense laser radius
+        if (!isPositionClear(placement, laserRadius)) {
+            log.debug("Player {} tried to place defense laser at ({}, {}) but position is blocked by obstacle",
+                    activation.playerId, placement.x, placement.y);
+
+            // Send feedback to player that placement failed
+            Player player = gameEntities.getPlayer(activation.playerId);
+            if (player != null) {
+                // Refund the cooldown since placement failed
+                player.refundUtilityCooldown();
+            }
+            return;
+        }
+
+        DefenseLaser defenseLaser = new DefenseLaser(
+                Config.nextId(),
+                activation.playerId,
+                activation.team,
+                placement,
+                20.0 // 20 second lifespan
+        );
+
+        gameEntities.addDefenseLaser(defenseLaser);
+        world.addBody(defenseLaser.getBody());
+
+        // Add all beams to physics world but NOT to gameEntities.beams
+        // DefenseLaser beams should only be managed as part of the DefenseLaser entity
+        for (Beam beam : defenseLaser.getBeams()) {
+            gameEntities.addBeam(beam);
+            world.addBody(beam.getBody());
+        }
+    }
+
+    /**
      * Link teleport pads from the same player.
      */
     private void linkTeleportPads(TeleportPad newPad, int playerId) {
@@ -329,13 +375,6 @@ public class UtilitySystem {
      */
     private boolean isPositionClear(Vector2 position, double radius) {
         return isPositionClearCheck.apply(position);
-    }
-
-    /**
-     * Broadcast a warning message to players.
-     */
-    private void broadcastWarning(String message) {
-        gameEventBroadcaster.accept(message, "WARNING");
     }
 
     /**

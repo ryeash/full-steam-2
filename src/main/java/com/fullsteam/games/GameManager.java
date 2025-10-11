@@ -18,6 +18,7 @@ import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.CollisionProcessor;
+import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.KothZone;
@@ -30,6 +31,7 @@ import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.TeleportPad;
 import com.fullsteam.physics.Turret;
 import io.micronaut.websocket.WebSocketSession;
+import io.micronaut.websocket.exceptions.WebSocketSessionException;
 import lombok.Getter;
 import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
@@ -52,6 +54,7 @@ import java.util.Map;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 public class GameManager {
@@ -89,6 +92,8 @@ public class GameManager {
     private final World<Body> world;
     private final ScheduledFuture<?> shutdownHook;
     private double lastUpdateTime = System.nanoTime() / 1e9;
+
+    private final AtomicBoolean shutdown = new AtomicBoolean(false);
 
     public GameManager(String gameId, GameConfig gameConfig, ObjectMapper objectMapper) {
         this.gameId = gameId;
@@ -198,6 +203,12 @@ public class GameManager {
             }
         } catch (JsonProcessingException e) {
             log.error("Error serializing message", e);
+        } catch (WebSocketSessionException e) {
+            if (!(e.getCause() instanceof InterruptedException)) {
+                log.error("Error sending message", e);
+            } else {
+                log.debug("interrupted sending message, likely game was shutdown", e);
+            }
         }
     }
 
@@ -232,6 +243,7 @@ public class GameManager {
     }
 
     public void shutdown() {
+        shutdown.set(true);
         shutdownHook.cancel(true);
     }
 
@@ -447,6 +459,9 @@ public class GameManager {
 
     protected void update() {
         try {
+            if (shutdown.get()) {
+                return;
+            }
             double currentTime = System.nanoTime() / 1e9;
             double deltaTime = currentTime - lastUpdateTime;
             lastUpdateTime = currentTime;
@@ -1193,6 +1208,24 @@ public class GameManager {
             teleportPadStates.add(padState);
         }
         gameState.put("teleportPads", teleportPadStates);
+
+        // Defense laser states
+        List<Map<String, Object>> defenseLaserStates = new ArrayList<>();
+        for (DefenseLaser defenseLaser : gameEntities.getAllDefenseLasers()) {
+            Vector2 pos = defenseLaser.getPosition();
+            Map<String, Object> laserState = new HashMap<>();
+            laserState.put("id", defenseLaser.getId());
+            laserState.put("type", "DEFENSE_LASER");
+            laserState.put("x", pos.x);
+            laserState.put("y", pos.y);
+            laserState.put("rotation", defenseLaser.getCurrentRotation());
+            laserState.put("health", defenseLaser.getHealth());
+            laserState.put("active", defenseLaser.isActive());
+            laserState.put("ownerId", defenseLaser.getOwnerId());
+            laserState.put("ownerTeam", defenseLaser.getOwnerTeam());
+            defenseLaserStates.add(laserState);
+        }
+        gameState.put("defenseLasers", defenseLaserStates);
 
         // Beam states
         List<Map<String, Object>> beamStates = new ArrayList<>();

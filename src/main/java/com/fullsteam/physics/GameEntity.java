@@ -13,6 +13,7 @@ public abstract class GameEntity {
     protected boolean active = true;
     protected long lastUpdateTime;
     protected final long created = System.currentTimeMillis();
+    protected long expires = -1L;
 
     public GameEntity(int id, Body body, double health) {
         this.id = id;

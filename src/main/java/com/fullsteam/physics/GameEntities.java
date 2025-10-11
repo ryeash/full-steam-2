@@ -39,13 +39,14 @@ public class GameEntities {
 
     // Utility entity collections
     private final Map<Integer, Turret> turrets = new ConcurrentSkipListMap<>();
+    private final Map<Integer, DefenseLaser> defenseLasers = new ConcurrentSkipListMap<>();
     private final Map<Integer, NetProjectile> netProjectiles = new ConcurrentSkipListMap<>();
     private final Map<Integer, TeleportPad> teleportPads = new ConcurrentSkipListMap<>();
     private final Map<Integer, Beam> beams = new ConcurrentSkipListMap<>();
-    
+
     // Capture the Flag entities
     private final Map<Integer, Flag> flags = new ConcurrentSkipListMap<>();
-    
+
     // King of the Hill entities
     private final Map<Integer, KothZone> kothZones = new ConcurrentSkipListMap<>();
 
@@ -121,7 +122,7 @@ public class GameEntities {
     /**
      * Remove inactive entities across all collections.
      * This is useful for cleanup operations.
-     * 
+     * <p>
      * Note: Players and Projectiles are handled separately in GameManager.update()
      * for more fine-grained control over their lifecycle and effects.
      */
@@ -177,7 +178,7 @@ public class GameEntities {
             }
             return false;
         });
-        
+
         netProjectiles.entrySet().removeIf(entry -> {
             NetProjectile o = entry.getValue();
             if (o.isExpired()) {
@@ -186,7 +187,7 @@ public class GameEntities {
             }
             return false;
         });
-        
+
         teleportPads.entrySet().removeIf(entry -> {
             TeleportPad o = entry.getValue();
             if (o.isExpired()) {
@@ -196,7 +197,16 @@ public class GameEntities {
             }
             return false;
         });
-        
+
+        defenseLasers.entrySet().removeIf(entry -> {
+            DefenseLaser o = entry.getValue();
+            if (!o.isActive()) {
+                world.removeBody(o.getBody());
+                return true;
+            }
+            return false;
+        });
+
         beams.entrySet().removeIf(entry -> {
             Beam o = entry.getValue();
             if (o.isExpired()) {
@@ -205,7 +215,7 @@ public class GameEntities {
             }
             return false;
         });
-        
+
         // Note: Flags are intentionally NOT cleaned up here as they persist for the entire game
         // Flags are only removed when a game ends or when explicitly removed via removeFlag()
     }
@@ -220,11 +230,11 @@ public class GameEntities {
         projectiles.values().forEach(projectile -> projectile.update(deltaTime));
         fieldEffects.values().forEach(effect -> effect.update(deltaTime));
         turrets.values().forEach(turret -> turret.update(deltaTime));
+        defenseLasers.values().forEach(defenseLaser -> defenseLaser.update(deltaTime));
         netProjectiles.values().forEach(net -> net.update(deltaTime));
         teleportPads.values().forEach(pad -> pad.update(deltaTime));
         beams.values().forEach(beam -> beam.update(deltaTime));
         kothZones.values().forEach(zone -> zone.update(deltaTime));
-        // Note: Flags don't need updates - their state is managed by game logic in CollisionProcessor
     }
 
     public PlayerSession removePlayerSession(int playerId) {
@@ -233,10 +243,6 @@ public class GameEntities {
 
     public void addFieldEffect(FieldEffect fieldEffect) {
         fieldEffects.put(fieldEffect.getId(), fieldEffect);
-    }
-
-    public FieldEffect getFieldEffect(int id) {
-        return fieldEffects.get(id);
     }
 
     public FieldEffect removeFieldEffect(int id) {
@@ -264,14 +270,18 @@ public class GameEntities {
         }
     }
 
-    public Turret getTurret(int turretId) {
-        return turrets.get(turretId);
-    }
-
     public Collection<Turret> getAllTurrets() {
         return turrets.values();
     }
 
+    // Defense laser management
+    public void addDefenseLaser(DefenseLaser defenseLaser) {
+        defenseLasers.put(defenseLaser.getId(), defenseLaser);
+    }
+
+    public Collection<DefenseLaser> getAllDefenseLasers() {
+        return defenseLasers.values();
+    }
 
     // Net projectile management
     public void addNetProjectile(NetProjectile netProjectile) {
@@ -321,53 +331,53 @@ public class GameEntities {
     public Collection<Beam> getAllBeams() {
         return beams.values();
     }
-    
+
     // ===== Flag Management =====
-    
+
     public void addFlag(Flag flag) {
         flags.put(flag.getId(), flag);
     }
-    
+
     public void removeFlag(int flagId) {
         Flag flag = flags.remove(flagId);
         if (flag != null && flag.getBody() != null) {
             world.removeBody(flag.getBody());
         }
     }
-    
+
     public Flag getFlag(int flagId) {
         return flags.get(flagId);
     }
-    
+
     public Collection<Flag> getAllFlags() {
         return flags.values();
     }
-    
+
     public Map<Integer, Flag> getFlags() {
         return flags;
     }
-    
+
     // ===== KOTH Zone Management =====
-    
+
     public void addKothZone(KothZone zone) {
         kothZones.put(zone.getId(), zone);
     }
-    
+
     public void removeKothZone(int zoneId) {
         KothZone zone = kothZones.remove(zoneId);
         if (zone != null && zone.getBody() != null) {
             world.removeBody(zone.getBody());
         }
     }
-    
+
     public KothZone getKothZone(int zoneId) {
         return kothZones.get(zoneId);
     }
-    
+
     public Collection<KothZone> getAllKothZones() {
         return kothZones.values();
     }
-    
+
     public Map<Integer, KothZone> getKothZones() {
         return kothZones;
     }
