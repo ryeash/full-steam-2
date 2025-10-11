@@ -69,6 +69,32 @@ public abstract class GameEntity {
     public void heal(double amount) {
         health = Math.min(maxHealth, health + amount);
     }
+
+
+    /**
+     * Check if the beam has expired
+     */
+    public boolean isExpired() {
+        if (!active) {
+            return true;
+        } else if (expires > 0) {
+            return System.currentTimeMillis() > expires;
+        } else {
+            return false;
+        }
+    }
+
+    /**
+     * Get the remaining duration as a percentage
+     */
+    public double getDurationPercent() {
+        if (expires <= created) {
+            return 0; // No duration set
+        }
+        long totalDuration = expires - created;
+        long remainingTime = expires - System.currentTimeMillis();
+        return Math.max(0, Math.min(1, (double) remainingTime / totalDuration));
+    }
 }
 
 

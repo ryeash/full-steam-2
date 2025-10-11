@@ -125,19 +125,7 @@ public class DefenseLaser extends GameEntity {
             offset.multiply(beamLength);
             beam.getEndPoint().set(center);
             beam.getEndPoint().add(offset);
-            
-            // Update effective end point
-            beam.getEffectiveEndPoint().set(beam.getEndPoint());
-            
-            // Update physics body position and rotation
-            Body body = beam.getBody();
-            Vector2 bodyCenter = center.copy();
-            Vector2 bodyOffset = direction.copy();
-            bodyOffset.multiply(beamLength / 2.0);
-            bodyCenter.add(bodyOffset);
-            
-            body.getTransform().setTranslation(bodyCenter.x, bodyCenter.y);
-            body.getTransform().setRotation(Math.atan2(direction.y, direction.x));
+            beam.setEffectiveEndPoint(beam.getEndPoint().copy());
         }
     }
 }

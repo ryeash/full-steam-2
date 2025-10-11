@@ -36,7 +36,6 @@ public class Beam extends GameEntity {
     protected final double damageInterval;
     protected final Ordinance ordinance; // Type of beam (laser, plasma, heal, etc.)
     protected final Set<BulletEffect> bulletEffects; // Special effects this beam has
-    protected long expires;
 
     // Track affected players for DOT beams
     protected final Set<Integer> affectedPlayers = new HashSet<>();
@@ -177,21 +176,6 @@ public class Beam extends GameEntity {
      */
     public boolean isHealingBeam() {
         return ordinance == Ordinance.HEAL_BEAM;
-    }
-
-    /**
-     * Check if the beam has expired
-     */
-    public boolean isExpired() {
-        return !active || System.currentTimeMillis() > expires;
-    }
-
-    /**
-     * Get the remaining duration as a percentage
-     */
-    public double getDurationPercent() {
-        double beamDuration = (double) (expires - created) / 1000;
-        return beamDuration > 0 ? Math.max(0, (expires - System.currentTimeMillis()) / beamDuration) : 0;
     }
 
     /**

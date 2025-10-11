@@ -3218,7 +3218,7 @@ class GameEngine {
         const angle = Math.atan2(dy, dx);
         
         // Update beam graphics if length or angle changed significantly
-        if (Math.abs(length - beamContainer.beamLength) > 5 || 
+        if (Math.abs(length - beamContainer.beamLength) > 5 ||
             Math.abs(angle - beamContainer.beamAngle) > 0.1) {
             
             // Remove old graphics
