@@ -3826,83 +3826,170 @@ class GameEngine {
      * Create net projectile graphics
      */
     createNetGraphics(graphics, entityData) {
-        // Triangular bola design - three weighted balls connected by rope
-        const ropeLength = 14;
-        const ballRadius = 4;
+        // Choose net design - rectangle or pentagon
+        const netDesign = 'pentagon'; // Change to 'rectangle' for rectangular net
         
-        // Calculate positions for triangular arrangement
-        const ball1X = 0;
-        const ball1Y = -ropeLength;
-        const ball2X = ropeLength * Math.cos(Math.PI / 6); // 60 degrees
-        const ball2Y = ropeLength * Math.sin(Math.PI / 6);
-        const ball3X = -ropeLength * Math.cos(Math.PI / 6); // -60 degrees
-        const ball3Y = ropeLength * Math.sin(Math.PI / 6);
+        if (netDesign === 'pentagon') {
+            return this.createPentagonNetGraphics(graphics, entityData);
+        } else {
+            return this.createRectangleNetGraphics(graphics, entityData);
+        }
+    }
+    
+    /**
+     * Create rectangular mesh net graphics
+     */
+    createRectangleNetGraphics(graphics, entityData) {
+        // Mesh-like rectangular net design
+        const netWidth = 20;
+        const netHeight = 16;
+        const meshSize = 3; // Size of each mesh cell
         
-        // Draw connecting ropes between all three balls
-        graphics.lineStyle(3, 0x8B4513, 0.9); // Brown rope
+        // Draw the main net frame (rectangle outline)
+        graphics.lineStyle(2, 0x8B4513, 0.9); // Brown rope color
+        graphics.drawRect(-netWidth/2, -netHeight/2, netWidth, netHeight);
         
-        // Rope from ball 1 to ball 2
-        graphics.moveTo(ball1X, ball1Y);
-        graphics.lineTo(ball2X, ball2Y);
-        
-        // Rope from ball 2 to ball 3
-        graphics.moveTo(ball2X, ball2Y);
-        graphics.lineTo(ball3X, ball3Y);
-        
-        // Rope from ball 3 to ball 1
-        graphics.moveTo(ball3X, ball3Y);
-        graphics.lineTo(ball1X, ball1Y);
-        
-        // Add rope texture with small segments on each rope
-        graphics.lineStyle(1, 0x654321, 0.7);
-        
-        // Texture on rope 1-2
-        const steps12 = 5;
-        for (let i = 1; i < steps12; i++) {
-            const t = i / steps12;
-            const x = ball1X + (ball2X - ball1X) * t;
-            const y = ball1Y + (ball2Y - ball1Y) * t;
-            graphics.moveTo(x - 1, y - 1);
-            graphics.lineTo(x + 1, y + 1);
+        // Draw horizontal mesh lines
+        graphics.lineStyle(1, 0x654321, 0.8); // Slightly darker brown
+        const horizontalLines = Math.floor(netHeight / meshSize);
+        for (let i = 1; i < horizontalLines; i++) {
+            const y = -netHeight/2 + (i * meshSize);
+            graphics.moveTo(-netWidth/2, y);
+            graphics.lineTo(netWidth/2, y);
         }
         
-        // Texture on rope 2-3
-        for (let i = 1; i < steps12; i++) {
-            const t = i / steps12;
-            const x = ball2X + (ball3X - ball2X) * t;
-            const y = ball2Y + (ball3Y - ball2Y) * t;
-            graphics.moveTo(x - 1, y - 1);
-            graphics.lineTo(x + 1, y + 1);
+        // Draw vertical mesh lines
+        const verticalLines = Math.floor(netWidth / meshSize);
+        for (let i = 1; i < verticalLines; i++) {
+            const x = -netWidth/2 + (i * meshSize);
+            graphics.moveTo(x, -netHeight/2);
+            graphics.lineTo(x, netHeight/2);
         }
         
-        // Texture on rope 3-1
-        for (let i = 1; i < steps12; i++) {
-            const t = i / steps12;
-            const x = ball3X + (ball1X - ball3X) * t;
-            const y = ball3Y + (ball1Y - ball3Y) * t;
-            graphics.moveTo(x - 1, y - 1);
-            graphics.lineTo(x + 1, y + 1);
-        }
-        
-        // Draw the three weighted balls
-        const ballPositions = [
-            { x: ball1X, y: ball1Y },
-            { x: ball2X, y: ball2Y },
-            { x: ball3X, y: ball3Y }
+        // Add corner weights for realistic net behavior
+        const cornerRadius = 3;
+        const corners = [
+            { x: -netWidth/2, y: -netHeight/2 }, // Top-left
+            { x: netWidth/2, y: -netHeight/2 },  // Top-right
+            { x: -netWidth/2, y: netHeight/2 },  // Bottom-left
+            { x: netWidth/2, y: netHeight/2 }    // Bottom-right
         ];
         
-        ballPositions.forEach(pos => {
-            // Weighted ball
+        corners.forEach(corner => {
+            // Corner weight
             graphics.beginFill(0x4A4A4A, 0.9); // Dark gray metal
-            graphics.lineStyle(2, 0x2A2A2A, 1.0); // Darker outline
-            graphics.drawCircle(pos.x, pos.y, ballRadius);
+            graphics.lineStyle(1, 0x2A2A2A, 1.0); // Darker outline
+            graphics.drawCircle(corner.x, corner.y, cornerRadius);
             graphics.endFill();
             
             // Add metallic shine
             graphics.beginFill(0x6A6A6A, 0.6);
-            graphics.drawCircle(pos.x - 1, pos.y - 1, ballRadius * 0.4);
+            graphics.drawCircle(corner.x - 1, corner.y - 1, cornerRadius * 0.4);
             graphics.endFill();
         });
+        
+        // Add subtle net texture with small cross-hatches
+        graphics.lineStyle(0.5, 0x654321, 0.4);
+        for (let x = -netWidth/2 + meshSize/2; x < netWidth/2; x += meshSize) {
+            for (let y = -netHeight/2 + meshSize/2; y < netHeight/2; y += meshSize) {
+                // Small cross pattern in each mesh cell
+                graphics.moveTo(x - 0.5, y - 0.5);
+                graphics.lineTo(x + 0.5, y + 0.5);
+                graphics.moveTo(x + 0.5, y - 0.5);
+                graphics.lineTo(x - 0.5, y + 0.5);
+            }
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create pentagonal mesh net graphics
+     */
+    createPentagonNetGraphics(graphics, entityData) {
+        const radius = 12; // Radius of the pentagon
+        const meshSize = 2.5; // Size of each mesh cell
+        
+        // Calculate pentagon vertices
+        const vertices = [];
+        for (let i = 0; i < 5; i++) {
+            const angle = (i * 2 * Math.PI) / 5 - Math.PI / 2; // Start from top
+            const x = radius * Math.cos(angle);
+            const y = radius * Math.sin(angle);
+            vertices.push({ x, y });
+        }
+        
+        // Draw pentagon outline
+        graphics.lineStyle(2, 0x8B4513, 0.9); // Brown rope color
+        graphics.moveTo(vertices[0].x, vertices[0].y);
+        for (let i = 1; i < vertices.length; i++) {
+            graphics.lineTo(vertices[i].x, vertices[i].y);
+        }
+        graphics.lineTo(vertices[0].x, vertices[0].y); // Close the pentagon
+        
+        // Draw mesh lines from center to each vertex
+        graphics.lineStyle(1, 0x654321, 0.8); // Slightly darker brown
+        vertices.forEach(vertex => {
+            graphics.moveTo(0, 0); // Center
+            graphics.lineTo(vertex.x, vertex.y);
+        });
+        
+        // Draw concentric pentagon mesh lines
+        const meshLevels = Math.floor(radius / meshSize);
+        for (let level = 1; level < meshLevels; level++) {
+            const levelRadius = (level * radius) / meshLevels;
+            const levelVertices = [];
+            
+            for (let i = 0; i < 5; i++) {
+                const angle = (i * 2 * Math.PI) / 5 - Math.PI / 2;
+                const x = levelRadius * Math.cos(angle);
+                const y = levelRadius * Math.sin(angle);
+                levelVertices.push({ x, y });
+            }
+            
+            // Draw the concentric pentagon
+            graphics.moveTo(levelVertices[0].x, levelVertices[0].y);
+            for (let i = 1; i < levelVertices.length; i++) {
+                graphics.lineTo(levelVertices[i].x, levelVertices[i].y);
+            }
+            graphics.lineTo(levelVertices[0].x, levelVertices[0].y);
+        }
+        
+        // Add corner weights at each vertex
+        const cornerRadius = 2.5;
+        vertices.forEach(vertex => {
+            // Corner weight
+            graphics.beginFill(0x4A4A4A, 0.9); // Dark gray metal
+            graphics.lineStyle(1, 0x2A2A2A, 1.0); // Darker outline
+            graphics.drawCircle(vertex.x, vertex.y, cornerRadius);
+            graphics.endFill();
+            
+            // Add metallic shine
+            graphics.beginFill(0x6A6A6A, 0.6);
+            graphics.drawCircle(vertex.x - 0.8, vertex.y - 0.8, cornerRadius * 0.4);
+            graphics.endFill();
+        });
+        
+        // Add subtle net texture with small cross-hatches in mesh cells
+        graphics.lineStyle(0.5, 0x654321, 0.3);
+        for (let level = 1; level < meshLevels; level++) {
+            const levelRadius = (level * radius) / meshLevels;
+            const nextLevelRadius = ((level + 1) * radius) / meshLevels;
+            
+            for (let i = 0; i < 5; i++) {
+                const angle1 = (i * 2 * Math.PI) / 5 - Math.PI / 2;
+                const angle2 = ((i + 1) * 2 * Math.PI) / 5 - Math.PI / 2;
+                
+                // Add cross-hatch in the mesh cell
+                const centerX = (levelRadius + nextLevelRadius) / 2 * Math.cos((angle1 + angle2) / 2);
+                const centerY = (levelRadius + nextLevelRadius) / 2 * Math.sin((angle1 + angle2) / 2);
+                
+                graphics.moveTo(centerX - 0.5, centerY - 0.5);
+                graphics.lineTo(centerX + 0.5, centerY + 0.5);
+                graphics.moveTo(centerX + 0.5, centerY - 0.5);
+                graphics.lineTo(centerX - 0.5, centerY + 0.5);
+            }
+        }
         
         return graphics;
     }

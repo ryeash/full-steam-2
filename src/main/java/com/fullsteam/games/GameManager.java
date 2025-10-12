@@ -6,6 +6,7 @@ import com.fullsteam.Config;
 import com.fullsteam.ai.AIGameHelper;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
+import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.GameEvent;
@@ -15,6 +16,7 @@ import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
 import com.fullsteam.model.Rules;
 import com.fullsteam.model.UtilityWeapon;
+import com.fullsteam.model.Weapon;
 import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.CollisionProcessor;
@@ -48,9 +50,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -351,7 +356,7 @@ public class GameManager {
         // Debug logging for team assignment
         log.info("Team assignment - Game has {} teams. Team counts: {}",
                 gameConfig.getTeamCount(),
-                java.util.Arrays.toString(teamCounts));
+                Arrays.toString(teamCounts));
         log.info("Assigning player to team {} (counts: T1={}, T2={}, T3={}, T4={})",
                 bestTeam,
                 teamCounts[1],
@@ -1622,7 +1627,7 @@ public class GameManager {
         // Broadcast kill event with team colors
         String killerName = shooter != null ? shooter.getPlayerName() : "Unknown";
         String victimName = victim.getPlayerName();
-        String weaponName = shooter != null ? shooter.getCurrentWeapon().getName() : "Unknown weapon";
+        String weaponName = shooter != null ? generateWeaponDisplayName(shooter.getCurrentWeapon()) : "Unknown weapon";
         Integer killerTeam = shooter != null ? shooter.getTeam() : null;
         Integer victimTeam = victim.getTeam();
 
@@ -1719,6 +1724,50 @@ public class GameManager {
         player.addCapture();
         log.info("Player {} (team {}) awarded capture. Total captures: {}",
                 player.getId(), player.getTeam(), player.getCaptures());
+    }
+
+    /**
+     * Generate a meaningful display name for a weapon based on its ordinance and effects.
+     * For custom weapons, shows the ordinance type and primary effects instead of "Custom Weapon".
+     */
+    private String generateWeaponDisplayName(Weapon weapon) {
+        String weaponName = weapon.getName();
+
+        // If it's a preset weapon (not "Custom Weapon"), use the original name
+        if (!"Custom Weapon".equals(weaponName)) {
+            return weaponName;
+        }
+
+        // For custom weapons, generate a name based on ordinance and effects
+        StringBuilder displayName = new StringBuilder();
+
+        // Add ordinance name
+        String ordinanceName = weapon.getOrdinance().name();
+        switch (weapon.getOrdinance()) {
+            case BULLET -> displayName.append("Bullet");
+            case ROCKET -> displayName.append("Rocket");
+            case GRENADE -> displayName.append("Grenade");
+            case PLASMA -> displayName.append("Plasma");
+            case CANNONBALL -> displayName.append("Cannonball");
+            case DART -> displayName.append("Dart");
+            case FLAMETHROWER -> displayName.append("Flamethrower");
+            case LASER -> displayName.append("Laser");
+            case PLASMA_BEAM -> displayName.append("Plasma Beam");
+            case HEAL_BEAM -> displayName.append("Heal Beam");
+            case RAILGUN -> displayName.append("Railgun");
+            default -> displayName.append(ordinanceName);
+        }
+
+        // Add primary bullet effects
+        Set<BulletEffect> effects = weapon.getBulletEffects();
+        if (!effects.isEmpty()) {
+            displayName.append(" ");
+            effects.stream()
+                    .min(Comparator.comparing(BulletEffect::ordinal))
+                    .map(e -> "(" + e.toString().toLowerCase() + ")")
+                    .ifPresent(displayName::append);
+        }
+        return displayName.toString();
     }
 
     /**
