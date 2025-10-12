@@ -151,22 +151,10 @@ public class Beam extends GameEntity {
         if (!canAffectPlayer(player)) {
             return 0.0;
         }
-        double beamDuration = (double) (expires - created) / 1000;
-
         return switch (ordinance) {
-            case PLASMA_BEAM -> {
-                // Continuous plasma damage
-                double plasmaPerSecond = damage / beamDuration;
-                yield plasmaPerSecond * deltaTime;
-            }
-            case HEAL_BEAM -> {
-                // Continuous healing (return negative value for healing)
-                double healPerSecond = damage / beamDuration;
-                yield -(healPerSecond * deltaTime);
-            }
-            default ->
-                // Other beam types don't do continuous damage
-                    0.0;
+            case PLASMA_BEAM -> damage * deltaTime;
+            case HEAL_BEAM -> -(damage * deltaTime);
+            default -> 0.0;
         };
     }
 

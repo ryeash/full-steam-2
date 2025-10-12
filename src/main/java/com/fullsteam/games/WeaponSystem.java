@@ -11,6 +11,7 @@ import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Projectile;
+import lombok.Setter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.geometry.Ray;
@@ -34,20 +35,13 @@ public class WeaponSystem {
     private final GameEntities gameEntities;
     private final World<Body> world;
     private final BulletEffectProcessor bulletEffectProcessor;
+    @Setter
     private BiConsumer<Player, Player> killCallback;
 
     public WeaponSystem(GameEntities gameEntities, World<Body> world) {
         this.gameEntities = gameEntities;
         this.world = world;
         this.bulletEffectProcessor = new BulletEffectProcessor(gameEntities);
-    }
-
-    /**
-     * Set the kill callback to be invoked when a player is killed by a beam weapon.
-     * @param killCallback Function that takes (victim, killer) parameters
-     */
-    public void setKillCallback(BiConsumer<Player, Player> killCallback) {
-        this.killCallback = killCallback;
     }
 
     /**
@@ -85,10 +79,10 @@ public class WeaponSystem {
 
         // Process initial hit for instant damage beams
         if (beam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
-            processBeamInitialHit(beam);
+            processStandardBeamHit(beam);
         }
 
-        log.debug("Player {} fired beam weapon: {}", player.getId(), 
+        log.debug("Player {} fired beam weapon: {}", player.getId(),
                 player.getCurrentWeapon().getName());
     }
 
@@ -97,7 +91,7 @@ public class WeaponSystem {
      */
     private void handleProjectileFire(Player player) {
         List<Projectile> projectiles = player.shoot();
-        
+
         for (Projectile projectile : projectiles) {
             if (projectile != null) {
                 gameEntities.addProjectile(projectile);
@@ -106,7 +100,7 @@ public class WeaponSystem {
         }
 
         if (!projectiles.isEmpty()) {
-            log.debug("Player {} fired {} projectile(s): {}", 
+            log.debug("Player {} fired {} projectile(s): {}",
                     player.getId(), projectiles.size(), player.getCurrentWeapon().getName());
         }
     }
@@ -115,7 +109,7 @@ public class WeaponSystem {
      * Find where a beam intersects with obstacles.
      * Returns the effective end point of the beam (either full range or obstacle intersection).
      */
-    private Vector2 findBeamObstacleIntersection(Vector2 startPoint, Vector2 endPoint) {
+    public Vector2 findBeamObstacleIntersection(Vector2 startPoint, Vector2 endPoint) {
         Vector2 direction = endPoint.copy().subtract(startPoint);
         double maxDistance = direction.getMagnitude();
         direction.normalize();
@@ -126,12 +120,12 @@ public class WeaponSystem {
         List<RaycastResult<Body, BodyFixture>> results = world.raycast(
                 ray,
                 maxDistance,
-                new DetectFilter<Body, BodyFixture>(true, true, null)
+                new DetectFilter<>(true, true, null)
         );
 
         boolean hit = !results.isEmpty();
 
-        if (!hit || results.isEmpty()) {
+        if (!hit) {
             return endPoint; // No obstacles, beam reaches full range
         }
 
@@ -173,7 +167,7 @@ public class WeaponSystem {
         List<RaycastResult<Body, BodyFixture>> results = world.raycast(
                 ray,
                 maxDistance,
-                new DetectFilter<Body, BodyFixture>(true, true, null)
+                new DetectFilter<>(true, true, null)
         );
 
         if (results.isEmpty()) {
@@ -232,17 +226,9 @@ public class WeaponSystem {
     }
 
     /**
-     * Process initial hit for instant damage beams.
-     * Handles different beam types with their specific piercing behaviors.
-     */
-    private void processBeamInitialHit(Beam beam) {
-        processStandardBeamHit(beam);
-    }
-
-    /**
      * Process standard beam hits (laser, railgun, etc.)
      */
-    private void processStandardBeamHit(Beam beam) {
+    public void processStandardBeamHit(Beam beam) {
         Vector2 startPoint = beam.getStartPoint();
         Vector2 endPoint = beam.getEffectiveEndPoint();
         Vector2 direction = endPoint.copy().subtract(startPoint);
@@ -255,7 +241,7 @@ public class WeaponSystem {
         List<RaycastResult<Body, BodyFixture>> results = world.raycast(
                 ray,
                 distance,
-                new DetectFilter<Body, BodyFixture>(true, true, null)
+                new DetectFilter<>(true, true, null)
         );
 
         if (results.isEmpty()) {
@@ -273,7 +259,7 @@ public class WeaponSystem {
             if (userData instanceof Player player) {
                 if (beam.canAffectPlayer(player)) {
                     applyBeamDamageToPlayer(beam, player);
-                    
+
                     // Stop at first player if beam doesn't pierce players
                     if (!beam.canPiercePlayers()) {
                         break;
@@ -281,22 +267,16 @@ public class WeaponSystem {
                 }
             } else if (userData instanceof Obstacle obstacle) {
                 // Apply damage to player-created obstacles if beam can damage them
-                if (obstacle.getType() == Obstacle.ObstacleType.PLAYER_BARRIER && 
+                if (obstacle.getType() == Obstacle.ObstacleType.PLAYER_BARRIER &&
                     canBeamDamageObstacle(beam, obstacle)) {
                     obstacle.takeDamage(beam.getDamage());
                 }
-                
+
                 // Stop at obstacle if beam doesn't pierce obstacles
                 if (!beam.canPierceObstacles()) {
                     break;
                 }
             } else if (userData.getClass().getSimpleName().equals("Turret")) {
-                // Handle turret damage if beam can damage turrets
-                if (canBeamDamageTurret(beam, userData)) {
-                    // Apply damage to turret (would need turret reference)
-                    log.debug("Beam {} hit turret", beam.getId());
-                }
-                
                 // Stop at turret if beam doesn't pierce turrets
                 if (!beam.canPiercePlayers()) {
                     break;
@@ -312,16 +292,16 @@ public class WeaponSystem {
     private void applyBeamDamageToPlayer(Beam beam, Player player) {
         beam.getAffectedPlayers().add(player.getId());
         boolean killed = player.takeDamage(beam.getDamage());
-        
+
         // Process AOE bullet effects for beam weapons
         bulletEffectProcessor.processBeamEffectHit(beam, player.getPosition());
-        
+
         // Handle kill if player died
         if (killed && killCallback != null) {
             Player killer = gameEntities.getPlayer(beam.getOwnerId());
             killCallback.accept(player, killer);
         }
-        
+
         log.debug("Beam {} hit player {} for {} damage (killed: {})",
                 beam.getId(), player.getId(), beam.getDamage(), killed);
     }
@@ -345,65 +325,6 @@ public class WeaponSystem {
     }
 
     /**
-     * Check if a beam can damage a turret based on team rules
-     */
-    private boolean canBeamDamageTurret(Beam beam, Object turret) {
-        // This would need to be implemented based on turret team rules
-        // For now, assume beams can damage enemy turrets
-        return true;
-    }
-
-
-    /**
-     * Public method for GameManager to find beam obstacle intersection.
-     * This delegates to the beam-specific collision detection.
-     */
-    public Vector2 findBeamObstacleIntersectionPublic(Vector2 beamStart, Vector2 beamEnd) {
-        return findBeamObstacleIntersection(beamStart, beamEnd);
-    }
-
-    /**
-     * Update all homing projectiles to track their targets.
-     * This is handled by BulletEffectProcessor in CollisionProcessor.
-     * Keeping this method for potential future use.
-     */
-    public void updateHomingProjectiles() {
-        // Homing behavior is now handled by BulletEffectProcessor
-        // This method is kept for API compatibility
-    }
-
-    /**
-     * Check if a player can shoot their weapon.
-     */
-    public boolean canShoot(Player player) {
-        return player.canShoot();
-    }
-
-    /**
-     * Check if a player needs to reload.
-     */
-    public boolean needsReload(Player player) {
-        return player.getCurrentWeapon().getCurrentAmmo() <= 0 && !player.isReloading();
-    }
-
-    /**
-     * Update weapon states for all players (cooldowns, reloading, etc).
-     * Should be called once per game loop.
-     */
-    public void updateWeaponStates(double deltaTime) {
-        // Weapon state updates (reloading, cooldowns) are handled by Player class
-        // This method is kept for potential future weapon system features
-    }
-
-    /**
-     * Process beam initial hit - exposed for utility weapon use.
-     * Public method for GameManager to use when creating instant damage beams.
-     */
-    public void processBeamInitialHitPublic(Beam beam) {
-        processBeamInitialHit(beam);
-    }
-
-    /**
      * Get statistics about active weapons.
      */
     public WeaponStats getStats() {
@@ -419,5 +340,6 @@ public class WeaponSystem {
     public record WeaponStats(
             int totalProjectiles,
             int totalBeams
-    ) {}
+    ) {
+    }
 }

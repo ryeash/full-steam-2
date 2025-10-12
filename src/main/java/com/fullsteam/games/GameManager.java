@@ -506,18 +506,43 @@ public class GameManager {
             });
 
             updateUtilityEntities(deltaTime);
+
+            // CRITICAL FIX: Update DefenseLaser beam effective endpoints after position updates
+            updateDefenseLaserBeamEndpoints();
+
             world.updatev(deltaTime);
 
             gameEntities.runPostUpdateHooks();
             gameEntities.removeInactiveEntities();
-
-            // Update weapon system (homing projectiles, weapon states)
-            weaponSystem.updateHomingProjectiles();
-            weaponSystem.updateWeaponStates(deltaTime);
-
             sendGameState();
         } catch (Throwable t) {
             log.error("Error in update loop", t);
+        }
+    }
+
+    /**
+     * Update DefenseLaser beam effective endpoints based on obstacle collisions.
+     * This ensures beams stop at obstacles instead of piercing through them.
+     */
+    private void updateDefenseLaserBeamEndpoints() {
+        for (DefenseLaser defenseLaser : gameEntities.getAllDefenseLasers()) {
+            if (!defenseLaser.isActive()) {
+                continue;
+            }
+
+            // Calculate effective endpoints for all beams
+            Vector2[] effectiveEndpoints = new Vector2[defenseLaser.getBeams().size()];
+            for (int i = 0; i < defenseLaser.getBeams().size(); i++) {
+                Beam beam = defenseLaser.getBeams().get(i);
+                Vector2 effectiveEnd = weaponSystem.findBeamObstacleIntersection(
+                        beam.getStartPoint(),
+                        beam.getEndPoint()
+                );
+                effectiveEndpoints[i] = effectiveEnd;
+            }
+
+            // Update the DefenseLaser with the calculated effective endpoints
+            defenseLaser.updateBeamEffectiveEndpoints(effectiveEndpoints);
         }
     }
 
@@ -709,20 +734,6 @@ public class GameManager {
         }
 
         return playersInPath;
-    }
-
-    /**
-     * Find beam obstacle intersection - delegates to WeaponSystem.
-     */
-    private Vector2 findBeamObstacleIntersection(Vector2 beamStart, Vector2 beamEnd) {
-        return weaponSystem.findBeamObstacleIntersectionPublic(beamStart, beamEnd);
-    }
-
-    /**
-     * Process beam initial hit - delegates to WeaponSystem.
-     */
-    private void processBeamInitialHit(Beam beam) {
-        weaponSystem.processBeamInitialHitPublic(beam);
     }
 
     protected void processPlayerConfigChange(PlayerSession playerSession, PlayerConfigRequest request) {

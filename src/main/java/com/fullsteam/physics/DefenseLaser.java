@@ -8,6 +8,7 @@ import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
+import org.dyn4j.world.World;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,16 +32,18 @@ public class DefenseLaser extends GameEntity {
     // Three rotating beams
     private final List<Beam> beams = new ArrayList<>();
     private double currentRotation = 0.0;
+    private final World<Body> world;
 
-    public DefenseLaser(int id, int ownerId, int ownerTeam, Vector2 position, double lifespan) {
+    public DefenseLaser(int id, int ownerId, int ownerTeam, Vector2 position, double lifespan, World<Body> world) {
         super(id, createDefenseLaserBody(position), 75.0); // 75 HP
         this.ownerId = ownerId;
         this.ownerTeam = ownerTeam;
         this.detectionRange = 300.0;
         this.beamLength = 200.0;
         this.rotationSpeed = Math.PI / 2.0; // 90 degrees per second
-        this.damage = 12.0; // Moderate DOT damage
+        this.damage = 40.0; // Moderate DOT damage
         this.expires = (long) (System.currentTimeMillis() + (lifespan * 1000));
+        this.world = world;
         
         // Create initial beams at 120-degree intervals
         createRotatingBeams();
@@ -125,7 +128,22 @@ public class DefenseLaser extends GameEntity {
             offset.multiply(beamLength);
             beam.getEndPoint().set(center);
             beam.getEndPoint().add(offset);
-            beam.setEffectiveEndPoint(beam.getEndPoint().copy());
+            
+            // Note: Effective endpoint will be updated by WeaponSystem via updateBeamEffectiveEndpoints()
+        }
+    }
+    
+    /**
+     * Update the effective endpoints of all beams based on obstacle collisions.
+     * This method should be called by WeaponSystem after updateBeamPositions().
+     */
+    public void updateBeamEffectiveEndpoints(Vector2[] effectiveEndpoints) {
+        if (effectiveEndpoints.length != beams.size()) {
+            throw new IllegalArgumentException("Effective endpoints array size must match beam count");
+        }
+        
+        for (int i = 0; i < beams.size(); i++) {
+            beams.get(i).setEffectiveEndPoint(effectiveEndpoints[i]);
         }
     }
 }

@@ -298,7 +298,8 @@ public class UtilitySystem {
                 activation.playerId,
                 activation.team,
                 placement,
-                20.0 // 20 second lifespan
+                20.0, // 20 second lifespan
+                world
         );
 
         gameEntities.addDefenseLaser(defenseLaser);
@@ -340,7 +341,7 @@ public class UtilitySystem {
         Ordinance beamOrdinance = utility.getBeamOrdinance();
 
         // Create beam using the utility's beam ordinance
-        Beam utilityBeam = new Beam(
+        Beam beam = new Beam(
                 Config.nextId(),
                 activation.position,
                 activation.direction,
@@ -353,18 +354,18 @@ public class UtilitySystem {
         );
 
         // Update beam's effective end point based on obstacle collisions
-        Vector2 effectiveEnd = weaponSystem.findBeamObstacleIntersectionPublic(
-                utilityBeam.getStartPoint(),
-                utilityBeam.getEndPoint()
+        Vector2 effectiveEnd = weaponSystem.findBeamObstacleIntersection(
+                beam.getStartPoint(),
+                beam.getEndPoint()
         );
-        utilityBeam.setEffectiveEndPoint(effectiveEnd);
+        beam.setEffectiveEndPoint(effectiveEnd);
 
-        gameEntities.addBeam(utilityBeam);
-        world.addBody(utilityBeam.getBody());
+        gameEntities.addBeam(beam);
+        world.addBody(beam.getBody());
 
         // Process initial hit for instant damage beams
-        if (utilityBeam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
-            weaponSystem.processBeamInitialHitPublic(utilityBeam);
+        if (beam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
+            weaponSystem.processStandardBeamHit(beam);
         }
 
         log.debug("Player {} fired utility beam: {}", activation.playerId, utility.getDisplayName());
