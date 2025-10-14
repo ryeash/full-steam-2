@@ -1,5 +1,6 @@
 package com.fullsteam.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -106,6 +107,34 @@ public class Rules {
     @Builder.Default
     private double kothPointsPerSecond = 1.0;
     
+    // ===== Workshop Rules =====
+    
+    /**
+     * Whether to add workshops to the game. When enabled, each team gets one workshop in their spawn zone.
+     * Workshops allow players to craft power-ups by standing near them.
+     */
+    @JsonProperty("addWorkshops")
+    @Builder.Default
+    private boolean addWorkshops = false;
+    
+    /**
+     * Time in seconds required to craft a power-up at a workshop.
+     */
+    @Builder.Default
+    private double workshopCraftTime = 10.0;
+    
+    /**
+     * Radius around workshop where players can craft power-ups.
+     */
+    @Builder.Default
+    private double workshopCraftRadius = 80.0;
+    
+    /**
+     * Maximum number of power-ups that can exist around a workshop.
+     */
+    @Builder.Default
+    private int maxPowerUpsPerWorkshop = 3;
+    
     /**
      * Check if this game mode uses flags.
      */
@@ -118,6 +147,13 @@ public class Rules {
      */
     public boolean hasKothZones() {
         return kothZones > 0;
+    }
+    
+    /**
+     * Check if this game mode uses workshops.
+     */
+    public boolean hasWorkshops() {
+        return addWorkshops;
     }
     
     /**

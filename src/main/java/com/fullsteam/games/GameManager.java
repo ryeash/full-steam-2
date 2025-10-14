@@ -32,6 +32,9 @@ import com.fullsteam.physics.TeamSpawnArea;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.TeleportPad;
 import com.fullsteam.physics.Turret;
+import com.fullsteam.physics.Workshop;
+import com.fullsteam.physics.PowerUp;
+import com.fullsteam.model.StatusEffects;
 import io.micronaut.websocket.WebSocketSession;
 import io.micronaut.websocket.exceptions.WebSocketSessionException;
 import lombok.Getter;
@@ -51,6 +54,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -156,6 +160,7 @@ public class GameManager {
         createObstacles();
         createFlags();
         createKothZones();
+        createWorkshops();
 
         // Add initial AI players to make the game more interesting from the start (if enabled)
         if (gameConfig.isEnableAIFilling()) {
@@ -497,6 +502,7 @@ public class GameManager {
             gameEntities.updateAll(deltaTime);
             updateCarriedFlags(); // Update flag positions for carried flags
             getCollisionProcessor().updateKothZones(deltaTime); // Update KOTH zone control and award points (using proper deltaTime)
+            getCollisionProcessor().updateWorkshops(deltaTime); // Update workshop crafting mechanics (using proper deltaTime)
             gameEntities.getProjectiles().entrySet().removeIf(entry -> {
                 Projectile projectile = entry.getValue();
                 if (!projectile.isActive()) {
@@ -963,6 +969,69 @@ public class GameManager {
     }
 
     /**
+     * Create workshops if enabled in rules.
+     * Each team gets one workshop placed in their spawn zone.
+     */
+    private void createWorkshops() {
+        Rules rules = gameConfig.getRules();
+        if (!rules.hasWorkshops() || !gameConfig.isTeamMode()) {
+            return; // Workshops disabled or not in team mode
+        }
+
+        int teamCount = gameConfig.getTeamCount();
+        log.info("Creating workshops for {} teams in game {}", teamCount, gameId);
+
+        int workshopId = Config.nextId();
+
+        // Create one workshop per team in their spawn zone
+        for (int teamNumber = 1; teamNumber <= teamCount; teamNumber++) {
+            TeamSpawnArea teamArea = teamSpawnManager.getTeamAreas().get(teamNumber);
+            if (teamArea == null) {
+                log.warn("No spawn area found for team {}, skipping workshop creation", teamNumber);
+                continue;
+            }
+
+            // Place workshop near the center of the team's spawn area
+            Vector2 workshopPosition = teamArea.getCenter().copy();
+            
+            // Add a small random offset to avoid exact center placement
+            double offsetX = (Math.random() - 0.5) * 50; // ±25 units
+            double offsetY = (Math.random() - 0.5) * 50; // ±25 units
+            workshopPosition.add(offsetX, offsetY);
+
+            // Ensure workshop position is clear of obstacles
+            if (!terrainGenerator.isPositionClear(workshopPosition, 100.0)) {
+                // Try to find a nearby clear position within the team area
+                for (int attempt = 0; attempt < 10; attempt++) {
+                    double randomX = teamArea.getMinBounds().x + Math.random() * 
+                        (teamArea.getMaxBounds().x - teamArea.getMinBounds().x);
+                    double randomY = teamArea.getMinBounds().y + Math.random() * 
+                        (teamArea.getMaxBounds().y - teamArea.getMinBounds().y);
+                    Vector2 candidate = new Vector2(randomX, randomY);
+
+                    if (terrainGenerator.isPositionClear(candidate, 100.0)) {
+                        workshopPosition = candidate;
+                        break;
+                    }
+                }
+            }
+
+            Workshop workshop = new Workshop(
+                    workshopId++,
+                    workshopPosition,
+                    rules.getWorkshopCraftRadius(),
+                    rules.getWorkshopCraftTime(),
+                    rules.getMaxPowerUpsPerWorkshop()
+            );
+            gameEntities.addWorkshop(workshop);
+            world.addBody(workshop.getBody());
+
+            log.info("Created workshop {} for team {} at position ({}, {})", 
+                    workshopId - 1, teamNumber, workshopPosition.x, workshopPosition.y);
+        }
+    }
+
+    /**
      * Update positions of flags that are being carried by players.
      */
     private void updateCarriedFlags() {
@@ -1288,6 +1357,59 @@ public class GameManager {
         } else {
             gameState.put("kothEnabled", false);
         }
+
+        // Include workshop states if workshops are enabled
+        if (gameConfig.getRules().hasWorkshops()) {
+            List<Map<String, Object>> workshopStates = new ArrayList<>();
+            for (Workshop workshop : gameEntities.getAllWorkshops()) {
+                Vector2 pos = workshop.getPosition();
+                Map<String, Object> workshopState = new HashMap<>();
+                workshopState.put("id", workshop.getId());
+                workshopState.put("type", "WORKSHOP"); // Add type field for frontend
+                workshopState.put("x", pos.x);
+                workshopState.put("y", pos.y);
+                workshopState.put("craftRadius", workshop.getCraftRadius());
+                workshopState.put("craftTime", workshop.getCraftTime());
+                workshopState.put("maxPowerUps", workshop.getMaxPowerUps());
+                int activeCrafters = workshop.getActiveCrafters();
+                Map<Integer, Double> craftingProgress = workshop.getAllCraftingProgress();
+                
+                workshopState.put("activeCrafters", activeCrafters);
+                workshopState.put("craftingProgress", craftingProgress);
+                
+                // DEBUG: Always log workshop state to see what's being sent
+                log.info("DEBUG: Workshop {} sending to frontend - activeCrafters: {}, craftingProgress: {}", 
+                        workshop.getId(), activeCrafters, craftingProgress);
+                
+                // Add detailed shape data for client rendering (inherited from Obstacle)
+                workshopState.putAll(workshop.getShapeData());
+                
+                workshopStates.add(workshopState);
+            }
+            gameState.put("workshops", workshopStates);
+            gameState.put("workshopsEnabled", true);
+        } else {
+            gameState.put("workshopsEnabled", false);
+        }
+
+        // Include power-up states
+        List<Map<String, Object>> powerUpStates = new ArrayList<>();
+        for (PowerUp powerUp : gameEntities.getAllPowerUps()) {
+            Vector2 pos = powerUp.getPosition();
+            Map<String, Object> powerUpState = new HashMap<>();
+            powerUpState.put("id", powerUp.getId());
+            powerUpState.put("type", "POWERUP"); // Frontend expects this to identify as utility entity
+            powerUpState.put("powerUpType", powerUp.getType().name()); // Store the actual power-up type
+            powerUpState.put("displayName", powerUp.getType().getDisplayName());
+            powerUpState.put("renderHint", powerUp.getType().getRenderHint());
+            powerUpState.put("x", pos.x);
+            powerUpState.put("y", pos.y);
+            powerUpState.put("workshopId", powerUp.getWorkshopId());
+            powerUpState.put("duration", powerUp.getDuration());
+            powerUpState.put("effectStrength", powerUp.getEffectStrength());
+            powerUpStates.add(powerUpState);
+        }
+        gameState.put("powerUps", powerUpStates);
 
         // Include flag states if flags are enabled
         if (gameConfig.getRules().hasFlags()) {

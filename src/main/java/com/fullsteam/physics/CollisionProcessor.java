@@ -21,7 +21,8 @@ import org.dyn4j.world.listener.ContactListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Optional;
+import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 
 
 public class CollisionProcessor implements CollisionListener<Body, BodyFixture>, ContactListener<Body> {
@@ -122,6 +123,18 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         } else if (entity1 instanceof KothZone zone && entity2 instanceof Player player) {
             handlePlayerKothZoneCollision(player, zone);
             return true; // KOTH zones are sensors, no physics resolution
+        } else if (entity1 instanceof Player player && entity2 instanceof Workshop workshop) {
+            handlePlayerWorkshopCollision(player, workshop);
+            return true; // Workshops are sensors, no physics resolution
+        } else if (entity1 instanceof Workshop workshop && entity2 instanceof Player player) {
+            handlePlayerWorkshopCollision(player, workshop);
+            return true; // Workshops are sensors, no physics resolution
+        } else if (entity1 instanceof Player player && entity2 instanceof PowerUp powerUp) {
+            handlePlayerPowerUpCollision(player, powerUp);
+            return true; // Power-ups are sensors, no physics resolution
+        } else if (entity1 instanceof PowerUp powerUp && entity2 instanceof Player player) {
+            handlePlayerPowerUpCollision(player, powerUp);
+            return true; // Power-ups are sensors, no physics resolution
         }
         return true;
     }
@@ -564,6 +577,79 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
     }
 
     /**
+     * Handle player entering/staying near a workshop.
+     * Triggers crafting mechanics when player is within craft radius.
+     */
+    void handlePlayerWorkshopCollision(Player player, Workshop workshop) {
+        if (!workshop.isActive()) {
+            return;
+        }
+
+        // If player is inactive or dead, stop crafting and return
+        if (!player.isActive() || player.getHealth() <= 0) {
+            workshop.stopCrafting(player.getId());
+            return;
+        }
+
+        // Calculate distance between player and workshop
+        Vector2 playerPos = player.getPosition();
+        Vector2 workshopPos = workshop.getPosition();
+        double distance = playerPos.distance(workshopPos);
+
+        // DEBUG: Log collision detection
+        log.debug("Player {} collision with workshop {}: distance={}, craftRadius={}", 
+                player.getId(), workshop.getId(), distance, workshop.getCraftRadius());
+
+        // Check if player is within crafting radius
+        if (distance <= workshop.getCraftRadius()) {
+            // Player is in range, start or continue crafting
+            workshop.startCrafting(player.getId());
+            
+            // DEBUG: Log crafting progress
+            double progress = workshop.getCraftingProgress(player.getId());
+            log.debug("Player {} crafting at workshop {}: progress={}", 
+                    player.getId(), workshop.getId(), progress);
+            
+            // Check if crafting is complete
+            if (workshop.isCraftingComplete(player.getId())) {
+                // Spawn power-up for this player
+                log.info("Crafting complete for player {} at workshop {}, spawning power-up", 
+                        player.getId(), workshop.getId());
+                spawnPowerUpForPlayer(workshop, player);
+                workshop.resetCraftingProgress(player.getId());
+            }
+        } else {
+            // Player is out of range, stop crafting
+            workshop.stopCrafting(player.getId());
+        }
+    }
+
+    /**
+     * Handle player collecting a power-up.
+     * Applies the power-up effect to the player and removes the power-up.
+     */
+    void handlePlayerPowerUpCollision(Player player, PowerUp powerUp) {
+        if (!player.isActive() || player.getHealth() <= 0 || !powerUp.isActive()) {
+            return;
+        }
+
+        // Check if power-up can be collected by this player
+        if (powerUp.canBeCollectedBy(player)) {
+            // Apply the power-up effect
+            PowerUp.PowerUpEffect effect = powerUp.getEffect();
+            applyPowerUpEffect(player, effect);
+            
+            // Remove the power-up from the game
+            powerUp.setActive(false);
+            gameEntities.removePowerUp(powerUp.getId());
+            gameEntities.getWorld().removeBody(powerUp.getBody());
+            
+            log.info("Player {} collected power-up {} (type: {})", 
+                    player.getId(), powerUp.getId(), powerUp.getType());
+        }
+    }
+
+    /**
      * Update all KOTH zones - called once per physics step with proper deltaTime.
      * This ensures scoring is frame-rate independent.
      */
@@ -589,6 +675,62 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
 
             // Clear player tracking for next frame (collision detection will re-add them)
             zone.clearPlayers();
+        }
+    }
+    
+    /**
+     * Update all workshops - mimic KOTH zone approach for continuous player tracking.
+     * This ensures continuous distance checking for crafting mechanics.
+     */
+    public void updateWorkshops(double deltaTime) {
+        for (Workshop workshop : gameEntities.getAllWorkshops()) {
+            if (!workshop.isActive()) {
+                continue;
+            }
+            
+            Vector2 workshopPos = workshop.getPosition();
+            
+            // Track players currently in range (mimic KOTH zone approach)
+            Set<Integer> playersCurrentlyInRange = new HashSet<>();
+            
+            // Check all active players for distance to this workshop
+            for (Player player : gameEntities.getAllPlayers()) {
+                if (!player.isActive() || player.getHealth() <= 0) {
+                    continue;
+                }
+                
+                Vector2 playerPos = player.getPosition();
+                double distance = playerPos.distance(workshopPos);
+                
+                // Check if player is within crafting radius
+                if (distance <= workshop.getCraftRadius()) {
+                    playersCurrentlyInRange.add(player.getId());
+                    
+                    // Add player to workshop if not already there (mimic KOTH zone approach)
+                    if (!workshop.isPlayerNearby(player.getId())) {
+                        workshop.addPlayer(player.getId(), player.getTeam());
+                        log.debug("Player {} entered workshop {} range", player.getId(), workshop.getId());
+                    }
+                    
+                    // Check if crafting is complete
+                    if (workshop.isCraftingComplete(player.getId())) {
+                        // Spawn power-up for this player
+                        log.info("Crafting complete for player {} at workshop {}, spawning power-up", 
+                                player.getId(), workshop.getId());
+                        spawnPowerUpForPlayer(workshop, player);
+                        workshop.resetCraftingProgress(player.getId());
+                    }
+                }
+            }
+            
+            // Remove players who are no longer in range (mimic KOTH zone approach)
+            Map<Integer, Double> currentProgress = workshop.getAllCraftingProgress();
+            for (int playerId : currentProgress.keySet()) {
+                if (!playersCurrentlyInRange.contains(playerId)) {
+                    workshop.removePlayer(playerId);
+                    log.debug("Player {} left workshop {} range", playerId, workshop.getId());
+                }
+            }
         }
     }
 
@@ -672,5 +814,75 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
 
         log.debug("Created turret destruction explosion at ({}, {}) with radius {}",
                 turretPosition.x, turretPosition.y, explosionRadius);
+    }
+
+    /**
+     * Spawn a power-up for a player at a workshop.
+     */
+    private void spawnPowerUpForPlayer(Workshop workshop, Player player) {
+        // Check if workshop has reached max power-ups
+        if (gameEntities.getPowerUpsForWorkshop(workshop.getId()).size() >= workshop.getMaxPowerUps()) {
+            return; // Workshop is full
+        }
+
+        // Randomly select a power-up type
+        PowerUp.PowerUpType[] powerUpTypes = PowerUp.PowerUpType.values();
+        PowerUp.PowerUpType selectedType = powerUpTypes[ThreadLocalRandom.current().nextInt(powerUpTypes.length)];
+
+        // Calculate spawn position around the workshop
+        Vector2 workshopPos = workshop.getPosition();
+        double spawnRadius = 40.0 + ThreadLocalRandom.current().nextDouble(20.0); // 40-60 units from workshop
+        double spawnAngle = ThreadLocalRandom.current().nextDouble(Math.PI * 2);
+        
+        Vector2 spawnPos = new Vector2(
+                workshopPos.x + Math.cos(spawnAngle) * spawnRadius,
+                workshopPos.y + Math.sin(spawnAngle) * spawnRadius
+        );
+
+        // Create the power-up
+        PowerUp powerUp = new PowerUp(
+                Config.nextId(),
+                spawnPos,
+                selectedType,
+                workshop.getId(),
+                30.0, // 30 second duration
+                1.0   // Normal effect strength
+        );
+
+        // Add to game world
+        gameEntities.addPowerUp(powerUp);
+        gameEntities.getWorld().addBody(powerUp.getBody());
+
+        log.info("Spawned power-up {} (type: {}) for player {} at workshop {}",
+                powerUp.getId(), selectedType, player.getId(), workshop.getId());
+    }
+
+    /**
+     * Apply a power-up effect to a player.
+     */
+    private void applyPowerUpEffect(Player player, PowerUp.PowerUpEffect effect) {
+        switch (effect.getType()) {
+            case SPEED_BOOST:
+                StatusEffects.applySpeedBoost(player, effect.getDuration(), effect.getStrength(), "Workshop Power-up");
+                break;
+            case HEALTH_REGENERATION:
+                StatusEffects.applyHealthRegeneration(player, effect.getDuration(), effect.getStrength(), "Workshop Power-up");
+                break;
+            case DAMAGE_BOOST:
+                StatusEffects.applyDamageBoost(player, effect.getDuration(), effect.getStrength(), "Workshop Power-up");
+                break;
+            case DAMAGE_RESISTANCE:
+                StatusEffects.applyDamageResistance(player, effect.getDuration(), effect.getStrength(), "Workshop Power-up");
+                break;
+            case BERSERKER_MODE:
+                StatusEffects.applyBerserkerMode(player, effect.getDuration(), "Workshop Power-up");
+                break;
+            case SLOW_EFFECT:
+                StatusEffects.applySlowEffect(player, effect.getDuration(), effect.getStrength(), "Workshop Power-up");
+                break;
+        }
+
+        log.info("Applied power-up effect {} to player {} for {} seconds",
+                effect.getType(), player.getId(), effect.getDuration());
     }
 }

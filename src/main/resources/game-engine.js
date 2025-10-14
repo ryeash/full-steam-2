@@ -1227,6 +1227,30 @@ class GameEngine {
             });
         }
         
+        // Handle workshops
+        if (data.workshops) {
+            data.workshops.forEach(workshopData => {
+                currentEntityIds.add(workshopData.id);
+                if (this.utilityEntities.has(workshopData.id)) {
+                    this.updateUtilityEntity(workshopData);
+                } else {
+                    this.createUtilityEntity(workshopData);
+                }
+            });
+        }
+        
+        // Handle power-ups
+        if (data.powerUps) {
+            data.powerUps.forEach(powerUpData => {
+                currentEntityIds.add(powerUpData.id);
+                if (this.utilityEntities.has(powerUpData.id)) {
+                    this.updateUtilityEntity(powerUpData);
+                } else {
+                    this.createUtilityEntity(powerUpData);
+                }
+            });
+        }
+        
         // Remove entities that no longer exist
         for (let [entityId, entity] of this.utilityEntities) {
             if (!currentEntityIds.has(entityId)) {
@@ -1239,6 +1263,13 @@ class GameEngine {
      * Create a utility entity
      */
     createUtilityEntity(entityData) {
+        console.log('DEBUG: createUtilityEntity called for:', {
+            id: entityData.id,
+            type: entityData.type,
+            activeCrafters: entityData.activeCrafters,
+            craftingProgress: entityData.craftingProgress
+        });
+        
         const entityContainer = new PIXI.Container();
         const isoPos = this.worldToIsometric(entityData.x, entityData.y);
         entityContainer.position.set(isoPos.x, isoPos.y);
@@ -3765,6 +3796,7 @@ class GameEngine {
      * Create graphics for utility entities based on type
      */
     createUtilityEntityGraphics(entityData) {
+        console.log('DEBUG: createUtilityEntityGraphics called with type:', entityData.type);
         const graphics = new PIXI.Graphics();
         
         switch (entityData.type) {
@@ -3778,7 +3810,13 @@ class GameEngine {
                 return this.createTeleportPadGraphics(graphics, entityData);
             case 'DEFENSE_LASER':
                 return this.createDefenseLaserGraphics(graphics, entityData);
+            case 'WORKSHOP':
+                console.log('DEBUG: Routing to createWorkshopGraphics');
+                return this.createWorkshopGraphics(graphics, entityData);
+            case 'POWERUP':
+                return this.createPowerUpGraphics(graphics, entityData);
             default:
+                console.log('DEBUG: Using default graphics for type:', entityData.type);
                 return this.createGenericUtilityGraphics(graphics, entityData);
         }
     }
@@ -4176,6 +4214,189 @@ class GameEngine {
     }
     
     /**
+     * Create workshop graphics
+     */
+        createWorkshopGraphics(graphics, entityData) {
+            console.log('DEBUG: createWorkshopGraphics called with:', {
+                id: entityData.id,
+                activeCrafters: entityData.activeCrafters,
+                craftingProgress: entityData.craftingProgress,
+                width: entityData.width,
+                height: entityData.height,
+                type: entityData.type
+            });
+            
+            // Check if this is actually a workshop
+            if (entityData.type !== 'WORKSHOP') {
+                console.log('DEBUG: Not a workshop, type is:', entityData.type);
+                return;
+            }
+        
+        // Use the same approach as rectangular obstacles
+        const width = entityData.width || entityData.boundingRadius * 1.5 || 50;
+        const height = entityData.height || entityData.boundingRadius * 1.2 || 30;
+        
+        const halfWidth = width / 2;
+        const halfHeight = height / 2;
+        
+        // Workshop base - industrial gray rectangle
+        graphics.beginFill(0x555555, 0.9);
+        graphics.drawRect(-halfWidth, -halfHeight, width, height);
+        graphics.endFill();
+        
+        // Workshop outline
+        graphics.lineStyle(3, 0x777777, 1.0);
+        graphics.drawRect(-halfWidth, -halfHeight, width, height);
+        
+        // Crafting radius indicator (subtle)
+        graphics.lineStyle(1, 0x888888, 0.3);
+        graphics.drawCircle(0, 0, entityData.craftRadius || 80);
+        
+        // Workshop center - gear-like design
+        graphics.lineStyle(2, 0x999999, 1.0);
+        graphics.moveTo(-8, -8);
+        graphics.lineTo(8, 8);
+        graphics.moveTo(8, -8);
+        graphics.lineTo(-8, 8);
+        graphics.drawCircle(0, 0, 6);
+        
+        // Add some workshop details to make it look more industrial
+        graphics.lineStyle(1, 0x666666, 0.8);
+        // Horizontal lines for workshop floor (scaled to actual dimensions)
+        const floorY1 = -halfHeight * 0.3;
+        const floorY2 = halfHeight * 0.3;
+        graphics.moveTo(-halfWidth * 0.8, floorY1);
+        graphics.lineTo(halfWidth * 0.8, floorY1);
+        graphics.moveTo(-halfWidth * 0.8, floorY2);
+        graphics.lineTo(halfWidth * 0.8, floorY2);
+        // Vertical lines for workshop walls (scaled to actual dimensions)
+        const wallX1 = -halfWidth * 0.6;
+        const wallX2 = halfWidth * 0.6;
+        graphics.moveTo(wallX1, -halfHeight * 0.8);
+        graphics.lineTo(wallX1, halfHeight * 0.8);
+        graphics.moveTo(wallX2, -halfHeight * 0.8);
+        graphics.lineTo(wallX2, halfHeight * 0.8);
+        
+        // Add crafting progress indicators for active players
+        if (entityData.craftingProgress) {
+            console.log('DEBUG: Rendering progress indicators for workshop', entityData.id, 'with progress:', entityData.craftingProgress);
+            const progressEntries = Object.entries(entityData.craftingProgress);
+            progressEntries.forEach(([playerId, progress], index) => {
+                if (progress > 0) {
+                    console.log('DEBUG: Rendering progress for player', playerId, 'progress:', progress);
+                    const angle = (index / progressEntries.length) * Math.PI * 2;
+                    const radius = Math.max(halfWidth, halfHeight) + 20; // Position further outside the workshop
+                    const x = Math.cos(angle) * radius;
+                    const y = Math.sin(angle) * radius;
+                    
+                    // Progress indicator dot (larger and more visible)
+                    graphics.beginFill(0x00AAFF, 1.0);
+                    graphics.drawCircle(x, y, 8);
+                    graphics.endFill();
+                    
+                    // Progress ring (outer) - thicker and more visible
+                    graphics.lineStyle(4, 0x00AAFF, progress);
+                    graphics.drawCircle(x, y, 12);
+                    
+                    // Inner progress circle
+                    graphics.lineStyle(2, 0xFFFFFF, 0.8);
+                    graphics.drawCircle(x, y, 6);
+                    
+                    // Progress percentage indicator (pulsing dot)
+                    const pulseSize = 4 + (progress * 4);
+                    graphics.beginFill(0xFFFFFF, 0.9);
+                    graphics.drawCircle(x, y, pulseSize);
+                    graphics.endFill();
+                }
+            });
+        } else {
+            console.log('DEBUG: No crafting progress data for workshop', entityData.id);
+        }
+        
+        // Add workshop activity indicator (pulsing center when active)
+        if (entityData.activeCrafters > 0) {
+            console.log('DEBUG: Rendering activity indicator for workshop', entityData.id, 'activeCrafters:', entityData.activeCrafters);
+            // Pulsing center circle to show workshop is active
+            graphics.lineStyle(3, 0x00FF00, 1.0); // Green for active - thicker and brighter
+            graphics.drawCircle(0, 0, 10);
+            
+            // Add some sparks/particles effect - more visible
+            for (let i = 0; i < 8; i++) {
+                const sparkAngle = (i / 8) * Math.PI * 2;
+                const sparkRadius = 15 + Math.sin(Date.now() * 0.01 + i) * 5; // Larger animation
+                const sparkX = Math.cos(sparkAngle) * sparkRadius;
+                const sparkY = Math.sin(sparkAngle) * sparkRadius;
+                
+                graphics.beginFill(0xFFFF00, 0.9); // Yellow sparks - brighter
+                graphics.drawCircle(sparkX, sparkY, 3);
+                graphics.endFill();
+            }
+        } else {
+            console.log('DEBUG: No active crafters for workshop', entityData.id);
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Create power-up graphics
+     */
+    createPowerUpGraphics(graphics, entityData) {
+        const powerUpType = entityData.powerUpType || entityData.type || 'SPEED_BOOST';
+        
+        // Power-up base - small circle
+        graphics.beginFill(0xFFFFFF, 0.9);
+        graphics.drawCircle(0, 0, 8);
+        graphics.endFill();
+        
+        // Power-up outline
+        graphics.lineStyle(2, 0xCCCCCC, 1.0);
+        graphics.drawCircle(0, 0, 8);
+        
+        // Type-specific visual indicators
+        switch (powerUpType) {
+            case 'SPEED_BOOST':
+                graphics.beginFill(0x00FFFF, 0.8);
+                graphics.drawCircle(0, 0, 5);
+                graphics.endFill();
+                break;
+            case 'HEALTH_REGENERATION':
+                graphics.beginFill(0x00FF00, 0.8);
+                graphics.drawCircle(0, 0, 5);
+                graphics.endFill();
+                break;
+            case 'DAMAGE_BOOST':
+                graphics.beginFill(0xFF0000, 0.8);
+                graphics.drawCircle(0, 0, 5);
+                graphics.endFill();
+                break;
+            case 'DAMAGE_RESISTANCE':
+                graphics.beginFill(0xFFD700, 0.8);
+                graphics.drawCircle(0, 0, 5);
+                graphics.endFill();
+                break;
+            case 'BERSERKER_MODE':
+                graphics.beginFill(0xFF4500, 0.8);
+                graphics.drawCircle(0, 0, 5);
+                graphics.endFill();
+                break;
+            case 'SLOW_EFFECT':
+                graphics.beginFill(0x0066CC, 0.8);
+                graphics.drawCircle(0, 0, 5);
+                graphics.endFill();
+                break;
+        }
+        
+        // Add sparkle effect
+        graphics.beginFill(0xFFFFFF, 0.6);
+        graphics.drawCircle(-3, -3, 2);
+        graphics.drawCircle(3, 3, 2);
+        graphics.endFill();
+        
+        return graphics;
+    }
+    
+    /**
      * Create generic utility graphics
      */
     createGenericUtilityGraphics(graphics, entityData) {
@@ -4206,6 +4427,10 @@ class GameEngine {
                 return 7;  // Above obstacles, below players
             case 'TELEPORT_PAD':
                 return 5;  // Below most things
+            case 'WORKSHOP':
+                return 6;  // Above obstacles, below players
+            case 'POWERUP':
+                return 10; // Above players, below projectiles
             default:
                 return 8;
         }

@@ -304,6 +304,30 @@
                 </div>
                 
                 <div class="config-section">
+                    <h3>🏭 Workshops</h3>
+                    <div class="config-item">
+                        <label for="addWorkshops">Enable Workshops:</label>
+                        <input type="checkbox" id="addWorkshops">
+                        <small style="color: #888; font-size: 0.8em;">Each team gets one workshop in their spawn zone</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="workshopCraftTime">Craft Time (seconds):</label>
+                        <input type="number" id="workshopCraftTime" min="5" max="30" step="1" value="10">
+                        <small style="color: #888; font-size: 0.8em;">Time required to craft a power-up</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="workshopCraftRadius">Craft Radius:</label>
+                        <input type="number" id="workshopCraftRadius" min="50" max="150" step="10" value="80">
+                        <small style="color: #888; font-size: 0.8em;">Range around workshop for crafting</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="maxPowerUpsPerWorkshop">Max Power-ups per Workshop:</label>
+                        <input type="number" id="maxPowerUpsPerWorkshop" min="1" max="8" value="3">
+                        <small style="color: #888; font-size: 0.8em;">Maximum power-ups that can exist around each workshop</small>
+                    </div>
+                </div>
+                
+                <div class="config-section">
                     <h3>🏆 Victory Conditions</h3>
                     <div class="config-item">
                         <label for="victoryCondition">Win Condition:</label>
@@ -575,7 +599,11 @@
                     waveRespawnInterval: 30,
                     maxLives: -1,
                     kothZones: 0,
-                    kothPointsPerSecond: 1.0
+                    kothPointsPerSecond: 1.0,
+                    workshops: 0,
+                    workshopCraftTime: 10,
+                    workshopCraftRadius: 80,
+                    maxPowerUpsPerWorkshop: 3
                 }
             };
         } else if (presetType === 'ffa') {
@@ -605,7 +633,11 @@
                     waveRespawnInterval: 30,
                     maxLives: -1,
                     kothZones: 0,
-                    kothPointsPerSecond: 1.0
+                    kothPointsPerSecond: 1.0,
+                    workshops: 0,
+                    workshopCraftTime: 10,
+                    workshopCraftRadius: 80,
+                    maxPowerUpsPerWorkshop: 3
                 }
             };
         } else if (presetType === 'ctf') {
@@ -635,7 +667,11 @@
                     waveRespawnInterval: 20,    // 20 second waves for CTF
                     maxLives: -1,
                     kothZones: 0,               // No KOTH zones in CTF
-                    kothPointsPerSecond: 1.0
+                    kothPointsPerSecond: 1.0,
+                    workshops: 0,
+                    workshopCraftTime: 10,
+                    workshopCraftRadius: 80,
+                    maxPowerUpsPerWorkshop: 3
                 }
             };
         } else if (presetType === 'domination') {
@@ -695,7 +731,11 @@
                     waveRespawnInterval: 30,
                     maxLives: -1,
                     kothZones: 0,
-                    kothPointsPerSecond: 1.0
+                    kothPointsPerSecond: 1.0,
+                    workshops: 0,
+                    workshopCraftTime: 10,
+                    workshopCraftRadius: 80,
+                    maxPowerUpsPerWorkshop: 3
                 }
             };
         } else if (presetType === 'stock-battle') {
@@ -725,7 +765,11 @@
                     waveRespawnInterval: 30,
                     maxLives: 5,                // 5 stocks per player (like Smash Bros!)
                     kothZones: 0,
-                    kothPointsPerSecond: 1.0
+                    kothPointsPerSecond: 1.0,
+                    workshops: 0,
+                    workshopCraftTime: 10,
+                    workshopCraftRadius: 80,
+                    maxPowerUpsPerWorkshop: 3
                 }
             };
         }
@@ -819,6 +863,10 @@
                 document.getElementById('maxLives').value = defaultConfig.rules.maxLives || 3;
                 document.getElementById('kothZones').value = defaultConfig.rules.kothZones || 0;
                 document.getElementById('kothPointsPerSecond').value = defaultConfig.rules.kothPointsPerSecond || 1.0;
+                document.getElementById('addWorkshops').checked = defaultConfig.rules.addWorkshops || false;
+                document.getElementById('workshopCraftTime').value = defaultConfig.rules.workshopCraftTime || 10;
+                document.getElementById('workshopCraftRadius').value = defaultConfig.rules.workshopCraftRadius || 80;
+                document.getElementById('maxPowerUpsPerWorkshop').value = defaultConfig.rules.maxPowerUpsPerWorkshop || 3;
             } else {
                 document.getElementById('roundDuration').value = 0;
                 document.getElementById('restDuration').value = 10;
@@ -834,6 +882,10 @@
                 document.getElementById('kothPointsPerSecond').value = 1.0;
                 document.getElementById('waveRespawnInterval').value = 30;
                 document.getElementById('maxLives').value = 3;
+                document.getElementById('addWorkshops').checked = false;
+                document.getElementById('workshopCraftTime').value = 10;
+                document.getElementById('workshopCraftRadius').value = 80;
+                document.getElementById('maxPowerUpsPerWorkshop').value = 3;
             }
             
             // Update field visibility
@@ -933,7 +985,11 @@
                 waveRespawnInterval: parseFloat(document.getElementById('waveRespawnInterval').value),
                 maxLives: parseInt(document.getElementById('maxLives').value),
                 kothZones: parseInt(document.getElementById('kothZones').value),
-                kothPointsPerSecond: parseFloat(document.getElementById('kothPointsPerSecond').value)
+                kothPointsPerSecond: parseFloat(document.getElementById('kothPointsPerSecond').value),
+                addWorkshops: document.getElementById('addWorkshops').checked,
+                workshopCraftTime: parseFloat(document.getElementById('workshopCraftTime').value),
+                workshopCraftRadius: parseFloat(document.getElementById('workshopCraftRadius').value),
+                maxPowerUpsPerWorkshop: parseInt(document.getElementById('maxPowerUpsPerWorkshop').value)
             }
         };
 

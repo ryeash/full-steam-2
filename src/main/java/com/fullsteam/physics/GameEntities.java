@@ -50,6 +50,10 @@ public class GameEntities {
     // King of the Hill entities
     private final Map<Integer, KothZone> kothZones = new ConcurrentSkipListMap<>();
 
+    // Workshop entities
+    private final Map<Integer, Workshop> workshops = new ConcurrentSkipListMap<>();
+    private final Map<Integer, PowerUp> powerUps = new ConcurrentSkipListMap<>();
+
     private final Deque<Runnable> postWorldUpdateHooks = new ConcurrentLinkedDeque<>();
 
     public GameEntities(GameConfig config, World<Body> world) {
@@ -235,6 +239,8 @@ public class GameEntities {
         teleportPads.values().forEach(pad -> pad.update(deltaTime));
         beams.values().forEach(beam -> beam.update(deltaTime));
         kothZones.values().forEach(zone -> zone.update(deltaTime));
+        workshops.values().forEach(workshop -> workshop.update(deltaTime));
+        powerUps.values().forEach(powerUp -> powerUp.update(deltaTime));
     }
 
     public PlayerSession removePlayerSession(int playerId) {
@@ -391,6 +397,51 @@ public class GameEntities {
         while ((hook = postWorldUpdateHooks.poll()) != null) {
             hook.run();
         }
+    }
+
+    // ===== Workshop Management =====
+
+    public void addWorkshop(Workshop workshop) {
+        workshops.put(workshop.getId(), workshop);
+    }
+
+    public Workshop getWorkshop(int workshopId) {
+        return workshops.get(workshopId);
+    }
+
+    public Collection<Workshop> getAllWorkshops() {
+        return workshops.values();
+    }
+
+    public void removeWorkshop(int workshopId) {
+        workshops.remove(workshopId);
+    }
+
+    // ===== Power-Up Management =====
+
+    public void addPowerUp(PowerUp powerUp) {
+        powerUps.put(powerUp.getId(), powerUp);
+    }
+
+    public PowerUp getPowerUp(int powerUpId) {
+        return powerUps.get(powerUpId);
+    }
+
+    public Collection<PowerUp> getAllPowerUps() {
+        return powerUps.values();
+    }
+
+    public void removePowerUp(int powerUpId) {
+        powerUps.remove(powerUpId);
+    }
+
+    /**
+     * Get power-ups spawned by a specific workshop.
+     */
+    public Collection<PowerUp> getPowerUpsForWorkshop(int workshopId) {
+        return powerUps.values().stream()
+                .filter(powerUp -> powerUp.getWorkshopId() == workshopId)
+                .collect(Collectors.toList());
     }
 
 }

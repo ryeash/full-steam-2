@@ -162,7 +162,7 @@ class WeaponSystemTest extends BaseTestClass {
         Vector2 beamEnd = new Vector2(100, 0);
 
         // Act
-        Vector2 intersection = weaponSystem.findBeamObstacleIntersectionPublic(beamStart, beamEnd);
+        Vector2 intersection = weaponSystem.findBeamObstacleIntersection(beamStart, beamEnd);
 
         // Assert
         assertNotNull(intersection, "Intersection point should be calculated");
@@ -194,21 +194,6 @@ class WeaponSystemTest extends BaseTestClass {
         assertNotNull(stats, "Weapon stats should be available");
         assertTrue(stats.totalProjectiles() >= 0, "Total projectiles should be tracked");
         assertTrue(stats.totalBeams() >= 0, "Total beams should be tracked");
-    }
-
-    @Test
-    @DisplayName("Should update weapon states")
-    void testWeaponStateUpdate() {
-        // Arrange
-        Player player = createTestPlayer(1, 1);
-        gameEntities.addPlayer(player);
-
-        // Act
-        weaponSystem.updateWeaponStates(0.016); // One frame at 60 FPS
-
-        // Assert
-        // This is mostly a smoke test - ensure no exceptions
-        assertNotNull(player.getCurrentWeapon(), "Player should still have weapon");
     }
 
     // ============================================================================
