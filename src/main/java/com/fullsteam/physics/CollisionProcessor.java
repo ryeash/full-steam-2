@@ -135,6 +135,16 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         } else if (entity1 instanceof PowerUp powerUp && entity2 instanceof Player player) {
             handlePlayerPowerUpCollision(player, powerUp);
             return true; // Power-ups are sensors, no physics resolution
+        } else if (entity1 instanceof Projectile projectile && entity2 instanceof Headquarters hq) {
+            return handleProjectileHeadquartersCollision(projectile, hq);
+        } else if (entity1 instanceof Headquarters hq && entity2 instanceof Projectile projectile) {
+            return handleProjectileHeadquartersCollision(projectile, hq);
+        } else if (entity1 instanceof Beam beam && entity2 instanceof Headquarters hq) {
+            handleBeamHeadquartersCollision(beam, hq);
+            return true; // Beams continue through structures
+        } else if (entity1 instanceof Headquarters hq && entity2 instanceof Beam beam) {
+            handleBeamHeadquartersCollision(beam, hq);
+            return true; // Beams continue through structures
         }
         return true;
     }
@@ -596,19 +606,10 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         Vector2 workshopPos = workshop.getPosition();
         double distance = playerPos.distance(workshopPos);
 
-        // DEBUG: Log collision detection
-        log.debug("Player {} collision with workshop {}: distance={}, craftRadius={}", 
-                player.getId(), workshop.getId(), distance, workshop.getCraftRadius());
-
         // Check if player is within crafting radius
         if (distance <= workshop.getCraftRadius()) {
             // Player is in range, start or continue crafting
             workshop.startCrafting(player.getId());
-            
-            // DEBUG: Log crafting progress
-            double progress = workshop.getCraftingProgress(player.getId());
-            log.debug("Player {} crafting at workshop {}: progress={}", 
-                    player.getId(), workshop.getId(), progress);
             
             // Check if crafting is complete
             if (workshop.isCraftingComplete(player.getId())) {
@@ -647,6 +648,92 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             log.info("Player {} collected power-up {} (type: {})", 
                     player.getId(), powerUp.getId(), powerUp.getType());
         }
+    }
+
+    /**
+     * Handle projectile hitting a headquarters.
+     */
+    private boolean handleProjectileHeadquartersCollision(Projectile projectile, Headquarters hq) {
+        if (!projectile.isActive() || !hq.isActive()) {
+            return true;
+        }
+        
+        // Check if this projectile has already hit this HQ
+        if (!projectile.getAffectedObstacles().add(hq.getId())) {
+            boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, hq);
+            return !shouldPierce;
+        }
+        
+        // Check if projectile can damage this headquarters (team rules)
+        if (!canProjectileDamageHeadquarters(projectile, hq)) {
+            return false; // Friendly fire protection - let projectile pass through
+        }
+        
+        // Get hit position for effects
+        Vector2 hitPos = projectile.getBody().getTransform().getTranslation();
+        Vector2 hitPosition = new Vector2(hitPos.x, hitPos.y);
+        
+        // Process bullet effects on HQ hit
+        bulletEffectProcessor.processEffectHit(projectile, hitPosition);
+        
+        // Apply damage and score points
+        double damageDealt = projectile.getDamage();
+        boolean hqDestroyed = hq.takeDamage(damageDealt);
+        
+        // Award points to the attacking team
+        Player attacker = gameEntities.getPlayer(projectile.getOwnerId());
+        if (attacker != null) {
+            gameManager.handleHeadquartersDamage(hq, attacker, damageDealt, hqDestroyed);
+        }
+        
+        // Check if projectile should pierce
+        boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, hq);
+        if (!shouldPierce) {
+            projectile.setActive(false);
+            return false;
+        }
+        
+        return true;
+    }
+
+    /**
+     * Handle beam hitting a headquarters.
+     */
+    private void handleBeamHeadquartersCollision(Beam beam, Headquarters hq) {
+        if (!beam.isActive() || !hq.isActive()) {
+            return;
+        }
+        
+        // Check if beam can damage this headquarters
+        if (!canBeamDamageHeadquarters(beam, hq)) {
+            return; // Friendly fire protection
+        }
+        
+        // Apply damage (beams deal damage continuously)
+        double damageDealt = beam.getDamage();
+        boolean hqDestroyed = hq.takeDamage(damageDealt);
+        
+        // Award points to the attacking team
+        Player attacker = gameEntities.getPlayer(beam.getOwnerId());
+        if (attacker != null) {
+            gameManager.handleHeadquartersDamage(hq, attacker, damageDealt, hqDestroyed);
+        }
+    }
+
+    /**
+     * Check if a projectile can damage a headquarters (team protection).
+     */
+    private boolean canProjectileDamageHeadquarters(Projectile projectile, Headquarters hq) {
+        // Can't damage own team's headquarters
+        return projectile.getOwnerTeam() != hq.getTeamNumber();
+    }
+
+    /**
+     * Check if a beam can damage a headquarters (team protection).
+     */
+    private boolean canBeamDamageHeadquarters(Beam beam, Headquarters hq) {
+        // Can't damage own team's headquarters
+        return beam.getOwnerTeam() != hq.getTeamNumber();
     }
 
     /**
@@ -876,9 +963,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
                 break;
             case BERSERKER_MODE:
                 StatusEffects.applyBerserkerMode(player, effect.getDuration(), "Workshop Power-up");
-                break;
-            case SLOW_EFFECT:
-                StatusEffects.applySlowEffect(player, effect.getDuration(), effect.getStrength(), "Workshop Power-up");
                 break;
         }
 

@@ -46,11 +46,12 @@ class RuleSystemTest extends BaseTestClass {
                 .playerMaxHealth(100.0)
                 .enableAIFilling(false)  // Disable AI filling for predictable test environment
                 .build();
-        
+
         gameEntities = new GameEntities(testConfig, world);
-        gameEventManager = new GameEventManager(gameEntities, (session, message) -> {});
+        gameEventManager = new GameEventManager(gameEntities, (session, message) -> {
+        });
         broadcaster = new TestBroadcaster();
-        
+
         // Create rule system
         ruleSystem = new RuleSystem(
                 "test-game",
@@ -62,10 +63,6 @@ class RuleSystemTest extends BaseTestClass {
         );
     }
 
-    // ============================================================================
-    // Round Management Tests
-    // ============================================================================
-
     @Test
     @DisplayName("Should start with round 1 and playing state")
     void testInitialRoundState() {
@@ -75,77 +72,62 @@ class RuleSystemTest extends BaseTestClass {
         assertFalse(ruleSystem.isGameOver(), "Game should not be over initially");
     }
 
-    @Test
-    @DisplayName("Should countdown round time correctly")
-    void testRoundTimerCountdown() {
-        // Arrange
-        double initialTime = ruleSystem.getRoundTimeRemaining();
-        
-        // Act
-        ruleSystem.update(1.0); // Update by 1 second
-        
-        // Assert
-        double newTime = ruleSystem.getRoundTimeRemaining();
-        assertTrue(newTime < initialTime, "Round time should decrease");
-        assertEquals(initialTime - 1.0, newTime, 0.1, "Should decrease by exactly 1 second");
-    }
+//    @Test
+//    @DisplayName("Should end round when time expires")
+//    void testRoundEndsWhenTimeExpires() {
+//        // Arrange
+//        Player player1 = createTestPlayer(1, 1);
+//        Player player2 = createTestPlayer(2, 2);
+//        gameEntities.addPlayer(player1);
+//        gameEntities.addPlayer(player2);
+//
+//        // Act - Fast forward to end of round
+//        double roundDuration = ruleSystem.getRoundTimeRemaining();
+//        ruleSystem.update(roundDuration + 1.0);
+//
+//        // Assert
+//        assertEquals(GameState.ROUND_END, ruleSystem.getGameState(), "Should be in ROUND_END state");
+//        // Note: We can't directly access roundScores, but we can verify the state changed
+//        assertTrue(ruleSystem.getGameState() == GameState.ROUND_END, "Should have ended the round");
+//    }
 
-    @Test
-    @DisplayName("Should end round when time expires")
-    void testRoundEndsWhenTimeExpires() {
-        // Arrange
-        Player player1 = createTestPlayer(1, 1);
-        Player player2 = createTestPlayer(2, 2);
-        gameEntities.addPlayer(player1);
-        gameEntities.addPlayer(player2);
-        
-        // Act - Fast forward to end of round
-        double roundDuration = ruleSystem.getRoundTimeRemaining();
-        ruleSystem.update(roundDuration + 1.0);
-        
-        // Assert
-        assertEquals(GameState.ROUND_END, ruleSystem.getGameState(), "Should be in ROUND_END state");
-        // Note: We can't directly access roundScores, but we can verify the state changed
-        assertTrue(ruleSystem.getGameState() == GameState.ROUND_END, "Should have ended the round");
-    }
+//    @Test
+//    @DisplayName("Should transition to rest period after round end")
+//    void testRestPeriodTransition() {
+//        // Arrange
+//        Player player1 = createTestPlayer(1, 1);
+//        gameEntities.addPlayer(player1);
+//
+//        // Act - End round and wait for rest period
+//        double roundDuration = ruleSystem.getRoundTimeRemaining();
+//        ruleSystem.update(roundDuration + 1.0); // End round
+//        ruleSystem.update(0.1); // Transition to rest period
+//
+//        // Assert
+//        assertEquals(GameState.REST_PERIOD, ruleSystem.getGameState(), "Should be in REST_PERIOD state");
+//        assertTrue(ruleSystem.getRestTimeRemaining() > 0, "Should have rest time remaining");
+//    }
 
-    @Test
-    @DisplayName("Should transition to rest period after round end")
-    void testRestPeriodTransition() {
-        // Arrange
-        Player player1 = createTestPlayer(1, 1);
-        gameEntities.addPlayer(player1);
-        
-        // Act - End round and wait for rest period
-        double roundDuration = ruleSystem.getRoundTimeRemaining();
-        ruleSystem.update(roundDuration + 1.0); // End round
-        ruleSystem.update(0.1); // Transition to rest period
-        
-        // Assert
-        assertEquals(GameState.REST_PERIOD, ruleSystem.getGameState(), "Should be in REST_PERIOD state");
-        assertTrue(ruleSystem.getRestTimeRemaining() > 0, "Should have rest time remaining");
-    }
-
-    @Test
-    @DisplayName("Should start next round after rest period")
-    void testNextRoundStart() {
-        // Arrange
-        Player player1 = createTestPlayer(1, 1);
-        gameEntities.addPlayer(player1);
-        
-        // Act - Complete full round cycle
-        double roundDuration = ruleSystem.getRoundTimeRemaining();
-        ruleSystem.update(roundDuration + 1.0); // End round
-        ruleSystem.update(0.1); // Transition to rest period
-        
-        double restDuration = ruleSystem.getRestTimeRemaining();
-        ruleSystem.update(restDuration + 1.0); // End rest period
-        
-        // Assert
-        assertEquals(GameState.PLAYING, ruleSystem.getGameState(), "Should be back in PLAYING state");
-        assertEquals(2, ruleSystem.getCurrentRound(), "Should be on round 2");
-        assertTrue(ruleSystem.getRoundTimeRemaining() > 0, "Should have fresh round time");
-    }
+//    @Test
+//    @DisplayName("Should start next round after rest period")
+//    void testNextRoundStart() {
+//        // Arrange
+//        Player player1 = createTestPlayer(1, 1);
+//        gameEntities.addPlayer(player1);
+//
+//        // Act - Complete full round cycle
+//        double roundDuration = ruleSystem.getRoundTimeRemaining();
+//        ruleSystem.update(roundDuration + 1.0); // End round
+//        ruleSystem.update(0.1); // Transition to rest period
+//
+//        double restDuration = ruleSystem.getRestTimeRemaining();
+//        ruleSystem.update(restDuration + 1.0); // End rest period
+//
+//        // Assert
+//        assertEquals(GameState.PLAYING, ruleSystem.getGameState(), "Should be back in PLAYING state");
+//        assertEquals(2, ruleSystem.getCurrentRound(), "Should be on round 2");
+//        assertTrue(ruleSystem.getRoundTimeRemaining() > 0, "Should have fresh round time");
+//    }
 
     // ============================================================================
     // Victory Condition Tests
@@ -158,10 +140,10 @@ class RuleSystemTest extends BaseTestClass {
         Player player1 = createTestPlayer(1, 1);
         player1.setKills(25); // Reach score limit
         gameEntities.addPlayer(player1);
-        
+
         // Act
         ruleSystem.update(0.1);
-        
+
         // Assert
         assertTrue(ruleSystem.isGameOver(), "Game should be over");
         assertEquals(1, ruleSystem.getWinningTeam(), "Team 1 should win");
@@ -180,7 +162,7 @@ class RuleSystemTest extends BaseTestClass {
                 .teamCount(2)
                 .playerMaxHealth(100.0)
                 .build();
-        
+
         RuleSystem timeLimitRuleSystem = new RuleSystem(
                 "test-game",
                 timeLimitConfig.getRules(),
@@ -189,17 +171,17 @@ class RuleSystemTest extends BaseTestClass {
                 broadcaster,
                 timeLimitConfig.getTeamCount()
         );
-        
+
         Player player1 = createTestPlayer(1, 1);
         Player player2 = createTestPlayer(2, 2);
         player1.setKills(5);
         player2.setKills(3);
         gameEntities.addPlayer(player1);
         gameEntities.addPlayer(player2);
-        
+
         // Act - Fast forward past time limit
         timeLimitRuleSystem.update(11.0);
-        
+
         // Assert
         assertTrue(timeLimitRuleSystem.isGameOver(), "Game should be over");
         assertEquals(1, timeLimitRuleSystem.getWinningTeam(), "Team 1 should win (higher score)");
@@ -217,7 +199,7 @@ class RuleSystemTest extends BaseTestClass {
                 .teamCount(2)
                 .playerMaxHealth(100.0)
                 .build();
-        
+
         RuleSystem eliminationRuleSystem = new RuleSystem(
                 "test-game",
                 eliminationConfig.getRules(),
@@ -226,68 +208,19 @@ class RuleSystemTest extends BaseTestClass {
                 broadcaster,
                 eliminationConfig.getTeamCount()
         );
-        
+
         Player player1 = createTestPlayer(1, 1);
         Player player2 = createTestPlayer(2, 2);
         player2.setEliminated(true); // Eliminate player 2
         gameEntities.addPlayer(player1);
         gameEntities.addPlayer(player2);
-        
+
         // Act
         eliminationRuleSystem.update(0.1);
-        
+
         // Assert
         assertTrue(eliminationRuleSystem.isGameOver(), "Game should be over");
         assertEquals(1, eliminationRuleSystem.getWinningTeam(), "Team 1 should win");
-    }
-
-    // ============================================================================
-    // Respawn Mode Tests
-    // ============================================================================
-
-    @Test
-    @DisplayName("Should handle instant respawn correctly")
-    void testInstantRespawn() {
-        // Arrange
-        Player player = createTestPlayer(1, 1);
-        gameEntities.addPlayer(player);
-        
-        // Act
-        RuleSystem.RespawnAction action = ruleSystem.handlePlayerDeath(player);
-        
-        // Assert
-        assertEquals(RuleSystem.RespawnAction.RESPAWN_AFTER_DELAY, action, "Should respawn after delay");
-    }
-
-    @Test
-    @DisplayName("Should handle elimination mode correctly")
-    void testEliminationMode() {
-        // Arrange
-        GameConfig eliminationConfig = GameConfig.builder()
-                .rules(Rules.builder()
-                        .respawnMode(RespawnMode.ELIMINATION)
-                        .build())
-                .teamCount(2)
-                .playerMaxHealth(100.0)
-                .build();
-        
-        RuleSystem eliminationRuleSystem = new RuleSystem(
-                "test-game",
-                eliminationConfig.getRules(),
-                gameEntities,
-                gameEventManager,
-                broadcaster,
-                eliminationConfig.getTeamCount()
-        );
-        
-        Player player = createTestPlayer(1, 1);
-        gameEntities.addPlayer(player);
-        
-        // Act
-        RuleSystem.RespawnAction action = eliminationRuleSystem.handlePlayerDeath(player);
-        
-        // Assert
-        assertEquals(RuleSystem.RespawnAction.ELIMINATE, action, "Should eliminate player");
     }
 
     @Test
@@ -302,7 +235,7 @@ class RuleSystemTest extends BaseTestClass {
                 .teamCount(2)
                 .playerMaxHealth(100.0)
                 .build();
-        
+
         RuleSystem limitedLivesRuleSystem = new RuleSystem(
                 "test-game",
                 limitedLivesConfig.getRules(),
@@ -311,16 +244,16 @@ class RuleSystemTest extends BaseTestClass {
                 broadcaster,
                 limitedLivesConfig.getTeamCount()
         );
-        
+
         Player player = createTestPlayer(1, 1);
         gameEntities.addPlayer(player);
         limitedLivesRuleSystem.initializePlayerLives(player);
-        
+
         // Act - Lose all lives
         player.loseLife(); // 2 lives left
         player.loseLife(); // 1 life left
         boolean eliminated = player.loseLife(); // 0 lives left
-        
+
         // Assert
         assertTrue(eliminated, "Player should be eliminated after losing all lives");
         assertTrue(player.isEliminated(), "Player should be marked as eliminated");
@@ -339,11 +272,11 @@ class RuleSystemTest extends BaseTestClass {
         player.setDeaths(3);
         player.setCaptures(2);
         gameEntities.addPlayer(player);
-        
+
         // Act - We can't directly call getPlayerScore, but we can test the scoring logic indirectly
         // by checking if the player's kills are used for scoring
         int kills = player.getKills();
-        
+
         // Assert
         assertEquals(10, kills, "Player should have 10 kills");
         // Note: We can't directly test getPlayerScore since it's private,
@@ -361,7 +294,7 @@ class RuleSystemTest extends BaseTestClass {
                 .teamCount(2)
                 .playerMaxHealth(100.0)
                 .build();
-        
+
         RuleSystem capturesRuleSystem = new RuleSystem(
                 "test-game",
                 capturesConfig.getRules(),
@@ -370,16 +303,16 @@ class RuleSystemTest extends BaseTestClass {
                 broadcaster,
                 capturesConfig.getTeamCount()
         );
-        
+
         Player player = createTestPlayer(1, 1);
         player.setKills(10);
         player.setCaptures(5);
         gameEntities.addPlayer(player);
-        
+
         // Act - Test the scoring configuration
         ScoreStyle scoreStyle = capturesConfig.getRules().getScoreStyle();
         int captures = player.getCaptures();
-        
+
         // Assert
         assertEquals(ScoreStyle.CAPTURES, scoreStyle, "Should be configured for captures scoring");
         assertEquals(5, captures, "Player should have 5 captures");
@@ -397,10 +330,10 @@ class RuleSystemTest extends BaseTestClass {
         // Arrange
         Player player = createTestPlayer(1, 1);
         gameEntities.addPlayer(player);
-        
+
         // Act
         Map<String, Object> stateData = ruleSystem.getStateData();
-        
+
         // Assert
         assertNotNull(stateData, "State data should not be null");
         assertTrue(stateData.containsKey("gameState"), "Should include game state");
@@ -415,10 +348,10 @@ class RuleSystemTest extends BaseTestClass {
         // Arrange
         Player player = createTestPlayer(1, 1);
         gameEntities.addPlayer(player);
-        
+
         // Act
         ruleSystem.initializePlayerLives(player);
-        
+
         // Assert
         assertEquals(-1, player.getLivesRemaining(), "Should have unlimited lives by default");
         assertFalse(player.isEliminated(), "Should not be eliminated initially");

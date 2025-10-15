@@ -6,23 +6,13 @@ import com.fullsteam.Config;
 import com.fullsteam.ai.AIGameHelper;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
-import com.fullsteam.model.BulletEffect;
-import com.fullsteam.model.FieldEffect;
-import com.fullsteam.model.FieldEffectType;
-import com.fullsteam.model.GameEvent;
-import com.fullsteam.model.GameInfo;
-import com.fullsteam.model.PlayerConfigRequest;
-import com.fullsteam.model.PlayerInput;
-import com.fullsteam.model.PlayerSession;
-import com.fullsteam.model.Rules;
-import com.fullsteam.model.UtilityWeapon;
-import com.fullsteam.model.Weapon;
-import com.fullsteam.model.WeaponConfig;
+import com.fullsteam.model.*;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.CollisionProcessor;
 import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
+import com.fullsteam.physics.Headquarters;
 import com.fullsteam.physics.KothZone;
 import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Obstacle;
@@ -34,7 +24,6 @@ import com.fullsteam.physics.TeleportPad;
 import com.fullsteam.physics.Turret;
 import com.fullsteam.physics.Workshop;
 import com.fullsteam.physics.PowerUp;
-import com.fullsteam.model.StatusEffects;
 import io.micronaut.websocket.WebSocketSession;
 import io.micronaut.websocket.exceptions.WebSocketSessionException;
 import lombok.Getter;
@@ -97,7 +86,6 @@ public class GameManager {
     protected boolean gameRunning = false;
     private final long aiCheckIntervalMs;
     private long lastAICheckTime = 0;
-    private boolean aiAdjustmentEnabled = true;
     private final World<Body> world;
     private final ScheduledFuture<?> shutdownHook;
     private double lastUpdateTime = System.nanoTime() / 1e9;
@@ -161,6 +149,7 @@ public class GameManager {
         createFlags();
         createKothZones();
         createWorkshops();
+        createHeadquarters();
 
         // Add initial AI players to make the game more interesting from the start (if enabled)
         if (gameConfig.isEnableAIFilling()) {
@@ -242,14 +231,6 @@ public class GameManager {
 
     public int getPlayerCount() {
         return gameEntities.getPlayerSessions().size();
-    }
-
-    /**
-     * Get the current round time remaining in seconds.
-     * Returns -1 if rounds are not enabled.
-     */
-    public double getRoundTimeRemaining() {
-        return ruleSystem.getRoundTimeRemaining();
     }
 
     public void shutdown() {
@@ -373,26 +354,10 @@ public class GameManager {
     }
 
     /**
-     * Get team counts for all teams.
-     *
-     * @return Map of team number to player count
-     */
-    public Map<Integer, Integer> getTeamCounts() {
-        Map<Integer, Integer> teamCounts = new HashMap<>();
-
-        for (Player player : gameEntities.getAllPlayers()) {
-            int team = player.getTeam();
-            teamCounts.put(team, teamCounts.getOrDefault(team, 0) + 1);
-        }
-
-        return teamCounts;
-    }
-
-    /**
      * Manually trigger AI player adjustment based on current settings.
      */
     public void adjustAIPlayers() {
-        if (!aiAdjustmentEnabled || !gameConfig.isEnableAIFilling()) {
+        if (!gameConfig.isEnableAIFilling()) {
             return;
         }
 
@@ -417,20 +382,6 @@ public class GameManager {
                         removed, totalPlayers - removed);
             }
         }
-    }
-
-    /**
-     * Disable AI player adjustment (for testing).
-     */
-    public void disableAIAdjustment() {
-        this.aiAdjustmentEnabled = false;
-    }
-
-    /**
-     * Enable AI player adjustment (for testing).
-     */
-    public void enableAIAdjustment() {
-        this.aiAdjustmentEnabled = true;
     }
 
     /**
@@ -468,10 +419,10 @@ public class GameManager {
     }
 
     protected void update() {
+        if (shutdown.get()) {
+            return;
+        }
         try {
-            if (shutdown.get()) {
-                return;
-            }
             double currentTime = System.nanoTime() / 1e9;
             double deltaTime = currentTime - lastUpdateTime;
             lastUpdateTime = currentTime;
@@ -483,11 +434,6 @@ public class GameManager {
 
             // Update rule systems (rounds, victory conditions, respawns)
             ruleSystem.update(deltaTime);
-
-            // Process wave respawns if timer expired
-            if (ruleSystem.shouldProcessWaveRespawn()) {
-                processWaveRespawns();
-            }
 
             // Process individual player respawns based on rules
             processPlayerRespawns();
@@ -993,7 +939,7 @@ public class GameManager {
 
             // Place workshop near the center of the team's spawn area
             Vector2 workshopPosition = teamArea.getCenter().copy();
-            
+
             // Add a small random offset to avoid exact center placement
             double offsetX = (Math.random() - 0.5) * 50; // ±25 units
             double offsetY = (Math.random() - 0.5) * 50; // ±25 units
@@ -1003,10 +949,10 @@ public class GameManager {
             if (!terrainGenerator.isPositionClear(workshopPosition, 100.0)) {
                 // Try to find a nearby clear position within the team area
                 for (int attempt = 0; attempt < 10; attempt++) {
-                    double randomX = teamArea.getMinBounds().x + Math.random() * 
-                        (teamArea.getMaxBounds().x - teamArea.getMinBounds().x);
-                    double randomY = teamArea.getMinBounds().y + Math.random() * 
-                        (teamArea.getMaxBounds().y - teamArea.getMinBounds().y);
+                    double randomX = teamArea.getMinBounds().x + Math.random() *
+                            (teamArea.getMaxBounds().x - teamArea.getMinBounds().x);
+                    double randomY = teamArea.getMinBounds().y + Math.random() *
+                            (teamArea.getMaxBounds().y - teamArea.getMinBounds().y);
                     Vector2 candidate = new Vector2(randomX, randomY);
 
                     if (terrainGenerator.isPositionClear(candidate, 100.0)) {
@@ -1026,8 +972,73 @@ public class GameManager {
             gameEntities.addWorkshop(workshop);
             world.addBody(workshop.getBody());
 
-            log.info("Created workshop {} for team {} at position ({}, {})", 
+            log.info("Created workshop {} for team {} at position ({}, {})",
                     workshopId - 1, teamNumber, workshopPosition.x, workshopPosition.y);
+        }
+    }
+
+    /**
+     * Create headquarters if enabled in rules.
+     * Each team gets one headquarters placed in their spawn zone (defensive position).
+     */
+    private void createHeadquarters() {
+        Rules rules = gameConfig.getRules();
+        if (!rules.hasHeadquarters() || !gameConfig.isTeamMode()) {
+            return; // Headquarters disabled or not in team mode
+        }
+
+        int teamCount = gameConfig.getTeamCount();
+        log.info("Creating headquarters for {} teams in game {}", teamCount, gameId);
+
+        int hqId = Config.nextId();
+
+        // Create one headquarters per team in their spawn zone
+        for (int teamNumber = 1; teamNumber <= teamCount; teamNumber++) {
+            TeamSpawnArea teamArea = teamSpawnManager.getTeamAreas().get(teamNumber);
+            if (teamArea == null) {
+                log.warn("No spawn area found for team {}, skipping HQ creation", teamNumber);
+                continue;
+            }
+
+            // Place HQ at the back of team's spawn area (defensive position)
+            Vector2 hqPosition = teamArea.getCenter().copy();
+
+            // Offset towards the back of the spawn area (away from center of map)
+            Vector2 mapCenter = new Vector2(0, 0);
+            Vector2 awayFromCenter = hqPosition.copy().subtract(mapCenter);
+            if (awayFromCenter.getMagnitude() > 0) {
+                awayFromCenter.normalize();
+                // Move 150 units further back
+                hqPosition.add(awayFromCenter.multiply(150.0));
+            }
+
+            // Ensure HQ position is clear of obstacles
+            if (!terrainGenerator.isPositionClear(hqPosition, 50.0)) {
+                // Try to find a nearby clear position within the team area
+                for (int attempt = 0; attempt < 10; attempt++) {
+                    double offsetX = (Math.random() - 0.5) * 200;
+                    double offsetY = (Math.random() - 0.5) * 200;
+                    Vector2 candidate = new Vector2(hqPosition.x + offsetX, hqPosition.y + offsetY);
+
+                    if (terrainGenerator.isPositionClear(candidate, 50.0)) {
+                        hqPosition = candidate;
+                        break;
+                    }
+                }
+            }
+
+            Headquarters hq = new Headquarters(
+                    hqId++,
+                    teamNumber,
+                    hqPosition.x,
+                    hqPosition.y,
+                    rules.getHeadquartersMaxHealth()
+            );
+            gameEntities.addHeadquarters(hq);
+            world.addBody(hq.getBody());
+
+            log.info("Created headquarters {} for team {} at position ({}, {}) with {} HP",
+                    hqId - 1, teamNumber, hqPosition.x, hqPosition.y, rules.getHeadquartersMaxHealth());
         }
     }
 
@@ -1140,9 +1151,20 @@ public class GameManager {
             playerState.put("kills", player.getKills());
             playerState.put("deaths", player.getDeaths());
             playerState.put("captures", player.getCaptures());
-            playerState.put("respawnTime", player.getRespawnTime());
+            playerState.put("respawnTime", Math.max(0, (player.getRespawnTime() - System.currentTimeMillis()) / 1000));
             playerState.put("livesRemaining", player.getLivesRemaining());
             playerState.put("eliminated", player.isEliminated());
+
+            // Include active power-up effects
+            List<String> activePowerUps = new ArrayList<>();
+            for (AttributeModification mod : player.getAttributeModifications()) {
+                String hint = mod.renderHint();
+                if (hint != null && !hint.isEmpty()) {
+                    activePowerUps.add(hint);
+                }
+            }
+            playerState.put("activePowerUps", activePowerUps);
+
             playerStates.add(playerState);
         }
         gameState.put("players", playerStates);
@@ -1365,7 +1387,7 @@ public class GameManager {
                 Vector2 pos = workshop.getPosition();
                 Map<String, Object> workshopState = new HashMap<>();
                 workshopState.put("id", workshop.getId());
-                workshopState.put("type", "WORKSHOP"); // Add type field for frontend
+                workshopState.put("type", "WORKSHOP");
                 workshopState.put("x", pos.x);
                 workshopState.put("y", pos.y);
                 workshopState.put("craftRadius", workshop.getCraftRadius());
@@ -1373,23 +1395,45 @@ public class GameManager {
                 workshopState.put("maxPowerUps", workshop.getMaxPowerUps());
                 int activeCrafters = workshop.getActiveCrafters();
                 Map<Integer, Double> craftingProgress = workshop.getAllCraftingProgress();
-                
+
                 workshopState.put("activeCrafters", activeCrafters);
                 workshopState.put("craftingProgress", craftingProgress);
-                
-                // DEBUG: Always log workshop state to see what's being sent
-                log.info("DEBUG: Workshop {} sending to frontend - activeCrafters: {}, craftingProgress: {}", 
-                        workshop.getId(), activeCrafters, craftingProgress);
-                
+
                 // Add detailed shape data for client rendering (inherited from Obstacle)
                 workshopState.putAll(workshop.getShapeData());
-                
+
                 workshopStates.add(workshopState);
             }
             gameState.put("workshops", workshopStates);
             gameState.put("workshopsEnabled", true);
         } else {
             gameState.put("workshopsEnabled", false);
+        }
+
+        // Include headquarters states if headquarters are enabled
+        if (gameConfig.getRules().hasHeadquarters()) {
+            List<Map<String, Object>> hqStates = new ArrayList<>();
+            for (Headquarters hq : gameEntities.getAllHeadquarters()) {
+                Vector2 pos = hq.getPosition();
+                Map<String, Object> hqState = new HashMap<>();
+                hqState.put("id", hq.getId());
+                hqState.put("type", "HEADQUARTERS");
+                hqState.put("team", hq.getTeamNumber());
+                hqState.put("x", pos.x);
+                hqState.put("y", pos.y);
+                hqState.put("health", hq.getHealth());
+                hqState.put("maxHealth", hq.getMaxHealth());
+                hqState.put("active", hq.isActive());
+
+                // Add shape data for client rendering
+                hqState.putAll(hq.getShapeData());
+
+                hqStates.add(hqState);
+            }
+            gameState.put("headquarters", hqStates);
+            gameState.put("headquartersEnabled", true);
+        } else {
+            gameState.put("headquartersEnabled", false);
         }
 
         // Include power-up states
@@ -1462,7 +1506,7 @@ public class GameManager {
         double halfHeight = gameConfig.getWorldHeight() / 2.0;
 
         return !(Math.abs(position.x) + checkRadius > halfWidth)
-               && !(Math.abs(position.y) + checkRadius > halfHeight);
+                && !(Math.abs(position.y) + checkRadius > halfHeight);
     }
 
     /**
@@ -1660,52 +1704,31 @@ public class GameManager {
     }
 
     /**
-     * Process wave respawns - called when wave timer expires.
-     */
-    private void processWaveRespawns() {
-        for (Player player : ruleSystem.getDeadPlayersWaitingForWave()) {
-            if (!player.isEliminated()) {
-                player.setActive(true);
-                player.setHealth(gameConfig.getPlayerMaxHealth());
-                player.setRespawnTime(0);
-
-                // Move to spawn point
-                Vector2 spawnPoint = findVariedSpawnPointForTeam(player.getTeam());
-                player.getBody().getTransform().setTranslation(spawnPoint.x, spawnPoint.y);
-                player.getBody().setLinearVelocity(0, 0);
-                player.getBody().setAngularVelocity(0);
-
-                log.debug("Wave respawned player {} at ({}, {})",
-                        player.getId(), spawnPoint.x, spawnPoint.y);
-            }
-        }
-    }
-
-    /**
      * Process individual player respawns based on respawn rules.
      * This centralizes respawn logic in GameManager where RuleSystem is accessible.
      */
     private void processPlayerRespawns() {
         for (Player player : gameEntities.getAllPlayers()) {
-            if (!player.isActive() && player.getRespawnTime() <= 0) {
-                // Player's respawn timer has expired, check if they should respawn
-                if (ruleSystem.shouldPlayerRespawn(player)) {
-                    // Player should respawn - perform respawn
-                    player.setActive(true);
-                    player.setHealth(gameConfig.getPlayerMaxHealth());
-                    player.setRespawnTime(0);
-
-                    // Move to spawn point
-                    Vector2 spawnPoint = findVariedSpawnPointForTeam(player.getTeam());
-                    player.getBody().getTransform().setTranslation(spawnPoint.x, spawnPoint.y);
-                    player.getBody().setLinearVelocity(0, 0);
-                    player.getBody().setAngularVelocity(0);
-
-                    log.debug("Respawned player {} at ({}, {})",
-                            player.getId(), spawnPoint.x, spawnPoint.y);
-                }
+            if (ruleSystem.shouldPlayerRespawn(player)) {
+                respawnPlayer(player);
             }
         }
+    }
+
+    public void respawnAllPlayers() {
+        gameEntities.getPlayers().values().forEach(this::respawnPlayer);
+    }
+
+    public void respawnPlayer(Player player) {
+        player.setActive(true);
+        player.setHealth(gameConfig.getPlayerMaxHealth());
+        player.setRespawnTime(0);
+
+        // Move to spawn point
+        Vector2 spawnPoint = findVariedSpawnPointForTeam(player.getTeam());
+        player.getBody().getTransform().setTranslation(spawnPoint.x, spawnPoint.y);
+        player.getBody().setLinearVelocity(0, 0);
+        player.getBody().setAngularVelocity(0);
     }
 
     public void killPlayer(Player victim, Player shooter) {
@@ -1722,28 +1745,28 @@ public class GameManager {
             }
         }
 
-        // Handle respawn based on respawn mode (delegated to RuleSystem)
-        RuleSystem.RespawnAction action = ruleSystem.handlePlayerDeath(victim);
-
-        switch (action) {
-            case RESPAWN_AFTER_DELAY:
-                // Standard respawn with delay
-                victim.setRespawnTime(gameConfig.getRules().getRespawnDelay());
-                Vector2 newSpawnPoint = findVariedSpawnPointForTeam(victim.getTeam());
-                victim.setRespawnPoint(newSpawnPoint);
+        Vector2 newSpawnPoint = findVariedSpawnPointForTeam(victim.getTeam());
+        victim.setRespawnPoint(newSpawnPoint);
+        switch (gameConfig.getRules().getRespawnMode()) {
+            case INSTANT:
+                victim.setRespawnTime((long) (System.currentTimeMillis() + (gameConfig.getRules().getRespawnDelay() * 1000)));
                 break;
-
-            case WAIT_FOR_WAVE:
-                // Player added to wave queue by RuleSystem
+            case WAVE:
+                victim.setRespawnTime(ruleSystem.getWaveRespawnTime());
                 break;
-
-            case WAIT_FOR_ROUND:
-                // Player will respawn at round start
+            case NEXT_ROUND:
+            case ELIMINATION:
+                victim.setRespawnTime(ruleSystem.getRoundEndTime());
                 break;
-
-            case ELIMINATE:
-                // Player is permanently eliminated
+            case LIMITED:
+                if (victim.isEliminated()) {
+                    victim.setRespawnTime(0);
+                } else {
+                    victim.setRespawnTime((long) (System.currentTimeMillis() + (gameConfig.getRules().getRespawnDelay() * 1000)));
+                }
                 break;
+            default:
+                throw new IllegalStateException("Unexpected value: " + gameConfig.getRules().getRespawnMode());
         }
 
         // Broadcast kill event with team colors
@@ -1762,6 +1785,72 @@ public class GameManager {
         deathNotification.put("killerId", shooter != null ? shooter.getId() : null);
         deathNotification.put("killerName", shooter != null ? shooter.getPlayerName() : null);
         broadcast(deathNotification);
+    }
+
+    /**
+     * Handle headquarters damage and scoring.
+     * Called by CollisionProcessor when HQ is hit.
+     */
+    public void handleHeadquartersDamage(Headquarters hq, Player attacker, double damage, boolean destroyed) {
+        Rules rules = gameConfig.getRules();
+
+        // Award points for damage dealt
+        double pointsPerDamage = rules.getHeadquartersPointsPerDamage();
+        int points = (int) (damage * pointsPerDamage);
+
+        if (points > 0 && attacker != null) {
+            ruleSystem.addTeamPoints(attacker.getTeam(), points);
+            log.debug("Team {} scored {} points for damaging team {} headquarters (damage: {})",
+                    attacker.getTeam(), points, hq.getTeamNumber(), damage);
+        }
+
+        // Handle destruction
+        if (destroyed) {
+            int destructionBonus = rules.getHeadquartersDestructionBonus();
+            if (attacker != null) {
+                ruleSystem.addTeamPoints(attacker.getTeam(), destructionBonus);
+            }
+
+            // Create destruction effect
+            createHeadquartersDestructionEffect(hq);
+
+            log.info("Team {} headquarters destroyed by team {}! Bonus: {} points",
+                    hq.getTeamNumber(), attacker != null ? attacker.getTeam() : "?", destructionBonus);
+
+            // Broadcast HQ destruction event
+            if (attacker != null) {
+                gameEventManager.broadcastHeadquartersDestroyed(hq.getTeamNumber(), attacker.getTeam());
+            }
+
+            // Check if this ends the game
+            if (rules.isHeadquartersDestructionEndsGame()) {
+                int winningTeam = attacker != null ? attacker.getTeam() : -1;
+                if (winningTeam > 0) {
+                    ruleSystem.declareVictory(winningTeam, -1, "Headquarters Destroyed");
+                }
+            }
+        }
+    }
+
+    /**
+     * Create explosion effect when headquarters is destroyed.
+     */
+    private void createHeadquartersDestructionEffect(Headquarters hq) {
+        Vector2 pos = hq.getPosition();
+
+        // Create large explosion effect at HQ location
+        FieldEffect explosion = new FieldEffect(
+                Config.nextId(),
+                -1, // No owner
+                FieldEffectType.EXPLOSION,
+                pos,
+                100.0, // Large radius
+                100.0, // Large damage
+                2.0,   // 2 second duration
+                0      // No team
+        );
+        gameEntities.addFieldEffect(explosion);
+        world.addBody(explosion.getBody());
     }
 
     // Game Event Broadcasting Convenience Methods

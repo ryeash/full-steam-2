@@ -52,16 +52,7 @@ public class GameEventManager {
             }
         }
     }
-    
-    /**
-     * Broadcast multiple events in sequence
-     */
-    public void broadcastEvents(Collection<GameEvent> events) {
-        if (events != null) {
-            events.forEach(this::broadcastEvent);
-        }
-    }
-    
+
     /**
      * Determine which player IDs should receive the event based on targeting
      */
@@ -204,6 +195,13 @@ public class GameEventManager {
      */
     public void broadcastAchievement(String playerName, String achievement) {
         broadcastEvent(GameEvent.createAchievementEvent(playerName, achievement));
+    }
+    
+    /**
+     * Convenience method to broadcast headquarters destruction
+     */
+    public void broadcastHeadquartersDestroyed(int destroyedTeam, int attackingTeam) {
+        broadcastEvent(GameEvent.createHeadquartersDestroyedEvent(destroyedTeam, attackingTeam));
     }
     
     /**

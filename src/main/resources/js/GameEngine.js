@@ -1,224 +1,3 @@
-/**
- * Full Steam - Battle Arena Game Engine
- * Built with PixiJS
- */
-
-/**
- * Player Interpolator for smooth movement with client-side prediction
- * Handles both local player (with prediction) and remote players (with smoothing)
- */
-class PlayerInterpolator {
-    constructor(sprite, playerId, isLocalPlayer = false) {
-        this.sprite = sprite;
-        this.playerId = playerId;
-        this.isLocalPlayer = isLocalPlayer;
-        
-        // Server state
-        this.serverPos = { x: sprite.x, y: sprite.y };
-        this.serverRotation = 0;
-        this.lastServerUpdate = performance.now();
-        this.isFirstUpdate = true; // Flag to handle initial positioning
-        
-        // Interpolation settings
-        this.smoothingFactor = 0.15;
-        this.maxInterpolationDistance = 200; // pixels - beyond this, assume teleport/respawn
-        
-        // Performance optimization
-        this.tempDx = 0;
-        this.tempDy = 0;
-        this.tempDistance = 0;
-    }
-    
-    updateFromServer(x, y, rotation = 0) {
-        const now = performance.now();
-        const timeSinceLastUpdate = (now - this.lastServerUpdate) / 1000;
-        
-        // Calculate distance from current position to server position
-        this.tempDx = this.sprite.x - x;
-        this.tempDy = this.sprite.y - y;
-        this.tempDistance = Math.sqrt(this.tempDx * this.tempDx + this.tempDy * this.tempDy);
-        
-        // Check if this is a teleport/respawn (distance too large for normal movement)
-        // Always snap on first update to avoid initial interpolation from (0,0)
-        if (this.isFirstUpdate || this.tempDistance > this.maxInterpolationDistance) {
-            // Large distance change - assume teleport/respawn, snap immediately
-            this.sprite.x = x;
-            this.sprite.y = y;
-            this.sprite.rotation = -rotation; // Invert for PIXI
-            
-            // Player teleported/respawned - no logging needed for performance
-            this.isFirstUpdate = false;
-        } else {
-            // Normal movement - use interpolation
-            // Treat local player the same as remote players for smooth interpolation
-            this.interpolateToServer(x, y, rotation, timeSinceLastUpdate);
-            this.isFirstUpdate = false;
-        }
-        
-        // Update server reference
-        this.serverPos.x = x;
-        this.serverPos.y = y;
-        this.serverRotation = rotation;
-        this.lastServerUpdate = now;
-    }
-    
-    interpolateToServer(serverX, serverY, serverRotation, deltaTime) {
-        // Smooth interpolation to server position for all players
-        const lerpFactor = Math.min(1.0, this.smoothingFactor * (deltaTime * 60)); // Adjust for frame rate
-        
-        this.sprite.x += (serverX - this.sprite.x) * lerpFactor;
-        this.sprite.y += (serverY - this.sprite.y) * lerpFactor;
-        this.sprite.rotation = this.lerpAngle(this.sprite.rotation, -serverRotation, lerpFactor);
-    }
-    
-    lerpAngle(from, to, factor) {
-        // Handle angle wrapping for smooth rotation
-        let diff = to - from;
-        if (diff > Math.PI) diff -= 2 * Math.PI;
-        if (diff < -Math.PI) diff += 2 * Math.PI;
-        return from + diff * factor;
-    }
-    
-    destroy() {
-        // Clear all object references to prevent memory leaks
-        this.sprite = null;
-        this.serverPos = null;
-        this.predictedPos = null;
-        this.velocity = null;
-        this.isFirstUpdate = null;
-        
-        // Clear cached values
-        this.tempDx = 0;
-        this.tempDy = 0;
-        this.tempDistance = 0;
-    }
-}
-
-/**
- * Projectile Interpolator for smooth movement between server updates
- * Optimized for performance and accuracy
- */
-class ProjectileInterpolator {
-    constructor(container, initialVelocity = { x: 0, y: 0 }) {
-        this.container = container; // Now works with container instead of sprite
-        this.velocity = { ...initialVelocity };
-        this.serverPos = { x: container.x, y: container.y };
-        this.lastServerUpdate = performance.now(); // Use high-resolution timer
-        this.correctionThreshold = 15; // Reduced from 30 pixels for smoother movement
-        this.maxCorrectionSpeed = 500; // pixels/second - limit correction speed to avoid teleporting
-        
-        // Performance optimization: cache frequently used values
-        this.tempDistance = 0;
-        this.tempDx = 0;
-        this.tempDy = 0;
-        
-        // Trail tracking
-        this.lastTrailPosition = { x: container.x, y: container.y };
-        this.trailUpdateDistance = 5; // Add trail point every 5 pixels of movement
-    }
-    
-    updateFromServer(x, y, vx = 0, vy = 0) {
-        const now = performance.now();
-        const timeSinceLastUpdate = (now - this.lastServerUpdate) / 1000; // Convert to seconds
-        
-        // Calculate prediction error (difference between predicted and actual server position)
-        this.tempDx = this.container.x - x;
-        this.tempDy = this.container.y - y;
-        this.tempDistance = Math.sqrt(this.tempDx * this.tempDx + this.tempDy * this.tempDy);
-        
-        // Apply correction based on error magnitude
-        if (this.tempDistance > this.correctionThreshold) {
-            // For large errors, apply gradual correction to avoid jarring snaps
-            if (this.tempDistance > 100) {
-                // Very large error - likely a teleport or major desync, snap immediately
-                this.container.x = x;
-                this.container.y = y;
-            } else {
-                // Moderate error - apply smooth correction over time
-                const correctionFactor = Math.min(1.0, (this.maxCorrectionSpeed * timeSinceLastUpdate) / this.tempDistance);
-                this.container.x += this.tempDx * -correctionFactor;
-                this.container.y += this.tempDy * -correctionFactor;
-            }
-        }
-        
-        // Always update server reference and velocity
-        this.serverPos.x = x;
-        this.serverPos.y = y;
-        this.velocity.x = vx;
-        this.velocity.y = vy;
-        this.lastServerUpdate = now;
-    }
-    
-    update(deltaTime) {
-        // PIXI deltaTime is frame-based, but we need consistent time-based movement
-        // Use a fixed timestep approach for more predictable interpolation
-        const targetFPS = 60;
-        const dt = deltaTime / targetFPS; // Convert PIXI deltaTime to seconds
-        
-        // Store old position for trail tracking
-        const oldX = this.container.x;
-        const oldY = this.container.y;
-        
-        // Apply velocity-based prediction
-        // This predicts where the projectile should be based on last known velocity
-        this.container.x += this.velocity.x * dt;
-        this.container.y += this.velocity.y * dt;
-        
-        // Update trail if projectile has one
-        this.updateTrail(oldX, oldY);
-    }
-    
-    updateTrail(oldX, oldY) {
-        if (!this.container.trail || !this.container.trailPoints) return;
-        
-        // Check if projectile has moved enough to add a new trail point
-        const dx = this.container.x - this.lastTrailPosition.x;
-        const dy = this.container.y - this.lastTrailPosition.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        if (distance >= this.trailUpdateDistance) {
-            // Add new trail point (relative to container position)
-            const relativeX = this.lastTrailPosition.x - this.container.x;
-            const relativeY = this.lastTrailPosition.y - this.container.y;
-            
-            this.container.trailPoints.push({
-                x: relativeX,
-                y: relativeY
-            });
-            
-            // Update last trail position
-            this.lastTrailPosition.x = this.container.x;
-            this.lastTrailPosition.y = this.container.y;
-            
-            // Keep trail points within maximum length
-            while (this.container.trailPoints.length > this.container.maxTrailLength) {
-                this.container.trailPoints.shift();
-            }
-            
-            // Update trail graphics through game engine
-            if (window.gameEngine) {
-                window.gameEngine.updateProjectileTrail(this.container);
-            }
-        }
-    }
-    
-    /**
-     * Clean up resources when interpolator is no longer needed
-     */
-    destroy() {
-        // Clear all object references to prevent memory leaks
-        this.container = null;
-        this.velocity = null;
-        this.serverPos = null;
-        this.lastTrailPosition = null;
-        
-        // Clear any cached values
-        this.tempDistance = 0;
-        this.tempDx = 0;
-        this.tempDy = 0;
-    }
-}
-
 class GameEngine {
     constructor() {
         this.app = null;
@@ -318,6 +97,15 @@ class GameEngine {
             this.projectiles.forEach(projectileContainer => {
                 if (projectileContainer.isPlasma) {
                     this.animatePlasmaEffects(projectileContainer, deltaTime);
+                }
+            });
+            
+            // Smoothly update workshop progress bars
+            this.utilityEntities.forEach((container, entityId) => {
+                if (container.progressBars) {
+                    container.progressBars.forEach((progressBar) => {
+                        this.updateProgressBarAnimation(progressBar, deltaTime);
+                    });
                 }
             });
         });
@@ -1251,6 +1039,18 @@ class GameEngine {
             });
         }
         
+        // Handle headquarters
+        if (data.headquarters) {
+            data.headquarters.forEach(hqData => {
+                currentEntityIds.add(hqData.id);
+                if (this.utilityEntities.has(hqData.id)) {
+                    this.updateUtilityEntity(hqData);
+                } else {
+                    this.createUtilityEntity(hqData);
+                }
+            });
+        }
+        
         // Remove entities that no longer exist
         for (let [entityId, entity] of this.utilityEntities) {
             if (!currentEntityIds.has(entityId)) {
@@ -2068,7 +1868,7 @@ class GameEngine {
         if (!sprite) return;
 
         // Enable interpolation for smoothness, but keep prediction disabled
-        const USE_INTERPOLATION = true;
+        const USE_INTERPOLATION = false;
         
         if (USE_INTERPOLATION) {
             // Use interpolator for smooth movement
@@ -2076,9 +1876,6 @@ class GameEngine {
             if (interpolator) {
                 // Convert server position from world to screen coordinates
                 const isoPos = this.worldToIsometric(playerData.x, playerData.y);
-                
-                // Update interpolator with server data
-                // Server rotation is in physics coordinates, pass it directly
                 interpolator.updateFromServer(isoPos.x, isoPos.y, playerData.rotation || 0);
             } else {
                 // Fallback to direct position update if no interpolator
@@ -2124,6 +1921,9 @@ class GameEngine {
         if (sprite.reloadIndicator) {
             this.updateReloadIndicator(sprite.reloadIndicator, playerData);
         }
+        
+        // Update power-up visual indicators
+        this.updatePowerUpIndicators(sprite, playerData);
 
         sprite.playerData = playerData;
     }
@@ -2199,6 +1999,15 @@ class GameEngine {
             }
             sprite.deathMarker.destroy();
             sprite.deathMarker = null;
+        }
+        
+        // Remove and destroy power-up container
+        if (sprite.powerUpContainer) {
+            if (sprite.powerUpContainer.parent) {
+                sprite.powerUpContainer.parent.removeChild(sprite.powerUpContainer);
+            }
+            sprite.powerUpContainer.destroy({ children: true });
+            sprite.powerUpContainer = null;
         }
         
         // Clear player data reference
@@ -2419,6 +2228,152 @@ class GameEngine {
         } else if (reloadContainer.reloadText) {
             reloadContainer.reloadText.alpha = 1.0; // Full opacity when not reloading
         }
+    }
+    
+    /**
+     * Update power-up visual indicators around player.
+     */
+    updatePowerUpIndicators(sprite, playerData) {
+        const activePowerUps = playerData.activePowerUps || [];
+        
+        // Create power-up container if it doesn't exist
+        if (!sprite.powerUpContainer) {
+            sprite.powerUpContainer = new PIXI.Container();
+            this.gameContainer.addChild(sprite.powerUpContainer);
+        }
+        
+        // Update position to match player
+        sprite.powerUpContainer.position.set(sprite.x, sprite.y);
+        sprite.powerUpContainer.visible = playerData.active;
+        
+        // Parse active power-ups and create/update visuals
+        if (activePowerUps.length > 0) {
+            this.updatePowerUpVisuals(sprite.powerUpContainer, activePowerUps, sprite);
+        } else {
+            // Clear all power-up effects if no active power-ups
+            sprite.powerUpContainer.removeChildren();
+        }
+    }
+    
+    /**
+     * Create/update power-up visual effects based on render hints.
+     */
+    updatePowerUpVisuals(container, activePowerUps, sprite) {
+        // Parse render hints: "effect_name:#COLOR:animation_type:show_icon:Display Name"
+        const effects = activePowerUps.map(hint => {
+            const parts = hint.split(':');
+            return {
+                name: parts[0] || 'unknown',
+                color: parseInt(parts[1]?.replace('#', '') || 'FFFFFF', 16),
+                animation: parts[2] || 'pulse',
+                showIcon: parts[3] === 'true',
+                displayName: parts[4] || ''
+            };
+        });
+        
+        // Clear existing visuals
+        container.removeChildren();
+        
+        // Create visual effect for each active power-up
+        effects.forEach((effect, index) => {
+            // Create aura/glow around player
+            const aura = new PIXI.Graphics();
+            
+            // Draw aura based on effect type
+            if (effect.animation === 'sparkle' || effect.animation === 'pulse') {
+                // Pulsing glow ring
+                const time = Date.now() * 0.003;
+                const pulseSize = 20 + Math.sin(time + index) * 5;
+                
+                aura.lineStyle(3, effect.color, 0.6);
+                aura.drawCircle(0, 0, pulseSize);
+                
+                // Add inner particles/sparkles
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i / 8) * Math.PI * 2 + time;
+                    const distance = 25;
+                    const x = Math.cos(angle) * distance;
+                    const y = Math.sin(angle) * distance;
+                    
+                    aura.beginFill(effect.color, 0.8);
+                    aura.drawCircle(x, y, 2);
+                    aura.endFill();
+                }
+            } else if (effect.animation === 'shield') {
+                // Hexagonal shield pattern
+                const time = Date.now() * 0.002;
+                const size = 22 + Math.sin(time) * 2;
+                
+                aura.lineStyle(2, effect.color, 0.7);
+                for (let i = 0; i < 6; i++) {
+                    const angle = (i / 6) * Math.PI * 2;
+                    const x = Math.cos(angle) * size;
+                    const y = Math.sin(angle) * size;
+                    if (i === 0) {
+                        aura.moveTo(x, y);
+                    } else {
+                        aura.lineTo(x, y);
+                    }
+                }
+                aura.closePath();
+            } else if (effect.animation === 'slow') {
+                // Slow debuff - dripping effect
+                const time = Date.now() * 0.002;
+                aura.beginFill(effect.color, 0.5);
+                for (let i = 0; i < 6; i++) {
+                    const angle = (i / 6) * Math.PI * 2 + time;
+                    const x = Math.cos(angle) * 18;
+                    const y = Math.sin(angle) * 18 + Math.sin(time * 2 + i) * 3;
+                    aura.drawCircle(x, y, 3);
+                }
+                aura.endFill();
+            }
+            
+            // Store animation type for update loop
+            aura.animationType = effect.animation;
+            aura.effectColor = effect.color;
+            aura.effectIndex = index;
+            
+            container.addChild(aura);
+            
+            // Add icon badge if requested (for player's own view)
+            if (effect.showIcon && sprite.playerData.id === this.myPlayerId) {
+                const badge = this.createPowerUpBadge(effect, index);
+                container.addChild(badge);
+            }
+        });
+    }
+    
+    /**
+     * Create a small badge/icon for power-up status (shown only for local player).
+     */
+    createPowerUpBadge(effect, index) {
+        const badge = new PIXI.Container();
+        
+        // Position badges in a row above player
+        const offsetX = (index - 0.5) * 30;
+        badge.position.set(offsetX, -45);
+        
+        // Background circle
+        const bg = new PIXI.Graphics();
+        bg.beginFill(0x000000, 0.7);
+        bg.drawCircle(0, 0, 10);
+        bg.endFill();
+        bg.lineStyle(2, effect.color, 1.0);
+        bg.drawCircle(0, 0, 10);
+        badge.addChild(bg);
+        
+        // Icon letter (first letter of effect name)
+        const letter = effect.displayName.charAt(0) || '?';
+        const text = new PIXI.Text(letter, {
+            fontSize: 12,
+            fill: effect.color,
+            fontWeight: 'bold'
+        });
+        text.anchor.set(0.5);
+        badge.addChild(text);
+        
+        return badge;
     }
     
     createProjectile(projectileData) {
@@ -3813,6 +3768,8 @@ class GameEngine {
             case 'WORKSHOP':
                 console.log('DEBUG: Routing to createWorkshopGraphics');
                 return this.createWorkshopGraphics(graphics, entityData);
+            case 'HEADQUARTERS':
+                return this.createHeadquartersGraphics(graphics, entityData);
             case 'POWERUP':
                 return this.createPowerUpGraphics(graphics, entityData);
             default:
@@ -4339,58 +4296,204 @@ class GameEngine {
     }
     
     /**
+     * Update workshop visual to show crafting progress changes
+     */
+    updateWorkshopVisual(container, entityData) {
+        // Clear and redraw with updated progress
+        const graphics = container.getChildAt(0);
+        if (graphics) {
+            graphics.clear();
+            this.createWorkshopGraphics(graphics, entityData);
+        }
+    }
+    
+    /**
+     * Create headquarters graphics
+     */
+    createHeadquartersGraphics(graphics, entityData) {
+        const width = entityData.width || 80;
+        const height = entityData.height || 60;
+        const halfWidth = width / 2;
+        const halfHeight = height / 2;
+        const team = entityData.team || 0;
+        
+        // Get team color
+        const teamColor = this.getTeamColor(team);
+        
+        // Calculate health percentage for damage visualization
+        const healthPct = entityData.maxHealth > 0 ? entityData.health / entityData.maxHealth : 1.0;
+        
+        // HQ base - large fortified rectangle with team color
+        const baseAlpha = 0.9;
+        graphics.beginFill(teamColor, baseAlpha);
+        graphics.drawRect(-halfWidth, -halfHeight, width, height);
+        graphics.endFill();
+        
+        // Damage overlay (darker as health decreases)
+        if (healthPct < 1.0) {
+            const damageAlpha = (1.0 - healthPct) * 0.6;
+            graphics.beginFill(0x000000, damageAlpha);
+            graphics.drawRect(-halfWidth, -halfHeight, width, height);
+            graphics.endFill();
+        }
+        
+        // HQ fortified outline (thicker than normal obstacles)
+        graphics.lineStyle(4, 0xFFFFFF, 0.9);
+        graphics.drawRect(-halfWidth, -halfHeight, width, height);
+        
+        // Corner reinforcements (fortress-like)
+        const cornerSize = 8;
+        graphics.lineStyle(3, 0xFFFFFF, 1.0);
+        // Top-left
+        graphics.moveTo(-halfWidth, -halfHeight + cornerSize);
+        graphics.lineTo(-halfWidth, -halfHeight);
+        graphics.lineTo(-halfWidth + cornerSize, -halfHeight);
+        // Top-right
+        graphics.moveTo(halfWidth - cornerSize, -halfHeight);
+        graphics.lineTo(halfWidth, -halfHeight);
+        graphics.lineTo(halfWidth, -halfHeight + cornerSize);
+        // Bottom-right
+        graphics.moveTo(halfWidth, halfHeight - cornerSize);
+        graphics.lineTo(halfWidth, halfHeight);
+        graphics.lineTo(halfWidth - cornerSize, halfHeight);
+        // Bottom-left
+        graphics.moveTo(-halfWidth + cornerSize, halfHeight);
+        graphics.lineTo(-halfWidth, halfHeight);
+        graphics.lineTo(-halfWidth, halfHeight - cornerSize);
+        
+        // Central command center design
+        const centerSize = Math.min(halfWidth, halfHeight) * 0.5;
+        graphics.lineStyle(2, 0xFFFFFF, 0.8);
+        graphics.beginFill(teamColor, 0.5);
+        graphics.drawCircle(0, 0, centerSize);
+        graphics.endFill();
+        
+        // Team indicator - large team number in center
+        const teamText = new PIXI.Text(`HQ\n${team}`, {
+            fontSize: 18,
+            fill: 0xFFFFFF,
+            fontWeight: 'bold',
+            align: 'center',
+            stroke: 0x000000,
+            strokeThickness: 3
+        });
+        teamText.anchor.set(0.5);
+        graphics.addChild(teamText);
+        
+        // Health bar above HQ
+        const barWidth = width * 0.8;
+        const barHeight = 6;
+        const barY = -halfHeight - 15;
+        
+        // Health bar background
+        graphics.lineStyle(2, 0x000000, 0.8);
+        graphics.beginFill(0x333333, 0.8);
+        graphics.drawRect(-barWidth/2, barY, barWidth, barHeight);
+        graphics.endFill();
+        
+        // Health bar fill (color changes based on health)
+        let healthBarColor = 0x00FF00; // Green
+        if (healthPct < 0.3) {
+            healthBarColor = 0xFF0000; // Red
+        } else if (healthPct < 0.6) {
+            healthBarColor = 0xFFAA00; // Orange
+        }
+        
+        graphics.beginFill(healthBarColor, 0.9);
+        graphics.drawRect(-barWidth/2, barY, barWidth * healthPct, barHeight);
+        graphics.endFill();
+        
+        // Health text
+        const healthText = new PIXI.Text(`${Math.round(entityData.health)}/${Math.round(entityData.maxHealth)}`, {
+            fontSize: 10,
+            fill: 0xFFFFFF,
+            fontWeight: 'bold',
+            stroke: 0x000000,
+            strokeThickness: 2
+        });
+        healthText.anchor.set(0.5);
+        healthText.position.set(0, barY - 12);
+        graphics.addChild(healthText);
+        
+        // Warning pulse effect when heavily damaged
+        if (healthPct < 0.3) {
+            const pulse = Math.sin(Date.now() * 0.005) * 0.5 + 0.5;
+            graphics.lineStyle(3, 0xFF0000, pulse);
+            graphics.drawRect(-halfWidth - 5, -halfHeight - 5, width + 10, height + 10);
+        }
+        
+        return graphics;
+    }
+    
+    /**
+     * Update headquarters visual to show health changes
+     */
+    updateHeadquartersVisual(container, entityData) {
+        // Clear and redraw with updated health
+        const graphics = container.getChildAt(0);
+        if (graphics) {
+            graphics.clear();
+            // Remove old text children
+            while (graphics.children.length > 0) {
+                graphics.removeChildAt(0);
+            }
+            this.createHeadquartersGraphics(graphics, entityData);
+        }
+    }
+    
+    /**
      * Create power-up graphics
      */
     createPowerUpGraphics(graphics, entityData) {
         const powerUpType = entityData.powerUpType || entityData.type || 'SPEED_BOOST';
         
-        // Power-up base - small circle
+        // Power-up base - larger circle for better visibility
         graphics.beginFill(0xFFFFFF, 0.9);
-        graphics.drawCircle(0, 0, 8);
+        graphics.drawCircle(0, 0, 14);
         graphics.endFill();
         
-        // Power-up outline
-        graphics.lineStyle(2, 0xCCCCCC, 1.0);
-        graphics.drawCircle(0, 0, 8);
+        // Power-up outline (thicker for better visibility)
+        graphics.lineStyle(3, 0xCCCCCC, 1.0);
+        graphics.drawCircle(0, 0, 14);
         
-        // Type-specific visual indicators
+        // Type-specific visual indicators (larger inner circle)
         switch (powerUpType) {
             case 'SPEED_BOOST':
                 graphics.beginFill(0x00FFFF, 0.8);
-                graphics.drawCircle(0, 0, 5);
+                graphics.drawCircle(0, 0, 9);
                 graphics.endFill();
                 break;
             case 'HEALTH_REGENERATION':
                 graphics.beginFill(0x00FF00, 0.8);
-                graphics.drawCircle(0, 0, 5);
+                graphics.drawCircle(0, 0, 9);
                 graphics.endFill();
                 break;
             case 'DAMAGE_BOOST':
                 graphics.beginFill(0xFF0000, 0.8);
-                graphics.drawCircle(0, 0, 5);
+                graphics.drawCircle(0, 0, 9);
                 graphics.endFill();
                 break;
             case 'DAMAGE_RESISTANCE':
                 graphics.beginFill(0xFFD700, 0.8);
-                graphics.drawCircle(0, 0, 5);
+                graphics.drawCircle(0, 0, 9);
                 graphics.endFill();
                 break;
             case 'BERSERKER_MODE':
                 graphics.beginFill(0xFF4500, 0.8);
-                graphics.drawCircle(0, 0, 5);
+                graphics.drawCircle(0, 0, 9);
                 graphics.endFill();
                 break;
             case 'SLOW_EFFECT':
                 graphics.beginFill(0x0066CC, 0.8);
-                graphics.drawCircle(0, 0, 5);
+                graphics.drawCircle(0, 0, 9);
                 graphics.endFill();
                 break;
         }
         
-        // Add sparkle effect
-        graphics.beginFill(0xFFFFFF, 0.6);
-        graphics.drawCircle(-3, -3, 2);
-        graphics.drawCircle(3, 3, 2);
+        // Add larger sparkle effect for better visibility
+        graphics.beginFill(0xFFFFFF, 0.7);
+        graphics.drawCircle(-5, -5, 3);
+        graphics.drawCircle(5, 5, 3);
         graphics.endFill();
         
         return graphics;
@@ -4429,6 +4532,8 @@ class GameEngine {
                 return 5;  // Below most things
             case 'WORKSHOP':
                 return 6;  // Above obstacles, below players
+            case 'HEADQUARTERS':
+                return 5;  // Same as obstacles (HQ is a structure)
             case 'POWERUP':
                 return 10; // Above players, below projectiles
             default:
@@ -4463,6 +4568,12 @@ class GameEngine {
                 break;
             case 'DEFENSE_LASER':
                 this.updateDefenseLaserVisual(container, entityData);
+                break;
+            case 'WORKSHOP':
+                this.updateWorkshopVisual(container, entityData);
+                break;
+            case 'HEADQUARTERS':
+                this.updateHeadquartersVisual(container, entityData);
                 break;
         }
     }
@@ -4658,6 +4769,142 @@ class GameEngine {
         const time = Date.now() * 0.003; // Slow pulse
         const pulseValue = 0.8 + 0.2 * Math.sin(time);
         container.alpha = pulseValue;
+    }
+    
+    /**
+     * Update workshop visual with crafting progress
+     */
+    updateWorkshopVisual(container, entityData) {
+        // Always update the progress data for smooth interpolation
+        container.craftingProgress = entityData.craftingProgress || {};
+        container.activeCrafters = entityData.activeCrafters || 0;
+        
+        // Create progress bars if they don't exist
+        if (!container.progressBars) {
+            container.progressBars = new Map();
+        }
+        
+        // Get current crafters
+        const currentCrafters = new Set(Object.keys(container.craftingProgress));
+        const existingCrafters = new Set(container.progressBars.keys());
+        
+        // Remove progress bars for players who stopped crafting
+        for (const playerId of existingCrafters) {
+            if (!currentCrafters.has(playerId)) {
+                const progressBar = container.progressBars.get(playerId);
+                if (progressBar && progressBar.parent) {
+                    container.removeChild(progressBar);
+                    progressBar.destroy();
+                }
+                container.progressBars.delete(playerId);
+            }
+        }
+        
+        // Create or update progress bars for active crafters
+        let barIndex = 0;
+        for (const [playerId, progress] of Object.entries(container.craftingProgress)) {
+            if (progress > 0) {
+                let progressBar = container.progressBars.get(playerId);
+                
+                if (!progressBar) {
+                    // Create new progress bar
+                    progressBar = this.createWorkshopProgressBar();
+                    container.addChild(progressBar);
+                    container.progressBars.set(playerId, progressBar);
+                }
+                
+                // Position progress bar above workshop
+                const yOffset = -40 - (barIndex * 12); // Stack multiple bars
+                progressBar.position.set(0, yOffset);
+                
+                // Update progress bar fill (smooth interpolation happens in animation)
+                progressBar.targetProgress = progress;
+                
+                barIndex++;
+            }
+        }
+    }
+    
+    /**
+     * Create a simple horizontal progress bar for workshop crafting
+     */
+    createWorkshopProgressBar() {
+        const barContainer = new PIXI.Container();
+        
+        // Progress bar dimensions
+        const barWidth = 60;
+        const barHeight = 8;
+        
+        // Background (dark gray)
+        const background = new PIXI.Graphics();
+        background.beginFill(0x222222, 0.8);
+        background.drawRoundedRect(-barWidth/2, 0, barWidth, barHeight, 3);
+        background.endFill();
+        
+        // Border
+        background.lineStyle(1, 0x444444, 0.8);
+        background.drawRoundedRect(-barWidth/2, 0, barWidth, barHeight, 3);
+        barContainer.addChild(background);
+        
+        // Progress fill (starts empty)
+        const progressFill = new PIXI.Graphics();
+        barContainer.addChild(progressFill);
+        
+        // Store references and state
+        barContainer.background = background;
+        barContainer.progressFill = progressFill;
+        barContainer.barWidth = barWidth;
+        barContainer.barHeight = barHeight;
+        barContainer.currentProgress = 0;
+        barContainer.targetProgress = 0;
+        
+        return barContainer;
+    }
+    
+    /**
+     * Smoothly animate progress bar from current to target progress
+     */
+    updateProgressBarAnimation(progressBar, deltaTime) {
+        const target = progressBar.targetProgress || 0;
+        const current = progressBar.currentProgress || 0;
+        
+        // Smooth interpolation (lerp)
+        const lerpSpeed = 0.15; // Adjust for smoothness (0.1 = slow, 0.5 = fast)
+        const newProgress = current + (target - current) * lerpSpeed;
+        
+        // Only redraw if progress changed enough (avoid tiny updates)
+        if (Math.abs(newProgress - current) > 0.001) {
+            progressBar.currentProgress = newProgress;
+            
+            // Redraw the progress fill
+            const fill = progressBar.progressFill;
+            fill.clear();
+            
+            if (newProgress > 0) {
+                // Calculate fill width
+                const fillWidth = (progressBar.barWidth - 4) * newProgress; // -4 for padding
+                
+                // Color based on progress (blue -> green as it fills)
+                let fillColor;
+                if (newProgress < 0.33) {
+                    fillColor = 0x3498db; // Blue
+                } else if (newProgress < 0.66) {
+                    fillColor = 0x2ecc71; // Green
+                } else {
+                    fillColor = 0xf39c12; // Orange/Gold (almost complete)
+                }
+                
+                // Draw the fill
+                fill.beginFill(fillColor, 0.9);
+                fill.drawRoundedRect(-progressBar.barWidth/2 + 2, 2, fillWidth, progressBar.barHeight - 4, 2);
+                fill.endFill();
+                
+                // Add a subtle shine effect
+                fill.beginFill(0xffffff, 0.3);
+                fill.drawRoundedRect(-progressBar.barWidth/2 + 2, 2, fillWidth, 2, 2);
+                fill.endFill();
+            }
+        }
     }
     
     /**
@@ -6610,572 +6857,5 @@ class GameEngine {
         this.gameState = null;
         
         console.log('GameEngine destroyed and cleaned up');
-    }
-}
-
-/**
- * Input Manager for handling keyboard, mouse, and gamepad input
- */
-class InputManager {
-    constructor() {
-        this.keys = {
-            w: false, a: false, s: false, d: false,
-            shift: false, space: false
-        };
-        this.movement = {
-            moveX: 0.0, // -1.0 = left, +1.0 = right
-            moveY: 0.0  // -1.0 = down, +1.0 = up
-        };
-        this.mouse = {
-            x: 0, y: 0, worldX: 0, worldY: 0,
-            left: false, right: false
-        };
-        
-        // Gamepad support
-        this.gamepad = {
-            connected: false,
-            index: -1,
-            leftStick: { x: 0, y: 0 },
-            rightStick: { x: 0, y: 0 },
-            buttons: {
-                a: false,        // Fire/Action (Button 0)
-                b: false,        // Secondary action (Button 1)
-                x: false,        // Reload (Button 2)
-                y: false,        // Weapon switch (Button 3)
-                lb: false,       // Left bumper (Button 4)
-                rb: false,       // Right bumper (Button 5)
-                lt: false,       // Left trigger (Button 6)
-                rt: false,       // Right trigger (Button 7)
-                back: false,     // Back/Select (Button 8)
-                start: false,    // Start/Menu (Button 9)
-                ls: false,       // Left stick click (Button 10)
-                rs: false,       // Right stick click (Button 11)
-                up: false,       // D-pad up (Button 12)
-                down: false,     // D-pad down (Button 13)
-                left: false,     // D-pad left (Button 14)
-                right: false     // D-pad right (Button 15)
-            },
-            deadzone: 0.15,      // Deadzone for analog sticks
-            triggerThreshold: 0.1 // Threshold for trigger buttons
-        };
-        
-        this.onInputChange = null;
-        this.inputSource = 'keyboard'; // 'keyboard' or 'gamepad'
-        
-        this.setupEventListeners();
-        this.inputInterval = 20; // 50 FPS (20ms intervals)
-        
-        // Start gamepad polling
-        this.pollGamepads();
-    }
-    
-    setupEventListeners() {
-        document.addEventListener('keydown', (e) => this.handleKeyDown(e));
-        document.addEventListener('keyup', (e) => this.handleKeyUp(e));
-        document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
-        document.addEventListener('mousedown', (e) => this.handleMouseDown(e));
-        document.addEventListener('mouseup', (e) => this.handleMouseUp(e));
-        document.addEventListener('contextmenu', (e) => e.preventDefault());
-        
-        // Gamepad connection events
-        window.addEventListener('gamepadconnected', (e) => this.handleGamepadConnected(e));
-        window.addEventListener('gamepaddisconnected', (e) => this.handleGamepadDisconnected(e));
-        
-        // Window events
-        window.addEventListener('beforeunload', () => this.handleBeforeUnload());
-        window.addEventListener('unload', () => this.destroy());
-        
-        // Send input at fixed 20ms intervals (50 FPS)
-        setInterval(() => this.sendInput(), this.inputInterval);
-    }
-    
-    updateMovementAxes() {
-        // Convert WASD keys to axis values for gamepad compatibility
-        this.movement.moveX = 0;
-        this.movement.moveY = 0;
-        
-        if (this.keys.a) this.movement.moveX -= 1.0; // Left
-        if (this.keys.d) this.movement.moveX += 1.0; // Right
-        if (this.keys.s) this.movement.moveY -= 1.0; // Down
-        if (this.keys.w) this.movement.moveY += 1.0; // Up
-    }
-    
-    handleKeyDown(e) {
-        // Prevent default for game keys to avoid browser actions
-        if (['w', 'a', 's', 'd', ' ', '1', '2', 'r'].includes(e.key.toLowerCase())) {
-            e.preventDefault();
-        }
-        
-        switch(e.key.toLowerCase()) {
-            case 'w': this.keys.w = true; this.updateMovementAxes(); break;
-            case 'a': this.keys.a = true; this.updateMovementAxes(); break;
-            case 's': this.keys.s = true; this.updateMovementAxes(); break;
-            case 'd': this.keys.d = true; this.updateMovementAxes(); break;
-            case 'r': this.keys.r = true; break;
-            case 'shift': this.keys.shift = true; break;
-            case ' ': this.keys.space = true; break;
-        }
-    }
-
-    handleKeyUp(e) {
-        switch(e.key.toLowerCase()) {
-            case 'w': this.keys.w = false; this.updateMovementAxes(); break;
-            case 'a': this.keys.a = false; this.updateMovementAxes(); break;
-            case 's': this.keys.s = false; this.updateMovementAxes(); break;
-            case 'd': this.keys.d = false; this.updateMovementAxes(); break;
-            case 'r': this.keys.r = false; break;
-            case 'shift': this.keys.shift = false; break;
-            case ' ': this.keys.space = false; break;
-        }
-    }
-    
-    handleMouseMove(e) {
-        this.mouse.x = e.clientX;
-        this.mouse.y = e.clientY;
-        this.updateMouseWorldCoordinates();
-    }
-    
-    /**
-     * Update mouse world coordinates based on current screen position
-     */
-    updateMouseWorldCoordinates() {
-        const gameEngine = window.gameEngine;
-        if (gameEngine && gameEngine.gameContainer) {
-            // Use PIXI's built-in transformation to get coordinates relative to the game world
-            const screenPos = new PIXI.Point(this.mouse.x, this.mouse.y);
-            const worldPos = gameEngine.gameContainer.toLocal(screenPos);
-
-            // The world uses a Y-up coordinate system for physics, but PIXI uses Y-down.
-            // We need to send the physics-correct coordinates to the server.
-            this.mouse.worldX = worldPos.x;
-            this.mouse.worldY = -worldPos.y; // Invert Y for the physics engine
-        }
-    }
-    
-    handleMouseDown(e) {
-        // Only handle mouse events on the game canvas, not UI elements
-        const isGameCanvas = e.target.tagName === 'CANVAS' || e.target.closest('#pixi-container');
-        const isUIElement = e.target.closest('button, input, select, textarea, .ui-element');
-        
-        if (!isGameCanvas || isUIElement) {
-            return;
-        }
-
-        if (e.button === 0) {
-            this.mouse.left = true;
-        }
-        if (e.button === 2) {
-            this.mouse.right = true;
-        }
-        e.preventDefault();
-    }
-    
-    handleMouseUp(e) {
-        if (e.button === 0) {
-            this.mouse.left = false;
-        }
-        if (e.button === 2) this.mouse.right = false;
-    }
-    
-    /**
-     * Handle gamepad connection
-     */
-    handleGamepadConnected(e) {
-        console.log('Gamepad connected:', e.gamepad.id);
-        this.gamepad.connected = true;
-        this.gamepad.index = e.gamepad.index;
-        this.inputSource = 'gamepad';
-        
-        // Initialize mouse position to center of screen for gamepad aiming
-        this.mouse.x = window.innerWidth / 2;
-        this.mouse.y = window.innerHeight / 2;
-        
-        // Show gamepad connected notification
-        this.showInputSourceNotification('Gamepad Connected: ' + e.gamepad.id);
-        
-        // Update HUD immediately if game engine is available
-        if (this.gameEngine && this.gameEngine.hudInputText) {
-            this.gameEngine.hudInputText.text = 'Gamepad';
-            this.gameEngine.hudInputText.style.fill = 0x44ff44;
-        }
-    }
-    
-    /**
-     * Handle gamepad disconnection
-     */
-    handleGamepadDisconnected(e) {
-        console.log('Gamepad disconnected:', e.gamepad.id);
-        this.gamepad.connected = false;
-        this.gamepad.index = -1;
-        this.inputSource = 'keyboard';
-        
-        // Reset gamepad state
-        this.resetGamepadState();
-        
-        // Show gamepad disconnected notification
-        this.showInputSourceNotification('Gamepad Disconnected - Switched to Keyboard');
-        
-        // Update HUD immediately if game engine is available
-        if (this.gameEngine && this.gameEngine.hudInputText) {
-            this.gameEngine.hudInputText.text = 'Keyboard';
-            this.gameEngine.hudInputText.style.fill = 0xffffff;
-        }
-    }
-    
-    /**
-     * Poll gamepad state (required for consistent gamepad input)
-     */
-    pollGamepads() {
-        if (!this.gamepad.connected) {
-            // Check for newly connected gamepads
-            const gamepads = navigator.getGamepads();
-            for (let i = 0; i < gamepads.length; i++) {
-                if (gamepads[i]) {
-                    this.handleGamepadConnected({ gamepad: gamepads[i] });
-                    break;
-                }
-            }
-        } else {
-            // Update gamepad state
-            this.updateGamepadState();
-        }
-        
-        // Continue polling
-        requestAnimationFrame(() => this.pollGamepads());
-    }
-    
-    /**
-     * Update gamepad input state
-     */
-    updateGamepadState() {
-        const gamepads = navigator.getGamepads();
-        const gamepad = gamepads[this.gamepad.index];
-        
-        if (!gamepad) {
-            this.handleGamepadDisconnected({ gamepad: { id: 'Unknown' } });
-            return;
-        }
-        
-        // Update analog sticks with deadzone
-        this.gamepad.leftStick.x = this.applyDeadzone(gamepad.axes[0] || 0);
-        this.gamepad.leftStick.y = this.applyDeadzone(-(gamepad.axes[1] || 0)); // Invert Y for game coordinates
-        this.gamepad.rightStick.x = this.applyDeadzone(gamepad.axes[2] || 0);
-        this.gamepad.rightStick.y = this.applyDeadzone(-(gamepad.axes[3] || 0)); // Invert Y for game coordinates
-        
-        // Update button states
-        const buttons = this.gamepad.buttons;
-        const gamepadButtons = gamepad.buttons;
-        
-        // Face buttons (Xbox layout)
-        buttons.a = this.isButtonPressed(gamepadButtons[0]);      // A - Fire
-        buttons.b = this.isButtonPressed(gamepadButtons[1]);      // B - Secondary
-        buttons.x = this.isButtonPressed(gamepadButtons[2]);      // X - Reload
-        buttons.y = this.isButtonPressed(gamepadButtons[3]);      // Y - Weapon switch
-        
-        // Shoulder buttons
-        buttons.lb = this.isButtonPressed(gamepadButtons[4]);     // Left bumper
-        buttons.rb = this.isButtonPressed(gamepadButtons[5]);     // Right bumper
-        buttons.lt = this.isTriggerPressed(gamepadButtons[6]);    // Left trigger
-        buttons.rt = this.isTriggerPressed(gamepadButtons[7]);    // Right trigger
-        
-        // System buttons
-        buttons.back = this.isButtonPressed(gamepadButtons[8]);   // Back/Select
-        buttons.start = this.isButtonPressed(gamepadButtons[9]);  // Start/Menu
-        
-        // Stick clicks
-        buttons.ls = this.isButtonPressed(gamepadButtons[10]);    // Left stick click
-        buttons.rs = this.isButtonPressed(gamepadButtons[11]);    // Right stick click
-        
-        // D-pad
-        buttons.up = this.isButtonPressed(gamepadButtons[12]);    // D-pad up
-        buttons.down = this.isButtonPressed(gamepadButtons[13]);  // D-pad down
-        buttons.left = this.isButtonPressed(gamepadButtons[14]);  // D-pad left
-        buttons.right = this.isButtonPressed(gamepadButtons[15]); // D-pad right
-        
-        // Update movement from gamepad
-        this.updateGamepadMovement();
-        
-        // Handle gamepad-specific actions
-        this.handleGamepadActions();
-    }
-    
-    /**
-     * Apply deadzone to analog stick values
-     */
-    applyDeadzone(value) {
-        if (Math.abs(value) < this.gamepad.deadzone) {
-            return 0;
-        }
-        // Scale the value to account for deadzone
-        const sign = Math.sign(value);
-        const scaledValue = (Math.abs(value) - this.gamepad.deadzone) / (1 - this.gamepad.deadzone);
-        return sign * scaledValue;
-    }
-    
-    /**
-     * Check if a button is pressed (handles both digital and analog buttons)
-     */
-    isButtonPressed(button) {
-        if (typeof button === 'object') {
-            return button.pressed || button.value > 0.5;
-        }
-        return button > 0.5;
-    }
-    
-    /**
-     * Check if a trigger is pressed (with threshold)
-     */
-    isTriggerPressed(button) {
-        if (typeof button === 'object') {
-            return button.value > this.gamepad.triggerThreshold;
-        }
-        return button > this.gamepad.triggerThreshold;
-    }
-    
-    /**
-     * Update movement from gamepad input
-     */
-    updateGamepadMovement() {
-        if (!this.gamepad.connected) return;
-        
-        // Use left stick for movement
-        this.movement.moveX = this.gamepad.leftStick.x;
-        this.movement.moveY = this.gamepad.leftStick.y;
-        
-        // Alternative: D-pad movement (digital)
-        if (Math.abs(this.movement.moveX) < 0.1 && Math.abs(this.movement.moveY) < 0.1) {
-            this.movement.moveX = 0;
-            this.movement.moveY = 0;
-            
-            if (this.gamepad.buttons.left) this.movement.moveX -= 1.0;
-            if (this.gamepad.buttons.right) this.movement.moveX += 1.0;
-            if (this.gamepad.buttons.down) this.movement.moveY -= 1.0;
-            if (this.gamepad.buttons.up) this.movement.moveY += 1.0;
-        }
-    }
-    
-    /**
-     * Handle gamepad-specific actions
-     */
-    handleGamepadActions() {
-        if (!this.gamepad.connected) {
-            return;
-        }
-        
-        // Handle scoreboard toggle with Back/Select button (button 8)
-        const backPressed = this.gamepad.buttons.back;
-        const backPrevious = this.gamepad.buttons.back_prev || false;
-        
-        // Toggle scoreboard on button press (edge detection)
-        if (backPressed && !backPrevious) {
-            this.toggleScoreboard();
-        }
-        
-        // Store previous button states for edge detection
-        this.gamepad.buttons.back_prev = this.gamepad.buttons.back;
-        this.gamepad.buttons.y_prev = this.gamepad.buttons.y;
-        this.gamepad.buttons.x_prev = this.gamepad.buttons.x;
-    }
-    
-    /**
-     * Update aiming from gamepad right stick
-     */
-    updateGamepadAiming() {
-        if (!this.gamepad.connected || !window.gameEngine) return;
-        
-        const gameEngine = window.gameEngine;
-        
-        // For gamepad, use right stick to directly control aiming direction
-        if (Math.abs(this.gamepad.rightStick.x) > 0.1 || Math.abs(this.gamepad.rightStick.y) > 0.1) {
-            // Get player position in world coordinates
-            const myPlayer = gameEngine.getMyPlayer();
-            if (myPlayer) {
-                // Calculate aim direction relative to player position
-                const aimRange = 200; // Distance to aim point from player
-                const aimX = myPlayer.x + (this.gamepad.rightStick.x * aimRange);
-                const aimY = myPlayer.y + (this.gamepad.rightStick.y * aimRange);
-                
-                // Convert to screen coordinates for mouse position
-                const worldPos = new PIXI.Point(aimX, aimY);
-                const screenPos = gameEngine.gameContainer.toGlobal(worldPos);
-                
-                // Update mouse position for aiming
-                this.mouse.x = screenPos.x;
-                this.mouse.y = screenPos.y;
-                this.mouse.worldX = aimX;
-                this.mouse.worldY = aimY;
-            }
-        } else {
-            // When right stick is neutral, aim forward relative to player
-            const myPlayer = gameEngine.getMyPlayer();
-            if (myPlayer) {
-                // Default aim direction (forward/up in world coordinates)
-                const aimRange = 100;
-                const aimX = myPlayer.x;
-                const aimY = myPlayer.y + aimRange; // Aim upward by default
-                
-                const worldPos = new PIXI.Point(aimX, aimY);
-                const screenPos = gameEngine.gameContainer.toGlobal(worldPos);
-                
-                this.mouse.x = screenPos.x;
-                this.mouse.y = screenPos.y;
-                this.mouse.worldX = aimX;
-                this.mouse.worldY = aimY;
-            }
-        }
-    }
-    
-    /**
-     * Reset gamepad state
-     */
-    resetGamepadState() {
-        this.gamepad.leftStick.x = 0;
-        this.gamepad.leftStick.y = 0;
-        this.gamepad.rightStick.x = 0;
-        this.gamepad.rightStick.y = 0;
-        
-        Object.keys(this.gamepad.buttons).forEach(key => {
-            if (!key.endsWith('_prev')) {
-                this.gamepad.buttons[key] = false;
-            }
-        });
-    }
-    
-    /**
-     * Toggle scoreboard visibility (for gamepad users)
-     */
-    toggleScoreboard() {
-        const scoreboard = document.getElementById('scoreboard');
-        if (!scoreboard) return;
-        
-        if (window.gameEngine) {
-            window.gameEngine.scoreboardVisible = !window.gameEngine.scoreboardVisible;
-            scoreboard.style.display = window.gameEngine.scoreboardVisible ? 'block' : 'none';
-            
-            // Show notification for gamepad users
-            const action = window.gameEngine.scoreboardVisible ? 'opened' : 'closed';
-            this.showInputSourceNotification(`Scoreboard ${action} (Back/Select button)`);
-        }
-    }
-    
-    /**
-     * Show input source notification
-     */
-    showInputSourceNotification(message) {
-        // Create or update notification element
-        let notification = document.getElementById('input-notification');
-        if (!notification) {
-            notification = document.createElement('div');
-            notification.id = 'input-notification';
-            notification.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: rgba(0, 0, 0, 0.8);
-                color: white;
-                padding: 10px 15px;
-                border-radius: 5px;
-                font-family: Arial, sans-serif;
-                font-size: 14px;
-                z-index: 1000;
-                transition: opacity 0.3s ease;
-            `;
-            document.body.appendChild(notification);
-        }
-        
-        notification.textContent = message;
-        notification.style.opacity = '1';
-        
-        // Auto-hide after 3 seconds
-        setTimeout(() => {
-            if (notification) {
-                notification.style.opacity = '0';
-                setTimeout(() => {
-                    if (notification && notification.parentNode) {
-                        notification.parentNode.removeChild(notification);
-                    }
-                }, 300);
-            }
-        }, 3000);
-    }
-    
-    sendInput() {
-        if (this.onInputChange) {
-            // Update mouse world coordinates every time we send input
-            this.updateMouseWorldCoordinates();
-            
-            // Update gamepad aiming if connected
-            if (this.gamepad.connected) {
-                this.updateGamepadAiming();
-            }
-            
-            // Determine input values based on active input source
-            let moveX, moveY, fire, altFire, reload;
-            
-            if (this.gamepad.connected && this.inputSource === 'gamepad') {
-                // Use gamepad input
-                moveX = this.movement.moveX; // Already updated by updateGamepadMovement
-                moveY = this.movement.moveY;
-                fire = this.gamepad.buttons.rt || this.gamepad.buttons.a; // Right trigger or A button
-                altFire = this.gamepad.buttons.rb || this.gamepad.buttons.b; // Right bumper or B button for utility
-                reload = this.gamepad.buttons.x;
-            } else {
-                // Use keyboard/mouse input
-                moveX = this.movement.moveX;
-                moveY = this.movement.moveY;
-                fire = this.mouse.left;
-                altFire = this.mouse.right || this.keys.space; // Right click OR space bar for utility
-                reload = this.keys.r;
-            }
-            
-            const input = {
-                type: 'playerInput',
-                moveX: moveX,
-                moveY: moveY,
-                mouseX: this.mouse.x || 0,
-                mouseY: this.mouse.y || 0,
-                worldX: this.mouse.worldX || 0,
-                worldY: this.mouse.worldY || 0,
-                left: !!fire,
-                right: !!altFire, // Legacy field - now maps to altFire
-                altFire: !!altFire, // New field for utility weapons
-                reload: !!reload,
-                inputSource: this.inputSource // Let server know input source
-            };
-            
-            this.onInputChange(input);
-        }
-    }
-    
-    /**
-     * Clean up InputManager resources
-     */
-    destroy() {
-        // Clear the memory cleanup interval
-        if (this.memoryCleanupInterval) {
-            clearInterval(this.memoryCleanupInterval);
-            this.memoryCleanupInterval = null;
-        }
-        
-        // Remove event listeners
-        document.removeEventListener('keydown', this.handleKeyDown);
-        document.removeEventListener('keyup', this.handleKeyUp);
-        document.removeEventListener('mousemove', this.handleMouseMove);
-        document.removeEventListener('mousedown', this.handleMouseDown);
-        document.removeEventListener('mouseup', this.handleMouseUp);
-        document.removeEventListener('contextmenu', (e) => e.preventDefault());
-        
-        window.removeEventListener('gamepadconnected', this.handleGamepadConnected);
-        window.removeEventListener('gamepaddisconnected', this.handleGamepadDisconnected);
-        
-        // Clear all references
-        this.keys = null;
-        this.movement = null;
-        this.mouse = null;
-        this.gamepad = null;
-        this.onInputChange = null;
-        this.gameEngine = null;
-        
-        console.log('InputManager destroyed and cleaned up');
     }
 }

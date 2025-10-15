@@ -4,6 +4,7 @@ import com.fullsteam.games.BaseTestClass;
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.games.GameManager;
 import com.fullsteam.model.Rules;
+import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -188,9 +189,6 @@ class PowerUpTest extends BaseTestClass {
         
         assertEquals("Berserker", PowerUp.PowerUpType.BERSERKER_MODE.getDisplayName());
         assertEquals("🔥", PowerUp.PowerUpType.BERSERKER_MODE.getRenderHint());
-        
-        assertEquals("Slow Trap", PowerUp.PowerUpType.SLOW_EFFECT.getDisplayName());
-        assertEquals("🕸️", PowerUp.PowerUpType.SLOW_EFFECT.getRenderHint());
     }
 
     @Test
@@ -209,7 +207,7 @@ class PowerUpTest extends BaseTestClass {
         assertTrue(powerUp.getBody().getFixture(0).isSensor());
         
         // Power-up should have infinite mass (stationary, no bouncing)
-        assertTrue(powerUp.getBody().getMass().getType() == org.dyn4j.geometry.MassType.INFINITE);
+        assertSame(powerUp.getBody().getMass().getType(), MassType.INFINITE);
     }
 
     @Test

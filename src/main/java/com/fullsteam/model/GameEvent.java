@@ -263,6 +263,23 @@ public class GameEvent {
     }
     
     /**
+     * Create a headquarters destruction event
+     */
+    public static GameEvent createHeadquartersDestroyedEvent(int destroyedTeam, int attackingTeam) {
+        String teamColor = getTeamColorHex(attackingTeam);
+        String message = String.format("<color:%s>Team %d</color> destroyed Team %d's Headquarters!", 
+                teamColor, attackingTeam, destroyedTeam);
+        
+        return GameEvent.builder()
+                .message(message)
+                .category(EventCategory.CAPTURE)
+                .color(teamColor)
+                .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
+                .displayDuration(5000L) // Longer display for major event
+                .build();
+    }
+    
+    /**
      * Create a custom event with full control
      */
     public static GameEvent createCustomEvent(String message, String color, EventTarget target) {

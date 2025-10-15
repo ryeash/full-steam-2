@@ -15,10 +15,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -41,9 +39,9 @@ public class RuleSystem {
     @Getter
     private int currentRound = 1;
     @Getter
-    private double roundTimeRemaining = 0.0;
+    private long roundEndTime = 0L;
     @Getter
-    private double restTimeRemaining = 0.0;
+    private long restTimeEnd = 0L;
     private final Map<Integer, RoundScore> roundScores = new HashMap<>();
 
     // Victory state
@@ -57,12 +55,11 @@ public class RuleSystem {
     private Integer winningTeam = null;
     @Getter
     private Integer winningPlayerId = null;
+    @Getter
+    private long waveRespawnTime = 0;
 
-    // Respawn state
-    @Getter
-    private double waveRespawnTimer = 0.0;
-    @Getter
-    private final Set<Player> deadPlayersWaitingForWave = new HashSet<>();
+    // Bonus points tracking (for HQ damage, objectives, etc.)
+    private final Map<Integer, Integer> bonusTeamPoints = new HashMap<>();
 
     public RuleSystem(String gameId, Rules rules, GameEntities gameEntities,
                       GameEventManager gameEventManager, Consumer<Map<String, Object>> broadcaster,
@@ -76,16 +73,7 @@ public class RuleSystem {
 
         // Initialize round timer if rounds are enabled
         if (rules.getRoundDuration() > 0) {
-            this.roundTimeRemaining = rules.getRoundDuration();
-            log.info("Game {} initialized with round-based gameplay: {} second rounds, {} second rest",
-                    gameId, rules.getRoundDuration(), rules.getRestDuration());
-        }
-
-        // Initialize wave respawn timer if using wave respawns
-        if (rules.usesWaveRespawn()) {
-            this.waveRespawnTimer = rules.getWaveRespawnInterval();
-            log.info("Game {} initialized with wave respawn mode: {} second intervals",
-                    gameId, rules.getWaveRespawnInterval());
+            this.roundEndTime = (long) (System.currentTimeMillis() + (rules.getRoundDuration() * 1000));
         }
     }
 
@@ -95,14 +83,16 @@ public class RuleSystem {
      * Update all rule systems with the given time delta.
      */
     public void update(double deltaTime) {
-        if (gameOver) return;
+        if (gameOver) {
+            return;
+        }
 
         // Track total game time for time-limit victory condition
         gameTimeElapsed += deltaTime;
 
         // Update round state if rounds are enabled
         if (rules.getRoundDuration() > 0) {
-            updateRoundState(deltaTime);
+            updateRoundState();
         }
 
         // Update wave respawn timer if using wave mode
@@ -114,33 +104,30 @@ public class RuleSystem {
         checkVictoryConditions();
     }
 
-    // ===== ROUND MANAGEMENT =====
-
-    private void updateRoundState(double deltaTime) {
+    private void updateRoundState() {
         switch (gameState) {
             case PLAYING:
-                updatePlayingState(deltaTime);
+                updatePlayingState();
                 break;
             case ROUND_END:
-                updateRoundEndState(deltaTime);
+                updateRoundEndState();
                 break;
             case REST_PERIOD:
-                updateRestPeriodState(deltaTime);
+                updateRestPeriodState();
                 break;
         }
     }
 
-    private void updatePlayingState(double deltaTime) {
-        roundTimeRemaining -= deltaTime;
-
-        if (roundTimeRemaining <= 0) {
+    private void updatePlayingState() {
+        if (System.currentTimeMillis() > roundEndTime) {
             endRound();
         }
     }
 
     private void endRound() {
         gameState = GameState.ROUND_END;
-        roundTimeRemaining = 0;
+        roundEndTime = 0;
+        restTimeEnd = (long) (System.currentTimeMillis() + (rules.getRestDuration() * 1000));
 
         // Capture current scores
         roundScores.clear();
@@ -165,20 +152,14 @@ public class RuleSystem {
         roundEndEvent.put("scores", new ArrayList<>(roundScores.values()));
         roundEndEvent.put("restDuration", rules.getRestDuration());
         broadcaster.accept(roundEndEvent);
-
-        // Start rest period
-        restTimeRemaining = rules.getRestDuration();
     }
 
-    private void updateRoundEndState(double deltaTime) {
-        // Brief pause, then transition to rest period
+    private void updateRoundEndState() {
         gameState = GameState.REST_PERIOD;
     }
 
-    private void updateRestPeriodState(double deltaTime) {
-        restTimeRemaining -= deltaTime;
-
-        if (restTimeRemaining <= 0) {
+    private void updateRestPeriodState() {
+        if (System.currentTimeMillis() > restTimeEnd) {
             startNextRound();
         }
     }
@@ -187,14 +168,20 @@ public class RuleSystem {
      * Start the next round - to be called by GameManager for player reset logic.
      * Returns true if a new round was started.
      */
-    public boolean startNextRound() {
+    public void startNextRound() {
         currentRound++;
         gameState = GameState.PLAYING;
-        roundTimeRemaining = rules.getRoundDuration();
-        restTimeRemaining = 0;
+        roundEndTime = (long) (System.currentTimeMillis() + (rules.getRoundDuration() * 1000));
+        restTimeEnd = 0;
 
         // Reset player lives for stock mode (LIMITED respawn mode)
         resetPlayerLivesForNewRound();
+
+        // force a respawn of all players
+        gameEntities.getPlayers().values().forEach(p -> {
+            p.setActive(false);
+            p.setRespawnTime(1L);
+        });
 
         log.info("Round {} started in game {}", currentRound, gameId);
 
@@ -204,79 +191,16 @@ public class RuleSystem {
         roundStartEvent.put("round", currentRound);
         roundStartEvent.put("duration", rules.getRoundDuration());
         broadcaster.accept(roundStartEvent);
-
-        return true;
     }
 
     // ===== RESPAWN MANAGEMENT =====
 
     private void updateWaveRespawn(double deltaTime) {
-        waveRespawnTimer -= deltaTime;
-
-        if (waveRespawnTimer <= 0 && !deadPlayersWaitingForWave.isEmpty()) {
-            log.info("Wave respawn triggered! {} players ready", deadPlayersWaitingForWave.size());
-
-            // Clear the waiting list and reset timer
-            deadPlayersWaitingForWave.clear();
-            waveRespawnTimer = rules.getWaveRespawnInterval();
-
+        if (System.currentTimeMillis() >= waveRespawnTime) {
             // Broadcast wave respawn event
             gameEventManager.broadcastSystemMessage("⚡ Wave Respawn!");
+            waveRespawnTime = (long) (System.currentTimeMillis() + (rules.getWaveRespawnInterval() * 1000));
         }
-    }
-
-    /**
-     * Handle player death according to respawn rules.
-     * Returns the respawn mode action to take.
-     */
-    public RespawnAction handlePlayerDeath(Player victim) {
-        RespawnMode respawnMode = rules.getRespawnMode();
-
-        switch (respawnMode) {
-            case INSTANT:
-                return RespawnAction.RESPAWN_AFTER_DELAY;
-
-            case WAVE:
-                if (!deadPlayersWaitingForWave.contains(victim)) {
-                    deadPlayersWaitingForWave.add(victim);
-                    log.info("Player {} added to wave respawn queue. Queue size: {}",
-                            victim.getId(), deadPlayersWaitingForWave.size());
-                }
-                return RespawnAction.WAIT_FOR_WAVE;
-
-            case NEXT_ROUND:
-                log.info("Player {} will respawn next round", victim.getId());
-                return RespawnAction.WAIT_FOR_ROUND;
-
-            case ELIMINATION:
-                victim.eliminate();
-                log.info("Player {} permanently eliminated", victim.getId());
-                return RespawnAction.ELIMINATE;
-
-            case LIMITED:
-                if (victim.loseLife()) {
-                    // Player ran out of lives
-                    victim.eliminate();
-                    log.info("Player {} eliminated (no lives remaining)", victim.getId());
-                    gameEventManager.broadcastSystemMessage(
-                            String.format("💀 %s has been eliminated!", victim.getPlayerName()));
-                    return RespawnAction.ELIMINATE;
-                } else {
-                    // Player still has lives
-                    log.info("Player {} died. Lives remaining: {}", victim.getId(), victim.getLivesRemaining());
-                    return RespawnAction.RESPAWN_AFTER_DELAY;
-                }
-
-            default:
-                return RespawnAction.RESPAWN_AFTER_DELAY;
-        }
-    }
-
-    /**
-     * Check if wave respawn should process now.
-     */
-    public boolean shouldProcessWaveRespawn() {
-        return waveRespawnTimer <= 0 && !deadPlayersWaitingForWave.isEmpty();
     }
 
     /**
@@ -287,29 +211,8 @@ public class RuleSystem {
         if (player.isActive()) {
             return false; // Player is already active
         }
-
-        RespawnMode respawnMode = rules.getRespawnMode();
-        
-        switch (respawnMode) {
-            case INSTANT:
-                return player.hasLivesRemaining() && !player.isEliminated();
-                
-            case WAVE:
-                return !player.isEliminated() && deadPlayersWaitingForWave.contains(player);
-                
-            case NEXT_ROUND:
-                return gameState == GameState.PLAYING && !player.isEliminated();
-                
-            case ELIMINATION:
-            case LIMITED:
-                return !player.isEliminated() && player.hasLivesRemaining();
-                
-            default:
-                return true; // Fallback to allow respawn
-        }
+        return player.getRespawnTime() > 0 && System.currentTimeMillis() > player.getRespawnTime();
     }
-
-    // ===== VICTORY CONDITION MANAGEMENT =====
 
     private void checkVictoryConditions() {
         if (gameOver) return;
@@ -478,6 +381,22 @@ public class RuleSystem {
         rules.setScoreLimit(currentHighest + 1);
     }
 
+    /**
+     * Public method to manually declare victory (e.g., for HQ destruction).
+     */
+    public void declareVictory(int winningTeamNumber, int winningPlayerId, String reason) {
+        if (winningTeamNumber > 0) {
+            declareTeamVictory(winningTeamNumber,
+                    String.format("Team %d wins - %s!", winningTeamNumber, reason));
+        } else if (winningPlayerId >= 0) {
+            Player winner = gameEntities.getPlayer(winningPlayerId);
+            if (winner != null) {
+                declarePlayerVictory(winner.getId(), winner.getPlayerName(),
+                        String.format("%s wins - %s!", winner.getPlayerName(), reason));
+            }
+        }
+    }
+
     private void declareTeamVictory(int teamNumber, String message) {
         gameOver = true;
         winningTeam = teamNumber;
@@ -519,22 +438,22 @@ public class RuleSystem {
 
     private Map<Integer, Integer> calculateTeamScores() {
         Map<Integer, Integer> teamScores = new HashMap<>();
-        
+
         // Add player-based scores based on ScoreStyle
-        if (rules.getScoreStyle() == ScoreStyle.TOTAL_KILLS || 
-            rules.getScoreStyle() == ScoreStyle.CAPTURES || 
-            rules.getScoreStyle() == ScoreStyle.TOTAL) {
-            
+        if (rules.getScoreStyle() == ScoreStyle.TOTAL_KILLS ||
+                rules.getScoreStyle() == ScoreStyle.CAPTURES ||
+                rules.getScoreStyle() == ScoreStyle.TOTAL) {
+
             for (Player player : gameEntities.getAllPlayers()) {
                 int score = getPlayerScore(player);
                 teamScores.merge(player.getTeam(), score, Integer::sum);
             }
         }
-        
+
         // Add KOTH zone scores based on ScoreStyle
-        if (rules.getScoreStyle() == ScoreStyle.KOTH_ZONES || 
-            rules.getScoreStyle() == ScoreStyle.TOTAL) {
-            
+        if (rules.getScoreStyle() == ScoreStyle.KOTH_ZONES ||
+                rules.getScoreStyle() == ScoreStyle.TOTAL) {
+
             for (KothZone zone : gameEntities.getAllKothZones()) {
                 Map<Integer, Double> zoneTeamScores = zone.getAllTeamScores();
                 for (Map.Entry<Integer, Double> entry : zoneTeamScores.entrySet()) {
@@ -546,8 +465,28 @@ public class RuleSystem {
                 }
             }
         }
-        
+
+        // Add bonus points (HQ damage, objectives, etc.) - always included
+        for (Map.Entry<Integer, Integer> entry : bonusTeamPoints.entrySet()) {
+            teamScores.merge(entry.getKey(), entry.getValue(), Integer::sum);
+        }
+
         return teamScores;
+    }
+
+    /**
+     * Add bonus points to a team's score (for HQ damage, objectives, etc.).
+     * These points are always added regardless of ScoreStyle.
+     */
+    public void addTeamPoints(int team, int points) {
+        if (team > 0 && points > 0) {
+            bonusTeamPoints.merge(team, points, Integer::sum);
+            log.debug("Added {} bonus points to team {}. Total bonus: {}",
+                    points, team, bonusTeamPoints.get(team));
+
+            // Check victory conditions after adding points
+            checkVictoryConditions();
+        }
     }
 
     private int getPlayerScore(Player player) {
@@ -620,8 +559,6 @@ public class RuleSystem {
         return scores;
     }
 
-    // ===== PUBLIC HELPER METHODS =====
-
     /**
      * Get game state data for broadcasting to clients.
      */
@@ -633,8 +570,8 @@ public class RuleSystem {
             data.put("roundEnabled", true);
             data.put("currentRound", currentRound);
             data.put("gameState", gameState.name());
-            data.put("roundTimeRemaining", roundTimeRemaining);
-            data.put("restTimeRemaining", restTimeRemaining);
+            data.put("roundTimeRemaining", Math.max(0, (roundEndTime - System.currentTimeMillis()) / 1000));
+            data.put("restTimeRemaining", Math.max(0, (restTimeEnd - System.currentTimeMillis()) / 1000));
         } else {
             data.put("roundEnabled", false);
         }
@@ -647,15 +584,9 @@ public class RuleSystem {
             data.put("winningPlayerId", winningPlayerId);
         }
 
-        // Respawn data
-        if (rules.usesWaveRespawn()) {
-            data.put("waveRespawnTimer", waveRespawnTimer);
-            data.put("playersWaitingForWave", deadPlayersWaitingForWave.size());
-        }
-
         // Team scores
         data.put("teamScores", calculateTeamScores());
-        
+
         // Scoring style info
         data.put("scoreStyle", rules.getScoreStyle().name());
 
@@ -680,24 +611,14 @@ public class RuleSystem {
         if (rules.hasLimitedLives()) {
             for (Player player : gameEntities.getAllPlayers()) {
                 player.initializeLives(rules.getMaxLives());
-                log.info("Player {} lives reset to {} for round {}", 
+                log.info("Player {} lives reset to {} for round {}",
                         player.getId(), rules.getMaxLives(), currentRound);
             }
-            
+
             // Broadcast lives reset message
             gameEventManager.broadcastSystemMessage(
-                    String.format("🔄 Round %d - All players have %d lives!", 
+                    String.format("🔄 Round %d - All players have %d lives!",
                             currentRound, rules.getMaxLives()));
         }
-    }
-
-    /**
-     * Respawn action enum for communicating what should happen after death.
-     */
-    public enum RespawnAction {
-        RESPAWN_AFTER_DELAY,  // Instant mode - respawn after delay
-        WAIT_FOR_WAVE,        // Wave mode - wait for next wave
-        WAIT_FOR_ROUND,       // Next round mode - wait for round end
-        ELIMINATE             // Elimination/limited - player is out
     }
 }

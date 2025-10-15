@@ -54,6 +54,9 @@ public class GameEntities {
     private final Map<Integer, Workshop> workshops = new ConcurrentSkipListMap<>();
     private final Map<Integer, PowerUp> powerUps = new ConcurrentSkipListMap<>();
 
+    // Headquarters entities
+    private final Map<Integer, Headquarters> headquarters = new ConcurrentSkipListMap<>();
+
     private final Deque<Runnable> postWorldUpdateHooks = new ConcurrentLinkedDeque<>();
 
     public GameEntities(GameConfig config, World<Body> world) {
@@ -241,6 +244,7 @@ public class GameEntities {
         kothZones.values().forEach(zone -> zone.update(deltaTime));
         workshops.values().forEach(workshop -> workshop.update(deltaTime));
         powerUps.values().forEach(powerUp -> powerUp.update(deltaTime));
+        headquarters.values().forEach(hq -> hq.update(deltaTime));
     }
 
     public PlayerSession removePlayerSession(int playerId) {
@@ -442,6 +446,34 @@ public class GameEntities {
         return powerUps.values().stream()
                 .filter(powerUp -> powerUp.getWorkshopId() == workshopId)
                 .collect(Collectors.toList());
+    }
+
+    // ===== Headquarters Management =====
+
+    public void addHeadquarters(Headquarters hq) {
+        headquarters.put(hq.getId(), hq);
+    }
+
+    public Headquarters getHeadquarters(int hqId) {
+        return headquarters.get(hqId);
+    }
+
+    public Collection<Headquarters> getAllHeadquarters() {
+        return headquarters.values();
+    }
+
+    public void removeHeadquarters(int hqId) {
+        headquarters.remove(hqId);
+    }
+
+    /**
+     * Get headquarters for a specific team.
+     */
+    public Headquarters getTeamHeadquarters(int teamNumber) {
+        return headquarters.values().stream()
+                .filter(hq -> hq.getTeamNumber() == teamNumber)
+                .findFirst()
+                .orElse(null);
     }
 
 }

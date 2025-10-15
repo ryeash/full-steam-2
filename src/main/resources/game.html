@@ -179,6 +179,22 @@
             height: 100%;
         }
     </style>
+    <script src="color-palette.js"></script>
+    <script src="js/PlayerInterpolator.js"></script>
+    <script src="js/ProjectileInterpolator.js"></script>
+    <script src="js/InputManager.js"></script>
+    <script src="js/GameEngine.js"></script>
+    <script type="text/javascript">
+        // Initialize the game when everything is loaded
+        window.addEventListener('load', () => {
+            try {
+                new GameEngine();
+            } catch (error) {
+                console.error('Failed to initialize game:', error);
+                document.getElementById('loading-status').textContent = 'Failed to load game: ' + error.message;
+            }
+        });
+    </script>
 </head>
 <body>
 <div id="game-container">
@@ -194,8 +210,6 @@
     
     <!-- Game UI Overlay -->
     <div id="game-ui" style="display: none;">
-        <!-- Old HUD removed - now using consolidated PIXI-based HUD -->
-        
         <div id="scoreboard" style="display: none;">
             <div class="scoreboard-header">
                 <h3>Scoreboard</h3>
@@ -220,22 +234,7 @@
         </div>
     </div>
     
-    <!-- PixiJS will create its own canvas -->
     <div id="pixi-container"></div>
 </div>
-
-<script src="color-palette.js"></script>
-<script src="game-engine.js"></script>
-<script type="text/javascript">
-    // Initialize the game when everything is loaded
-    window.addEventListener('load', () => {
-        try {
-            new GameEngine();
-        } catch (error) {
-            console.error('Failed to initialize game:', error);
-            document.getElementById('loading-status').textContent = 'Failed to load game: ' + error.message;
-        }
-    });
-</script>
 </body>
 </html>

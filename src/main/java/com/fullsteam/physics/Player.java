@@ -35,7 +35,7 @@ public class Player extends GameEntity {
     private int kills = 0;
     private int deaths = 0;
     private int captures = 0; // Flag captures in CTF mode
-    private double respawnTime = 0;
+    private long respawnTime = 0;
     private Vector2 respawnPoint;
     private double maxSpeed = Config.PLAYER_SPEED;
     private final Set<AttributeModification> attributeModifications = new HashSet<>();
@@ -93,13 +93,6 @@ public class Player extends GameEntity {
                 isReloading = false;
             }
         }
-
-        // Handle respawning - timer countdown only, respawn logic handled by GameManager
-        if (!active && respawnTime > 0) {
-            respawnTime -= deltaTime;
-            // Note: Actual respawn decision is made by GameManager using RuleSystem
-        }
-
         lastUpdateTime = System.currentTimeMillis();
     }
 
@@ -342,7 +335,6 @@ public class Player extends GameEntity {
     public void die() {
         active = false;
         deaths++;
-        respawnTime = 5.0; // 5 second respawn
         health = 0;
     }
 

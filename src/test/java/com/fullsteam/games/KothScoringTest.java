@@ -56,9 +56,6 @@ public class KothScoringTest extends BaseTestClass {
         // Create game manager first (it will create its own GameEntities)
         gameManager = new GameManager("test_game", testConfig, null);
         
-        // Disable AI adjustment for tests
-        gameManager.disableAIAdjustment();
-        
         // Clear all AI players that were added initially
         gameManager.getGameEntities().getAllPlayers().forEach(player -> {
             if (player.getId() > 100) { // AI players have high IDs

@@ -328,6 +328,37 @@
                 </div>
                 
                 <div class="config-section">
+                    <h3>🏛️ Headquarters</h3>
+                    <div class="config-item">
+                        <label for="addHeadquarters">Enable Headquarters:</label>
+                        <input type="checkbox" id="addHeadquarters" checked>
+                        <small style="color: #888; font-size: 0.8em;">Each team gets a destructible base in their spawn zone</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="headquartersMaxHealth">Max Health:</label>
+                        <input type="number" id="headquartersMaxHealth" min="500" max="5000" step="100" value="1000">
+                        <small style="color: #888; font-size: 0.8em;">Health of each headquarters structure</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="headquartersPointsPerDamage">Points Per Damage:</label>
+                        <input type="number" id="headquartersPointsPerDamage" min="0" max="1" step="0.05" value="0.1">
+                        <small style="color: #888; font-size: 0.8em;">Points awarded per damage dealt (0.1 = 1 point per 10 damage)</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="headquartersDestructionBonus">Destruction Bonus:</label>
+                        <input type="number" id="headquartersDestructionBonus" min="0" max="500" step="10" value="100">
+                        <small style="color: #888; font-size: 0.8em;">Bonus points for destroying enemy HQ</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="headquartersDestructionEndsGame">
+                            <input type="checkbox" id="headquartersDestructionEndsGame" checked style="width: auto; margin-right: 5px;">
+                            HQ Destruction Ends Game
+                        </label>
+                        <small style="color: #888; font-size: 0.8em;">Game ends immediately when a headquarters is destroyed</small>
+                    </div>
+                </div>
+                
+                <div class="config-section">
                     <h3>🏆 Victory Conditions</h3>
                     <div class="config-item">
                         <label for="victoryCondition">Win Condition:</label>
@@ -480,6 +511,11 @@
         stockBattleButton.textContent = '❤️ Stock Battle';
         stockBattleButton.onclick = () => createPresetGame('stock-battle');
         createButtons.appendChild(stockBattleButton);
+        
+        const headquartersButton = document.createElement('button');
+        headquartersButton.textContent = '🏛️ Headquarters Assault';
+        headquartersButton.onclick = () => createPresetGame('headquarters-assault');
+        createButtons.appendChild(headquartersButton);
         
         // Add custom game button
         const customButton = document.createElement('button');
@@ -772,6 +808,45 @@
                     maxPowerUpsPerWorkshop: 3
                 }
             };
+        } else if (presetType === 'headquarters-assault') {
+            gameConfig = {
+                maxPlayers: 16,
+                teamCount: 2,                   // 2 teams competing for headquarters destruction
+                worldWidth: 4000,               // Wide battlefield
+                worldHeight: 1000,              // Shorter height creates lanes/frontlines
+                playerSpeed: 150,
+                playerMaxHealth: 100,
+                playerSize: 10,
+                captureRadius: 50,
+                captureTime: 3,
+                aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
+                rules: {
+                    roundDuration: 0,           // No rounds - continuous battle
+                    restDuration: 10,
+                    flagsPerTeam: 0,            // No flags in HQ assault
+                    scoreStyle: 'TOTAL',        // Kills + HQ damage points
+                    victoryCondition: 'OBJECTIVE',  // Win by destroying enemy HQ
+                    scoreLimit: 300,            // Fallback score limit
+                    timeLimit: 900,             // 15 minute fallback
+                    suddenDeath: false,
+                    respawnMode: 'WAVE',        // Wave respawns for coordinated attacks
+                    respawnDelay: 5,
+                    waveRespawnInterval: 25,    // 25 second waves
+                    maxLives: -1,               // Infinite lives
+                    kothZones: 0,               // No KOTH zones
+                    kothPointsPerSecond: 1.0,
+                    addWorkshops: true,         // Workshops enabled for power-up crafting
+                    workshopCraftTime: 12,      // 12 seconds to craft
+                    workshopCraftRadius: 80,
+                    maxPowerUpsPerWorkshop: 4,  // More power-ups for strategic gameplay
+                    addHeadquarters: true,      // Headquarters are the main objective
+                    headquartersMaxHealth: 1500,  // Durable headquarters
+                    headquartersPointsPerDamage: 0.1,  // Points for damaging HQ
+                    headquartersDestructionBonus: 150,  // Big bonus for destroying enemy HQ
+                    headquartersDestructionEndsGame: true  // Game ends when HQ destroyed
+                }
+            };
         }
         
         try {
@@ -989,7 +1064,12 @@
                 addWorkshops: document.getElementById('addWorkshops').checked,
                 workshopCraftTime: parseFloat(document.getElementById('workshopCraftTime').value),
                 workshopCraftRadius: parseFloat(document.getElementById('workshopCraftRadius').value),
-                maxPowerUpsPerWorkshop: parseInt(document.getElementById('maxPowerUpsPerWorkshop').value)
+                maxPowerUpsPerWorkshop: parseInt(document.getElementById('maxPowerUpsPerWorkshop').value),
+                addHeadquarters: document.getElementById('addHeadquarters').checked,
+                headquartersMaxHealth: parseFloat(document.getElementById('headquartersMaxHealth').value),
+                headquartersPointsPerDamage: parseFloat(document.getElementById('headquartersPointsPerDamage').value),
+                headquartersDestructionBonus: parseInt(document.getElementById('headquartersDestructionBonus').value),
+                headquartersDestructionEndsGame: document.getElementById('headquartersDestructionEndsGame').checked
             }
         };
 

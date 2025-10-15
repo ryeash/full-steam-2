@@ -135,6 +135,41 @@ public class Rules {
     @Builder.Default
     private int maxPowerUpsPerWorkshop = 3;
     
+    // ===== Headquarters Rules =====
+    
+    /**
+     * Whether to add headquarters to the game. When enabled, each team gets one headquarters in their spawn zone.
+     * Headquarters are destructible structures that can be shot to score points.
+     */
+    @JsonProperty("addHeadquarters")
+    @Builder.Default
+    private boolean addHeadquarters = false;
+    
+    /**
+     * Health of each headquarters structure.
+     */
+    @Builder.Default
+    private double headquartersMaxHealth = 1000.0;
+    
+    /**
+     * Points awarded per damage dealt to enemy headquarters.
+     * e.g., 1.0 = 1 point per 1 damage, 0.1 = 1 point per 10 damage
+     */
+    @Builder.Default
+    private double headquartersPointsPerDamage = 0.1;
+    
+    /**
+     * Bonus points awarded when a team destroys enemy headquarters.
+     */
+    @Builder.Default
+    private int headquartersDestructionBonus = 100;
+    
+    /**
+     * Whether destroying headquarters ends the game.
+     */
+    @Builder.Default
+    private boolean headquartersDestructionEndsGame = true;
+    
     /**
      * Check if this game mode uses flags.
      */
@@ -154,6 +189,13 @@ public class Rules {
      */
     public boolean hasWorkshops() {
         return addWorkshops;
+    }
+    
+    /**
+     * Check if this game mode uses headquarters.
+     */
+    public boolean hasHeadquarters() {
+        return addHeadquarters;
     }
     
     /**

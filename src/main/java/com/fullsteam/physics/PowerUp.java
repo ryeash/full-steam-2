@@ -19,9 +19,8 @@ public class PowerUp extends GameEntity {
         HEALTH_REGENERATION("Health Regen", "❤️"),
         DAMAGE_BOOST("Damage Boost", "⚔️"),
         DAMAGE_RESISTANCE("Damage Resist", "🛡️"),
-        BERSERKER_MODE("Berserker", "🔥"),
-        SLOW_EFFECT("Slow Trap", "🕸️");
-        
+        BERSERKER_MODE("Berserker", "🔥");
+
         private final String displayName;
         private final String renderHint;
         

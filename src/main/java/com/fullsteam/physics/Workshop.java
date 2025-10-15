@@ -47,10 +47,7 @@ public class Workshop extends Obstacle {
         if (!active) {
             return;
         }
-        
-        // Update crafting progress for all players in range (mimic KOTH zone approach)
         updateCraftingProgress(deltaTime);
-        
         lastUpdateTime = System.currentTimeMillis();
     }
     
@@ -91,7 +88,10 @@ public class Workshop extends Obstacle {
      */
     public void removePlayer(int playerId) {
         playersInRange.remove(playerId);
-        // Keep progress data for potential re-entry
+        // Remove progress data when player leaves
+        playerCraftProgress.remove(playerId);
+        playerCraftStartTime.remove(playerId);
+        playerCraftAccumulatedTime.remove(playerId);
     }
 
     /**
@@ -116,6 +116,8 @@ public class Workshop extends Obstacle {
      */
     public void startCrafting(int playerId) {
         if (!playerCraftProgress.containsKey(playerId)) {
+            // Add to playersInRange with default team (needed for progress updates)
+            playersInRange.put(playerId, 0);
             playerCraftProgress.put(playerId, 0.0);
             playerCraftStartTime.put(playerId, System.currentTimeMillis());
             playerCraftAccumulatedTime.put(playerId, 0.0);
@@ -126,6 +128,7 @@ public class Workshop extends Obstacle {
      * Stop crafting for a player.
      */
     public void stopCrafting(int playerId) {
+        playersInRange.remove(playerId);
         playerCraftProgress.remove(playerId);
         playerCraftStartTime.remove(playerId);
         playerCraftAccumulatedTime.remove(playerId);
@@ -159,14 +162,8 @@ public class Workshop extends Obstacle {
      * Get the number of active crafters (players who have started crafting).
      */
     public int getActiveCrafters() {
-        // Count players who have started crafting (have progress > 0)
-        int activeCount = 0;
-        for (Double progress : playerCraftProgress.values()) {
-            if (progress != null && progress > 0) {
-                activeCount++;
-            }
-        }
-        return activeCount;
+        // Count players who have started crafting (have progress entry)
+        return playerCraftProgress.size();
     }
     
     /**
@@ -174,15 +171,7 @@ public class Workshop extends Obstacle {
      * This ensures progress indicators persist even if players temporarily move out of range.
      */
     public Map<Integer, Double> getAllCraftingProgress() {
-        Map<Integer, Double> activeProgress = new HashMap<>();
-        // Return progress for all players who have started crafting, not just those currently in range
-        for (Map.Entry<Integer, Double> entry : playerCraftProgress.entrySet()) {
-            int playerId = entry.getKey();
-            Double progress = entry.getValue();
-            if (progress != null && progress > 0) {
-                activeProgress.put(playerId, progress);
-            }
-        }
-        return activeProgress;
+        // Return a copy of all crafting progress
+        return new HashMap<>(playerCraftProgress);
     }
 }

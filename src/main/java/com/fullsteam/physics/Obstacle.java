@@ -51,23 +51,12 @@ public class Obstacle extends GameEntity {
     private final Shape primaryShape;
     @Getter
     private final double boundingRadius;
-    /**
-     * -- GETTER --
-     * Get shape-specific data for client rendering.
-     * Returns a map containing shape information for the client.
-     */
     @Getter
     private final Map<String, Object> shapeData;
-
-    // Player barrier specific fields
     @Getter
     private final int ownerId; // Player who created this barrier (0 for map obstacles)
     @Getter
     private final int ownerTeam; // Team of the player who created this barrier (0 for map obstacles)
-    @Getter
-    private final double lifespan; // Total lifespan for temporary barriers (0 for permanent obstacles)
-
-    private double timeRemaining; // Time remaining for temporary barriers
 
     public Obstacle(int id, double x, double y, ObstacleType type) {
         this(id, x, y, type, 0, 0, 0.0, Double.POSITIVE_INFINITY);
@@ -78,12 +67,11 @@ public class Obstacle extends GameEntity {
         this.type = type;
         this.ownerId = ownerId;
         this.ownerTeam = ownerTeam;
-        this.lifespan = lifespan;
-        this.timeRemaining = lifespan;
         this.primaryShape = getBody().getFixture(0).getShape();
         this.shapeCategory = determineShapeCategory(type);
         this.boundingRadius = calculateBoundingRadius();
         this.shapeData = generateShapeData();
+        this.expires = lifespan > 0 ? (long) (System.currentTimeMillis() + (lifespan * 1000)) : 0;
         getBody().setMass(MassType.INFINITE);
         getBody().setUserData(this);
     }
@@ -517,17 +505,13 @@ public class Obstacle extends GameEntity {
 
     @Override
     public void update(double deltaTime) {
-        // Handle temporary barriers
-        if (type == ObstacleType.PLAYER_BARRIER && lifespan > 0) {
+        if (type == ObstacleType.PLAYER_BARRIER && expires > 0) {
             if (!active) {
                 return;
             }
-
-            timeRemaining -= deltaTime;
-            if (timeRemaining <= 0) {
+            if (System.currentTimeMillis() > expires) {
                 active = false;
             }
-
             lastUpdateTime = System.currentTimeMillis();
         }
     }
@@ -571,16 +555,6 @@ public class Obstacle extends GameEntity {
         }
 
         return barrier;
-    }
-
-    /**
-     * Check if the obstacle has expired (for temporary barriers)
-     */
-    public boolean isExpired() {
-        if (type != ObstacleType.PLAYER_BARRIER) {
-            return false; // Permanent obstacles never expire
-        }
-        return !active || timeRemaining <= 0;
     }
 
     /**

@@ -19,12 +19,6 @@ public class RoundScore {
     private int kills;
     private int deaths;
     private int captures; // Flag captures (CTF mode)
-    
-    /**
-     * Calculate K/D ratio
-     */
-    public double getKDRatio() {
-        return deaths == 0 ? kills : (double) kills / deaths;
-    }
+    private double hqDamage;
 }
 

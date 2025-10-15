@@ -238,7 +238,7 @@ public class GameController {
             "/game.html",
             "/config.html",
             "/color-palette.js",
-            "/game-engine.js",
+            "/js/{file}",
             "/unified.css",
             "/favicon.ico",
             "/robots.txt"
