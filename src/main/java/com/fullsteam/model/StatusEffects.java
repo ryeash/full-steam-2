@@ -10,11 +10,21 @@ import com.fullsteam.physics.Player;
  */
 public class StatusEffects {
 
+    public static void applyEffect(Player player, AttributeModification attributeModification) {
+        player.getAttributeModifications().removeIf(am -> am.uniqueKey().equals(attributeModification.uniqueKey()));
+        player.getAttributeModifications().add(attributeModification);
+    }
+
     /**
      * Apply a speed boost effect to a player.
      */
     public static void applySpeedBoost(Player player, double speedMultiplier, double durationSeconds, String source) {
-        player.getAttributeModifications().add(new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+        applyEffect(player, new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+            @Override
+            public String uniqueKey() {
+                return "speedBoost";
+            }
+
             @Override
             public String renderHint() {
                 return "speed_sparks:#00FFFF:sparkle:true:Speed Boost";
@@ -36,7 +46,12 @@ public class StatusEffects {
      * Apply health regeneration effect to a player.
      */
     public static void applyHealthRegeneration(Player player, double healthPerSecond, double durationSeconds, String source) {
-        player.getAttributeModifications().add(new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+        applyEffect(player, new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+            @Override
+            public String uniqueKey() {
+                return "healthRegen";
+            }
+
             @Override
             public String renderHint() {
                 return "healing_sparkles:#00FFFF:pulse:true:Regenerating";
@@ -62,7 +77,12 @@ public class StatusEffects {
      * Apply health degeneration (poison/bleed) effect to a player.
      */
     public static void applyHealthDegeneration(GameManager gameManager, String renderHint, Player player, double damagePerSecond, double durationSeconds, int effectOwner) {
-        player.getAttributeModifications().add(new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+        applyEffect(player, new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+            @Override
+            public String uniqueKey() {
+                return "healthDegen";
+            }
+
             @Override
             public String renderHint() {
                 return renderHint;
@@ -82,7 +102,12 @@ public class StatusEffects {
      * Apply damage resistance effect to a player.
      */
     public static void applyDamageResistance(Player player, double resistancePercentage, double durationSeconds, String source) {
-        player.getAttributeModifications().add(new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+        applyEffect(player, new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+            @Override
+            public String uniqueKey() {
+                return "damageResist";
+            }
+
             @Override
             public String renderHint() {
                 return "shield_shimmer:#FFD700:shield:true:Protected!";
@@ -99,7 +124,12 @@ public class StatusEffects {
      * Apply weapon damage boost effect.
      */
     public static void applyDamageBoost(Player player, double damageMultiplier, double durationSeconds, String source) {
-        player.getAttributeModifications().add(new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+        applyEffect(player, new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+            @Override
+            public String uniqueKey() {
+                return "damageBoost";
+            }
+
             @Override
             public String renderHint() {
                 return "power_aura:#FF0000:pulse:true:Damage Boost!";
@@ -121,7 +151,12 @@ public class StatusEffects {
      * Apply berserker mode - increased damage and speed, reduced defense.
      */
     public static void applyBerserkerMode(Player player, double durationSeconds, String source) {
-        player.getAttributeModifications().add(new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+        applyEffect(player, new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+            @Override
+            public String uniqueKey() {
+                return "berserk";
+            }
+
             @Override
             public String renderHint() {
                 return "power_aura:#FF0000:pulse:true:Damage Boost!";
@@ -158,7 +193,12 @@ public class StatusEffects {
      * Apply slowing effect to a player.
      */
     public static void applySlowEffect(Player player, double linearDamping, double durationSeconds, String source) {
-        player.getAttributeModifications().add(new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+        applyEffect(player, new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+            @Override
+            public String uniqueKey() {
+                return "slow";
+            }
+
             @Override
             public String renderHint() {
                 return "slow_debuff:#0066CC:slow:true:Slowed";

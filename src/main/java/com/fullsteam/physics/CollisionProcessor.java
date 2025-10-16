@@ -78,6 +78,14 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
     }
 
     private boolean handleEntityCollision(GameEntity entity1, GameEntity entity2) {
+        // Early exit: ignore collisions involving inactive/dead players
+        if (entity1 instanceof Player player1 && !player1.isActive()) {
+            return false; // Don't process collisions for dead players
+        }
+        if (entity2 instanceof Player player2 && !player2.isActive()) {
+            return false; // Don't process collisions for dead players
+        }
+        
         // let the bouncy bullets interact with bullets
         if (entity1 instanceof Projectile p1 && entity2 instanceof Projectile p2) {
             return p1.getBulletEffects().contains(BulletEffect.BOUNCY) || p2.getBulletEffects().contains(BulletEffect.BOUNCY);// Disable collision resolution between projectiles

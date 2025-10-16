@@ -6,6 +6,7 @@ import com.fullsteam.model.RoundScore;
 import com.fullsteam.model.Rules;
 import com.fullsteam.model.ScoreStyle;
 import com.fullsteam.model.VictoryCondition;
+import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.KothZone;
 import com.fullsteam.physics.Player;
@@ -177,13 +178,22 @@ public class RuleSystem {
         // Reset player lives for stock mode (LIMITED respawn mode)
         resetPlayerLivesForNewRound();
 
-        // force a respawn of all players
         gameEntities.getPlayers().values().forEach(p -> {
+            // force a respawn of all players
             p.setActive(false);
             p.setRespawnTime(1L);
+            // reset scoring
+            p.setKills(0);
+            p.setDeaths(0);
         });
 
-        log.info("Round {} started in game {}", currentRound, gameId);
+        bonusTeamPoints.clear();
+
+        gameEntities.getFlags().values().forEach(Flag::returnToHome);
+        gameEntities.getDefenseLasers().clear();
+        gameEntities.getFieldEffects().clear();
+        gameEntities.getBeams().clear();
+        gameEntities.getProjectiles().clear();
 
         // Broadcast round start event
         Map<String, Object> roundStartEvent = new HashMap<>();

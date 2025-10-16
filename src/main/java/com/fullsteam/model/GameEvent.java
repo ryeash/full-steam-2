@@ -16,45 +16,45 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 public class GameEvent {
-    
+
     /**
      * The type of message for WebSocket routing
      */
     @Builder.Default
     private String type = "gameEvent";
-    
+
     /**
      * The event message to display
      */
     private String message;
-    
+
     /**
      * Hex color code for the message (e.g., "#FF0000" for red)
      */
     private String color;
-    
+
     /**
      * Event category for styling and filtering
      */
     private EventCategory category;
-    
+
     /**
      * Targeting information - who should receive this event
      */
     private EventTarget target;
-    
+
     /**
      * Timestamp when the event occurred
      */
     @Builder.Default
     private long timestamp = System.currentTimeMillis();
-    
+
     /**
      * Optional duration in milliseconds for how long to display the event
      * If null or 0, uses default display duration
      */
     private Long displayDuration;
-    
+
     /**
      * Categories of game events for styling and organization
      */
@@ -66,18 +66,18 @@ public class GameEvent {
         WARNING("#FF8800"),        // Orange for warnings
         INFO("#00AAFF"),          // Blue for information
         CHAT("#FFFFFF");          // White for chat messages
-        
+
         private final String defaultColor;
-        
+
         EventCategory(String defaultColor) {
             this.defaultColor = defaultColor;
         }
-        
+
         public String getDefaultColor() {
             return defaultColor;
         }
     }
-    
+
     /**
      * Targeting information for event delivery
      */
@@ -90,22 +90,22 @@ public class GameEvent {
          * Target type - determines who receives the event
          */
         private TargetType type;
-        
+
         /**
          * Specific player IDs to target (for SPECIFIC type)
          */
         private Set<Integer> playerIds;
-        
+
         /**
          * Specific team IDs to target (for TEAM type)
          */
         private Set<Integer> teamIds;
-        
+
         /**
          * Exclude specific player IDs from receiving the event
          */
         private Set<Integer> excludePlayerIds;
-        
+
         public enum TargetType {
             ALL,        // All players in the game
             TEAM,       // Specific team(s)
@@ -113,17 +113,17 @@ public class GameEvent {
             SPECTATORS  // Only spectators
         }
     }
-    
+
     // Convenience factory methods for common event types
-    
+
     /**
      * Create a kill event with team-colored player names
      */
-    public static GameEvent createKillEvent(String killerName, String victimName, String weaponName, 
-                                           Integer killerTeam, Integer victimTeam) {
+    public static GameEvent createKillEvent(String killerName, String victimName, String weaponName,
+                                            Integer killerTeam, Integer victimTeam) {
         // Format: <color:#RRGGBB>PlayerName</color> x <color:#RRGGBB>PlayerName</color>  WeaponName
         StringBuilder messageBuilder = new StringBuilder();
-        
+
         // Add killer name with team color
         if (killerTeam != null && killerTeam >= 0) {
             String killerColor = getTeamColorHex(killerTeam);
@@ -131,9 +131,9 @@ public class GameEvent {
         } else {
             messageBuilder.append(killerName);
         }
-        
+
         messageBuilder.append(" x ");
-        
+
         // Add victim name with team color
         if (victimTeam != null && victimTeam >= 0) {
             String victimColor = getTeamColorHex(victimTeam);
@@ -141,9 +141,9 @@ public class GameEvent {
         } else {
             messageBuilder.append(victimName);
         }
-        
-        messageBuilder.append("  ").append(weaponName);
-        
+
+        messageBuilder.append("  ").append("<color:%s>%s</color>".formatted(EventCategory.CHAT.defaultColor, weaponName));
+
         return GameEvent.builder()
                 .message(messageBuilder.toString())
                 .category(EventCategory.KILL)
@@ -152,7 +152,7 @@ public class GameEvent {
                 .displayDuration(3000L)
                 .build();
     }
-    
+
     /**
      * Helper method to get team color hex codes
      */
@@ -165,13 +165,13 @@ public class GameEvent {
             default -> "#FFFFFF"; // White (FFA/Unknown)
         };
     }
-    
+
     /**
      * Create a player join event with team-colored player name
      */
     public static GameEvent createPlayerJoinEvent(String playerName, int teamNumber) {
         StringBuilder messageBuilder = new StringBuilder();
-        
+
         // Add player name with team color
         if (teamNumber > 0) {
             String teamColor = getTeamColorHex(teamNumber);
@@ -179,9 +179,9 @@ public class GameEvent {
         } else {
             messageBuilder.append(playerName);
         }
-        
+
         messageBuilder.append(" joined the game");
-        
+
         return GameEvent.builder()
                 .message(messageBuilder.toString())
                 .category(EventCategory.SYSTEM)
@@ -190,7 +190,7 @@ public class GameEvent {
                 .displayDuration(3000L)
                 .build();
     }
-    
+
     /**
      * Create a capture event
      */
@@ -203,7 +203,7 @@ public class GameEvent {
                 .displayDuration(3000L)
                 .build();
     }
-    
+
     /**
      * Create a team-specific event
      */
@@ -219,7 +219,7 @@ public class GameEvent {
                 .displayDuration(3000L)
                 .build();
     }
-    
+
     /**
      * Create a system announcement
      */
@@ -232,7 +232,7 @@ public class GameEvent {
                 .displayDuration(3000L)
                 .build();
     }
-    
+
     /**
      * Create a player-specific event
      */
@@ -248,7 +248,7 @@ public class GameEvent {
                 .displayDuration(3000L)
                 .build();
     }
-    
+
     /**
      * Create an achievement event
      */
@@ -261,15 +261,15 @@ public class GameEvent {
                 .displayDuration(3000L)
                 .build();
     }
-    
+
     /**
      * Create a headquarters destruction event
      */
     public static GameEvent createHeadquartersDestroyedEvent(int destroyedTeam, int attackingTeam) {
         String teamColor = getTeamColorHex(attackingTeam);
-        String message = String.format("<color:%s>Team %d</color> destroyed Team %d's Headquarters!", 
+        String message = String.format("<color:%s>Team %d</color> destroyed Team %d's Headquarters!",
                 teamColor, attackingTeam, destroyedTeam);
-        
+
         return GameEvent.builder()
                 .message(message)
                 .category(EventCategory.CAPTURE)
@@ -278,7 +278,7 @@ public class GameEvent {
                 .displayDuration(5000L) // Longer display for major event
                 .build();
     }
-    
+
     /**
      * Create a custom event with full control
      */

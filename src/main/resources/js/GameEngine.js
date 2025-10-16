@@ -26,6 +26,18 @@ class GameEngine {
         this.minZoom = 0.5;
         this.maxZoom = 2.0;
         
+        // Store references to event handlers and timeouts for cleanup
+        this.eventHandlers = {
+            webglContextLost: null,
+            webglContextRestored: null,
+            resize: null,
+            keydown: null,
+            keyup: null,
+            closeScoreboard: null
+        };
+        this.pendingTimeouts = [];
+        this.tickerCallbacks = [];
+        
         this.init();
     }
     
@@ -72,20 +84,22 @@ class GameEngine {
 
         document.getElementById('pixi-container').appendChild(this.app.view);
 
-        // Handle WebGL context loss
-        this.app.renderer.gl.canvas.addEventListener('webglcontextlost', (event) => {
+        // Handle WebGL context loss - store handlers for cleanup
+        this.eventHandlers.webglContextLost = (event) => {
             console.warn('WebGL context lost');
             event.preventDefault();
             this.handleWebGLContextLost();
-        });
+        };
+        this.app.renderer.gl.canvas.addEventListener('webglcontextlost', this.eventHandlers.webglContextLost);
 
-        this.app.renderer.gl.canvas.addEventListener('webglcontextrestored', () => {
+        this.eventHandlers.webglContextRestored = () => {
             console.log('WebGL context restored');
             this.handleWebGLContextRestored();
-        });
+        };
+        this.app.renderer.gl.canvas.addEventListener('webglcontextrestored', this.eventHandlers.webglContextRestored);
 
-        // Set up interpolation ticker for smooth movement
-        this.app.ticker.add((deltaTime) => {
+        // Set up interpolation ticker for smooth movement - store reference for cleanup
+        const interpolationCallback = (deltaTime) => {
             const dt = deltaTime / 60.0; // Convert to seconds
             
             // Update all projectile interpolators every frame
@@ -108,7 +122,9 @@ class GameEngine {
                     });
                 }
             });
-        });
+        };
+        this.tickerCallbacks.push(interpolationCallback);
+        this.app.ticker.add(interpolationCallback);
 
         // Create main containers
         this.backgroundContainer = new PIXI.Container();
@@ -130,11 +146,12 @@ class GameEngine {
         // Enable sorting for proper z-index handling
         this.app.stage.sortableChildren = true;
 
-        // Handle window resize
-        window.addEventListener('resize', () => {
+        // Handle window resize - store handler for cleanup
+        this.eventHandlers.resize = () => {
             this.handleResize();
             this.updateRoundTimerPosition();
-        });
+        };
+        window.addEventListener('resize', this.eventHandlers.resize);
     }
     
     /**
@@ -556,8 +573,10 @@ class GameEngine {
             smoothing: 0.1
         };
         
-        // Start game loop
-        this.app.ticker.add(() => this.gameLoop());
+        // Start game loop - store reference for cleanup
+        const gameLoopCallback = () => this.gameLoop();
+        this.tickerCallbacks.push(gameLoopCallback);
+        this.app.ticker.add(gameLoopCallback);
     }
     
     setupInput() {
@@ -574,27 +593,30 @@ class GameEngine {
     }
     
     setupUI() {
-        // Setup event listeners
-        document.getElementById('close-scoreboard')?.addEventListener('click', () => {
+        // Setup event listeners - store handlers for cleanup
+        this.eventHandlers.closeScoreboard = () => {
             document.getElementById('scoreboard').style.display = 'none';
             this.scoreboardVisible = false; // Update state for gamepad users
-        });
+        };
+        document.getElementById('close-scoreboard')?.addEventListener('click', this.eventHandlers.closeScoreboard);
         
         // Tab to show scoreboard
-        document.addEventListener('keydown', (e) => {
+        this.eventHandlers.keydown = (e) => {
             if (e.key === 'Tab') {
                 e.preventDefault();
                 document.getElementById('scoreboard').style.display = 'block';
                 this.scoreboardVisible = true; // Update state for gamepad sync
             }
-        });
+        };
+        document.addEventListener('keydown', this.eventHandlers.keydown);
         
-        document.addEventListener('keyup', (e) => {
+        this.eventHandlers.keyup = (e) => {
             if (e.key === 'Tab') {
                 document.getElementById('scoreboard').style.display = 'none';
                 this.scoreboardVisible = false; // Update state for gamepad sync
             }
-        });
+        };
+        document.addEventListener('keyup', this.eventHandlers.keyup);
         
         // Store reference for gamepad scoreboard control
         this.scoreboardVisible = false;
@@ -679,7 +701,7 @@ class GameEngine {
                 reject(error);
             };
             
-            setTimeout(() => {
+            this.safeSetTimeout(() => {
                 if (this.websocket.readyState !== WebSocket.OPEN) {
                     reject(new Error('Connection timeout'));
                 }
@@ -728,6 +750,22 @@ class GameEngine {
     
     worldVelocityToIsometric(vx, vy) {
         return { x: vx, y: -vy };
+    }
+    
+    /**
+     * Wrapper for setTimeout that tracks timeouts for cleanup
+     */
+    safeSetTimeout(callback, delay) {
+        const timeoutId = setTimeout(() => {
+            // Remove from tracking when it fires
+            const index = this.pendingTimeouts.indexOf(timeoutId);
+            if (index > -1) {
+                this.pendingTimeouts.splice(index, 1);
+            }
+            callback();
+        }, delay);
+        this.pendingTimeouts.push(timeoutId);
+        return timeoutId;
     }
     
     handleServerMessage(data) {
@@ -1181,7 +1219,7 @@ class GameEngine {
         
         // Auto-remove after display duration (or default 3 seconds)
         const displayDuration = event.displayDuration || 3000;
-        setTimeout(() => {
+        this.safeSetTimeout(() => {
             this.removeGameEvent(eventElement);
         }, displayDuration);
         
@@ -1295,7 +1333,7 @@ class GameEngine {
             eventElement.style.transition = 'all 0.3s ease-in';
             eventElement.style.opacity = '0';
             eventElement.style.transform = 'translateX(30px) scale(0.95)';
-            setTimeout(() => {
+            this.safeSetTimeout(() => {
                 if (eventElement.parentNode) {
                     eventElement.parentNode.removeChild(eventElement);
                 }
@@ -2792,18 +2830,34 @@ class GameEngine {
         if (projectileContainer.plasmaEffects) {
             const effects = projectileContainer.plasmaEffects;
             
-            // Remove all plasma effect children
-            if (effects.outerGlow && effects.outerGlow.parent) {
-                effects.outerGlow.parent.removeChild(effects.outerGlow);
+            // Remove and destroy all plasma effect children
+            if (effects.outerGlow) {
+                if (effects.outerGlow.parent) {
+                    effects.outerGlow.parent.removeChild(effects.outerGlow);
+                }
+                if (effects.outerGlow.clear) effects.outerGlow.clear();
+                effects.outerGlow.destroy();
             }
-            if (effects.middleGlow && effects.middleGlow.parent) {
-                effects.middleGlow.parent.removeChild(effects.middleGlow);
+            if (effects.middleGlow) {
+                if (effects.middleGlow.parent) {
+                    effects.middleGlow.parent.removeChild(effects.middleGlow);
+                }
+                if (effects.middleGlow.clear) effects.middleGlow.clear();
+                effects.middleGlow.destroy();
             }
-            if (effects.innerGlow && effects.innerGlow.parent) {
-                effects.innerGlow.parent.removeChild(effects.innerGlow);
+            if (effects.innerGlow) {
+                if (effects.innerGlow.parent) {
+                    effects.innerGlow.parent.removeChild(effects.innerGlow);
+                }
+                if (effects.innerGlow.clear) effects.innerGlow.clear();
+                effects.innerGlow.destroy();
             }
-            if (effects.electricArcs && effects.electricArcs.parent) {
-                effects.electricArcs.parent.removeChild(effects.electricArcs);
+            if (effects.electricArcs) {
+                if (effects.electricArcs.parent) {
+                    effects.electricArcs.parent.removeChild(effects.electricArcs);
+                }
+                if (effects.electricArcs.clear) effects.electricArcs.clear();
+                effects.electricArcs.destroy();
             }
             
             // Clear references
@@ -2814,6 +2868,10 @@ class GameEngine {
         if (projectileContainer.trail) {
             if (projectileContainer.trail.parent) {
                 projectileContainer.trail.parent.removeChild(projectileContainer.trail);
+            }
+            // Clear graphics content before destroying
+            if (projectileContainer.trail.clear) {
+                projectileContainer.trail.clear();
             }
             projectileContainer.trail.destroy();
             projectileContainer.trail = null;
@@ -2830,7 +2888,8 @@ class GameEngine {
             if (projectileContainer.sprite.parent) {
                 projectileContainer.sprite.parent.removeChild(projectileContainer.sprite);
             }
-            projectileContainer.sprite.destroy();
+            // Destroy sprite but preserve the shared texture
+            projectileContainer.sprite.destroy({ children: false, texture: false, baseTexture: false });
             projectileContainer.sprite = null;
         }
         
@@ -2839,7 +2898,7 @@ class GameEngine {
         projectileContainer.isPlasma = null;
         projectileContainer.maxTrailLength = null;
         
-        // Destroy the container itself
+        // Destroy the container itself (children already manually destroyed above)
         projectileContainer.destroy({ children: true, texture: false, baseTexture: false });
     }
 
@@ -4341,25 +4400,43 @@ class GameEngine {
         graphics.lineStyle(4, 0xFFFFFF, 0.9);
         graphics.drawRect(-halfWidth, -halfHeight, width, height);
         
-        // Corner reinforcements (fortress-like)
-        const cornerSize = 8;
-        graphics.lineStyle(3, 0xFFFFFF, 1.0);
-        // Top-left
-        graphics.moveTo(-halfWidth, -halfHeight + cornerSize);
-        graphics.lineTo(-halfWidth, -halfHeight);
-        graphics.lineTo(-halfWidth + cornerSize, -halfHeight);
-        // Top-right
-        graphics.moveTo(halfWidth - cornerSize, -halfHeight);
-        graphics.lineTo(halfWidth, -halfHeight);
-        graphics.lineTo(halfWidth, -halfHeight + cornerSize);
-        // Bottom-right
-        graphics.moveTo(halfWidth, halfHeight - cornerSize);
-        graphics.lineTo(halfWidth, halfHeight);
-        graphics.lineTo(halfWidth - cornerSize, halfHeight);
-        // Bottom-left
-        graphics.moveTo(-halfWidth + cornerSize, halfHeight);
-        graphics.lineTo(-halfWidth, halfHeight);
-        graphics.lineTo(-halfWidth, halfHeight - cornerSize);
+        // Castle turrets at each corner
+        const turretRadius = 12;
+        const turretPositions = [
+            { x: -halfWidth, y: -halfHeight },  // Top-left
+            { x: halfWidth, y: -halfHeight },   // Top-right
+            { x: halfWidth, y: halfHeight },    // Bottom-right
+            { x: -halfWidth, y: halfHeight }    // Bottom-left
+        ];
+        
+        turretPositions.forEach(pos => {
+            // Turret base (darker shade of team color)
+            const darkerTeamColor = this.darkenColor(teamColor);
+            graphics.beginFill(darkerTeamColor, 0.95);
+            graphics.drawCircle(pos.x, pos.y, turretRadius);
+            graphics.endFill();
+            
+            // Damage overlay on turrets
+            if (healthPct < 1.0) {
+                const damageAlpha = (1.0 - healthPct) * 0.6;
+                graphics.beginFill(0x000000, damageAlpha);
+                graphics.drawCircle(pos.x, pos.y, turretRadius);
+                graphics.endFill();
+            }
+            
+            // Turret outline
+            graphics.lineStyle(3, 0xFFFFFF, 0.95);
+            graphics.drawCircle(pos.x, pos.y, turretRadius);
+            
+            // Inner turret detail (smaller circle)
+            graphics.lineStyle(2, 0xFFFFFF, 0.7);
+            graphics.drawCircle(pos.x, pos.y, turretRadius * 0.6);
+            
+            // Turret top accent
+            graphics.beginFill(0xFFFFFF, 0.4);
+            graphics.drawCircle(pos.x, pos.y, turretRadius * 0.3);
+            graphics.endFill();
+        });
         
         // Central command center design
         const centerSize = Math.min(halfWidth, halfHeight) * 0.5;
@@ -4659,7 +4736,12 @@ class GameEngine {
         // Add animation ticker for the connection line
         const animateConnection = () => {
             if (!connectionGraphics.parent) {
-                return; // Connection was removed
+                // Connection was removed - cleanup ticker
+                if (connectionGraphics.animationFunction) {
+                    this.app.ticker.remove(connectionGraphics.animationFunction);
+                    connectionGraphics.animationFunction = null;
+                }
+                return;
             }
             
             connectionGraphics.clear();
@@ -5932,16 +6014,16 @@ class GameEngine {
     animateShieldBarrier(container) {
         const time = container.animationTime;
         
-        // Shield energy fluctuation
-        const energy = 0.95 + Math.sin(time * 6) * 0.05;
+        // Shield energy fluctuation (slowed down)
+        const energy = 0.95 + Math.sin(time * 2) * 0.05;
         container.scale.set(energy);
         
-        // Shield shimmer effect
-        const shimmer = 0.8 + Math.sin(time * 8) * 0.15;
+        // Shield shimmer effect (slowed down)
+        const shimmer = 0.8 + Math.sin(time * 3) * 0.15;
         container.alpha = shimmer;
         
-        // Steady rotation for energy field
-        container.rotation = time * 1.0;
+        // Steady rotation for energy field (slowed down)
+        container.rotation = time * 0.015;
     }
     
     /**
@@ -6072,7 +6154,7 @@ class GameEngine {
         this.app.ticker.add(fadeOut);
         
         // Safety timeout to prevent infinite fade
-        setTimeout(() => {
+        this.safeSetTimeout(() => {
             if (container && container.fadeOutFunction) {
                 this.app.ticker.remove(container.fadeOutFunction);
                 container.fadeOutFunction = null;
@@ -6398,8 +6480,8 @@ class GameEngine {
                 countdown.style.color = '#f39c12';
                 countdown.style.fontWeight = 'normal';
                 
-                if (deathInfo) {
-                    const livesText = livesRemaining === -1 ? '∞' : livesRemaining;
+                if (deathInfo && livesRemaining != -1) {
+                    const livesText = livesRemaining;
                     deathInfo.innerHTML = `
                         <p style="color: #cccccc; margin: 10px 0;">
                             Lives remaining: <span style="color: #ffaa00; font-weight: bold;">${livesText}</span>
@@ -6474,7 +6556,7 @@ class GameEngine {
     }
     
     hideLoadingScreen() {
-        setTimeout(() => {
+        this.safeSetTimeout(() => {
             document.getElementById('loading-screen').style.display = 'none';
             document.getElementById('game-ui').style.display = 'block';
         }, 500);
@@ -6638,37 +6720,6 @@ class GameEngine {
     }
 
     /**
-     * Clean up the game engine and stop all intervals
-     */
-    destroy() {
-        console.log('Destroying game engine...');
-        
-        // Clear memory cleanup interval
-        if (this.memoryCleanupInterval) {
-            clearInterval(this.memoryCleanupInterval);
-            this.memoryCleanupInterval = null;
-        }
-        
-        // Stop ticker
-        if (this.app && this.app.ticker) {
-            this.app.ticker.stop();
-        }
-        
-        // Destroy PIXI app
-        if (this.app) {
-            this.app.destroy(true);
-            this.app = null;
-        }
-        
-        // Clear all collections
-        this.players.clear();
-        this.projectiles.clear();
-        this.fieldEffects.clear();
-        this.projectileInterpolators.clear();
-        this.playerInterpolators.clear();
-    }
-
-    /**
      * Performance monitoring for entity management optimization
      */
     logEntityManagementStats() {
@@ -6766,10 +6817,63 @@ class GameEngine {
      * Clean up all resources when the game engine is destroyed
      */
     destroy() {
+        console.log('Destroying game engine...');
+        
         // Clear the memory cleanup interval
         if (this.memoryCleanupInterval) {
             clearInterval(this.memoryCleanupInterval);
             this.memoryCleanupInterval = null;
+        }
+        
+        // Clear all pending timeouts
+        this.pendingTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+        this.pendingTimeouts = [];
+        
+        // Remove all ticker callbacks
+        if (this.app && this.app.ticker) {
+            this.tickerCallbacks.forEach(callback => {
+                this.app.ticker.remove(callback);
+            });
+            this.tickerCallbacks = [];
+            
+            // Stop ticker
+            this.app.ticker.stop();
+        }
+        
+        // Remove all event listeners
+        if (this.app && this.app.renderer && this.app.renderer.gl && this.app.renderer.gl.canvas) {
+            if (this.eventHandlers.webglContextLost) {
+                this.app.renderer.gl.canvas.removeEventListener('webglcontextlost', this.eventHandlers.webglContextLost);
+            }
+            if (this.eventHandlers.webglContextRestored) {
+                this.app.renderer.gl.canvas.removeEventListener('webglcontextrestored', this.eventHandlers.webglContextRestored);
+            }
+        }
+        
+        if (this.eventHandlers.resize) {
+            window.removeEventListener('resize', this.eventHandlers.resize);
+        }
+        
+        if (this.eventHandlers.keydown) {
+            document.removeEventListener('keydown', this.eventHandlers.keydown);
+        }
+        
+        if (this.eventHandlers.keyup) {
+            document.removeEventListener('keyup', this.eventHandlers.keyup);
+        }
+        
+        const closeScoreboardBtn = document.getElementById('close-scoreboard');
+        if (closeScoreboardBtn && this.eventHandlers.closeScoreboard) {
+            closeScoreboardBtn.removeEventListener('click', this.eventHandlers.closeScoreboard);
+        }
+        
+        // Clear event handlers
+        this.eventHandlers = {};
+        
+        // Clean up DOM elements
+        if (this.eventContainer && this.eventContainer.parentNode) {
+            this.eventContainer.parentNode.removeChild(this.eventContainer);
+            this.eventContainer = null;
         }
         
         // Clean up all interpolators
@@ -6840,6 +6944,23 @@ class GameEngine {
         });
         this.teleportConnections.clear();
         
+        // Close WebSocket connection
+        if (this.websocket) {
+            this.websocket.close();
+            this.websocket = null;
+        }
+        
+        // Clean up InputManager
+        if (this.inputManager && typeof this.inputManager.destroy === 'function') {
+            this.inputManager.destroy();
+        }
+        this.inputManager = null;
+        
+        // Clean up global reference
+        if (window.gameEngine === this) {
+            window.gameEngine = null;
+        }
+        
         // Clean up PIXI app
         if (this.app) {
             this.app.destroy(true, { children: true, texture: true, baseTexture: true });
@@ -6851,8 +6972,6 @@ class GameEngine {
         this.uiContainer = null;
         this.backgroundContainer = null;
         this.nameContainer = null;
-        this.websocket = null;
-        this.inputManager = null;
         this.camera = null;
         this.gameState = null;
         

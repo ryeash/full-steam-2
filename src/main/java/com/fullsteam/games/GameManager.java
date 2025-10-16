@@ -1151,7 +1151,7 @@ public class GameManager {
             playerState.put("kills", player.getKills());
             playerState.put("deaths", player.getDeaths());
             playerState.put("captures", player.getCaptures());
-            playerState.put("respawnTime", Math.max(0, (player.getRespawnTime() - System.currentTimeMillis()) / 1000));
+            playerState.put("respawnTime", Math.max(0, ((double) player.getRespawnTime() - System.currentTimeMillis()) / 1000));
             playerState.put("livesRemaining", player.getLivesRemaining());
             playerState.put("eliminated", player.isEliminated());
 
@@ -1713,10 +1713,6 @@ public class GameManager {
                 respawnPlayer(player);
             }
         }
-    }
-
-    public void respawnAllPlayers() {
-        gameEntities.getPlayers().values().forEach(this::respawnPlayer);
     }
 
     public void respawnPlayer(Player player) {

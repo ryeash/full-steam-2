@@ -11,6 +11,8 @@ public interface AttributeModification {
     // source?
     // uniqueness key?
 
+    String uniqueKey();
+
     default String renderHint() {
         return "";
     }
