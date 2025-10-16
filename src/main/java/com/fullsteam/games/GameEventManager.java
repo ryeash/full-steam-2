@@ -205,6 +205,13 @@ public class GameEventManager {
     }
     
     /**
+     * Convenience method to broadcast player elimination (when they run out of lives)
+     */
+    public void broadcastElimination(String playerName, int teamNumber, int livesRemaining) {
+        broadcastEvent(GameEvent.createEliminationEvent(playerName, teamNumber, livesRemaining));
+    }
+    
+    /**
      * Convenience method to broadcast a custom message with color
      */
     public void broadcastCustomMessage(String message, String color, GameEvent.EventTarget target) {

@@ -65,6 +65,8 @@ public class GameManager {
     @Getter
     protected final GameEntities gameEntities;
     @Getter
+    protected final CollisionProcessor collisionProcessor;
+    @Getter
     protected final AIPlayerManager aiPlayerManager;
     @Getter
     protected final TeamSpawnManager teamSpawnManager;
@@ -113,7 +115,7 @@ public class GameManager {
         this.world.setBounds(new AxisAlignedBounds(gameConfig.getWorldWidth(), gameConfig.getWorldHeight()));
 
         this.gameEntities = new GameEntities(gameConfig, world);
-        CollisionProcessor collisionProcessor = new CollisionProcessor(this, this.gameEntities);
+        this.collisionProcessor = new CollisionProcessor(this, this.gameEntities);
         this.world.addCollisionListener(collisionProcessor);
         this.world.addContactListener(collisionProcessor);
 
@@ -1012,18 +1014,37 @@ public class GameManager {
                 hqPosition.add(awayFromCenter.multiply(150.0));
             }
 
-            // Ensure HQ position is clear of obstacles
-            if (!terrainGenerator.isPositionClear(hqPosition, 50.0)) {
+            // Ensure HQ position is clear of obstacles (HQ needs more clearance due to size)
+            double hqClearanceRadius = 100.0; // HQ is 80x60, so need larger clearance
+            if (!terrainGenerator.isPositionClear(hqPosition, hqClearanceRadius)) {
                 // Try to find a nearby clear position within the team area
-                for (int attempt = 0; attempt < 10; attempt++) {
-                    double offsetX = (Math.random() - 0.5) * 200;
-                    double offsetY = (Math.random() - 0.5) * 200;
+                boolean foundClearPosition = false;
+                for (int attempt = 0; attempt < 20; attempt++) {
+                    double offsetX = (Math.random() - 0.5) * 300;
+                    double offsetY = (Math.random() - 0.5) * 300;
                     Vector2 candidate = new Vector2(hqPosition.x + offsetX, hqPosition.y + offsetY);
 
-                    if (terrainGenerator.isPositionClear(candidate, 50.0)) {
+                    if (terrainGenerator.isPositionClear(candidate, hqClearanceRadius)) {
                         hqPosition = candidate;
+                        foundClearPosition = true;
                         break;
                     }
+                }
+
+                // If still no clear position found, try anywhere in team area
+                if (!foundClearPosition && teamArea != null) {
+                    for (int attempt = 0; attempt < 30; attempt++) {
+                        Vector2 candidate = teamArea.generateSpawnPoint();
+                        if (terrainGenerator.isPositionClear(candidate, hqClearanceRadius)) {
+                            hqPosition = candidate;
+                            foundClearPosition = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!foundClearPosition) {
+                    log.warn("Could not find clear position for team {} headquarters after many attempts. Placing anyway.", teamNumber);
                 }
             }
 
@@ -1143,7 +1164,7 @@ public class GameManager {
             playerState.put("x", pos.x);
             playerState.put("y", pos.y);
             playerState.put("rotation", player.getRotation());
-            playerState.put("health", player.getHealth());
+            playerState.put("health", player.healthPercent());
             playerState.put("active", player.isActive());
             playerState.put("ammo", player.getCurrentWeapon().getCurrentAmmo());
             playerState.put("maxAmmo", player.getCurrentWeapon().getMagazineSize());
@@ -1205,7 +1226,7 @@ public class GameManager {
             obsState.put("boundingRadius", obstacle.getBoundingRadius());
             obsState.put("rotation", obstacle.getBody().getTransform().getRotation().toRadians());
             if (obstacle.getType() == Obstacle.ObstacleType.PLAYER_BARRIER) {
-                obsState.put("health", obstacle.getHealth());
+                obsState.put("health", obstacle.healthPercent());
                 obsState.put("maxHealth", obstacle.getMaxHealth());
                 obsState.put("active", obstacle.isActive());
                 obsState.put("ownerId", obstacle.getOwnerId());
@@ -1248,7 +1269,7 @@ public class GameManager {
             turretState.put("x", pos.x);
             turretState.put("y", pos.y);
             turretState.put("rotation", turret.getBody().getTransform().getRotation().toRadians());
-            turretState.put("health", turret.getHealth());
+            turretState.put("health", turret.healthPercent());
             turretState.put("active", turret.isActive());
             turretState.put("ownerId", turret.getOwnerId());
             turretState.put("ownerTeam", turret.getOwnerTeam());
@@ -1326,7 +1347,7 @@ public class GameManager {
             laserState.put("x", pos.x);
             laserState.put("y", pos.y);
             laserState.put("rotation", defenseLaser.getCurrentRotation());
-            laserState.put("health", defenseLaser.getHealth());
+            laserState.put("health", defenseLaser.healthPercent());
             laserState.put("active", defenseLaser.isActive());
             laserState.put("ownerId", defenseLaser.getOwnerId());
             laserState.put("ownerTeam", defenseLaser.getOwnerTeam());
@@ -1733,6 +1754,15 @@ public class GameManager {
         }
         victim.die();
 
+        // Check if player lost their last life
+        if (victim.loseLife()) {
+            gameEventManager.broadcastElimination(
+                    victim.getPlayerName(),
+                    victim.getTeam(),
+                    victim.getLivesRemaining()
+            );
+        }
+
         // Drop any flag the victim was carrying
         for (Flag flag : gameEntities.getAllFlags()) {
             if (flag.isCarried() && flag.getCarriedByPlayerId() == victim.getId()) {
@@ -1741,29 +1771,7 @@ public class GameManager {
             }
         }
 
-        Vector2 newSpawnPoint = findVariedSpawnPointForTeam(victim.getTeam());
-        victim.setRespawnPoint(newSpawnPoint);
-        switch (gameConfig.getRules().getRespawnMode()) {
-            case INSTANT:
-                victim.setRespawnTime((long) (System.currentTimeMillis() + (gameConfig.getRules().getRespawnDelay() * 1000)));
-                break;
-            case WAVE:
-                victim.setRespawnTime(ruleSystem.getWaveRespawnTime());
-                break;
-            case NEXT_ROUND:
-            case ELIMINATION:
-                victim.setRespawnTime(ruleSystem.getRoundEndTime());
-                break;
-            case LIMITED:
-                if (victim.isEliminated()) {
-                    victim.setRespawnTime(0);
-                } else {
-                    victim.setRespawnTime((long) (System.currentTimeMillis() + (gameConfig.getRules().getRespawnDelay() * 1000)));
-                }
-                break;
-            default:
-                throw new IllegalStateException("Unexpected value: " + gameConfig.getRules().getRespawnMode());
-        }
+        ruleSystem.setRespawnTime(victim);
 
         // Broadcast kill event with team colors
         String killerName = shooter != null ? shooter.getPlayerName() : "Unknown";
@@ -1975,18 +1983,5 @@ public class GameManager {
                     .ifPresent(displayName::append);
         }
         return displayName.toString();
-    }
-
-    /**
-     * Get the collision processor from the world's collision listeners
-     */
-    private CollisionProcessor getCollisionProcessor() {
-        // This is a bit of a hack, but we need access to the collision processor
-        // In a real implementation, we'd store a reference to it
-        return world.getCollisionListeners().stream()
-                .filter(listener -> listener instanceof CollisionProcessor)
-                .map(listener -> (CollisionProcessor) listener)
-                .findFirst()
-                .orElse(null);
     }
 }

@@ -18,23 +18,11 @@ public class GameConfig {
     @Builder.Default
     private double worldHeight = 2000.0;
     @Builder.Default
-    private double playerSpeed = 150.0; // pixels per second
-    @Builder.Default
-    private double playerSize = 10.0;
-    @Builder.Default
     private double playerMaxHealth = 100.0;
     @Builder.Default
-    private double captureRadius = 50.0;
+    private long aiCheckIntervalMs = 10000;
     @Builder.Default
-    private double captureTime = 3.0; // seconds
-
-    // AI Management Settings
-    @Builder.Default
-    private long aiCheckIntervalMs = 10000; // 10 seconds
-    @Builder.Default
-    private boolean enableAIFilling = true; // Whether to automatically fill game with AI players
-    
-    // Game Rules (rounds, timing, etc.)
+    private boolean enableAIFilling = true;
     @Builder.Default
     private Rules rules = Rules.builder().build();
 
@@ -54,15 +42,6 @@ public class GameConfig {
      */
     public boolean isFreeForAll() {
         return teamCount == 0;
-    }
-    
-    /**
-     * Check if this configuration uses rounds (timed gameplay).
-     *
-     * @return true if rounds are enabled, false for infinite gameplay
-     */
-    public boolean hasRounds() {
-        return rules != null && rules.getRoundDuration() > 0;
     }
 }
 

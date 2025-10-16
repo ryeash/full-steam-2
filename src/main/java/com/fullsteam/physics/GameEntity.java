@@ -27,7 +27,13 @@ public abstract class GameEntity {
         body.setUserData(this);
     }
 
-    public abstract void update(double deltaTime);
+    public double healthPercent() {
+        return health / maxHealth;
+    }
+
+    public void update(double deltaTime) {
+        lastUpdateTime = System.currentTimeMillis();
+    }
 
     public Vector2 getPosition() {
         return body.getTransform().getTranslation().copy();

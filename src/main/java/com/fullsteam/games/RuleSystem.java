@@ -98,7 +98,7 @@ public class RuleSystem {
 
         // Update wave respawn timer if using wave mode
         if (rules.usesWaveRespawn()) {
-            updateWaveRespawn(deltaTime);
+            updateWaveRespawn();
         }
 
         // Check victory conditions
@@ -133,6 +133,9 @@ public class RuleSystem {
         // Capture current scores
         roundScores.clear();
         for (Player player : gameEntities.getAllPlayers()) {
+            // Get team bonus points for this player's team
+            int teamBonus = bonusTeamPoints.getOrDefault(player.getTeam(), 0);
+
             RoundScore score = RoundScore.builder()
                     .playerId(player.getId())
                     .playerName(player.getPlayerName())
@@ -140,6 +143,7 @@ public class RuleSystem {
                     .kills(player.getKills())
                     .deaths(player.getDeaths())
                     .captures(player.getCaptures())
+                    .bonusPoints(teamBonus)
                     .build();
             roundScores.put(player.getId(), score);
         }
@@ -203,9 +207,7 @@ public class RuleSystem {
         broadcaster.accept(roundStartEvent);
     }
 
-    // ===== RESPAWN MANAGEMENT =====
-
-    private void updateWaveRespawn(double deltaTime) {
+    private void updateWaveRespawn() {
         if (System.currentTimeMillis() >= waveRespawnTime) {
             // Broadcast wave respawn event
             gameEventManager.broadcastSystemMessage("⚡ Wave Respawn!");
@@ -221,7 +223,38 @@ public class RuleSystem {
         if (player.isActive()) {
             return false; // Player is already active
         }
-        return player.getRespawnTime() > 0 && System.currentTimeMillis() > player.getRespawnTime();
+        return player.hasLivesRemaining()
+                && player.getRespawnTime() > 0
+                && System.currentTimeMillis() > player.getRespawnTime();
+    }
+
+    public void setRespawnTime(Player player) {
+        // this player is not dead, reset respawn and carry on
+        if (player.isActive()) {
+            player.setRespawnTime(0);
+            return;
+        }
+        switch (rules.getRespawnMode()) {
+            case INSTANT:
+                player.setRespawnTime((long) (System.currentTimeMillis() + (rules.getRespawnDelay() * 1000)));
+                break;
+            case WAVE:
+                player.setRespawnTime(waveRespawnTime);
+                break;
+            case NEXT_ROUND:
+            case ELIMINATION:
+                player.setRespawnTime(roundEndTime);
+                break;
+            case LIMITED:
+                if (player.isEliminated()) {
+                    player.setRespawnTime(0);
+                } else {
+                    player.setRespawnTime((long) (System.currentTimeMillis() + (rules.getRespawnDelay() * 1000)));
+                }
+                break;
+            default:
+                throw new IllegalStateException("Unexpected value: " + rules.getRespawnMode());
+        }
     }
 
     private void checkVictoryConditions() {

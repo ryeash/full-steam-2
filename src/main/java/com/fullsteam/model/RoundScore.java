@@ -19,6 +19,6 @@ public class RoundScore {
     private int kills;
     private int deaths;
     private int captures; // Flag captures (CTF mode)
-    private double hqDamage;
+    private int bonusPoints; // Team bonus points (HQ damage, objectives, etc.) - only populated for round summaries
 }
 

@@ -109,8 +109,7 @@ public class Beam extends GameEntity {
                 // DOT damage is now handled by GameManager with proper collision detection
                 break;
         }
-
-        lastUpdateTime = System.currentTimeMillis();
+        super.update(deltaTime);
     }
 
 

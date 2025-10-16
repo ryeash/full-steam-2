@@ -62,16 +62,6 @@ public class PowerUp extends GameEntity {
         return body;
     }
     
-    @Override
-    public void update(double deltaTime) {
-        if (!active) {
-            return;
-        }
-        
-        // Power-ups are stationary - no floating animation needed
-        lastUpdateTime = System.currentTimeMillis();
-    }
-    
     /**
      * Check if a player can collect this power-up.
      */

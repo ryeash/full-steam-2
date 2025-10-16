@@ -280,6 +280,38 @@ public class GameEvent {
     }
 
     /**
+     * Create a player elimination event (when they run out of lives)
+     */
+    public static GameEvent createEliminationEvent(String playerName, int teamNumber, int livesRemaining) {
+        StringBuilder messageBuilder = new StringBuilder();
+        messageBuilder.append("💀 ");
+        
+        // Add player name with team color
+        if (teamNumber > 0) {
+            String teamColor = getTeamColorHex(teamNumber);
+            messageBuilder.append(String.format("<color:%s>%s</color>", teamColor, playerName));
+        } else {
+            messageBuilder.append(playerName);
+        }
+        
+        messageBuilder.append(" has been eliminated!");
+        
+        // Add lives remaining if not completely out
+        if (livesRemaining > 0) {
+            messageBuilder.append(String.format(" (%d %s remaining)", 
+                    livesRemaining, livesRemaining == 1 ? "life" : "lives"));
+        }
+
+        return GameEvent.builder()
+                .message(messageBuilder.toString())
+                .category(EventCategory.WARNING)
+                .color(EventCategory.WARNING.getDefaultColor())
+                .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
+                .displayDuration(4000L) // Longer display for elimination
+                .build();
+    }
+
+    /**
      * Create a custom event with full control
      */
     public static GameEvent createCustomEvent(String message, String color, EventTarget target) {
