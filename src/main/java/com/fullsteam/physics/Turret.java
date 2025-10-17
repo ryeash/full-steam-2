@@ -214,20 +214,4 @@ public class Turret extends GameEntity {
         double fireInterval = 1000.0 / fireRate;
         return (now - lastShotTime) >= fireInterval;
     }
-
-    /**
-     * Check if the turret has expired
-     */
-    public boolean isExpired() {
-        return !active || System.currentTimeMillis() > expires;
-    }
-
-    /**
-     * Get the remaining lifespan as a percentage
-     */
-    public double getLifespanPercent() {
-        long lifespan = expires - created;
-        long timeRemaining = expires - System.currentTimeMillis();
-        return lifespan > 0 ? Math.max(0, timeRemaining / lifespan) : 0;
-    }
 }

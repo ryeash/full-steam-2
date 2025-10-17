@@ -28,7 +28,7 @@ public abstract class GameEntity {
     }
 
     public double healthPercent() {
-        return health / maxHealth;
+        return Math.max(0, (health / maxHealth));
     }
 
     public void update(double deltaTime) {

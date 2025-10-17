@@ -149,22 +149,6 @@ public class WeaponConfig {
             Ordinance.PLASMA
     );
 
-    // Cannonball Ordinance Showcase - Heavy, slow, powerful shots
-    public static final WeaponConfig SIEGE_CANNON_PRESET = new WeaponConfig(
-            "Siege Cannon",
-            35,     // High damage
-            1,      // Very slow fire rate
-            15,     // Good range
-            -2,      // Neutral accuracy
-            3,      // Small magazine
-            25,     // Long reload
-            11,      // Slow projectile
-            0,      // Single shot
-            0,      // No damping
-            Set.of(),
-            Ordinance.CANNONBALL  // 12 points, total: 84 + 12 = 96
-    );
-
     // Dart Ordinance Showcase - Fast, precise, low damage
     public static final WeaponConfig PRECISION_DART_GUN_PRESET = new WeaponConfig(
             "Precision Dart Gun",

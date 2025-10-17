@@ -2120,8 +2120,7 @@ class GameEngine {
         }
         
         // Calculate health percentage
-        const maxHealth = entityData.maxHealth || 100;
-        const healthPercent = Math.max(0, Math.min(1, entityData.health / maxHealth));
+        const healthPercent = entityData.health;
         
         // Determine visibility
         const isDamaged = healthPercent < 1.0;
@@ -2726,10 +2725,6 @@ class GameEngine {
             case 'LASER':
                 sprite.scale.set(0.8);
                 sprite.tint = 0xff44ff; // Magenta for laser
-                break;
-            case 'CANNONBALL':
-                sprite.scale.set(3.0);
-                sprite.tint = 0x444444; // Dark gray for cannonball
                 break;
             case 'DART':
                 sprite.scale.set(0.5);

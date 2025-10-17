@@ -25,7 +25,6 @@ public class FieldEffect extends GameEntity {
     private final double radius;
     private final double damage;
     private final int ownerTeam;
-    private final long expires;
     private final long armingTime;
     private final Set<Integer> affectedEntities; // Track which entities have been affected
     private final Map<Integer, Long> lastDamageTime; // Track last damage time for each player (in milliseconds)
@@ -142,10 +141,6 @@ public class FieldEffect extends GameEntity {
         return damage * getIntensityAtPosition(targetPosition);
     }
 
-    public boolean isExpired() {
-        return !active || System.currentTimeMillis() > expires;
-    }
-
     public long getDuration() {
         return Math.max(expires - created, 0);
     }
@@ -162,9 +157,9 @@ public class FieldEffect extends GameEntity {
                 : 1.0;
     }
 
-    /**
-     * Trigger the mine and create an explosion field effect (for proximity mines)
-     */
+//    /**
+//     * Trigger the mine and create an explosion field effect (for proximity mines)
+//     */
 //    public FieldEffect trigger() {
 //        if (type != FieldEffectType.PROXIMITY_MINE || hasTriggered) {
 //            return null;
@@ -185,22 +180,6 @@ public class FieldEffect extends GameEntity {
 //                ownerTeam
 //        );
 //    }
-
-    /**
-     * Get the arming progress as a percentage
-     */
-    public double getArmingPercent() {
-        if (armingTime == 0) {
-            return 1.0;
-        }
-        if (System.currentTimeMillis() > armingTime) {
-            return 1.0;
-        }
-        long armingTimeRemaining = armingTime - System.currentTimeMillis();
-        return (armingTime > 0 && armingTimeRemaining > 0)
-                ? Math.max(0, (armingTime - armingTimeRemaining) / armingTime)
-                : 1.0;
-    }
 
     /**
      * Check if the mine is armed (for proximity mines)

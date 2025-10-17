@@ -6,7 +6,6 @@ public enum Ordinance {
     ROCKET(20, "High-speed explosive projectile", 4.0, 1.2, true, 1.4, 50.0, null, 0.0, 0.0),
     GRENADE(10, "Arcing explosive projectile", 3.0, 0.6, true, 1.2, 20.0, null, 0.0, 0.0),
     PLASMA(15, "Energy-based projectile", 2.5, 1.1, false, 0.8, 40.0, null, 0.0, 0.0),
-    CANNONBALL(12, "Heavy, slow projectile", 6.0, 0.4, false, 1.0, 30.0, null, 0.0, 0.0),
     DART(5, "Small, fast projectile", 1.5, 1.4, false, 0.1, 50.0, null, 0.0, 0.0),
     FLAMETHROWER(8, "Short-range fire stream", 3.5, 0.8, false, 0.4, 10.0, null, 0.0, 0.0),
     

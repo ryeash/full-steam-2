@@ -49,7 +49,6 @@ public enum UtilityWeapon {
     private final double radius; // effect area radius
     private final double damage; // damage for offensive utilities (0 for non-damaging)
     private final UtilityCategory category;
-    private final Ordinance beamOrdinance; // null if not beam-based
 
     // Constructor for FieldEffect and Entity-based utilities
     UtilityWeapon(String displayName, String description, FieldEffectType fieldEffectType,
@@ -64,23 +63,6 @@ public enum UtilityWeapon {
         this.radius = radius;
         this.damage = damage;
         this.category = category;
-        this.beamOrdinance = null; // Not beam-based
-    }
-
-    // Constructor for Beam-based utilities
-    UtilityWeapon(String displayName, String description, FieldEffectType fieldEffectType,
-                  String entityClassName, double cooldown, double range, double radius, double damage,
-                  UtilityCategory category, Ordinance beamOrdinance) {
-        this.displayName = displayName;
-        this.description = description;
-        this.fieldEffectType = fieldEffectType;
-        this.entityClassName = entityClassName;
-        this.cooldown = cooldown;
-        this.range = range;
-        this.radius = radius;
-        this.damage = damage;
-        this.category = category;
-        this.beamOrdinance = beamOrdinance;
     }
 
     public String getDisplayName() {
@@ -119,10 +101,6 @@ public enum UtilityWeapon {
         return category;
     }
 
-    public Ordinance getBeamOrdinance() {
-        return beamOrdinance;
-    }
-
     /**
      * @return true if this utility uses FieldEffect system
      */
@@ -135,13 +113,6 @@ public enum UtilityWeapon {
      */
     public boolean isEntityBased() {
         return entityClassName != null;
-    }
-
-    /**
-     * @return true if this utility uses beam weapon system
-     */
-    public boolean isBeamBased() {
-        return beamOrdinance != null;
     }
 
     /**

@@ -1,10 +1,8 @@
 package com.fullsteam.games;
 
 import com.fullsteam.Config;
-import com.fullsteam.model.DamageApplicationType;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
-import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.DefenseLaser;
@@ -20,8 +18,6 @@ import org.dyn4j.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Set;
-import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 /**
@@ -34,20 +30,13 @@ public class UtilitySystem {
     private final GameEntities gameEntities;
     private final World<Body> world;
     private final Function<Vector2, Boolean> isPositionClearCheck;
-    private final BiConsumer<String, String> gameEventBroadcaster;
-    private final WeaponSystem weaponSystem;
 
-    public UtilitySystem(
-            GameEntities gameEntities,
-            World<Body> world,
-            Function<Vector2, Boolean> isPositionClearCheck,
-            BiConsumer<String, String> gameEventBroadcaster,
-            WeaponSystem weaponSystem) {
+    public UtilitySystem(GameEntities gameEntities,
+                         World<Body> world,
+                         Function<Vector2, Boolean> isPositionClearCheck) {
         this.gameEntities = gameEntities;
         this.world = world;
         this.isPositionClearCheck = isPositionClearCheck;
-        this.gameEventBroadcaster = gameEventBroadcaster;
-        this.weaponSystem = weaponSystem;
     }
 
     /**
@@ -55,16 +44,10 @@ public class UtilitySystem {
      */
     public void handleUtilityActivation(Player.UtilityActivation activation) {
         UtilityWeapon utility = activation.utilityWeapon;
-
         if (utility.isFieldEffectBased()) {
-            // Create FieldEffect for area-based utilities
             createFieldEffectUtility(activation);
         } else if (utility.isEntityBased()) {
-            // Create custom entity for complex utilities
             createEntityUtility(activation);
-        } else if (utility.isBeamBased()) {
-            // Create beam for line-of-sight utilities
-            createBeamUtility(activation);
         }
     }
 
@@ -74,16 +57,12 @@ public class UtilitySystem {
     private void createFieldEffectUtility(Player.UtilityActivation activation) {
         UtilityWeapon utility = activation.utilityWeapon;
         FieldEffectType effectType = utility.getFieldEffectType();
-
-        // Calculate target position based on utility range and aim direction
         Vector2 targetPos = activation.position.copy();
         if (utility.getRange() > 0) {
             Vector2 offset = activation.direction.copy();
             offset.multiply(utility.getRange());
             targetPos.add(offset);
         }
-
-        // Create the field effect
         FieldEffect fieldEffect = new FieldEffect(
                 Config.nextId(),
                 activation.playerId,
@@ -94,12 +73,8 @@ public class UtilitySystem {
                 effectType.getDefaultDuration(),
                 activation.team
         );
-
         gameEntities.addFieldEffect(fieldEffect);
         world.addBody(fieldEffect.getBody());
-
-        log.debug("Created {} field effect at ({}, {}) with radius {} for player {}",
-                effectType.name(), targetPos.x, targetPos.y, utility.getRadius(), activation.playerId);
     }
 
     /**
@@ -136,38 +111,27 @@ public class UtilitySystem {
      * Create a turret entity.
      */
     private void createTurret(Player.UtilityActivation activation) {
-        // Calculate placement position slightly in front of player
         Vector2 placement = activation.position.copy();
         Vector2 offset = activation.direction.copy();
         offset.multiply(50.0); // Place 50 units in front
         placement.add(offset);
-
-        // Check if placement position is clear of obstacles
-        double turretRadius = 15.0; // Turret radius from Turret class
+        double turretRadius = 15.0;
         if (!isPositionClear(placement, turretRadius)) {
-            log.debug("Player {} tried to place turret at ({}, {}) but position is blocked by obstacle",
-                    activation.playerId, placement.x, placement.y);
-
-            // Send feedback to player that placement failed
             Player player = gameEntities.getPlayer(activation.playerId);
             if (player != null) {
-                // Refund the cooldown since placement failed
                 player.refundUtilityCooldown();
             }
             return;
         }
-
         Turret turret = new Turret(
                 Config.nextId(),
                 activation.playerId,
                 activation.team,
                 placement,
-                15.0 // 15 second lifespan
+                15.0
         );
-
         gameEntities.addTurret(turret);
         world.addBody(turret.getBody());
-        log.debug("Player {} deployed turret at ({}, {})", activation.playerId, placement.x, placement.y);
     }
 
     /**
@@ -199,114 +163,85 @@ public class UtilitySystem {
      * Create a net projectile entity.
      */
     private void createNetProjectile(Player.UtilityActivation activation) {
-        // Fire net projectile in aim direction
         Vector2 velocity = activation.direction.copy();
-        velocity.multiply(300.0); // Net projectile speed
-
+        velocity.multiply(300.0);
         NetProjectile netProjectile = new NetProjectile(
                 Config.nextId(),
                 activation.playerId,
                 activation.team,
                 activation.position,
                 velocity,
-                5.0 // 5 second time to live
+                2.0
         );
-
         gameEntities.addNetProjectile(netProjectile);
         world.addBody(netProjectile.getBody());
-
-        log.debug("Player {} launched net projectile", activation.playerId);
     }
 
     /**
      * Create a proximity mine entity.
      */
     private void createProximityMine(Player.UtilityActivation activation) {
-        // Place mine at player's current position
         FieldEffect mine = new FieldEffect(
                 Config.nextId(),
                 activation.playerId,
                 FieldEffectType.PROXIMITY_MINE,
                 activation.position,
-                45.0, // Small visual radius for mine
-                1.0, // Damage (not used for mines, explosion handles damage)
-                15.0, // 15 second lifespan
+                45.0,
+                1.0,
+                15.0,
                 activation.team
         );
-
         gameEntities.addFieldEffect(mine);
         world.addBody(mine.getBody());
-        log.debug("Player {} placed proximity mine at ({}, {})",
-                activation.playerId, activation.position.x, activation.position.y);
     }
 
     /**
      * Create a teleport pad entity.
      */
     private void createTeleportPad(Player.UtilityActivation activation) {
-        // Calculate placement position slightly in front of player
         Vector2 placement = activation.position.copy();
         Vector2 offset = activation.direction.copy();
-        offset.multiply(30.0); // Place 30 units in front
+        offset.multiply(30.0);
         placement.add(offset);
-
         TeleportPad teleportPad = new TeleportPad(
                 Config.nextId(),
                 activation.playerId,
                 activation.team,
                 placement,
-                60.0 // 60 second lifespan
+                60.0
         );
-
         gameEntities.addTeleportPad(teleportPad);
         world.addBody(teleportPad.getBody());
-
-        // Try to link with existing teleport pad from same player
         linkTeleportPads(teleportPad, activation.playerId);
-
-        log.debug("Player {} placed teleport pad at ({}, {})",
-                activation.playerId, placement.x, placement.y);
     }
 
     /**
      * Create a defense laser entity.
      */
     private void createDefenseLaser(Player.UtilityActivation activation) {
-        // Calculate placement position slightly in front of player
         Vector2 placement = activation.position.copy();
         Vector2 offset = activation.direction.copy();
-        offset.multiply(60.0); // Place 60 units in front
+        offset.multiply(60.0);
         placement.add(offset);
 
-        // Check if placement position is clear of obstacles
-        double laserRadius = 20.0; // Defense laser radius
+        double laserRadius = 20.0;
         if (!isPositionClear(placement, laserRadius)) {
-            log.debug("Player {} tried to place defense laser at ({}, {}) but position is blocked by obstacle",
-                    activation.playerId, placement.x, placement.y);
-
-            // Send feedback to player that placement failed
             Player player = gameEntities.getPlayer(activation.playerId);
             if (player != null) {
-                // Refund the cooldown since placement failed
                 player.refundUtilityCooldown();
             }
             return;
         }
-
         DefenseLaser defenseLaser = new DefenseLaser(
                 Config.nextId(),
                 activation.playerId,
                 activation.team,
                 placement,
-                20.0, // 20 second lifespan
+                20.0,
                 world
         );
-
         gameEntities.addDefenseLaser(defenseLaser);
         world.addBody(defenseLaser.getBody());
-
-        // Add all beams to physics world but NOT to gameEntities.beams
-        // DefenseLaser beams should only be managed as part of the DefenseLaser entity
         for (Beam beam : defenseLaser.getBeams()) {
             gameEntities.addBeam(beam);
             world.addBody(beam.getBody());
@@ -317,58 +252,15 @@ public class UtilitySystem {
      * Link teleport pads from the same player.
      */
     private void linkTeleportPads(TeleportPad newPad, int playerId) {
-        // Find existing unlinked teleport pad from same player
         for (TeleportPad existingPad : gameEntities.getAllTeleportPads()) {
             if (existingPad.getId() != newPad.getId() &&
-                existingPad.getOwnerId() == playerId &&
-                !existingPad.isLinked() &&
-                existingPad.isActive()) {
-
-                // Link the pads
+                    existingPad.getOwnerId() == playerId &&
+                    !existingPad.isLinked() &&
+                    existingPad.isActive()) {
                 newPad.linkTo(existingPad);
-                log.debug("Linked teleport pads {} and {} for player {}",
-                        newPad.getId(), existingPad.getId(), playerId);
-                break; // Only link to one pad
+                break;
             }
         }
-    }
-
-    /**
-     * Create a beam for utility weapons that use the beam system.
-     */
-    private void createBeamUtility(Player.UtilityActivation activation) {
-        UtilityWeapon utility = activation.utilityWeapon;
-        Ordinance beamOrdinance = utility.getBeamOrdinance();
-
-        // Create beam using the utility's beam ordinance
-        Beam beam = new Beam(
-                Config.nextId(),
-                activation.position,
-                activation.direction,
-                utility.getRange(),
-                utility.getDamage(),
-                activation.playerId,
-                activation.team,
-                beamOrdinance,
-                Set.of() // Utility beams don't have bullet effects
-        );
-
-        // Update beam's effective end point based on obstacle collisions
-        Vector2 effectiveEnd = weaponSystem.findBeamObstacleIntersection(
-                beam.getStartPoint(),
-                beam.getEndPoint()
-        );
-        beam.setEffectiveEndPoint(effectiveEnd);
-
-        gameEntities.addBeam(beam);
-        world.addBody(beam.getBody());
-
-        // Process initial hit for instant damage beams
-        if (beam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
-            weaponSystem.processStandardBeamHit(beam);
-        }
-
-        log.debug("Player {} fired utility beam: {}", activation.playerId, utility.getDisplayName());
     }
 
     /**
@@ -376,28 +268,5 @@ public class UtilitySystem {
      */
     private boolean isPositionClear(Vector2 position, double radius) {
         return isPositionClearCheck.apply(position);
-    }
-
-    /**
-     * Get statistics about active utilities.
-     */
-    public UtilityStats getStats() {
-        int totalTurrets = gameEntities.getAllTurrets().size();
-        int totalTeleportPads = gameEntities.getAllTeleportPads().size();
-        int totalNetProjectiles = gameEntities.getAllNetProjectiles().size();
-        int totalFieldEffects = gameEntities.getFieldEffects().size();
-
-        return new UtilityStats(totalTurrets, totalTeleportPads, totalNetProjectiles, totalFieldEffects);
-    }
-
-    /**
-     * Statistics about active utilities in the game.
-     */
-    public record UtilityStats(
-            int totalTurrets,
-            int totalTeleportPads,
-            int totalNetProjectiles,
-            int totalFieldEffects
-    ) {
     }
 }

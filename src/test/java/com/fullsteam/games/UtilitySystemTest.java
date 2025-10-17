@@ -47,9 +47,7 @@ class UtilitySystemTest extends BaseTestClass {
         utilitySystem = new UtilitySystem(
                 gameEntities,
                 world,
-                pos -> true, // Always allow placement for tests
-                (msg, category) -> broadcaster.accept(Map.of("message", msg, "category", category)),
-                weaponSystem
+                pos -> true // Always allow placement for tests
         );
     }
 
@@ -184,40 +182,6 @@ class UtilitySystemTest extends BaseTestClass {
         assertFalse(gameEntities.getAllTeleportPads().isEmpty(), "Teleport pad should be created");
         assertEquals(1, gameEntities.getAllTeleportPads().size(), "Exactly one teleport pad should be created");
     }
-
-    // ============================================================================
-    // Utility Beam Tests
-    // ============================================================================
-
-
-    // ============================================================================
-    // Utility Statistics Tests
-    // ============================================================================
-
-    @Test
-    @DisplayName("Should track utility statistics")
-    void testUtilityStats() {
-        // Arrange
-        Player player = createTestPlayer(1, 1);
-        
-        // Create various utilities
-        utilitySystem.handleUtilityActivation(createUtilityActivation(player, UtilityWeapon.TURRET_CONSTRUCTOR));
-        utilitySystem.handleUtilityActivation(createUtilityActivation(player, UtilityWeapon.TELEPORTER));
-
-        // Act
-        UtilitySystem.UtilityStats stats = utilitySystem.getStats();
-
-        // Assert
-        assertNotNull(stats, "Utility stats should be available");
-        assertTrue(stats.totalTurrets() >= 0, "Total turrets should be tracked");
-        assertTrue(stats.totalTeleportPads() >= 0, "Total teleport pads should be tracked");
-        assertTrue(stats.totalNetProjectiles() >= 0, "Total net projectiles should be tracked");
-        assertTrue(stats.totalFieldEffects() >= 0, "Total field effects should be tracked");
-    }
-
-    // ============================================================================
-    // Helper Methods
-    // ============================================================================
 
     /**
      * Create a test player with basic configuration.

@@ -21,7 +21,6 @@ public class AIWeaponSelector {
     );
 
     private static final List<WeaponConfig> ORDINANCE_WEAPONS = List.of(
-            WeaponConfig.SIEGE_CANNON_PRESET,
             WeaponConfig.PRECISION_DART_GUN_PRESET,
             WeaponConfig.FLAME_PROJECTOR_PRESET
     );
@@ -58,7 +57,6 @@ public class AIWeaponSelector {
             WeaponConfig.TWIN_SIXES_PRESET,
 
             // Ordinance weapons
-            WeaponConfig.SIEGE_CANNON_PRESET,
             WeaponConfig.PRECISION_DART_GUN_PRESET,
             WeaponConfig.FLAME_PROJECTOR_PRESET,
 
@@ -117,7 +115,6 @@ public class AIWeaponSelector {
                         WeaponConfig.PIERCING_RIFLE_PRESET,
                         WeaponConfig.EXPLOSIVE_SNIPER_PRESET,
                         WeaponConfig.PRECISION_DART_GUN_PRESET,
-                        WeaponConfig.SIEGE_CANNON_PRESET,
                         WeaponConfig.LASER_RIFLE_PRESET,
                         WeaponConfig.RAIL_CANNON_PRESET
                 );
@@ -174,8 +171,7 @@ public class AIWeaponSelector {
                     List<WeaponConfig> guardianWeapons = List.of(
                             WeaponConfig.TOXIC_SPRAYER_PRESET,
                             WeaponConfig.ICE_CANNON_PRESET,
-                            WeaponConfig.FLAME_PROJECTOR_PRESET,
-                            WeaponConfig.SIEGE_CANNON_PRESET
+                            WeaponConfig.FLAME_PROJECTOR_PRESET
                     );
                     return guardianWeapons.get(random.nextInt(guardianWeapons.size()));
                 }
@@ -264,7 +260,6 @@ public class AIWeaponSelector {
                     WeaponConfig.PIERCING_RIFLE_PRESET,
                     WeaponConfig.EXPLOSIVE_SNIPER_PRESET,
                     WeaponConfig.PRECISION_DART_GUN_PRESET,
-                    WeaponConfig.SIEGE_CANNON_PRESET,
                     WeaponConfig.LASER_RIFLE_PRESET,
                     WeaponConfig.RAIL_CANNON_PRESET
             );
@@ -278,7 +273,6 @@ public class AIWeaponSelector {
     private static boolean isLongRangeWeapon(WeaponConfig weapon) {
         return weapon.range >= 15 || weapon == WeaponConfig.PIERCING_RIFLE_PRESET
                || weapon == WeaponConfig.EXPLOSIVE_SNIPER_PRESET
-               || weapon == WeaponConfig.SIEGE_CANNON_PRESET
                || weapon == WeaponConfig.LASER_RIFLE_PRESET
                || weapon == WeaponConfig.RAIL_CANNON_PRESET;
     }

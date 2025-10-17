@@ -43,7 +43,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -141,9 +140,7 @@ public class GameManager {
         this.utilitySystem = new UtilitySystem(
                 gameEntities,
                 world,
-                pos -> isPositionClearOfObstacles(pos, 15.0),
-                (msg, category) -> broadcastGameEvent(msg, category, "#FF8800"),
-                weaponSystem
+                pos -> isPositionClearOfObstacles(pos, 15.0)
         );
 
         createWorldBoundaries();
@@ -1396,9 +1393,6 @@ public class GameManager {
                 zoneStates.add(zoneState);
             }
             gameState.put("kothZones", zoneStates);
-            gameState.put("kothEnabled", true);
-        } else {
-            gameState.put("kothEnabled", false);
         }
 
         // Include workshop states if workshops are enabled
@@ -1426,9 +1420,6 @@ public class GameManager {
                 workshopStates.add(workshopState);
             }
             gameState.put("workshops", workshopStates);
-            gameState.put("workshopsEnabled", true);
-        } else {
-            gameState.put("workshopsEnabled", false);
         }
 
         // Include headquarters states if headquarters are enabled
@@ -1442,7 +1433,7 @@ public class GameManager {
                 hqState.put("team", hq.getTeamNumber());
                 hqState.put("x", pos.x);
                 hqState.put("y", pos.y);
-                hqState.put("health", hq.getHealth());
+                hqState.put("health", hq.healthPercent());
                 hqState.put("maxHealth", hq.getMaxHealth());
                 hqState.put("active", hq.isActive());
 
@@ -1452,9 +1443,6 @@ public class GameManager {
                 hqStates.add(hqState);
             }
             gameState.put("headquarters", hqStates);
-            gameState.put("headquartersEnabled", true);
-        } else {
-            gameState.put("headquartersEnabled", false);
         }
 
         // Include power-up states
@@ -1963,7 +1951,6 @@ public class GameManager {
             case ROCKET -> displayName.append("Rocket");
             case GRENADE -> displayName.append("Grenade");
             case PLASMA -> displayName.append("Plasma");
-            case CANNONBALL -> displayName.append("Cannonball");
             case DART -> displayName.append("Dart");
             case FLAMETHROWER -> displayName.append("Flamethrower");
             case LASER -> displayName.append("Laser");

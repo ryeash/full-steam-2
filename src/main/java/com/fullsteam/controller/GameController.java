@@ -146,7 +146,6 @@ public class GameController {
         presets.put("PLASMA_RIFLE", createPresetData(WeaponConfig.PLASMA_RIFLE_PRESET));
 
         // New ordinance showcases
-        presets.put("SIEGE_CANNON", createPresetData(WeaponConfig.SIEGE_CANNON_PRESET));
         presets.put("PRECISION_DART_GUN", createPresetData(WeaponConfig.PRECISION_DART_GUN_PRESET));
         presets.put("FLAME_PROJECTOR", createPresetData(WeaponConfig.FLAME_PROJECTOR_PRESET));
 

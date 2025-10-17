@@ -21,9 +21,6 @@ public class NetProjectile extends GameEntity {
     private final double slowEffect; // Linear damping multiplier for slowing effect (higher = more slowed)
     private final double slowDuration; // How long the slow effect lasts
     private final double pushbackForce; // Force applied to push player backward
-    private final double timeToLive;
-
-    private double timeRemaining;
     private Vector2 velocity;
     private boolean hasHit = false;
 
@@ -33,11 +30,10 @@ public class NetProjectile extends GameEntity {
         this.ownerTeam = ownerTeam;
         this.velocity = velocity.copy();
         this.damage = 0;
-        this.slowEffect = 10.0; // Moderate slowdown - 3x normal damping
-        this.slowDuration = 2.0; // 2 second immobilization
-        this.pushbackForce = Config.NET_PUSHBACK_FORCE; // Force to push player backward
-        this.timeToLive = timeToLive;
-        this.timeRemaining = timeToLive;
+        this.slowEffect = 10.0;
+        this.slowDuration = 2.0;
+        this.pushbackForce = Config.NET_PUSHBACK_FORCE;
+        this.expires = (long) (System.currentTimeMillis() + (timeToLive * 1000));
     }
 
     private static Body createNetProjectileBody(Vector2 position) {
@@ -56,19 +52,10 @@ public class NetProjectile extends GameEntity {
         if (!active) {
             return;
         }
-
-        // Update position based on velocity
         if (!hasHit) {
             body.setLinearVelocity(velocity.x, velocity.y);
         }
-
-        // Update time to live
-        timeRemaining -= deltaTime;
-        if (timeRemaining <= 0) {
-            active = false;
-        }
-
-        lastUpdateTime = System.currentTimeMillis();
+        super.update(deltaTime);
     }
 
     /**
@@ -108,13 +95,6 @@ public class NetProjectile extends GameEntity {
 
         // In team mode, can only affect players on different teams
         return ownerTeam != player.getTeam();
-    }
-
-    /**
-     * Check if the net projectile has expired
-     */
-    public boolean isExpired() {
-        return !active || timeRemaining <= 0;
     }
 
     /**

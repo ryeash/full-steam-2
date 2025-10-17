@@ -22,13 +22,12 @@ public class TeleportPad extends GameEntity {
     private final double activationRadius;
     private final double cooldownTime;
     private final double maxLifespan;
-    
-    private double timeRemaining;
+
     private double lastActivationTime = 0;
     private boolean isLinked = false;
     private TeleportPad linkedPad = null;
     private List<Integer> recentlyTeleportedPlayers = new ArrayList<>();
-    
+
     // Visual effects
     private double pulseTime = 0;
     private boolean isCharging = true;
@@ -41,7 +40,7 @@ public class TeleportPad extends GameEntity {
         this.activationRadius = 25.0; // Players must be within this distance
         this.cooldownTime = 1.0; // 1 second cooldown between teleports
         this.maxLifespan = maxLifespan;
-        this.timeRemaining = maxLifespan;
+        this.expires = (long) (System.currentTimeMillis() + (maxLifespan * 1000));
     }
 
     private static Body createTeleportPadBody(Vector2 position) {
@@ -71,12 +70,6 @@ public class TeleportPad extends GameEntity {
         // Update pulse animation
         pulseTime += deltaTime * 3.0; // Fast pulsing
 
-        // Update lifespan
-        timeRemaining -= deltaTime;
-        if (timeRemaining <= 0) {
-            active = false;
-        }
-
         // Clear recently teleported players after cooldown
         long currentTime = System.currentTimeMillis();
         if (currentTime - lastActivationTime > cooldownTime * 1000) {
@@ -92,7 +85,7 @@ public class TeleportPad extends GameEntity {
     public void linkTo(TeleportPad otherPad) {
         this.linkedPad = otherPad;
         this.isLinked = true;
-        
+
         // Create bidirectional link
         if (otherPad != null && otherPad.linkedPad != this) {
             otherPad.linkTo(this);
@@ -114,14 +107,14 @@ public class TeleportPad extends GameEntity {
         // Perform teleportation
         Vector2 destination = linkedPad.getPosition();
         player.setPosition(destination.x, destination.y);
-        
+
         // Add player to recently teleported list to prevent immediate return
         recentlyTeleportedPlayers.add(player.getId());
         linkedPad.recentlyTeleportedPlayers.add(player.getId());
-        
+
         lastActivationTime = System.currentTimeMillis();
         linkedPad.lastActivationTime = System.currentTimeMillis();
-        
+
         return true;
     }
 
@@ -165,13 +158,6 @@ public class TeleportPad extends GameEntity {
     }
 
     /**
-     * Check if the teleport pad has expired
-     */
-    public boolean isExpired() {
-        return !active || timeRemaining <= 0;
-    }
-
-    /**
      * Get the charging progress (0.0 to 1.0)
      */
     public double getChargingProgress() {
@@ -179,13 +165,6 @@ public class TeleportPad extends GameEntity {
             return 1.0;
         }
         return Math.max(0.0, 1.0 - (chargingTime / 2.0));
-    }
-
-    /**
-     * Get the lifespan progress (0.0 to 1.0, where 1.0 is full life)
-     */
-    public double getLifespanPercent() {
-        return Math.max(0.0, timeRemaining / maxLifespan);
     }
 
     /**
