@@ -9,23 +9,20 @@ import com.fullsteam.model.StatusEffects;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
-import org.dyn4j.dynamics.contact.Contact;
-import org.dyn4j.dynamics.contact.SolvedContact;
 import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.BroadphaseCollisionData;
-import org.dyn4j.world.ContactCollisionData;
 import org.dyn4j.world.ManifoldCollisionData;
 import org.dyn4j.world.NarrowphaseCollisionData;
 import org.dyn4j.world.listener.CollisionListener;
-import org.dyn4j.world.listener.ContactListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 
 
-public class CollisionProcessor implements CollisionListener<Body, BodyFixture>, ContactListener<Body> {
+public class CollisionProcessor implements CollisionListener<Body, BodyFixture> {
 
     private static final Logger log = LoggerFactory.getLogger(CollisionProcessor.class);
 
@@ -85,7 +82,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         if (entity2 instanceof Player player2 && !player2.isActive()) {
             return false; // Don't process collisions for dead players
         }
-        
+
         // let the bouncy bullets interact with bullets
         if (entity1 instanceof Projectile p1 && entity2 instanceof Projectile p2) {
             return p1.getBulletEffects().contains(BulletEffect.BOUNCY) || p2.getBulletEffects().contains(BulletEffect.BOUNCY);// Disable collision resolution between projectiles
@@ -97,10 +94,12 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         } else if (entity1 instanceof Projectile projectile && entity2 instanceof Player player) {
             handlePlayerProjectileCollision(player, projectile);
             return false; // Prevent physics resolution for projectile hits
+
         } else if (entity1 instanceof Projectile projectile && entity2 instanceof Obstacle obstacle) {
             return handleProjectileObstacleCollision(projectile, obstacle);
         } else if (entity1 instanceof Obstacle obstacle && entity2 instanceof Projectile projectile) {
             return handleProjectileObstacleCollision(projectile, obstacle);
+
         } else if (entity1 instanceof Player player && entity2 instanceof FieldEffect fieldEffect) {
             handlePlayerFieldEffectCollision(player, fieldEffect);
             return true; // Allow physics to handle overlaps (sensors should not resolve anyway)
@@ -243,8 +242,8 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
 
     private void handlePlayerFieldEffectCollision(Player player, FieldEffect fieldEffect) {
         if (!player.isActive()
-            || !fieldEffect.isActive()
-            || !fieldEffect.canAffect(player)) {
+                || !fieldEffect.isActive()
+                || !fieldEffect.canAffect(player)) {
             return;
         }
 
@@ -427,10 +426,19 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         boolean turretDestroyed = turret.takeDamage(projectile.getDamage());
 
         if (turretDestroyed) {
-            // Turret was destroyed, create visual explosion effect
-            createTurretDestructionExplosion(turret);
-            log.debug("Turret {} destroyed by projectile from player {}",
-                    turret.getId(), projectile.getOwnerId());
+            // Create zero-damage explosion field effect
+            FieldEffect explosion = new FieldEffect(
+                    Config.nextId(),
+                    turret.getOwnerId(), // Use turret owner for attribution
+                    FieldEffectType.EXPLOSION,
+                    turret.getPosition(),
+                    turret.getBody().getFixture(0).getShape().getRadius(), // Same size as turret,
+                    0.0, // Zero damage - purely visual
+                    FieldEffectType.EXPLOSION.getDefaultDuration(),
+                    turret.getOwnerTeam()
+            );
+            gameEntities.getWorld().addBody(explosion.getBody());
+            gameEntities.addFieldEffect(explosion);
         }
 
         // Check if projectile should pierce through the turret
@@ -470,6 +478,12 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         } else if (entity instanceof Obstacle) {
             net.setActive(false);
             return false;
+        } else if (entity instanceof FieldEffect fe) {
+            if (fe.getType() == FieldEffectType.SHIELD_BARRIER) {
+                net.setActive(false);
+                return false;
+            }
+            return true;
         } else {
             return !(entity instanceof Projectile);
         }
@@ -590,7 +604,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         if (!player.isActive() || player.getHealth() <= 0) {
             return;
         }
-        // Add player to zone tracking
         zone.addPlayer(player.getId(), player.getTeam());
     }
 
@@ -599,37 +612,14 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
      * Triggers crafting mechanics when player is within craft radius.
      */
     void handlePlayerWorkshopCollision(Player player, Workshop workshop) {
-        if (!workshop.isActive()) {
+        if (!workshop.isActive() || !player.isActive()) {
             return;
         }
-
-        // If player is inactive or dead, stop crafting and return
-        if (!player.isActive() || player.getHealth() <= 0) {
-            workshop.stopCrafting(player.getId());
-            return;
-        }
-
-        // Calculate distance between player and workshop
-        Vector2 playerPos = player.getPosition();
-        Vector2 workshopPos = workshop.getPosition();
-        double distance = playerPos.distance(workshopPos);
-
-        // Check if player is within crafting radius
-        if (distance <= workshop.getCraftRadius()) {
-            // Player is in range, start or continue crafting
-            workshop.startCrafting(player.getId());
-            
-            // Check if crafting is complete
-            if (workshop.isCraftingComplete(player.getId())) {
-                // Spawn power-up for this player
-                log.info("Crafting complete for player {} at workshop {}, spawning power-up", 
-                        player.getId(), workshop.getId());
-                spawnPowerUpForPlayer(workshop, player);
-                workshop.resetCraftingProgress(player.getId());
-            }
-        } else {
-            // Player is out of range, stop crafting
-            workshop.stopCrafting(player.getId());
+        workshop.addPlayer(player);
+        boolean completed = workshop.incrementProgress(player, gameEntities.getWorld().getTimeStep().getDeltaTime());
+        if (completed) {
+            spawnPowerUpForPlayer(workshop, player);
+            workshop.removePlayer(player);
         }
     }
 
@@ -647,13 +637,13 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             // Apply the power-up effect
             PowerUp.PowerUpEffect effect = powerUp.getEffect();
             applyPowerUpEffect(player, effect);
-            
+
             // Remove the power-up from the game
             powerUp.setActive(false);
             gameEntities.removePowerUp(powerUp.getId());
             gameEntities.getWorld().removeBody(powerUp.getBody());
-            
-            log.info("Player {} collected power-up {} (type: {})", 
+
+            log.info("Player {} collected power-up {} (type: {})",
                     player.getId(), powerUp.getId(), powerUp.getType());
         }
     }
@@ -665,42 +655,42 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         if (!projectile.isActive() || !hq.isActive()) {
             return true;
         }
-        
+
         // Check if this projectile has already hit this HQ
         if (!projectile.getAffectedObstacles().add(hq.getId())) {
             boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, hq);
             return !shouldPierce;
         }
-        
+
         // Check if projectile can damage this headquarters (team rules)
         if (!canProjectileDamageHeadquarters(projectile, hq)) {
             return false; // Friendly fire protection - let projectile pass through
         }
-        
+
         // Get hit position for effects
         Vector2 hitPos = projectile.getBody().getTransform().getTranslation();
         Vector2 hitPosition = new Vector2(hitPos.x, hitPos.y);
-        
+
         // Process bullet effects on HQ hit
         bulletEffectProcessor.processEffectHit(projectile, hitPosition);
-        
+
         // Apply damage and score points
         double damageDealt = projectile.getDamage();
         boolean hqDestroyed = hq.takeDamage(damageDealt);
-        
+
         // Award points to the attacking team
         Player attacker = gameEntities.getPlayer(projectile.getOwnerId());
         if (attacker != null) {
             gameManager.handleHeadquartersDamage(hq, attacker, damageDealt, hqDestroyed);
         }
-        
+
         // Check if projectile should pierce
         boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, hq);
         if (!shouldPierce) {
             projectile.setActive(false);
             return false;
         }
-        
+
         return true;
     }
 
@@ -711,16 +701,16 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         if (!beam.isActive() || !hq.isActive()) {
             return;
         }
-        
+
         // Check if beam can damage this headquarters
         if (!canBeamDamageHeadquarters(beam, hq)) {
             return; // Friendly fire protection
         }
-        
+
         // Apply damage (beams deal damage continuously)
         double damageDealt = beam.getDamage();
         boolean hqDestroyed = hq.takeDamage(damageDealt);
-        
+
         // Award points to the attacking team
         Player attacker = gameEntities.getPlayer(beam.getOwnerId());
         if (attacker != null) {
@@ -772,7 +762,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             zone.clearPlayers();
         }
     }
-    
+
     /**
      * Update all workshops - mimic KOTH zone approach for continuous player tracking.
      * This ensures continuous distance checking for crafting mechanics.
@@ -782,86 +772,13 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
             if (!workshop.isActive()) {
                 continue;
             }
-            
-            Vector2 workshopPos = workshop.getPosition();
-            
-            // Track players currently in range (mimic KOTH zone approach)
-            Set<Integer> playersCurrentlyInRange = new HashSet<>();
-            
-            // Check all active players for distance to this workshop
-            for (Player player : gameEntities.getAllPlayers()) {
-                if (!player.isActive() || player.getHealth() <= 0) {
-                    continue;
-                }
-                
-                Vector2 playerPos = player.getPosition();
-                double distance = playerPos.distance(workshopPos);
-                
-                // Check if player is within crafting radius
-                if (distance <= workshop.getCraftRadius()) {
-                    playersCurrentlyInRange.add(player.getId());
-                    
-                    // Add player to workshop if not already there (mimic KOTH zone approach)
-                    if (!workshop.isPlayerNearby(player.getId())) {
-                        workshop.addPlayer(player.getId(), player.getTeam());
-                        log.debug("Player {} entered workshop {} range", player.getId(), workshop.getId());
-                    }
-                    
-                    // Check if crafting is complete
-                    if (workshop.isCraftingComplete(player.getId())) {
-                        // Spawn power-up for this player
-                        log.info("Crafting complete for player {} at workshop {}, spawning power-up", 
-                                player.getId(), workshop.getId());
-                        spawnPowerUpForPlayer(workshop, player);
-                        workshop.resetCraftingProgress(player.getId());
-                    }
-                }
-            }
-            
-            // Remove players who are no longer in range (mimic KOTH zone approach)
-            Map<Integer, Double> currentProgress = workshop.getAllCraftingProgress();
-            for (int playerId : currentProgress.keySet()) {
-                if (!playersCurrentlyInRange.contains(playerId)) {
-                    workshop.removePlayer(playerId);
-                    log.debug("Player {} left workshop {} range", playerId, workshop.getId());
-                }
-            }
+            // all present players should have been resolved
+            // remove progress for players who are not preset
+            Set<Integer> presentIds = workshop.getPresentPlayers().stream().map(GameEntity::getId).collect(Collectors.toSet());
+            workshop.getPlayerProgress().keySet().removeIf(id -> !presentIds.contains(id));
+            // then clear the present players so the set can be re-calculated next world step
+            workshop.getPresentPlayers().clear();
         }
-    }
-
-    // ContactListener methods
-
-    @Override
-    public void begin(ContactCollisionData<Body> collision, Contact contact) {
-    }
-
-    @Override
-    public void persist(ContactCollisionData<Body> collision, Contact oldContact, Contact newContact) {
-
-    }
-
-    @Override
-    public void end(ContactCollisionData<Body> collision, Contact contact) {
-    }
-
-    @Override
-    public void destroyed(ContactCollisionData<Body> collision, Contact contact) {
-
-    }
-
-    @Override
-    public void collision(ContactCollisionData<Body> collision) {
-
-    }
-
-    @Override
-    public void preSolve(ContactCollisionData<Body> collision, Contact contact) {
-
-    }
-
-    @Override
-    public void postSolve(ContactCollisionData<Body> collision, SolvedContact contact) {
-
     }
 
     /**
@@ -884,34 +801,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
     }
 
     /**
-     * Create a visual explosion effect when a turret is destroyed.
-     * The explosion has zero damage and is purely visual feedback.
-     */
-    private void createTurretDestructionExplosion(Turret turret) {
-        Vector2 turretPosition = turret.getPosition();
-        double explosionRadius = turret.getBody().getFixture(0).getShape().getRadius(); // Same size as turret
-
-        // Create zero-damage explosion field effect
-        FieldEffect explosion = new FieldEffect(
-                Config.nextId(),
-                turret.getOwnerId(), // Use turret owner for attribution
-                FieldEffectType.EXPLOSION,
-                turretPosition,
-                explosionRadius,
-                0.0, // Zero damage - purely visual
-                FieldEffectType.EXPLOSION.getDefaultDuration(),
-                turret.getOwnerTeam()
-        );
-
-        // Add to game world
-        gameEntities.getWorld().addBody(explosion.getBody());
-        gameEntities.addFieldEffect(explosion);
-
-        log.debug("Created turret destruction explosion at ({}, {}) with radius {}",
-                turretPosition.x, turretPosition.y, explosionRadius);
-    }
-
-    /**
      * Spawn a power-up for a player at a workshop.
      */
     private void spawnPowerUpForPlayer(Workshop workshop, Player player) {
@@ -928,7 +817,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
         Vector2 workshopPos = workshop.getPosition();
         double spawnRadius = 40.0 + ThreadLocalRandom.current().nextDouble(20.0); // 40-60 units from workshop
         double spawnAngle = ThreadLocalRandom.current().nextDouble(Math.PI * 2);
-        
+
         Vector2 spawnPos = new Vector2(
                 workshopPos.x + Math.cos(spawnAngle) * spawnRadius,
                 workshopPos.y + Math.sin(spawnAngle) * spawnRadius
@@ -940,16 +829,13 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
                 spawnPos,
                 selectedType,
                 workshop.getId(),
-                30.0, // 30 second duration
+                12.0,
                 1.0   // Normal effect strength
         );
 
         // Add to game world
         gameEntities.addPowerUp(powerUp);
         gameEntities.getWorld().addBody(powerUp.getBody());
-
-        log.info("Spawned power-up {} (type: {}) for player {} at workshop {}",
-                powerUp.getId(), selectedType, player.getId(), workshop.getId());
     }
 
     /**
@@ -958,23 +844,20 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture>,
     private void applyPowerUpEffect(Player player, PowerUp.PowerUpEffect effect) {
         switch (effect.getType()) {
             case SPEED_BOOST:
-                StatusEffects.applySpeedBoost(player, effect.getDuration(), effect.getStrength(), "Workshop Power-up");
+                StatusEffects.applySpeedBoost(player,  effect.getStrength(), effect.getDuration(),"Workshop Power-up");
                 break;
             case HEALTH_REGENERATION:
-                StatusEffects.applyHealthRegeneration(player, effect.getDuration(), effect.getStrength(), "Workshop Power-up");
+                StatusEffects.applyHealthRegeneration(player,  effect.getStrength(), effect.getDuration(),"Workshop Power-up");
                 break;
             case DAMAGE_BOOST:
-                StatusEffects.applyDamageBoost(player, effect.getDuration(), effect.getStrength(), "Workshop Power-up");
+                StatusEffects.applyDamageBoost(player,  effect.getStrength(), effect.getDuration(),"Workshop Power-up");
                 break;
             case DAMAGE_RESISTANCE:
-                StatusEffects.applyDamageResistance(player, effect.getDuration(), effect.getStrength(), "Workshop Power-up");
+                StatusEffects.applyDamageResistance(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
                 break;
             case BERSERKER_MODE:
                 StatusEffects.applyBerserkerMode(player, effect.getDuration(), "Workshop Power-up");
                 break;
         }
-
-        log.info("Applied power-up effect {} to player {} for {} seconds",
-                effect.getType(), player.getId(), effect.getDuration());
     }
 }

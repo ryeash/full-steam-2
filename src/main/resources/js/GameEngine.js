@@ -1101,13 +1101,6 @@ class GameEngine {
      * Create a utility entity
      */
     createUtilityEntity(entityData) {
-        console.log('DEBUG: createUtilityEntity called for:', {
-            id: entityData.id,
-            type: entityData.type,
-            activeCrafters: entityData.activeCrafters,
-            craftingProgress: entityData.craftingProgress
-        });
-        
         const entityContainer = new PIXI.Container();
         const isoPos = this.worldToIsometric(entityData.x, entityData.y);
         entityContainer.position.set(isoPos.x, isoPos.y);
@@ -3820,7 +3813,6 @@ class GameEngine {
             case 'DEFENSE_LASER':
                 return this.createDefenseLaserGraphics(graphics, entityData);
             case 'WORKSHOP':
-                console.log('DEBUG: Routing to createWorkshopGraphics');
                 return this.createWorkshopGraphics(graphics, entityData);
             case 'HEADQUARTERS':
                 return this.createHeadquartersGraphics(graphics, entityData);
@@ -4227,25 +4219,14 @@ class GameEngine {
     /**
      * Create workshop graphics
      */
-        createWorkshopGraphics(graphics, entityData) {
-            console.log('DEBUG: createWorkshopGraphics called with:', {
-                id: entityData.id,
-                activeCrafters: entityData.activeCrafters,
-                craftingProgress: entityData.craftingProgress,
-                width: entityData.width,
-                height: entityData.height,
-                type: entityData.type
-            });
-            
-            // Check if this is actually a workshop
-            if (entityData.type !== 'WORKSHOP') {
-                console.log('DEBUG: Not a workshop, type is:', entityData.type);
-                return;
-            }
+    createWorkshopGraphics(graphics, entityData) {
+        if (entityData.type !== 'WORKSHOP') {
+            return;
+        }
         
         // Use the same approach as rectangular obstacles
-        const width = entityData.width || entityData.boundingRadius * 1.5 || 50;
-        const height = entityData.height || entityData.boundingRadius * 1.2 || 30;
+        const width = entityData.width;
+        const height = entityData.height;
         
         const halfWidth = width / 2;
         const halfHeight = height / 2;
@@ -4290,11 +4271,9 @@ class GameEngine {
         
         // Add crafting progress indicators for active players
         if (entityData.craftingProgress) {
-            console.log('DEBUG: Rendering progress indicators for workshop', entityData.id, 'with progress:', entityData.craftingProgress);
             const progressEntries = Object.entries(entityData.craftingProgress);
             progressEntries.forEach(([playerId, progress], index) => {
                 if (progress > 0) {
-                    console.log('DEBUG: Rendering progress for player', playerId, 'progress:', progress);
                     const angle = (index / progressEntries.length) * Math.PI * 2;
                     const radius = Math.max(halfWidth, halfHeight) + 20; // Position further outside the workshop
                     const x = Math.cos(angle) * radius;
@@ -4320,30 +4299,13 @@ class GameEngine {
                     graphics.endFill();
                 }
             });
-        } else {
-            console.log('DEBUG: No crafting progress data for workshop', entityData.id);
         }
         
         // Add workshop activity indicator (pulsing center when active)
         if (entityData.activeCrafters > 0) {
-            console.log('DEBUG: Rendering activity indicator for workshop', entityData.id, 'activeCrafters:', entityData.activeCrafters);
             // Pulsing center circle to show workshop is active
             graphics.lineStyle(3, 0x00FF00, 1.0); // Green for active - thicker and brighter
             graphics.drawCircle(0, 0, 10);
-            
-            // Add some sparks/particles effect - more visible
-            for (let i = 0; i < 8; i++) {
-                const sparkAngle = (i / 8) * Math.PI * 2;
-                const sparkRadius = 15 + Math.sin(Date.now() * 0.01 + i) * 5; // Larger animation
-                const sparkX = Math.cos(sparkAngle) * sparkRadius;
-                const sparkY = Math.sin(sparkAngle) * sparkRadius;
-                
-                graphics.beginFill(0xFFFF00, 0.9); // Yellow sparks - brighter
-                graphics.drawCircle(sparkX, sparkY, 3);
-                graphics.endFill();
-            }
-        } else {
-            console.log('DEBUG: No active crafters for workshop', entityData.id);
         }
         
         return graphics;

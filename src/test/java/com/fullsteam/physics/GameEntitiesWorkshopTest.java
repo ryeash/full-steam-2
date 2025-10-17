@@ -49,7 +49,6 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
         Workshop workshop = new Workshop(
                 1,
                 new Vector2(100, 100),
-                80.0,
                 5.0,
                 3
         );
@@ -73,7 +72,6 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
         Workshop workshop = new Workshop(
                 1,
                 new Vector2(100, 100),
-                80.0,
                 5.0,
                 3
         );
@@ -140,8 +138,8 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
     @Test
     @DisplayName("Get power-ups for specific workshop")
     void testGetPowerUpsForWorkshop() {
-        Workshop workshop1 = new Workshop(1, new Vector2(100, 100), 80.0, 5.0, 3);
-        Workshop workshop2 = new Workshop(2, new Vector2(200, 200), 80.0, 5.0, 3);
+        Workshop workshop1 = new Workshop(1, new Vector2(100, 100), 5.0, 3);
+        Workshop workshop2 = new Workshop(2, new Vector2(200, 200), 5.0, 3);
         
         PowerUp powerUp1 = new PowerUp(1, new Vector2(110, 110), PowerUp.PowerUpType.SPEED_BOOST, 1, 30.0, 1.0);
         PowerUp powerUp2 = new PowerUp(2, new Vector2(120, 120), PowerUp.PowerUpType.DAMAGE_BOOST, 1, 30.0, 1.0);
@@ -175,7 +173,7 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
     @Test
     @DisplayName("Update all workshops and power-ups")
     void testUpdateAllWorkshopsAndPowerUps() {
-        Workshop workshop = new Workshop(1, new Vector2(100, 100), 80.0, 5.0, 3);
+        Workshop workshop = new Workshop(1, new Vector2(100, 100), 5.0, 3);
         PowerUp powerUp = new PowerUp(1, new Vector2(110, 110), PowerUp.PowerUpType.SPEED_BOOST, 1, 30.0, 1.0);
         
         gameEntities.addWorkshop(workshop);
@@ -199,9 +197,9 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
     @Test
     @DisplayName("Multiple workshops management")
     void testMultipleWorkshopsManagement() {
-        Workshop workshop1 = new Workshop(1, new Vector2(100, 100), 80.0, 5.0, 3);
-        Workshop workshop2 = new Workshop(2, new Vector2(200, 200), 80.0, 5.0, 3);
-        Workshop workshop3 = new Workshop(3, new Vector2(300, 300), 80.0, 5.0, 3);
+        Workshop workshop1 = new Workshop(1, new Vector2(100, 100), 5.0, 3);
+        Workshop workshop2 = new Workshop(2, new Vector2(200, 200), 5.0, 3);
+        Workshop workshop3 = new Workshop(3, new Vector2(300, 300), 5.0, 3);
         
         gameEntities.addWorkshop(workshop1);
         gameEntities.addWorkshop(workshop2);
@@ -243,7 +241,7 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
     @Test
     @DisplayName("Workshop and power-up cleanup")
     void testWorkshopAndPowerUpCleanup() {
-        Workshop workshop = new Workshop(1, new Vector2(100, 100), 80.0, 5.0, 3);
+        Workshop workshop = new Workshop(1, new Vector2(100, 100), 5.0, 3);
         PowerUp powerUp = new PowerUp(1, new Vector2(110, 110), PowerUp.PowerUpType.SPEED_BOOST, 1, 30.0, 1.0);
         
         gameEntities.addWorkshop(workshop);
@@ -266,7 +264,7 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
     @Test
     @DisplayName("Workshop capacity tracking")
     void testWorkshopCapacityTracking() {
-        Workshop workshop = new Workshop(1, new Vector2(100, 100), 80.0, 5.0, 3);
+        Workshop workshop = new Workshop(1, new Vector2(100, 100), 5.0, 3);
         gameEntities.addWorkshop(workshop);
         
         // Add power-ups up to capacity
@@ -297,7 +295,7 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
     @Test
     @DisplayName("Workshop and power-up with same ID")
     void testWorkshopAndPowerUpSameId() {
-        Workshop workshop = new Workshop(1, new Vector2(100, 100), 80.0, 5.0, 3);
+        Workshop workshop = new Workshop(1, new Vector2(100, 100), 5.0, 3);
         PowerUp powerUp = new PowerUp(1, new Vector2(110, 110), PowerUp.PowerUpType.SPEED_BOOST, 1, 30.0, 1.0);
         
         gameEntities.addWorkshop(workshop);

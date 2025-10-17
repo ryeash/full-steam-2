@@ -151,7 +151,7 @@ public class StatusEffects {
      * Apply berserker mode - increased damage and speed, reduced defense.
      */
     public static void applyBerserkerMode(Player player, double durationSeconds, String source) {
-        applyEffect(player, new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+        applyEffect(player, new BaseAttributeModification((long) (System.currentTimeMillis() + (durationSeconds * 1000))) {
             @Override
             public String uniqueKey() {
                 return "berserk";
@@ -174,12 +174,12 @@ public class StatusEffects {
 
             @Override
             public void update(Player player, double delta) {
-                player.setMaxSpeed(Config.PLAYER_SPEED * 1.4);
+                player.getBody().setLinearDamping(0);
             }
 
             @Override
             public void revert(Player player) {
-                player.setMaxSpeed(Config.PLAYER_SPEED);
+                player.getBody().setLinearDamping(Config.PLAYER_LINEAR_DAMPING);
             }
 
             @Override

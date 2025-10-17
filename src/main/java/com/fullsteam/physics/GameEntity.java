@@ -4,6 +4,8 @@ import lombok.Data;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Vector2;
 
+import java.util.Objects;
+
 @Data
 public abstract class GameEntity {
     protected final int id;
@@ -100,6 +102,20 @@ public abstract class GameEntity {
         long totalDuration = expires - created;
         long remainingTime = expires - System.currentTimeMillis();
         return Math.max(0, Math.min(1, (double) remainingTime / totalDuration));
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        GameEntity that = (GameEntity) o;
+        return id == that.id;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(id);
     }
 }
 

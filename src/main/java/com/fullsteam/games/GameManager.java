@@ -116,7 +116,6 @@ public class GameManager {
         this.gameEntities = new GameEntities(gameConfig, world);
         this.collisionProcessor = new CollisionProcessor(this, this.gameEntities);
         this.world.addCollisionListener(collisionProcessor);
-        this.world.addContactListener(collisionProcessor);
 
         // Initialize game event manager
         this.gameEventManager = new GameEventManager(gameEntities, this::send);
@@ -879,13 +878,11 @@ public class GameManager {
     private Vector2 calculateKothZonePosition(int zoneIndex, int totalZones, int teamCount) {
         double worldWidth = gameConfig.getWorldWidth();
         double worldHeight = gameConfig.getWorldHeight();
-        double standardSpread = 0.33;
 
         if (totalZones == 1) {
             // Single zone: place at world center
             return new Vector2(0, 0);
         }
-
         // Team mode: place zones in neutral space between team spawn areas
         if (teamCount == 2) {
             // aligned on the y-axis to avoid all team zones
@@ -964,7 +961,6 @@ public class GameManager {
             Workshop workshop = new Workshop(
                     workshopId++,
                     workshopPosition,
-                    rules.getWorkshopCraftRadius(),
                     rules.getWorkshopCraftTime(),
                     rules.getMaxPowerUpsPerWorkshop()
             );
@@ -1405,14 +1401,14 @@ public class GameManager {
                 workshopState.put("type", "WORKSHOP");
                 workshopState.put("x", pos.x);
                 workshopState.put("y", pos.y);
-                workshopState.put("craftRadius", workshop.getCraftRadius());
+                workshopState.put("width", ((Rectangle) workshop.getBody().getFixture(0).getShape()).getWidth());
+                workshopState.put("height", ((Rectangle) workshop.getBody().getFixture(0).getShape()).getHeight());
+                workshopState.put("craftRadius", workshop.getBoundingRadius());
                 workshopState.put("craftTime", workshop.getCraftTime());
                 workshopState.put("maxPowerUps", workshop.getMaxPowerUps());
                 int activeCrafters = workshop.getActiveCrafters();
-                Map<Integer, Double> craftingProgress = workshop.getAllCraftingProgress();
-
                 workshopState.put("activeCrafters", activeCrafters);
-                workshopState.put("craftingProgress", craftingProgress);
+                workshopState.put("craftingProgress", workshop.getAllCraftingProgress());
 
                 // Add detailed shape data for client rendering (inherited from Obstacle)
                 workshopState.putAll(workshop.getShapeData());
