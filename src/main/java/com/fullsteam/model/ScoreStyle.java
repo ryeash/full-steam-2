@@ -10,17 +10,12 @@ public enum ScoreStyle {
     TOTAL_KILLS,
     
     /**
-     * Score based only on flag captures
+     * Score based only on objectives (flag captures, KOTH zones, and any future objectives)
      */
-    CAPTURES,
+    OBJECTIVE,
     
     /**
-     * Score based only on KOTH zone control
-     */
-    KOTH_ZONES,
-    
-    /**
-     * Score based on everything: kills + captures + KOTH zones + any future scoring mechanisms
+     * Score based on everything: kills + objectives (captures, KOTH, etc.)
      */
     TOTAL
 }

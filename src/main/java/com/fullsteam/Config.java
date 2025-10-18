@@ -20,7 +20,7 @@ public class Config {
 
     public static final int MAX_GLOBAL_PLAYERS = 100;
     public static final int MAX_GLOBAL_GAMES = 10;
-    
+
     // Player physics configuration
     public static final double PLAYER_SPEED = 600.0; // pixels per second (max speed)
     public static final double PLAYER_RADIUS = 20.0;
@@ -31,6 +31,10 @@ public class Config {
 
     // Net projectile configuration
     public static final double NET_PUSHBACK_FORCE = 2_000_000.0; // Force applied when net hits player
+
+    // the max distance from a target that a projectile with HOMING will start tracking
+    public static final double HOMING_DISTANCE = 300.0;
+
 }
 
 

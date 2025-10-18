@@ -39,7 +39,7 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         return Rules.builder()
                 .roundDuration(60.0)
                 .restDuration(10.0)
-                .scoreStyle(ScoreStyle.KOTH_ZONES)
+                .scoreStyle(ScoreStyle.OBJECTIVE)
                 .kothZones(2)
                 .kothPointsPerSecond(5.0)
                 .build();
@@ -56,14 +56,17 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
     }
 
     @Test
-    @DisplayName("KOTH_ZONES score style should only count zone scores, not player kills")
-    void testKothZonesScoreStyle() {
-        // Create players with kills
+    @DisplayName("OBJECTIVE score style should count objectives (captures + KOTH zones), not kills")
+    void testObjectiveScoreStyle() {
+        // Create players with kills and captures
         Player player1 = new Player(1, "Player1", 100, 100, 1,100.0);
         Player player2 = new Player(2, "Player2", 200, 200, 2,100.0);
         player1.addKill(); // Player 1 has 1 kill
+        player1.addCapture(); // Player 1 has 1 capture
         player2.addKill(); // Player 2 has 1 kill
         player2.addKill(); // Player 2 has 2 kills total
+        player2.addCapture(); // Player 2 has 1 capture
+        player2.addCapture(); // Player 2 has 2 captures
         
         gameEntities.addPlayer(player1);
         gameEntities.addPlayer(player2);
@@ -86,12 +89,11 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         @SuppressWarnings("unchecked")
         Map<Integer, Integer> teamScores = (Map<Integer, Integer>) stateData.get("teamScores");
         
-        // With KOTH_ZONES score style:
-        // - Team 1 should have 5 points (from zone control only)
-        // - Team 2 should have 10 points (from zone control only)
-        // - Player kills should be ignored
-        assertEquals(5, teamScores.get(1));
-        assertEquals(10, teamScores.get(2));
+        // With OBJECTIVE score style:
+        // - Team 1: 1 capture + 5 KOTH points = 6 points (kills ignored)
+        // - Team 2: 2 captures + 10 KOTH points = 12 points (kills ignored)
+        assertEquals(6, teamScores.get(1));
+        assertEquals(12, teamScores.get(2));
     }
 
     @Test
@@ -144,7 +146,7 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
     }
 
     @Test
-    @DisplayName("TOTAL_KILLS score style should ignore KOTH scores")
+    @DisplayName("TOTAL_KILLS score style should ignore objectives (KOTH and captures)")
     void testTotalKillsScoreStyle() {
         // Change to TOTAL_KILLS score style
         Rules killsRules = Rules.builder()
@@ -156,12 +158,14 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
                 .build();
         ruleSystem = new RuleSystem("test-game", killsRules, gameEntities, null, broadcaster, 2);
 
-        // Create players with kills
+        // Create players with kills and captures
         Player player1 = new Player(1, "Player1", 100, 100, 1, 100.0);
         Player player2 = new Player(2, "Player2", 200, 200, 2, 100.0);
         player1.addKill(); // Player 1 has 1 kill
+        player1.addCapture(); // Player 1 has 1 capture (should be ignored)
         player2.addKill(); // Player 2 has 1 kill
         player2.addKill(); // Player 2 has 2 kills total
+        player2.addCapture(); // Player 2 has 1 capture (should be ignored)
         
         gameEntities.addPlayer(player1);
         gameEntities.addPlayer(player2);
@@ -170,10 +174,10 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         KothZone zone1 = new KothZone(101, 0, 0, 0, 5.0);
         KothZone zone2 = new KothZone(102, 1, 100, 100, 5.0);
         
-        // Team 1 controls zone 1 (5 points)
+        // Team 1 controls zone 1 (5 points, should be ignored)
         zone1.awardPointsToTeam(1, 5.0);
         
-        // Team 2 controls zone 2 (10 points)
+        // Team 2 controls zone 2 (10 points, should be ignored)
         zone2.awardPointsToTeam(2, 10.0);
         
         gameEntities.addKothZone(zone1);
@@ -185,8 +189,8 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         Map<Integer, Integer> teamScores = (Map<Integer, Integer>) stateData.get("teamScores");
         
         // With TOTAL_KILLS score style:
-        // - Team 1: 1 kill (KOTH scores ignored)
-        // - Team 2: 2 kills (KOTH scores ignored)
+        // - Team 1: 1 kill (objectives and KOTH scores ignored)
+        // - Team 2: 2 kills (objectives and KOTH scores ignored)
         assertEquals(1, teamScores.get(1));
         assertEquals(2, teamScores.get(2));
     }

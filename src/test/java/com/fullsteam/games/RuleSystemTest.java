@@ -284,24 +284,24 @@ class RuleSystemTest extends BaseTestClass {
     }
 
     @Test
-    @DisplayName("Should calculate captures score correctly")
-    void testCapturesScoring() {
+    @DisplayName("Should calculate objectives score correctly")
+    void testObjectivesScoring() {
         // Arrange
-        GameConfig capturesConfig = GameConfig.builder()
+        GameConfig objectivesConfig = GameConfig.builder()
                 .rules(Rules.builder()
-                        .scoreStyle(ScoreStyle.CAPTURES)
+                        .scoreStyle(ScoreStyle.OBJECTIVE)
                         .build())
                 .teamCount(2)
                 .playerMaxHealth(100.0)
                 .build();
 
-        RuleSystem capturesRuleSystem = new RuleSystem(
+        RuleSystem objectivesRuleSystem = new RuleSystem(
                 "test-game",
-                capturesConfig.getRules(),
+                objectivesConfig.getRules(),
                 gameEntities,
                 gameEventManager,
                 broadcaster,
-                capturesConfig.getTeamCount()
+                objectivesConfig.getTeamCount()
         );
 
         Player player = createTestPlayer(1, 1);
@@ -310,11 +310,11 @@ class RuleSystemTest extends BaseTestClass {
         gameEntities.addPlayer(player);
 
         // Act - Test the scoring configuration
-        ScoreStyle scoreStyle = capturesConfig.getRules().getScoreStyle();
+        ScoreStyle scoreStyle = objectivesConfig.getRules().getScoreStyle();
         int captures = player.getCaptures();
 
         // Assert
-        assertEquals(ScoreStyle.CAPTURES, scoreStyle, "Should be configured for captures scoring");
+        assertEquals(ScoreStyle.OBJECTIVE, scoreStyle, "Should be configured for objectives scoring");
         assertEquals(5, captures, "Player should have 5 captures");
         // Note: We can't directly test getPlayerScore since it's private,
         // but we can verify the configuration and player data

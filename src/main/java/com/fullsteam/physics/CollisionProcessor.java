@@ -604,7 +604,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         if (!player.isActive() || player.getHealth() <= 0) {
             return;
         }
-        zone.addPlayer(player.getId(), player.getTeam());
+        zone.addPlayer(player);
     }
 
     /**
@@ -740,25 +740,12 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      */
     public void updateKothZones(double deltaTime) {
         for (KothZone zone : gameEntities.getAllKothZones()) {
-            // Store previous state for change detection
-            int previousController = zone.getControllingTeam();
-            KothZone.ZoneState previousState = zone.getState();
-
-            // Award points if zone is controlled (using proper deltaTime)
             if (zone.shouldAwardPoints()) {
                 double points = zone.getPointsPerSecond() * deltaTime;
                 if (points > 0) {
-                    // Award points directly to the zone's team score tracking
                     zone.awardPointsToTeam(zone.getControllingTeam(), points);
                 }
             }
-
-            // Check for zone control changes and broadcast events
-            if (zone.getControllingTeam() != previousController || zone.getState() != previousState) {
-                gameManager.broadcastZoneControlChange(zone, previousController, previousState);
-            }
-
-            // Clear player tracking for next frame (collision detection will re-add them)
             zone.clearPlayers();
         }
     }
@@ -844,13 +831,13 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     private void applyPowerUpEffect(Player player, PowerUp.PowerUpEffect effect) {
         switch (effect.getType()) {
             case SPEED_BOOST:
-                StatusEffects.applySpeedBoost(player,  effect.getStrength(), effect.getDuration(),"Workshop Power-up");
+                StatusEffects.applySpeedBoost(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
                 break;
             case HEALTH_REGENERATION:
-                StatusEffects.applyHealthRegeneration(player,  effect.getStrength(), effect.getDuration(),"Workshop Power-up");
+                StatusEffects.applyHealthRegeneration(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
                 break;
             case DAMAGE_BOOST:
-                StatusEffects.applyDamageBoost(player,  effect.getStrength(), effect.getDuration(),"Workshop Power-up");
+                StatusEffects.applyDamageBoost(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
                 break;
             case DAMAGE_RESISTANCE:
                 StatusEffects.applyDamageResistance(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");

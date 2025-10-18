@@ -15,6 +15,8 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
+import static com.fullsteam.Config.HOMING_DISTANCE;
+
 /**
  * Handles the processing of bullet effects when projectiles hit targets or obstacles
  */
@@ -140,7 +142,7 @@ public class BulletEffectProcessor {
         );
         world.addBody(poison.getBody());
         gameEntities.addFieldEffect(poison);
-        log.debug("Created poison field effect at ({}, {}) with radius {} and damage {}", 
+        log.debug("Created poison field effect at ({}, {}) with radius {} and damage {}",
                 position.x, position.y, poison.getRadius(), poison.getDamage());
     }
 
@@ -225,8 +227,8 @@ public class BulletEffectProcessor {
         Vector2 direction = targetPos.copy().subtract(projectilePos);
 
         double distance = direction.getMagnitude();
-        if (distance > 250.0) {
-            return; // Homing only works within 250 units
+        if (distance > HOMING_DISTANCE) {
+            return;
         }
 
         direction.normalize();
@@ -255,7 +257,7 @@ public class BulletEffectProcessor {
             // If crossProduct > 0, target is to the left, steer left (no change needed)
 
             // Apply perpendicular steering force
-            double steeringForce = 1000.0;
+            double steeringForce = 3000.0;
             projectile.getBody().applyForce(perpendicularDirection.multiply(steeringForce));
         }
     }
@@ -300,17 +302,11 @@ public class BulletEffectProcessor {
                 case POISON:
                     createPoisonEffectForBeam(beam, hitPosition);
                     break;
+                // these don't apply to beams
                 case PIERCING:
-                    // Piercing is handled in beam collision detection
-                    break;
                 case HOMING:
-                    // Homing doesn't apply to beams
-                    break;
                 case BOUNCY:
-                    // Bouncy doesn't apply to beams
-                    break;
                 case FRAGMENTING:
-                    // Fragmenting doesn't apply to beams
                     break;
             }
         }

@@ -8,7 +8,9 @@ import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * King of the Hill zone - a circular area that awards points to the team with the most players inside.
@@ -32,9 +34,7 @@ public class KothZone extends GameEntity {
      * Get the players currently in the zone.
      */
     // Player tracking
-    private Map<Integer, Integer> playersInZone = new HashMap<>(); // playerId -> teamNumber
-    
-    // Team score tracking (persistent across frames)
+    private Set<Player> playersInZone = new HashSet<>();
     private final Map<Integer, Double> teamScores = new HashMap<>(); // teamNumber -> total points earned
 
     public KothZone(int id, int zoneNumber, double x, double y, double pointsPerSecond) {
@@ -56,35 +56,13 @@ public class KothZone extends GameEntity {
 
     @Override
     public void update(double deltaTime) {
-        // Update control state based on players in zone
         if (playersInZone.isEmpty()) {
-            // No players - zone becomes neutral
             state = ZoneState.NEUTRAL;
             controllingTeam = -1;
             return;
         }
-
-        // Count players per team
-        Map<Integer, Integer> teamCounts = new HashMap<>();
-        for (int team : playersInZone.values()) {
-            teamCounts.put(team, teamCounts.getOrDefault(team, 0) + 1);
-        }
-
-        // Determine dominant team
-        int dominantTeam = -1;
-        int maxCount = 0;
-        boolean contested = false;
-
-        for (Map.Entry<Integer, Integer> entry : teamCounts.entrySet()) {
-            if (entry.getValue() > maxCount) {
-                dominantTeam = entry.getKey();
-                maxCount = entry.getValue();
-                contested = false;
-            } else if (entry.getValue() == maxCount) {
-                contested = true; // Multiple teams with same count
-            }
-        }
-
+        long teamCount = playersInZone.stream().map(Player::getTeam).distinct().count();
+        boolean contested = teamCount > 1;
         if (contested) {
             // Zone is contested - no team gets points
             state = ZoneState.CONTESTED;
@@ -92,22 +70,15 @@ public class KothZone extends GameEntity {
         } else {
             // One team has majority - they control the zone immediately
             state = ZoneState.CONTROLLED;
-            controllingTeam = dominantTeam;
+            controllingTeam = playersInZone.iterator().next().getTeam();
         }
     }
 
     /**
      * Add a player to the zone.
      */
-    public void addPlayer(int playerId, int teamNumber) {
-        playersInZone.put(playerId, teamNumber);
-    }
-
-    /**
-     * Remove a player from the zone.
-     */
-    public void removePlayer(int playerId) {
-        playersInZone.remove(playerId);
+    public void addPlayer(Player player) {
+        playersInZone.add(player);
     }
 
     /**
@@ -126,18 +97,11 @@ public class KothZone extends GameEntity {
     }
 
     /**
-     * Get the players currently in the zone.
-     */
-    public Map<Integer, Integer> getPlayersInZone() {
-        return playersInZone;
-    }
-
-    /**
      * Get the number of players from a specific team in the zone.
      */
     public int getTeamPlayerCount(int team) {
-        return (int) playersInZone.values().stream()
-                .filter(t -> t == team)
+        return (int) playersInZone.stream()
+                .filter(t -> t.getTeam() == team)
                 .count();
     }
 
@@ -157,54 +121,32 @@ public class KothZone extends GameEntity {
     }
 
     /**
-     * Set capture progress (for testing purposes).
-     * Since zones are controlled immediately, this method is mainly for test compatibility.
-     */
-    public void setCaptureProgress(double progress) {
-        // This method exists for test compatibility but doesn't affect actual zone behavior
-        // since zones are controlled immediately when a team has majority
-    }
-
-    /**
-     * Reset the zone to neutral state (e.g., at round start).
-     */
-    /**
      * Award points to a team for controlling this zone.
-     * @param team The team number to award points to
+     *
+     * @param team   The team number to award points to
      * @param points The number of points to award
      */
     public void awardPointsToTeam(int team, double points) {
         teamScores.put(team, teamScores.getOrDefault(team, 0.0) + points);
     }
-    
+
     /**
      * Get the total points earned by a team from this zone.
+     *
      * @param team The team number
      * @return The total points earned by this team
      */
     public double getTeamScore(int team) {
         return teamScores.getOrDefault(team, 0.0);
     }
-    
+
     /**
      * Get all team scores for this zone.
+     *
      * @return A map of team number to total points earned
      */
     public Map<Integer, Double> getAllTeamScores() {
         return new HashMap<>(teamScores);
-    }
-    
-    /**
-     * Reset all team scores for this zone.
-     */
-    public void resetTeamScores() {
-        teamScores.clear();
-    }
-
-    public void reset() {
-        controllingTeam = -1;
-        state = ZoneState.NEUTRAL;
-        playersInZone.clear();
     }
 
     /**

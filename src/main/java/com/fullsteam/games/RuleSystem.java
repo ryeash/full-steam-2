@@ -484,7 +484,6 @@ public class RuleSystem {
 
         // Add player-based scores based on ScoreStyle
         if (rules.getScoreStyle() == ScoreStyle.TOTAL_KILLS ||
-                rules.getScoreStyle() == ScoreStyle.CAPTURES ||
                 rules.getScoreStyle() == ScoreStyle.TOTAL) {
 
             for (Player player : gameEntities.getAllPlayers()) {
@@ -493,16 +492,22 @@ public class RuleSystem {
             }
         }
 
-        // Add KOTH zone scores based on ScoreStyle
-        if (rules.getScoreStyle() == ScoreStyle.KOTH_ZONES ||
+        // Add objective scores (KOTH zones, captures) based on ScoreStyle
+        if (rules.getScoreStyle() == ScoreStyle.OBJECTIVE ||
                 rules.getScoreStyle() == ScoreStyle.TOTAL) {
 
+            // Add player captures
+            for (Player player : gameEntities.getAllPlayers()) {
+                teamScores.merge(player.getTeam(), player.getCaptures(), Integer::sum);
+            }
+
+            // Add KOTH zone scores
             for (KothZone zone : gameEntities.getAllKothZones()) {
                 Map<Integer, Double> zoneTeamScores = zone.getAllTeamScores();
                 for (Map.Entry<Integer, Double> entry : zoneTeamScores.entrySet()) {
                     int team = entry.getKey();
                     double kothPoints = entry.getValue();
-                    // Convert KOTH points to integer kills for now (can be refined later)
+                    // Convert KOTH points to integer for scoring
                     int kothScore = (int) Math.round(kothPoints);
                     teamScores.merge(team, kothScore, Integer::sum);
                 }
@@ -535,8 +540,7 @@ public class RuleSystem {
     private int getPlayerScore(Player player) {
         return switch (rules.getScoreStyle()) {
             case TOTAL_KILLS -> player.getKills();
-            case CAPTURES -> player.getCaptures();
-            case KOTH_ZONES -> 0; // KOTH scores are handled separately in calculateTeamScores()
+            case OBJECTIVE -> player.getCaptures(); // Only captures for individual scoring; KOTH is team-based
             case TOTAL -> player.getKills() + player.getCaptures();
         };
     }
@@ -544,8 +548,7 @@ public class RuleSystem {
     private String getScoreTypeName() {
         return switch (rules.getScoreStyle()) {
             case TOTAL_KILLS -> "kills";
-            case CAPTURES -> "captures";
-            case KOTH_ZONES -> "zone control";
+            case OBJECTIVE -> "objectives";
             case TOTAL -> "points";
         };
     }

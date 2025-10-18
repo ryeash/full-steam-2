@@ -183,18 +183,19 @@ class GameEngine {
     createRoundTimer() {
         this.roundTimerContainer = new PIXI.Container();
         this.roundTimerContainer.zIndex = 200;
-        this.roundTimerContainer.visible = false; // Hidden by default, shown when rounds are enabled
+        this.roundTimerContainer.visible = false; // Hidden by default, shown when rounds are enabled or team mode is active
         
-        // Background
+        // Wider background to accommodate team scores
         const bg = new PIXI.Graphics();
         bg.beginFill(0x000000, 0.8);
-        bg.drawRoundedRect(0, 0, 200, 60, 8);
+        bg.drawRoundedRect(0, 0, 400, 60, 8);
         bg.endFill();
         bg.lineStyle(2, 0xffaa00, 0.9);
-        bg.drawRoundedRect(0, 0, 200, 60, 8);
+        bg.drawRoundedRect(0, 0, 400, 60, 8);
         this.roundTimerContainer.addChild(bg);
+        this.roundTimerBackground = bg;
         
-        // Round number text
+        // Round number text (center)
         this.roundNumberText = new PIXI.Text('ROUND 1', {
             fontSize: 14,
             fill: 0xffaa00,
@@ -202,10 +203,10 @@ class GameEngine {
             align: 'center'
         });
         this.roundNumberText.anchor.set(0.5, 0);
-        this.roundNumberText.position.set(100, 8);
+        this.roundNumberText.position.set(200, 8);
         this.roundTimerContainer.addChild(this.roundNumberText);
         
-        // Timer text (MM:SS)
+        // Timer text (MM:SS) (center)
         this.roundTimerText = new PIXI.Text('05:00', {
             fontSize: 24,
             fill: 0xffffff,
@@ -213,8 +214,11 @@ class GameEngine {
             align: 'center'
         });
         this.roundTimerText.anchor.set(0.5, 0);
-        this.roundTimerText.position.set(100, 28);
+        this.roundTimerText.position.set(200, 28);
         this.roundTimerContainer.addChild(this.roundTimerText);
+        
+        // Create team score containers (will be populated dynamically)
+        this.teamScoreContainers = new Map();
         
         this.uiContainer.addChild(this.roundTimerContainer);
         
@@ -228,48 +232,163 @@ class GameEngine {
     updateRoundTimerPosition() {
         if (!this.roundTimerContainer) return;
         this.roundTimerContainer.position.set(
-            (this.app.screen.width / 2) - 100, // Center horizontally
+            (this.app.screen.width / 2) - 200, // Center horizontally (wider now)
             10 // Top of screen with padding
         );
     }
     
     /**
-     * Update round timer display with current round state.
+     * Update round timer display with current round state and team scores.
      */
     updateRoundTimer(roundData) {
-        if (!this.roundTimerContainer || !roundData.roundEnabled) {
-            if (this.roundTimerContainer) {
-                this.roundTimerContainer.visible = false;
-            }
+        if (!this.roundTimerContainer) return;
+        
+        const hasTeams = this.teamCount > 0;
+        const hasTeamScores = roundData.teamScores && Object.keys(roundData.teamScores).length > 0;
+        
+        // Show if rounds are enabled OR if we have team scores to display
+        const shouldShow = roundData.roundEnabled || (hasTeams && hasTeamScores);
+        
+        if (!shouldShow) {
+            this.roundTimerContainer.visible = false;
             return;
         }
         
         this.roundTimerContainer.visible = true;
         
-        // Update round number
-        this.roundNumberText.text = `ROUND ${roundData.currentRound}`;
-        
-        // Update timer based on game state
-        let timeRemaining;
-        let timerColor;
-        
-        if (roundData.gameState === 'PLAYING') {
-            timeRemaining = roundData.roundTimeRemaining;
-            timerColor = timeRemaining <= 30 ? 0xff4444 : 0xffffff; // Red when under 30 seconds
-        } else if (roundData.gameState === 'REST_PERIOD') {
-            timeRemaining = roundData.restTimeRemaining;
-            timerColor = 0xffaa00; // Orange during rest
-            this.roundNumberText.text = 'REST PERIOD';
+        // Update round number and timer (if rounds are enabled)
+        if (roundData.roundEnabled) {
+            this.roundNumberText.visible = true;
+            this.roundTimerText.visible = true;
+            
+            // Update round number
+            this.roundNumberText.text = `ROUND ${roundData.currentRound}`;
+            
+            // Update timer based on game state
+            let timeRemaining;
+            let timerColor;
+            
+            if (roundData.gameState === 'PLAYING') {
+                timeRemaining = roundData.roundTimeRemaining;
+                timerColor = timeRemaining <= 30 ? 0xff4444 : 0xffffff; // Red when under 30 seconds
+            } else if (roundData.gameState === 'REST_PERIOD') {
+                timeRemaining = roundData.restTimeRemaining;
+                timerColor = 0xffaa00; // Orange during rest
+                this.roundNumberText.text = 'REST PERIOD';
+            } else {
+                timeRemaining = 0;
+                timerColor = 0xffffff;
+            }
+            
+            // Format as MM:SS
+            const minutes = Math.floor(Math.max(0, timeRemaining) / 60);
+            const seconds = Math.floor(Math.max(0, timeRemaining) % 60);
+            this.roundTimerText.text = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            this.roundTimerText.style.fill = timerColor;
         } else {
-            timeRemaining = 0;
-            timerColor = 0xffffff;
+            // Hide round/timer info if rounds are disabled
+            this.roundNumberText.visible = false;
+            this.roundTimerText.visible = false;
         }
         
-        // Format as MM:SS
-        const minutes = Math.floor(Math.max(0, timeRemaining) / 60);
-        const seconds = Math.floor(Math.max(0, timeRemaining) % 60);
-        this.roundTimerText.text = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        this.roundTimerText.style.fill = timerColor;
+        // Update team scores
+        this.updateTeamScores(roundData);
+    }
+    
+    /**
+     * Update team score displays in the round timer container.
+     */
+    updateTeamScores(roundData) {
+        if (!this.roundTimerContainer || !roundData.teamScores) return;
+        
+        const teamScores = roundData.teamScores;
+        const teams = Object.keys(teamScores).map(t => parseInt(t)).sort((a, b) => a - b);
+        
+        // Clear old team score containers
+        for (let [teamId, container] of this.teamScoreContainers) {
+            if (!teams.includes(teamId)) {
+                this.roundTimerContainer.removeChild(container);
+                this.teamScoreContainers.delete(teamId);
+            }
+        }
+        
+        // Fixed slot positions: 2 on left, 2 on right
+        // Each team score display is ~56px wide (6px bar + 50px content)
+        const slotPositions = [
+            { x: 15, y: 5 },       // Left slot 1
+            { x: 75, y: 5 },       // Left slot 2 (adjacent, 60px spacing)
+            { x: 330, y: 5 },      // Right slot 1
+            { x: 270, y: 5 }       // Right slot 2 (left of slot 1, for 4 teams)
+        ];
+        
+        // Create or update team score displays
+        teams.forEach((teamId, index) => {
+            // Only display up to 4 teams (2 left, 2 right)
+            if (index >= 4) return;
+            
+            let container = this.teamScoreContainers.get(teamId);
+            
+            if (!container) {
+                // Create new team score container
+                container = new PIXI.Container();
+                
+                // Team color indicator
+                const colorBar = new PIXI.Graphics();
+                colorBar.beginFill(this.getTeamColor(teamId));
+                colorBar.drawRoundedRect(0, 0, 6, 48, 3);
+                colorBar.endFill();
+                colorBar.position.set(0, 2);
+                container.addChild(colorBar);
+                container.colorBar = colorBar;
+                
+                // Team label
+                const teamLabel = new PIXI.Text(`T${teamId}`, {
+                    fontSize: 10,
+                    fill: this.getTeamColor(teamId),
+                    fontWeight: 'bold',
+                    align: 'center'
+                });
+                teamLabel.anchor.set(0.5, 0);
+                teamLabel.position.set(28, 8);
+                container.addChild(teamLabel);
+                
+                // Score text
+                const scoreText = new PIXI.Text('0', {
+                    fontSize: 20,
+                    fill: 0xffffff,
+                    fontWeight: 'bold',
+                    align: 'center'
+                });
+                scoreText.anchor.set(0.5, 0);
+                scoreText.position.set(28, 26);
+                container.addChild(scoreText);
+                container.scoreText = scoreText;
+                
+                this.roundTimerContainer.addChild(container);
+                this.teamScoreContainers.set(teamId, container);
+            }
+            
+            // Update score
+            const score = teamScores[teamId] || 0;
+            container.scoreText.text = score.toString();
+            
+            // Position teams in fixed slots
+            // Slot assignment based on team count and index:
+            // 2 teams: team 0 -> left, team 1 -> right (slots 0, 2)
+            // 3 teams: team 0 -> left, team 1 -> left adjacent, team 2 -> right (slots 0, 1, 2)
+            // 4 teams: team 0,1 -> left, team 2,3 -> right (slots 0, 1, 2, 3)
+            
+            let slotIndex;
+            if (teams.length === 2) {
+                slotIndex = index === 0 ? 0 : 2; // First team left, second team right
+            } else if (teams.length === 3) {
+                slotIndex = index; // 0,1 on left side, 2 on right
+            } else {
+                slotIndex = index; // All 4 slots used
+            }
+            
+            container.position.set(slotPositions[slotIndex].x, slotPositions[slotIndex].y);
+        });
     }
     
     /**
@@ -3350,8 +3469,8 @@ class GameEngine {
         // Animate glow
         flagContainer.glowPhase = 0;
         
-        // Set z-index (above ground, below players)
-        flagContainer.zIndex = 8;
+        // Set z-index (above players for visibility when carried)
+        flagContainer.zIndex = 11;
         
         // Store flag data
         flagContainer.flagData = flagData;
@@ -4336,8 +4455,8 @@ class GameEngine {
         // Get team color
         const teamColor = this.getTeamColor(team);
         
-        // Calculate health percentage for damage visualization
-        const healthPct = entityData.maxHealth > 0 ? entityData.health / entityData.maxHealth : 1.0;
+        // Health is already sent as a percentage (0.0 - 1.0) from backend
+        const healthPct = entityData.health || 1.0;
         
         // HQ base - large fortified rectangle with team color
         const baseAlpha = 0.9;
@@ -4437,8 +4556,9 @@ class GameEngine {
         graphics.drawRect(-barWidth/2, barY, barWidth * healthPct, barHeight);
         graphics.endFill();
         
-        // Health text
-        const healthText = new PIXI.Text(`${Math.round(entityData.health)}/${Math.round(entityData.maxHealth)}`, {
+        // Health text (show as percentage)
+        const healthPercentage = Math.round(healthPct * 100);
+        const healthText = new PIXI.Text(`${healthPercentage}%`, {
             fontSize: 10,
             fill: 0xFFFFFF,
             fontWeight: 'bold',

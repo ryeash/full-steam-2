@@ -445,8 +445,8 @@ public class GameManager {
             gameEntities.getPlayerInputs().forEach(this::processPlayerInput);
             gameEntities.updateAll(deltaTime);
             updateCarriedFlags(); // Update flag positions for carried flags
-            getCollisionProcessor().updateKothZones(deltaTime); // Update KOTH zone control and award points (using proper deltaTime)
-            getCollisionProcessor().updateWorkshops(deltaTime); // Update workshop crafting mechanics (using proper deltaTime)
+            collisionProcessor.updateKothZones(deltaTime); // Update KOTH zone control and award points (using proper deltaTime)
+            collisionProcessor.updateWorkshops(deltaTime); // Update workshop crafting mechanics (using proper deltaTime)
             gameEntities.getProjectiles().entrySet().removeIf(entry -> {
                 Projectile projectile = entry.getValue();
                 if (!projectile.isActive()) {
@@ -457,12 +457,11 @@ public class GameManager {
                     world.removeBody(projectile.getBody());
                     return true;
                 }
+                collisionProcessor.getBulletEffectProcessor().applyHomingBehavior(projectile);
                 return false;
             });
 
             updateUtilityEntities(deltaTime);
-
-            // CRITICAL FIX: Update DefenseLaser beam effective endpoints after position updates
             updateDefenseLaserBeamEndpoints();
 
             world.updatev(deltaTime);
@@ -919,24 +918,14 @@ public class GameManager {
         if (!rules.hasWorkshops() || !gameConfig.isTeamMode()) {
             return; // Workshops disabled or not in team mode
         }
-
         int teamCount = gameConfig.getTeamCount();
-        log.info("Creating workshops for {} teams in game {}", teamCount, gameId);
-
-        int workshopId = Config.nextId();
-
-        // Create one workshop per team in their spawn zone
         for (int teamNumber = 1; teamNumber <= teamCount; teamNumber++) {
             TeamSpawnArea teamArea = teamSpawnManager.getTeamAreas().get(teamNumber);
             if (teamArea == null) {
                 log.warn("No spawn area found for team {}, skipping workshop creation", teamNumber);
                 continue;
             }
-
-            // Place workshop near the center of the team's spawn area
             Vector2 workshopPosition = teamArea.getCenter().copy();
-
-            // Add a small random offset to avoid exact center placement
             double offsetX = (Math.random() - 0.5) * 50; // ±25 units
             double offsetY = (Math.random() - 0.5) * 50; // ±25 units
             workshopPosition.add(offsetX, offsetY);
@@ -959,16 +948,13 @@ public class GameManager {
             }
 
             Workshop workshop = new Workshop(
-                    workshopId++,
+                    Config.nextId(),
                     workshopPosition,
                     rules.getWorkshopCraftTime(),
                     rules.getMaxPowerUpsPerWorkshop()
             );
             gameEntities.addWorkshop(workshop);
             world.addBody(workshop.getBody());
-
-            log.info("Created workshop {} for team {} at position ({}, {})",
-                    workshopId - 1, teamNumber, workshopPosition.x, workshopPosition.y);
         }
     }
 
@@ -981,12 +967,7 @@ public class GameManager {
         if (!rules.hasHeadquarters() || !gameConfig.isTeamMode()) {
             return; // Headquarters disabled or not in team mode
         }
-
         int teamCount = gameConfig.getTeamCount();
-        log.info("Creating headquarters for {} teams in game {}", teamCount, gameId);
-
-        int hqId = Config.nextId();
-
         // Create one headquarters per team in their spawn zone
         for (int teamNumber = 1; teamNumber <= teamCount; teamNumber++) {
             TeamSpawnArea teamArea = teamSpawnManager.getTeamAreas().get(teamNumber);
@@ -1025,7 +1006,7 @@ public class GameManager {
                 }
 
                 // If still no clear position found, try anywhere in team area
-                if (!foundClearPosition && teamArea != null) {
+                if (!foundClearPosition) {
                     for (int attempt = 0; attempt < 30; attempt++) {
                         Vector2 candidate = teamArea.generateSpawnPoint();
                         if (terrainGenerator.isPositionClear(candidate, hqClearanceRadius)) {
@@ -1042,7 +1023,7 @@ public class GameManager {
             }
 
             Headquarters hq = new Headquarters(
-                    hqId++,
+                    Config.nextId(),
                     teamNumber,
                     hqPosition.x,
                     hqPosition.y,
@@ -1050,9 +1031,6 @@ public class GameManager {
             );
             gameEntities.addHeadquarters(hq);
             world.addBody(hq.getBody());
-
-            log.info("Created headquarters {} for team {} at position ({}, {}) with {} HP",
-                    hqId - 1, teamNumber, hqPosition.x, hqPosition.y, rules.getHeadquartersMaxHealth());
         }
     }
 
@@ -1220,7 +1198,6 @@ public class GameManager {
             obsState.put("rotation", obstacle.getBody().getTransform().getRotation().toRadians());
             if (obstacle.getType() == Obstacle.ObstacleType.PLAYER_BARRIER) {
                 obsState.put("health", obstacle.healthPercent());
-                obsState.put("maxHealth", obstacle.getMaxHealth());
                 obsState.put("active", obstacle.isActive());
                 obsState.put("ownerId", obstacle.getOwnerId());
                 obsState.put("ownerTeam", obstacle.getOwnerTeam());
@@ -1430,7 +1407,6 @@ public class GameManager {
                 hqState.put("x", pos.x);
                 hqState.put("y", pos.y);
                 hqState.put("health", hq.healthPercent());
-                hqState.put("maxHealth", hq.getMaxHealth());
                 hqState.put("active", hq.isActive());
 
                 // Add shape data for client rendering
@@ -1677,7 +1653,6 @@ public class GameManager {
             obsData.put("boundingRadius", obstacle.getBoundingRadius());
             obsData.put("rotation", obstacle.getBody().getTransform().getRotation().toRadians());
             obsData.put("health", obstacle.getHealth());
-            obsData.put("maxHealth", obstacle.getMaxHealth());
             obsData.put("active", obstacle.isActive());
             obsData.put("ownerId", obstacle.getOwnerId());
             obsData.put("ownerTeam", obstacle.getOwnerTeam());

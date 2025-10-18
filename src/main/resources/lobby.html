@@ -35,8 +35,8 @@
             background: rgba(0, 0, 0, 0.95);
             border: 2px solid #00ff88;
             border-radius: 12px;
-            max-width: 800px;
-            width: 90%;
+            max-width: 1200px;
+            width: 95%;
             max-height: 90vh;
             overflow-y: auto;
         }
@@ -229,6 +229,14 @@
                         </select>
                     </div>
                     <div class="config-item">
+                        <label for="scoreStyle">Score Style:</label>
+                        <select id="scoreStyle">
+                            <option value="TOTAL_KILLS">Total Kills (Deathmatch)</option>
+                            <option value="OBJECTIVE">Objectives Only (CTF/KOTH/etc.)</option>
+                            <option value="TOTAL">Total (Kills + Objectives)</option>
+                        </select>
+                    </div>
+                    <div class="config-item">
                         <label for="enableAIFilling">🤖 Fill with AI Players:</label>
                         <input type="checkbox" id="enableAIFilling" checked>
                         <span class="checkbox-label">Automatically fill empty slots with AI players</span>
@@ -274,14 +282,6 @@
                         <label for="flagsPerTeam">Flags Per Team:</label>
                         <input type="number" id="flagsPerTeam" min="0" max="3" value="0">
                         <small style="color: #888; font-size: 0.8em;">0 = disabled, 1-3 = CTF mode</small>
-                    </div>
-                    <div class="config-item">
-                        <label for="scoreStyle">Score Style:</label>
-                        <select id="scoreStyle">
-                            <option value="TOTAL_KILLS">Total Kills (Deathmatch)</option>
-                            <option value="CAPTURES">Captures Only (CTF)</option>
-                            <option value="TOTAL">Total (Kills + Captures)</option>
-                        </select>
                     </div>
                 </div>
                 
@@ -666,10 +666,10 @@
             };
         } else if (presetType === 'ctf') {
             gameConfig = {
-                maxPlayers: 16,
-                teamCount: 2,
-                worldWidth: 2000,
-                worldHeight: 2000,
+                maxPlayers: 24,                 // Increased for 3 teams
+                teamCount: 3,                   // 3-way CTF battle
+                worldWidth: 2500,               // Larger world for 3 teams
+                worldHeight: 2500,
                 playerMaxHealth: 100,
                 aiCheckIntervalMs: 10000,
                 enableAIFilling: true,
@@ -677,9 +677,9 @@
                     roundDuration: 300,         // 5 minute rounds
                     restDuration: 15,           // 15 second rest
                     flagsPerTeam: 1,            // Classic CTF - 1 flag per team
-                    scoreStyle: 'CAPTURES',     // Score by captures only
+                    scoreStyle: 'OBJECTIVE',    // Score by objectives only
                     victoryCondition: 'OBJECTIVE',
-                    scoreLimit: 3,              // First to 3 captures wins
+                    scoreLimit: 5,              // First to 5 captures wins (more for 3 teams)
                     timeLimit: 600,
                     suddenDeath: true,          // Sudden death if tied
                     respawnMode: 'WAVE',        // Wave respawns for coordinated pushes
@@ -707,7 +707,7 @@
                     roundDuration: 240,         // 4 minute rounds
                     restDuration: 15,
                     flagsPerTeam: 0,            // No flags in domination
-                    scoreStyle: 'KOTH_ZONES',   // Points from zone control only
+                    scoreStyle: 'OBJECTIVE',    // Points from zone control only
                     victoryCondition: 'SCORE_LIMIT',
                     scoreLimit: 200,            // First to 200 points (zone control only)
                     timeLimit: 900,             // 15 minute fallback
