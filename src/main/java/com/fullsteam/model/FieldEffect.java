@@ -22,7 +22,9 @@ import java.util.Set;
 public class FieldEffect extends GameEntity {
     private final int ownerId;
     private final FieldEffectType type;
-    private final double radius;
+    private double radius; // Non-final to support growing effects
+    private final double initialRadius;
+    private final double maxRadius;
     private final double damage;
     private final int ownerTeam;
     private final long armingTime;
@@ -33,6 +35,7 @@ public class FieldEffect extends GameEntity {
         super(id, createFieldEffectBody(position, radius), Double.POSITIVE_INFINITY); // Field effects are indestructible
         this.ownerId = ownerId;
         this.type = type;
+        this.initialRadius = radius;
         this.radius = radius;
         this.damage = damage;
         this.expires = (long) (System.currentTimeMillis() + (duration * 1000)); // duration in seconds
@@ -40,6 +43,13 @@ public class FieldEffect extends GameEntity {
         this.affectedEntities = new HashSet<>();
         this.lastDamageTime = new HashMap<>();
         this.active = true;
+
+        // Set max radius for growing effects (FIRE grows to 1.5x initial size for volcanic eruptions)
+        if (type == FieldEffectType.FIRE) {
+            this.maxRadius = radius * 1.5;
+        } else {
+            this.maxRadius = radius;
+        }
 
         // Initialize proximity mine specific fields
         if (type == FieldEffectType.PROXIMITY_MINE) {
@@ -65,9 +75,47 @@ public class FieldEffect extends GameEntity {
         if (!isActive()) {
             return;
         }
+        
+        // Grow FIRE effects over time (spreads like lava for volcanic eruptions)
+        if (type == FieldEffectType.FIRE && radius < maxRadius) {
+            double oldRadius = radius;
+            long elapsed = System.currentTimeMillis() - created;
+            long duration = expires - created;
+            double progress = elapsed / (double) duration;
+            
+            // Grow quickly in first 30% of lifetime, then stabilize
+            if (progress < 0.3) {
+                radius = initialRadius + (maxRadius - initialRadius) * (progress / 0.3);
+            } else {
+                radius = maxRadius;
+            }
+            
+            // Update physics body if radius changed significantly
+            if (Math.abs(radius - oldRadius) > 0.5) {
+                updateBodyRadius(radius);
+            }
+        }
+        
         if (System.currentTimeMillis() > expires) {
             active = false;
         }
+    }
+    
+    /**
+     * Update the physics body's sensor radius (for growing effects)
+     */
+    private void updateBodyRadius(double newRadius) {
+        Body body = getBody();
+        
+        // Remove old fixture
+        if (body.getFixtureCount() > 0) {
+            body.removeFixture(0);
+        }
+        
+        // Add new fixture with updated radius
+        Circle circle = new Circle(newRadius);
+        BodyFixture fixture = body.addFixture(circle);
+        fixture.setSensor(true);
     }
 
     public boolean isInRange(Vector2 targetPosition) {
@@ -76,6 +124,11 @@ public class FieldEffect extends GameEntity {
 
     public boolean canAffect(GameEntity entity) {
         if (!active || entity == null) {
+            return false;
+        }
+
+        // WARNING_ZONE is purely visual and doesn't affect entities
+        if (type == FieldEffectType.WARNING_ZONE) {
             return false;
         }
 
@@ -130,9 +183,11 @@ public class FieldEffect extends GameEntity {
             // explosions degrade with distance from center
             case EXPLOSION -> {
                 double distance = getPosition().distance(targetPosition);
-                double intensity = 0.2 + (0.8 - (distance / radius)); // Linear falloff
+                double intensity = 0.5 + (0.5 * (distance / radius));
                 yield Math.max(0.0, intensity);
             }
+            // Earthquakes have uniform intensity
+            case EARTHQUAKE -> 1.0;
             default -> 1.0;
         };
     }

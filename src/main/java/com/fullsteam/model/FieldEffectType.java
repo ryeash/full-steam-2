@@ -15,7 +15,11 @@ public enum FieldEffectType {
     SHIELD_BARRIER(10.0, false), // Damage absorption zone
     GRAVITY_WELL(7.0, false),  // Pull entities toward center
     SPEED_BOOST(7.0, false),   // Increases ally movement speed
-    PROXIMITY_MINE(30.0, false); // Proximity-triggered explosive mine
+    PROXIMITY_MINE(30.0, false), // Proximity-triggered explosive mine
+    
+    // Event/Hazard effects
+    WARNING_ZONE(3.0, false),  // Visual indicator for incoming hazard (no damage)
+    EARTHQUAKE(4.0, false);    // Ground shake with damage over time
 
     private final double defaultDuration;
     private final boolean instantaneous;

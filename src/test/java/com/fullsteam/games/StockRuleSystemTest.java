@@ -216,12 +216,13 @@ class StockRuleSystemTest extends BaseTestClass {
 
     @Test
     @DisplayName("Should start next round after stock 10-second rest period")
-    void testStockRestPeriodAndNextRound() {
+    void testStockRestPeriodAndNextRound() throws InterruptedException {
         // Add a player
         Player player = createTestPlayer(1, 1);
         gameEntities.addPlayer(player);
 
         // End first round
+        Thread.sleep(120000);
         ruleSystem.update(120.0);
         assertEquals(GameState.ROUND_END, ruleSystem.getGameState());
 

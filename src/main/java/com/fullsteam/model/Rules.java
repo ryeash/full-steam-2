@@ -7,6 +7,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.extern.jackson.Jacksonized;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -169,6 +172,104 @@ public class Rules {
      */
     @Builder.Default
     private boolean headquartersDestructionEndsGame = true;
+    
+    // ===== Event System Rules =====
+    
+    /**
+     * Whether to enable random events during gameplay.
+     */
+    @Builder.Default
+    private boolean enableRandomEvents = false;
+    
+    /**
+     * Interval in seconds between random events (minimum time).
+     * Actual time will vary based on randomEventIntervalVariance.
+     */
+    @Builder.Default
+    private double randomEventInterval = 40.0; // 40 seconds default
+    
+    /**
+     * Variance factor for event intervals (0.0 - 1.0).
+     * 0.5 means events can occur 50% earlier or later than the base interval.
+     */
+    @Builder.Default
+    private double randomEventIntervalVariance = 0.3;
+    
+    /**
+     * Warning duration in seconds before an event actually triggers.
+     * Displays visual indicators to give players time to react.
+     */
+    @Builder.Default
+    private double eventWarningDuration = 3.0;
+    
+    /**
+     * Which event types are enabled for this game.
+     * Empty list means all events can occur.
+     */
+    @Builder.Default
+    private List<EnvironmentalEvent> enabledEvents = new ArrayList<>();
+    
+    // ===== Event Intensity Settings =====
+    
+    /**
+     * Number of impact zones for meteor shower events.
+     */
+    @Builder.Default
+    private int meteorShowerCount = 8;
+    
+    /**
+     * Damage per meteor impact.
+     */
+    @Builder.Default
+    private double meteorDamage = 40.0;
+    
+    /**
+     * Radius of each meteor explosion.
+     */
+    @Builder.Default
+    private double meteorRadius = 60.0;
+    
+    /**
+     * Number of power-ups to spawn during supply drop events.
+     */
+    @Builder.Default
+    private int supplyDropCount = 5;
+    
+    /**
+     * Number of eruption zones for volcanic events.
+     */
+    @Builder.Default
+    private int volcanicEruptionCount = 4;
+    
+    /**
+     * Damage per second from eruption zones.
+     */
+    @Builder.Default
+    private double eruptionDamage = 30.0;
+    
+    /**
+     * Radius of each eruption zone.
+     */
+    @Builder.Default
+    private double eruptionRadius = 70.0;
+    
+    /**
+     * Damage per second from earthquake events.
+     */
+    @Builder.Default
+    private double earthquakeDamage = 15.0;
+    
+    /**
+     * Number of zones affected by ion storm.
+     */
+    @Builder.Default
+    private int ionStormZones = 6;
+    
+    /**
+     * Damage from ion storm electric fields.
+     */
+    @Builder.Default
+    private double ionStormDamage = 25.0;
     
     /**
      * Check if this game mode uses flags.

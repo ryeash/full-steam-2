@@ -3279,6 +3279,23 @@ class GameEngine {
         const isoPos = this.worldToIsometric(effectData.x, effectData.y);
         effectContainer.position.set(isoPos.x, isoPos.y);
         
+        // Handle growing effects (like ERUPTION)
+        if (!effectContainer.initialRadius) {
+            effectContainer.initialRadius = effectData.radius;
+            effectContainer.currentRadius = effectData.radius;
+        }
+        
+        // Smoothly scale to match server radius for growing effects
+        if (effectData.type === 'FIRE' && effectData.radius !== effectContainer.currentRadius) {
+            effectContainer.currentRadius = effectData.radius;
+            const scaleFactor = effectData.radius / effectContainer.initialRadius;
+            
+            // Apply base scale to the graphics (animation will pulse on top of this)
+            if (effectContainer.effectGraphics) {
+                effectContainer.effectGraphics.scale.set(scaleFactor);
+            }
+        }
+        
         // Update visual based on effect progress/intensity
         this.updateEffectVisual(effectContainer, effectData);
         
@@ -5276,6 +5293,11 @@ class GameEngine {
                 return this.createVisionRevealGraphics(graphics, radius, effectData);
             case 'SPEED_BOOST':
                 return this.createSpeedBoostGraphics(graphics, radius, effectData);
+            // Environmental event effects
+            case 'WARNING_ZONE':
+                return this.createWarningZoneGraphics(graphics, radius, effectData);
+            case 'EARTHQUAKE':
+                return this.createEarthquakeGraphics(graphics, radius, effectData);
             default:
                 return this.createGenericEffectGraphics(graphics, radius, effectData);
         }
@@ -5821,6 +5843,105 @@ class GameEngine {
     }
     
     /**
+     * Create warning zone graphics (pulsing red/yellow indicator)
+     */
+    createWarningZoneGraphics(graphics, radius, effectData) {
+        // Outer warning ring (red)
+        graphics.lineStyle(4, 0xff4444, 0.8);
+        graphics.drawCircle(0, 0, radius);
+        
+        // Middle warning ring (yellow)
+        graphics.lineStyle(3, 0xffaa00, 0.6);
+        graphics.drawCircle(0, 0, radius * 0.85);
+        
+        // Inner warning area (semi-transparent red)
+        graphics.beginFill(0xff4444, 0.15);
+        graphics.drawCircle(0, 0, radius);
+        graphics.endFill();
+        
+        // Add warning stripes
+        const stripeCount = 12;
+        for (let i = 0; i < stripeCount; i++) {
+            const angle = (i / stripeCount) * Math.PI * 2;
+            const x1 = Math.cos(angle) * radius * 0.7;
+            const y1 = Math.sin(angle) * radius * 0.7;
+            const x2 = Math.cos(angle) * radius * 0.95;
+            const y2 = Math.sin(angle) * radius * 0.95;
+            
+            graphics.lineStyle(2, 0xffaa00, 0.7);
+            graphics.moveTo(x1, y1);
+            graphics.lineTo(x2, y2);
+        }
+        
+        // Center warning symbol (exclamation mark)
+        graphics.lineStyle(0);
+        graphics.beginFill(0xff4444, 0.9);
+        // Exclamation body
+        graphics.drawRect(-3, -15, 6, 20);
+        // Exclamation dot
+        graphics.drawCircle(0, 10, 4);
+        graphics.endFill();
+        
+        return graphics;
+    }
+    
+    /**
+     * Create earthquake effect graphics (ground shake with cracks)
+     */
+    createEarthquakeGraphics(graphics, radius, effectData) {
+        // Base ground disturbance (brown/gray)
+        graphics.beginFill(0x8b7355, 0.4);
+        graphics.drawCircle(0, 0, radius);
+        graphics.endFill();
+        
+        // Inner shake zone (darker)
+        graphics.beginFill(0x654321, 0.5);
+        graphics.drawCircle(0, 0, radius * 0.7);
+        graphics.endFill();
+        
+        // Add crack lines radiating from center
+        const crackCount = 8;
+        for (let i = 0; i < crackCount; i++) {
+            const angle = (i / crackCount) * Math.PI * 2 + Math.random() * 0.3;
+            const length = radius * (0.6 + Math.random() * 0.4);
+            
+            // Main crack
+            graphics.lineStyle(3, 0x3d2817, 0.8);
+            graphics.moveTo(0, 0);
+            
+            // Jagged crack path
+            const segments = 5;
+            for (let j = 1; j <= segments; j++) {
+                const t = j / segments;
+                const x = Math.cos(angle) * length * t + (Math.random() - 0.5) * 10;
+                const y = Math.sin(angle) * length * t + (Math.random() - 0.5) * 10;
+                graphics.lineTo(x, y);
+            }
+        }
+        
+        // Add dust/debris particles
+        for (let i = 0; i < 15; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.random() * radius * 0.8;
+            const x = Math.cos(angle) * distance;
+            const y = Math.sin(angle) * distance;
+            const size = 2 + Math.random() * 4;
+            
+            graphics.beginFill(0xa0826d, 0.6);
+            graphics.drawCircle(x, y, size);
+            graphics.endFill();
+        }
+        
+        // Add shockwave rings
+        graphics.lineStyle(2, 0x8b7355, 0.5);
+        graphics.drawCircle(0, 0, radius * 0.4);
+        graphics.lineStyle(2, 0x8b7355, 0.3);
+        graphics.drawCircle(0, 0, radius * 0.6);
+        
+        return graphics;
+    }
+    
+    /**
      * Create generic effect graphics
      */
     createGenericEffectGraphics(graphics, radius, effectData) {
@@ -5906,6 +6027,13 @@ class GameEngine {
                 break;
             case 'SPEED_BOOST':
                 this.animateSpeedBoost(container);
+                break;
+            // Environmental event animations
+            case 'WARNING_ZONE':
+                this.animateWarningZone(container);
+                break;
+            case 'EARTHQUAKE':
+                this.animateEarthquake(container);
                 break;
         }
     }
@@ -6157,6 +6285,51 @@ class GameEngine {
     }
     
     /**
+     * Animate warning zone effects (pulsing alert)
+     */
+    animateWarningZone(container) {
+        const time = container.animationTime;
+        
+        // Rapid pulsing to draw attention
+        const pulse = 0.85 + Math.sin(time * 15) * 0.15;
+        container.scale.set(pulse);
+        
+        // Flashing alpha for urgency
+        const flash = 0.6 + Math.sin(time * 12) * 0.3;
+        container.alpha = flash;
+        
+        // Slow rotation
+        container.rotation = time * 0.5;
+    }
+    
+    /**
+     * Animate earthquake effects (shaking ground)
+     */
+    animateEarthquake(container) {
+        const time = container.animationTime;
+        
+        // Violent shaking effect
+        const shakeX = Math.sin(time * 20) * 3 + Math.sin(time * 35) * 1.5;
+        const shakeY = Math.cos(time * 23) * 3 + Math.cos(time * 38) * 1.5;
+        
+        if (!container.originalX) {
+            container.originalX = container.x;
+            container.originalY = container.y;
+        }
+        
+        container.x = container.originalX + shakeX;
+        container.y = container.originalY + shakeY;
+        
+        // Pulsing to show intensity
+        const intensity = 0.95 + Math.sin(time * 8) * 0.05;
+        container.scale.set(intensity);
+        
+        // Slight alpha variation
+        const rumble = 0.7 + Math.sin(time * 6) * 0.2;
+        container.alpha = rumble;
+    }
+    
+    /**
      * Get animation speed for different effect types
      */
     getEffectAnimationSpeed(effectType) {
@@ -6182,6 +6355,11 @@ class GameEngine {
                 return 0.06; // Slow, ominous
             case 'VISION_REVEAL':
                 return 0.15; // Fast, active scanning
+            // Environmental event speeds
+            case 'WARNING_ZONE':
+                return 0.2; // Fast, urgent pulsing
+            case 'EARTHQUAKE':
+                return 0.25; // Very fast, violent shaking
             default:
                 return 0.1;
         }

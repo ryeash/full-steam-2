@@ -411,6 +411,39 @@
                         <small style="color: #888; font-size: 0.8em;">Lives before elimination</small>
                     </div>
                 </div>
+                
+                <div class="config-section">
+                    <h3>🌋 Environmental Events</h3>
+                    <div class="config-item">
+                        <label for="enableRandomEvents">
+                            <input type="checkbox" id="enableRandomEvents" style="width: auto; margin-right: 5px;" onchange="updateEventFields()">
+                            Enable Random Events
+                        </label>
+                        <small style="color: #888; font-size: 0.8em;">Dynamic hazards and supply drops during gameplay</small>
+                    </div>
+                    <div id="eventConfigFields" style="display: none;">
+                        <div class="config-item">
+                            <label for="randomEventInterval">Event Interval (seconds):</label>
+                            <input type="number" id="randomEventInterval" min="20" max="300" step="10" value="40">
+                            <small style="color: #888; font-size: 0.8em;">Average time between events</small>
+                        </div>
+                        <div class="config-item">
+                            <label for="eventWarningDuration">Warning Duration (seconds):</label>
+                            <input type="number" id="eventWarningDuration" min="1" max="10" step="0.5" value="3">
+                            <small style="color: #888; font-size: 0.8em;">Warning time before event activates</small>
+                        </div>
+                        <div class="config-item">
+                            <label for="meteorShowerCount">Meteor Shower Intensity:</label>
+                            <input type="number" id="meteorShowerCount" min="3" max="20" value="8">
+                            <small style="color: #888; font-size: 0.8em;">Number of meteor impacts</small>
+                        </div>
+                        <div class="config-item">
+                            <label for="supplyDropCount">Supply Drop Count:</label>
+                            <input type="number" id="supplyDropCount" min="1" max="15" value="5">
+                            <small style="color: #888; font-size: 0.8em;">Number of power-up drops</small>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="modal-footer">
@@ -512,6 +545,11 @@
         headquartersButton.textContent = '🏛️ Headquarters Assault';
         headquartersButton.onclick = () => createPresetGame('headquarters-assault');
         createButtons.appendChild(headquartersButton);
+        
+        const chaosButton = document.createElement('button');
+        chaosButton.textContent = '🌋 Chaos Mode';
+        chaosButton.onclick = () => createPresetGame('chaos-mode');
+        createButtons.appendChild(chaosButton);
         
         // Add custom game button
         const customButton = document.createElement('button');
@@ -815,6 +853,46 @@
                     headquartersDestructionEndsGame: true  // Game ends when HQ destroyed
                 }
             };
+        } else if (presetType === 'chaos-mode') {
+            gameConfig = {
+                maxPlayers: 16,
+                teamCount: 3,                   // 3-way battle increases chaos
+                worldWidth: 2000,
+                worldHeight: 2000,
+                playerMaxHealth: 100,
+                aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
+                rules: {
+                    roundDuration: 180,         // 3 minute rounds
+                    restDuration: 12,
+                    flagsPerTeam: 0,
+                    scoreStyle: 'TOTAL',        // All points count
+                    victoryCondition: 'TIME_LIMIT',  // Survive the chaos for 10 minutes
+                    scoreLimit: 100,
+                    timeLimit: 600,             // 10 minutes of mayhem
+                    suddenDeath: true,
+                    respawnMode: 'INSTANT',     // Fast respawns keep action flowing
+                    respawnDelay: 3,
+                    waveRespawnInterval: 30,
+                    maxLives: -1,
+                    kothZones: 2,               // Some zones to fight over
+                    kothPointsPerSecond: 1.5,
+                    addWorkshops: false,
+                    workshopCraftTime: 10,
+                    workshopCraftRadius: 80,
+                    maxPowerUpsPerWorkshop: 3,
+                    addHeadquarters: false,
+                    headquartersMaxHealth: 1000,
+                    headquartersPointsPerDamage: 0.1,
+                    headquartersDestructionBonus: 100,
+                    headquartersDestructionEndsGame: false,
+                    enableRandomEvents: true,
+                    randomEventInterval: 25,     // Events every 25 seconds on average
+                    eventWarningDuration: 3,     // 3 second warning
+                    meteorShowerCount: 12,       // Intense meteor showers
+                    supplyDropCount: 8           // Generous supply drops
+                }
+            };
         }
         
         try {
@@ -909,6 +987,11 @@
                 document.getElementById('workshopCraftTime').value = defaultConfig.rules.workshopCraftTime || 10;
                 document.getElementById('workshopCraftRadius').value = defaultConfig.rules.workshopCraftRadius || 80;
                 document.getElementById('maxPowerUpsPerWorkshop').value = defaultConfig.rules.maxPowerUpsPerWorkshop || 3;
+                document.getElementById('enableRandomEvents').checked = defaultConfig.rules.enableRandomEvents || false;
+                document.getElementById('randomEventInterval').value = defaultConfig.rules.randomEventInterval || 40;
+                document.getElementById('eventWarningDuration').value = defaultConfig.rules.eventWarningDuration || 3;
+                document.getElementById('meteorShowerCount').value = defaultConfig.rules.meteorShowerCount || 8;
+                document.getElementById('supplyDropCount').value = defaultConfig.rules.supplyDropCount || 5;
             } else {
                 document.getElementById('roundDuration').value = 0;
                 document.getElementById('restDuration').value = 10;
@@ -928,11 +1011,17 @@
                 document.getElementById('workshopCraftTime').value = 10;
                 document.getElementById('workshopCraftRadius').value = 80;
                 document.getElementById('maxPowerUpsPerWorkshop').value = 3;
+                document.getElementById('enableRandomEvents').checked = false;
+                document.getElementById('randomEventInterval').value = 40;
+                document.getElementById('eventWarningDuration').value = 3;
+                document.getElementById('meteorShowerCount').value = 8;
+                document.getElementById('supplyDropCount').value = 5;
             }
             
             // Update field visibility
             updateVictoryFields();
             updateRespawnFields();
+            updateEventFields();
             
             // Show modal
             document.getElementById('custom-game-modal').classList.remove('hidden');
@@ -967,6 +1056,12 @@
                 suddenDeathField.style.display = 'block';
                 break;
         }
+    }
+    
+    function updateEventFields() {
+        const enableEvents = document.getElementById('enableRandomEvents').checked;
+        const eventConfigFields = document.getElementById('eventConfigFields');
+        eventConfigFields.style.display = enableEvents ? 'block' : 'none';
     }
     
     function updateRespawnFields() {
@@ -1032,7 +1127,12 @@
                 headquartersMaxHealth: parseFloat(document.getElementById('headquartersMaxHealth').value),
                 headquartersPointsPerDamage: parseFloat(document.getElementById('headquartersPointsPerDamage').value),
                 headquartersDestructionBonus: parseInt(document.getElementById('headquartersDestructionBonus').value),
-                headquartersDestructionEndsGame: document.getElementById('headquartersDestructionEndsGame').checked
+                headquartersDestructionEndsGame: document.getElementById('headquartersDestructionEndsGame').checked,
+                enableRandomEvents: document.getElementById('enableRandomEvents').checked,
+                randomEventInterval: parseFloat(document.getElementById('randomEventInterval').value),
+                eventWarningDuration: parseFloat(document.getElementById('eventWarningDuration').value),
+                meteorShowerCount: parseInt(document.getElementById('meteorShowerCount').value),
+                supplyDropCount: parseInt(document.getElementById('supplyDropCount').value)
             }
         };
 

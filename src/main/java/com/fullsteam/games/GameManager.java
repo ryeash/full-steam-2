@@ -149,6 +149,15 @@ public class GameManager {
         createWorkshops();
         createHeadquarters();
 
+        // Initialize event system if enabled (must be after terrain generation)
+        ruleSystem.initializeEventSystem(
+                terrainGenerator,
+                this::addFieldEffectToWorld,
+                this::addPowerUpToWorld,
+                gameConfig.getWorldWidth(),
+                gameConfig.getWorldHeight()
+        );
+
         // Add initial AI players to make the game more interesting from the start (if enabled)
         if (gameConfig.isEnableAIFilling()) {
             int initialAICount = getMaxPlayers();
@@ -1814,6 +1823,22 @@ public class GameManager {
         );
         gameEntities.addFieldEffect(explosion);
         world.addBody(explosion.getBody());
+    }
+
+    /**
+     * Add a field effect to the game world (used by event system).
+     */
+    private void addFieldEffectToWorld(FieldEffect fieldEffect) {
+        gameEntities.addFieldEffect(fieldEffect);
+        world.addBody(fieldEffect.getBody());
+    }
+
+    /**
+     * Add a power-up to the game world (used by event system).
+     */
+    private void addPowerUpToWorld(PowerUp powerUp) {
+        gameEntities.addPowerUp(powerUp);
+        world.addBody(powerUp.getBody());
     }
 
     // Game Event Broadcasting Convenience Methods

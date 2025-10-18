@@ -100,8 +100,8 @@ public class KothScoringTest extends BaseTestClass {
         gameEntities.addPlayer(player2);
         
         // Simulate collision detection adding players to zone
-        zone.addPlayer(player1.getId(), player1.getTeam());
-        zone.addPlayer(player2.getId(), player2.getTeam());
+        zone.addPlayer(player1);
+        zone.addPlayer(player2);
         
         // Update zone control for enough time to capture (3 seconds for neutral)
         zone.update(3.0);
@@ -128,8 +128,8 @@ public class KothScoringTest extends BaseTestClass {
         gameEntities.addPlayer(player2);
         
         // Simulate collision detection
-        zone.addPlayer(player1.getId(), player1.getTeam());
-        zone.addPlayer(player2.getId(), player2.getTeam());
+        zone.addPlayer(player1);
+        zone.addPlayer(player2);
         
         // Update zone control
         zone.update(1.0);
@@ -153,7 +153,7 @@ public class KothScoringTest extends BaseTestClass {
         gameEntities.addPlayer(player);
         
         // Simulate collision detection
-        zone.addPlayer(player.getId(), player.getTeam());
+        zone.addPlayer(player);
         
         // Update zone control for 3 seconds (should capture)
         zone.update(3.0);
@@ -176,14 +176,13 @@ public class KothScoringTest extends BaseTestClass {
         // First, set up zone to be controlled by team 0
         zone.setControllingTeam(0);
         zone.setState(KothZone.ZoneState.CONTROLLED);
-        zone.setCaptureProgress(1.0);
         
         // Create player from team 1 trying to capture team 0's zone
         Player player = createTestPlayer(1, 1, zone.getBody().getTransform().getTranslationX(), zone.getBody().getTransform().getTranslationY());
         gameEntities.addPlayer(player);
         
         // Simulate collision detection
-        zone.addPlayer(player.getId(), player.getTeam());
+        zone.addPlayer(player);
         
         // Update zone control for 5 seconds (should capture from enemy)
         zone.update(5.0);
@@ -213,14 +212,13 @@ public class KothScoringTest extends BaseTestClass {
         // Reset zone to neutral state
         zone.setControllingTeam(-1);
         zone.setState(KothZone.ZoneState.NEUTRAL);
-        zone.setCaptureProgress(0.0);
         
         // Create one player from team 1 in the zone
         Player player1 = createTestPlayer(1, 1, zone.getBody().getTransform().getTranslationX(), zone.getBody().getTransform().getTranslationY());
         gameEntities.addPlayer(player1);
         
         // Simulate collision detection and capture the zone
-        zone.addPlayer(player1.getId(), player1.getTeam());
+        zone.addPlayer(player1);
         
         // Update zone to ensure it's controlled (immediate control)
         zone.update(0.1);
@@ -233,13 +231,13 @@ public class KothScoringTest extends BaseTestClass {
         // Simulate 2 seconds of scoring with different frame rates
         // High frame rate: 60 FPS (0.0167s per frame)
         for (int i = 0; i < 60; i++) { // 60 frames = 1 second
-            zone.addPlayer(player1.getId(), player1.getTeam());
+            zone.addPlayer(player1);
             collisionProcessor.updateKothZones(0.0167);
         }
         
         // Low frame rate: 30 FPS (0.0333s per frame)  
         for (int i = 0; i < 30; i++) { // 30 frames = 1 second
-            zone.addPlayer(player1.getId(), player1.getTeam());
+            zone.addPlayer(player1);
             collisionProcessor.updateKothZones(0.0333);
         }
         
@@ -269,10 +267,10 @@ public class KothScoringTest extends BaseTestClass {
         gameEntities.addPlayer(player2);
         
         // Set up both zones to be controlled by team 1 (3 seconds to capture from neutral)
-        zones.get(0).addPlayer(player1.getId(), player1.getTeam());
+        zones.get(0).addPlayer(player1);
         zones.get(0).update(3.0);
         
-        zones.get(1).addPlayer(player2.getId(), player2.getTeam());
+        zones.get(1).addPlayer(player2);
         zones.get(1).update(3.0);
         
         // Both zones should be controlled
@@ -284,8 +282,8 @@ public class KothScoringTest extends BaseTestClass {
         
         // Award points for 1 second
         // Ensure players are still in zones when awarding points
-        zones.get(0).addPlayer(player1.getId(), player1.getTeam());
-        zones.get(1).addPlayer(player2.getId(), player2.getTeam());
+        zones.get(0).addPlayer(player1);
+        zones.get(1).addPlayer(player2);
         collisionProcessor.updateKothZones(1.0);
         
         // Each zone awards 5 points/second, so each zone should have 5 points
@@ -316,8 +314,8 @@ public class KothScoringTest extends BaseTestClass {
         gameEntities.addPlayer(deadPlayer);
         
         // Simulate collision detection (dead player shouldn't be added)
-        zone.addPlayer(livingPlayer.getId(), livingPlayer.getTeam());
-        zone.addPlayer(deadPlayer.getId(), deadPlayer.getTeam());
+        zone.addPlayer(livingPlayer);
+        zone.addPlayer(deadPlayer);
         
         // Update zone control (3 seconds to capture from neutral)
         zone.update(3.0);
@@ -326,7 +324,7 @@ public class KothScoringTest extends BaseTestClass {
         double initialTeamScore = zone.getTeamScore(1);
         
         // Award points - ensure players are in zone
-        zone.addPlayer(livingPlayer.getId(), livingPlayer.getTeam());
+        zone.addPlayer(livingPlayer);
         collisionProcessor.updateKothZones(1.0);
         
         // Team should get points regardless of individual player health
@@ -351,7 +349,7 @@ public class KothScoringTest extends BaseTestClass {
         assertEquals(-1, zone.getControllingTeam());
         
         // Add player - should immediately control the zone
-        zone.addPlayer(player.getId(), player.getTeam());
+        zone.addPlayer(player);
         zone.update(0.1);
         assertEquals(KothZone.ZoneState.CONTROLLED, zone.getState());
         assertEquals(1, zone.getControllingTeam());
@@ -366,10 +364,15 @@ public class KothScoringTest extends BaseTestClass {
         assertFalse(zones.isEmpty(), "GameManager should have created KOTH zones");
         KothZone zone = zones.get(0);
         
+        // Create test players
+        Player player1 = createTestPlayer(1, 0, 100, 100);
+        Player player2 = createTestPlayer(2, 0, 100, 100);
+        Player player3 = createTestPlayer(3, 1, 100, 100);
+        
         // Add players
-        zone.addPlayer(1, 0);
-        zone.addPlayer(2, 0);
-        zone.addPlayer(3, 1);
+        zone.addPlayer(player1);
+        zone.addPlayer(player2);
+        zone.addPlayer(player3);
         
         // Check team counts
         assertEquals(2, zone.getTeamPlayerCount(0));
@@ -399,14 +402,14 @@ public class KothScoringTest extends BaseTestClass {
         // Add zone to game entities so collision processor can find it
         gameEntities.addKothZone(zone1);
         
-        zone1.addPlayer(player.getId(), player.getTeam());
+        zone1.addPlayer(player);
         zone1.setControllingTeam(1);
         zone1.setState(KothZone.ZoneState.CONTROLLED);
         
         double initialTeamScore = zone1.getTeamScore(1);
         
         // Award points for 1 second
-        zone1.addPlayer(player.getId(), player.getTeam());
+        zone1.addPlayer(player);
         collisionProcessor.updateKothZones(1.0);
         
         assertEquals(initialTeamScore + 2.0, zone1.getTeamScore(1), 0.1); // 2 points per second

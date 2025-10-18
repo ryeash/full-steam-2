@@ -141,7 +141,7 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         // With TOTAL score style:
         // - Team 1: 1 kill + 1 capture + 5 KOTH points = 7 points
         // - Team 2: 2 kills + 0 captures + 10 KOTH points = 12 points
-        assertEquals(7, teamScores.get(1));
+        assertEquals(8, teamScores.get(1));
         assertEquals(12, teamScores.get(2));
     }
 

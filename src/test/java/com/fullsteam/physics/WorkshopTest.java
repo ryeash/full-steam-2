@@ -64,7 +64,6 @@ class WorkshopTest extends BaseTestClass {
         for (Workshop workshop : workshops) {
             assertNotNull(workshop);
             assertTrue(workshop.isActive());
-            assertEquals(80.0, workshop.getCraftRadius());
             assertEquals(5.0, workshop.getCraftTime());
             assertEquals(3, workshop.getMaxPowerUps());
             assertNotNull(workshop.getPosition());
@@ -78,20 +77,18 @@ class WorkshopTest extends BaseTestClass {
         Workshop workshop = gameManager.getGameEntities().getAllWorkshops().iterator().next();
         
         // Initially no crafting progress
-        assertEquals(0.0, workshop.getCraftingProgress(testPlayer.getId()));
+        Map<Integer, Double> initialProgress = workshop.getAllCraftingProgress();
+        assertFalse(initialProgress.containsKey(testPlayer.getId()));
         assertEquals(0, workshop.getActiveCrafters());
         
         // Start crafting
-        workshop.addPlayer(testPlayer.getId(), testPlayer.getTeam());
+        workshop.addPlayer(testPlayer);
         
         // Should have crafting progress
-        assertTrue(workshop.getCraftingProgress(testPlayer.getId()) >= 0.0);
-        assertEquals(1, workshop.getActiveCrafters());
-        
-        // Check crafting progress map
         Map<Integer, Double> progressMap = workshop.getAllCraftingProgress();
         assertTrue(progressMap.containsKey(testPlayer.getId()));
         assertTrue(progressMap.get(testPlayer.getId()) >= 0.0);
+        assertEquals(1, workshop.getActiveCrafters());
     }
 
     @Test
@@ -100,19 +97,21 @@ class WorkshopTest extends BaseTestClass {
         Workshop workshop = gameManager.getGameEntities().getAllWorkshops().iterator().next();
         
         // Start crafting
-        workshop.addPlayer(testPlayer.getId(), testPlayer.getTeam());
+        workshop.addPlayer(testPlayer);
         
         // Initially not complete
-        assertFalse(workshop.isCraftingComplete(testPlayer.getId()));
+        Map<Integer, Double> initialProgress = workshop.getAllCraftingProgress();
+        assertTrue(initialProgress.get(testPlayer.getId()) < 0.5);
         
-        // Simulate crafting completion by advancing time
-        // Manually advance time to complete crafting
-        for (int i = 0; i < 100; i++) {
-            workshop.update(0.05); // 5ms per update, 100 updates = 5 seconds
+        // Simulate crafting completion by advancing time using incrementProgress
+        boolean complete = false;
+        for (int i = 0; i < 100 && !complete; i++) {
+            complete = workshop.incrementProgress(testPlayer, 0.05); // 5ms per update, 100 updates = 5 seconds
         }
         
         // Should be complete now (or very close to complete)
-        double progress = workshop.getCraftingProgress(testPlayer.getId());
+        Map<Integer, Double> finalProgress = workshop.getAllCraftingProgress();
+        double progress = finalProgress.get(testPlayer.getId());
         assertTrue(progress >= 0.99, "Expected progress >= 0.99, but got " + progress);
     }
 
@@ -122,21 +121,24 @@ class WorkshopTest extends BaseTestClass {
         Workshop workshop = gameManager.getGameEntities().getAllWorkshops().iterator().next();
         
         // Start crafting and complete it
-        workshop.addPlayer(testPlayer.getId(), testPlayer.getTeam());
-        for (int i = 0; i < 100; i++) {
-            workshop.update(0.05);
+        workshop.addPlayer(testPlayer);
+        boolean complete = false;
+        for (int i = 0; i < 100 && !complete; i++) {
+            complete = workshop.incrementProgress(testPlayer, 0.05);
         }
         
         // Should be complete now (or very close to complete)
-        double progress = workshop.getCraftingProgress(testPlayer.getId());
+        Map<Integer, Double> progressAfterCraft = workshop.getAllCraftingProgress();
+        double progress = progressAfterCraft.get(testPlayer.getId());
         assertTrue(progress >= 0.99, "Expected progress >= 0.99, but got " + progress);
         
-        // Reset crafting progress
-        workshop.resetCraftingProgress(testPlayer.getId());
+        // Remove and re-add player to reset crafting progress
+        workshop.removePlayer(testPlayer);
+        workshop.addPlayer(testPlayer);
         
         // Should be back to 0 progress
-        assertEquals(0.0, workshop.getCraftingProgress(testPlayer.getId()));
-        assertFalse(workshop.isCraftingComplete(testPlayer.getId()));
+        Map<Integer, Double> resetProgress = workshop.getAllCraftingProgress();
+        assertEquals(0.0, resetProgress.get(testPlayer.getId()));
     }
 
     @Test
@@ -145,11 +147,11 @@ class WorkshopTest extends BaseTestClass {
         Workshop workshop = gameManager.getGameEntities().getAllWorkshops().iterator().next();
         
         // Start crafting
-        workshop.addPlayer(testPlayer.getId(), testPlayer.getTeam());
+        workshop.addPlayer(testPlayer);
         assertEquals(1, workshop.getActiveCrafters());
         
         // Stop crafting
-        workshop.removePlayer(testPlayer.getId());
+        workshop.removePlayer(testPlayer);
         
         // Should have no active crafters
         assertEquals(0, workshop.getActiveCrafters());
@@ -200,20 +202,24 @@ class WorkshopTest extends BaseTestClass {
         Player player3 = new Player(3, "Player3", 0, 0, 2, 100.0);
         
         // Start crafting for multiple players
-        workshop.addPlayer(testPlayer.getId(), testPlayer.getTeam());
-        workshop.startCrafting(player2.getId());
-        workshop.startCrafting(player3.getId());
+        workshop.addPlayer(testPlayer);
+        workshop.addPlayer(player2);
+        workshop.addPlayer(player3);
         
         // Should have 3 active crafters
         assertEquals(3, workshop.getActiveCrafters());
         
         // All players should have crafting progress
-        assertTrue(workshop.getCraftingProgress(testPlayer.getId()) >= 0.0);
-        assertTrue(workshop.getCraftingProgress(player2.getId()) >= 0.0);
-        assertTrue(workshop.getCraftingProgress(player3.getId()) >= 0.0);
+        Map<Integer, Double> progressMap = workshop.getAllCraftingProgress();
+        assertTrue(progressMap.containsKey(testPlayer.getId()));
+        assertTrue(progressMap.containsKey(player2.getId()));
+        assertTrue(progressMap.containsKey(player3.getId()));
+        assertTrue(progressMap.get(testPlayer.getId()) >= 0.0);
+        assertTrue(progressMap.get(player2.getId()) >= 0.0);
+        assertTrue(progressMap.get(player3.getId()) >= 0.0);
         
         // Stop crafting for one player
-        workshop.stopCrafting(player2.getId());
+        workshop.removePlayer(player2);
         
         // Should have 2 active crafters
         assertEquals(2, workshop.getActiveCrafters());

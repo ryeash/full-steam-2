@@ -1,5 +1,6 @@
 package com.fullsteam.games;
 
+import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.GameState;
 import com.fullsteam.model.RespawnMode;
 import com.fullsteam.model.RoundScore;
@@ -10,6 +11,7 @@ import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.KothZone;
 import com.fullsteam.physics.Player;
+import com.fullsteam.physics.PowerUp;
 import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,11 +30,15 @@ public class RuleSystem {
     private static final Logger log = LoggerFactory.getLogger(RuleSystem.class);
 
     private final String gameId;
+    private final long start = System.currentTimeMillis();
     private final Rules rules;
     private final GameEntities gameEntities;
     private final GameEventManager gameEventManager;
     private final Consumer<Map<String, Object>> broadcaster; // For broadcasting raw messages
     private final int teamCount;
+
+    // Event system (optional)
+    private EventSystem eventSystem = null;
 
     // Round state
     @Getter
@@ -46,8 +52,6 @@ public class RuleSystem {
     private final Map<Integer, RoundScore> roundScores = new HashMap<>();
 
     // Victory state
-    @Getter
-    private double gameTimeElapsed = 0.0;
     @Getter
     private boolean gameOver = false;
     @Getter
@@ -81,15 +85,36 @@ public class RuleSystem {
     // ===== UPDATE METHODS =====
 
     /**
+     * Initialize the event system if enabled.
+     * Must be called after construction with the required dependencies.
+     */
+    public void initializeEventSystem(TerrainGenerator terrainGenerator,
+                                      Consumer<FieldEffect> fieldEffectSpawner,
+                                      Consumer<PowerUp> powerUpSpawner,
+                                      double worldWidth, double worldHeight) {
+        if (rules.isEnableRandomEvents() && eventSystem == null) {
+            this.eventSystem = new EventSystem(
+                    gameId,
+                    rules,
+                    gameEntities,
+                    gameEventManager,
+                    terrainGenerator,
+                    fieldEffectSpawner,
+                    powerUpSpawner,
+                    worldWidth,
+                    worldHeight
+            );
+            log.info("Event system initialized for game {}", gameId);
+        }
+    }
+
+    /**
      * Update all rule systems with the given time delta.
      */
     public void update(double deltaTime) {
         if (gameOver) {
             return;
         }
-
-        // Track total game time for time-limit victory condition
-        gameTimeElapsed += deltaTime;
 
         // Update round state if rounds are enabled
         if (rules.getRoundDuration() > 0) {
@@ -99,6 +124,11 @@ public class RuleSystem {
         // Update wave respawn timer if using wave mode
         if (rules.usesWaveRespawn()) {
             updateWaveRespawn();
+        }
+
+        // Update event system if enabled
+        if (eventSystem != null) {
+            eventSystem.update(deltaTime);
         }
 
         // Check victory conditions
@@ -310,7 +340,7 @@ public class RuleSystem {
     }
 
     private void checkTimeLimitVictory() {
-        if (gameTimeElapsed < rules.getTimeLimit()) {
+        if (System.currentTimeMillis() < start + (rules.getTimeLimit() * 1000)) {
             return;
         }
 
@@ -635,6 +665,11 @@ public class RuleSystem {
 
         // Scoring style info
         data.put("scoreStyle", rules.getScoreStyle().name());
+
+        // Event data
+        if (eventSystem != null) {
+            data.put("activeEvents", eventSystem.getEventData());
+        }
 
         return data;
     }

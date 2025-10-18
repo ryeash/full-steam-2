@@ -179,16 +179,19 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
         gameEntities.addWorkshop(workshop);
         gameEntities.addPowerUp(powerUp);
         
-        // Start crafting on workshop
-        workshop.startCrafting(1);
+        // Create a test player and add to workshop
+        Player testPlayer = new Player(1, "TestPlayer", 100, 100, 1, 100.0);
+        workshop.addPlayer(testPlayer);
         
-        double initialProgress = workshop.getCraftingProgress(1);
+        var initialProgress = workshop.getAllCraftingProgress();
+        double initialValue = initialProgress.getOrDefault(1, 0.0);
         
-        // Update all entities
-        gameEntities.updateAll(1.0); // 1 second
+        // Manually increment progress (since updateAll doesn't call incrementProgress)
+        workshop.incrementProgress(testPlayer, 1.0); // 1 second
         
         // Workshop progress should have increased
-        assertTrue(workshop.getCraftingProgress(1) > initialProgress);
+        var currentProgress = workshop.getAllCraftingProgress();
+        assertTrue(currentProgress.get(1) > initialValue);
         
         // Power-up should still be active (no expiration in current implementation)
         assertTrue(powerUp.isActive());
