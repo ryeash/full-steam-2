@@ -32,32 +32,23 @@ public class FieldEffect extends GameEntity {
     private final Map<Integer, Long> lastDamageTime; // Track last damage time for each player (in milliseconds)
 
     public FieldEffect(int id, int ownerId, FieldEffectType type, Vector2 position, double radius, double damage, double duration, int ownerTeam) {
+        this(id, ownerId, type, position, radius, radius, damage, duration, 0, ownerTeam);
+    }
+
+    public FieldEffect(int id, int ownerId, FieldEffectType type, Vector2 position, double radius, double maxRadius, double damage, double duration, long armingTime, int ownerTeam) {
         super(id, createFieldEffectBody(position, radius), Double.POSITIVE_INFINITY); // Field effects are indestructible
         this.ownerId = ownerId;
         this.type = type;
         this.initialRadius = radius;
         this.radius = radius;
+        this.maxRadius = maxRadius;
         this.damage = damage;
         this.expires = (long) (System.currentTimeMillis() + (duration * 1000)); // duration in seconds
+        this.armingTime = armingTime;
         this.ownerTeam = ownerTeam;
         this.affectedEntities = new HashSet<>();
         this.lastDamageTime = new HashMap<>();
         this.active = true;
-
-        // Set max radius for growing effects (FIRE grows to 1.5x initial size for volcanic eruptions)
-        if (type == FieldEffectType.FIRE) {
-            this.maxRadius = radius * 1.5;
-        } else {
-            this.maxRadius = radius;
-        }
-
-        // Initialize proximity mine specific fields
-        if (type == FieldEffectType.PROXIMITY_MINE) {
-            this.armingTime = System.currentTimeMillis() + 1000; // 1 second arming time
-        } else {
-            this.armingTime = 0;
-        }
-
         getBody().setUserData(this);
     }
 
@@ -75,43 +66,42 @@ public class FieldEffect extends GameEntity {
         if (!isActive()) {
             return;
         }
-        
-        // Grow FIRE effects over time (spreads like lava for volcanic eruptions)
-        if (type == FieldEffectType.FIRE && radius < maxRadius) {
+
+        if (radius < maxRadius) {
             double oldRadius = radius;
             long elapsed = System.currentTimeMillis() - created;
             long duration = expires - created;
             double progress = elapsed / (double) duration;
-            
-            // Grow quickly in first 30% of lifetime, then stabilize
-            if (progress < 0.3) {
-                radius = initialRadius + (maxRadius - initialRadius) * (progress / 0.3);
+
+            // Grow over first 50% of lifetime, then stabilize
+            if (progress < 0.5) {
+                radius = initialRadius + (maxRadius - initialRadius) * (progress / 0.5);
             } else {
                 radius = maxRadius;
             }
-            
-            // Update physics body if radius changed significantly
-            if (Math.abs(radius - oldRadius) > 0.5) {
+
+            // Update physics body if radius changed (more frequent updates for smoother growth)
+            if (Math.abs(radius - oldRadius) > 0.1) {
                 updateBodyRadius(radius);
             }
         }
-        
+
         if (System.currentTimeMillis() > expires) {
             active = false;
         }
     }
-    
+
     /**
      * Update the physics body's sensor radius (for growing effects)
      */
     private void updateBodyRadius(double newRadius) {
         Body body = getBody();
-        
+
         // Remove old fixture
         if (body.getFixtureCount() > 0) {
             body.removeFixture(0);
         }
-        
+
         // Add new fixture with updated radius
         Circle circle = new Circle(newRadius);
         BodyFixture fixture = body.addFixture(circle);
@@ -123,22 +113,12 @@ public class FieldEffect extends GameEntity {
     }
 
     public boolean canAffect(GameEntity entity) {
-        if (!active || entity == null) {
-            return false;
-        }
-
-        // WARNING_ZONE is purely visual and doesn't affect entities
-        if (type == FieldEffectType.WARNING_ZONE) {
-            return false;
-        }
-
-        // Check if entity is in range
-        if (!isInRange(entity.getPosition())) {
-            return false;
-        }
-
-        // For instantaneous effects, check if already affected
-        if (type.isInstantaneous() && affectedEntities.contains(entity.getId())) {
+        if (!active
+                || entity == null
+                || type == FieldEffectType.WARNING_ZONE
+                || !isInRange(entity.getPosition())
+                // For instantaneous effects, check if already affected
+                || (type.isInstantaneous() && affectedEntities.contains(entity.getId()))) {
             return false;
         }
 

@@ -1531,39 +1531,112 @@ class GameEngine {
                 margin-bottom: 20px;
             `;
             
-            // Sort scores by kills (descending)
-            const sortedScores = [...data.scores].sort((a, b) => b.kills - a.kills);
-            
             // Group by team if team mode
-            const hasTeams = sortedScores.some(score => score.team > 0);
+            const hasTeams = data.scores.some(score => score.team > 0);
             
             if (hasTeams) {
                 // Team-based display
                 const teams = {};
-                sortedScores.forEach(score => {
+                const teamTotals = {};
+                
+                // Group players by team and calculate team totals
+                data.scores.forEach(score => {
                     const teamNum = score.team || 0;
                     if (!teams[teamNum]) {
                         teams[teamNum] = [];
+                        teamTotals[teamNum] = { kills: 0, deaths: 0, captures: 0, bonusPoints: 0 };
                     }
                     teams[teamNum].push(score);
+                    teamTotals[teamNum].kills += score.kills || 0;
+                    teamTotals[teamNum].deaths += score.deaths || 0;
+                    teamTotals[teamNum].captures += score.captures || 0;
+                    teamTotals[teamNum].bonusPoints += score.bonusPoints || 0;
                 });
                 
-                Object.entries(teams).forEach(([teamNum, players]) => {
-                    const teamHeader = document.createElement('h3');
-                    teamHeader.textContent = teamNum == 0 ? 'No Team' : `Team ${teamNum}`;
+                // Sort teams by total kills (descending) - winning team first
+                const sortedTeams = Object.entries(teams).sort((a, b) => {
+                    const teamA = parseInt(a[0]);
+                    const teamB = parseInt(b[0]);
+                    // No team (0) always goes last
+                    if (teamA === 0) return 1;
+                    if (teamB === 0) return -1;
+                    return teamTotals[teamB].kills - teamTotals[teamA].kills;
+                });
+                
+                sortedTeams.forEach(([teamNum, players]) => {
+                    const teamNumInt = parseInt(teamNum);
+                    const totals = teamTotals[teamNum];
+                    
+                    // Team header with totals
+                    const teamHeader = document.createElement('div');
                     teamHeader.style.cssText = `
-                        color: ${this.getTeamColorCSS(parseInt(teamNum))};
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
                         margin: 15px 0 10px 0;
-                        font-size: 20px;
+                        padding: 10px 15px;
+                        background: rgba(255, 255, 255, 0.05);
+                        border-radius: 6px;
+                        border-left: 4px solid ${this.getTeamColorCSS(teamNumInt)};
                     `;
+                    
+                    const teamName = document.createElement('h3');
+                    teamName.textContent = teamNum == 0 ? 'No Team' : `Team ${teamNum}`;
+                    teamName.style.cssText = `
+                        color: ${this.getTeamColorCSS(teamNumInt)};
+                        margin: 0;
+                        font-size: 22px;
+                        font-weight: bold;
+                    `;
+                    
+                    const teamStats = document.createElement('div');
+                    teamStats.style.cssText = `
+                        display: flex;
+                        gap: 20px;
+                        color: #cccccc;
+                        font-size: 16px;
+                        font-weight: bold;
+                    `;
+                    
+                    const teamKills = document.createElement('span');
+                    teamKills.style.color = '#4ade80';
+                    teamKills.textContent = `${totals.kills} K`;
+                    
+                    const teamDeaths = document.createElement('span');
+                    teamDeaths.style.color = '#f87171';
+                    teamDeaths.textContent = `${totals.deaths} D`;
+                    
+                    const teamKD = document.createElement('span');
+                    teamKD.style.color = '#fbbf24';
+                    teamKD.textContent = `${(totals.kills / Math.max(1, totals.deaths)).toFixed(2)} K/D`;
+                    
+                    teamStats.appendChild(teamKills);
+                    teamStats.appendChild(teamDeaths);
+                    
+                    if (totals.captures > 0) {
+                        const teamCaptures = document.createElement('span');
+                        teamCaptures.style.color = '#FFD700';
+                        teamCaptures.textContent = `${totals.captures} 🚩`;
+                        teamStats.appendChild(teamCaptures);
+                    }
+                    
+                    teamStats.appendChild(teamKD);
+                    
+                    teamHeader.appendChild(teamName);
+                    teamHeader.appendChild(teamStats);
                     scoresContainer.appendChild(teamHeader);
                     
-                    players.forEach(score => {
+                    // Sort players within team by kills (descending)
+                    const sortedPlayers = [...players].sort((a, b) => (b.kills || 0) - (a.kills || 0));
+                    
+                    sortedPlayers.forEach(score => {
                         scoresContainer.appendChild(this.createScoreRow(score));
                     });
                 });
             } else {
-                // FFA display
+                // FFA display - sort by kills with winner first
+                const sortedScores = [...data.scores].sort((a, b) => (b.kills || 0) - (a.kills || 0));
+                
                 sortedScores.forEach((score, index) => {
                     scoresContainer.appendChild(this.createScoreRow(score, index + 1));
                 });
@@ -4574,7 +4647,7 @@ class GameEngine {
         graphics.endFill();
         
         // Health text (show as percentage)
-        const healthPercentage = Math.round(healthPct * 100);
+        const healthPercentage = (healthPct * 100).toFixed(0);
         const healthText = new PIXI.Text(`${healthPercentage}%`, {
             fontSize: 10,
             fill: 0xFFFFFF,
@@ -6071,16 +6144,16 @@ class GameEngine {
     animateFire(container) {
         const time = container.animationTime;
         
-        // Flickering effect
-        const flicker = 0.8 + Math.sin(time * 15) * 0.2;
+        // Gentle flickering effect (slowed down from 15 to 6)
+        const flicker = 0.8 + Math.sin(time * 6) * 0.2;
         container.alpha = flicker;
         
-        // Slight scale variation
-        const scale = 0.9 + Math.sin(time * 8) * 0.1;
+        // Gentle scale variation (slowed down from 8 to 3)
+        const scale = 0.9 + Math.sin(time * 3) * 0.1;
         container.scale.set(scale);
         
-        // Subtle rotation
-        container.rotation = Math.sin(time * 3) * 0.1;
+        // Very subtle rotation (slowed down from 3 to 1)
+        container.rotation = Math.sin(time * 1) * 0.1;
     }
     
     /**

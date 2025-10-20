@@ -46,17 +46,12 @@ class EventSystemTest extends BaseTestClass {
         });
         TerrainGenerator terrainGenerator = new TerrainGenerator(2000, 2000);
 
-        List<FieldEffect> spawnedEffects = new ArrayList<>();
-        List<PowerUp> spawnedPowerUps = new ArrayList<>();
-
         EventSystem eventSystem = new EventSystem(
                 "test-game",
                 rules,
                 gameEntities,
                 eventManager,
                 terrainGenerator,
-                spawnedEffects::add,
-                spawnedPowerUps::add,
                 2000,
                 2000
         );
@@ -220,10 +215,6 @@ class EventSystemTest extends BaseTestClass {
                 gameEntities,
                 eventManager,
                 terrainGenerator,
-                effect -> {
-                },
-                powerUp -> {
-                },
                 2000,
                 2000
         );

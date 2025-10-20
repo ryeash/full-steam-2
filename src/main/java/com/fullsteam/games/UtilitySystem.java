@@ -187,8 +187,10 @@ public class UtilitySystem {
                 FieldEffectType.PROXIMITY_MINE,
                 activation.position,
                 45.0,
+                45.0,
                 1.0,
                 15.0,
+                System.currentTimeMillis() + 1000,
                 activation.team
         );
         gameEntities.addFieldEffect(mine);

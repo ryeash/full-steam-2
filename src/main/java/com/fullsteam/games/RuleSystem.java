@@ -99,8 +99,6 @@ public class RuleSystem {
                     gameEntities,
                     gameEventManager,
                     terrainGenerator,
-                    fieldEffectSpawner,
-                    powerUpSpawner,
                     worldWidth,
                     worldHeight
             );

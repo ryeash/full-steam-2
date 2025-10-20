@@ -8,6 +8,7 @@ import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Rules;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.PowerUp;
+import lombok.Getter;
 import org.dyn4j.geometry.Vector2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +17,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.function.Consumer;
 
 /**
  * Manages random events and environmental hazards during gameplay.
@@ -30,29 +30,25 @@ public class EventSystem {
     private final GameEntities gameEntities;
     private final GameEventManager gameEventManager;
     private final TerrainGenerator terrainGenerator;
-    private final Consumer<FieldEffect> fieldEffectSpawner;
-    private final Consumer<PowerUp> powerUpSpawner;
     private final double worldWidth;
     private final double worldHeight;
 
     private long nextEventTime = 0L;
+
+    @Getter
     private ActiveGameEvent currentEvent = null;
     private boolean warningZonesSpawned = false;
 
     public EventSystem(String gameId, Rules rules, GameEntities gameEntities,
                        GameEventManager gameEventManager, TerrainGenerator terrainGenerator,
-                       Consumer<FieldEffect> fieldEffectSpawner, Consumer<PowerUp> powerUpSpawner,
                        double worldWidth, double worldHeight) {
         this.gameId = gameId;
         this.rules = rules;
         this.gameEntities = gameEntities;
         this.gameEventManager = gameEventManager;
         this.terrainGenerator = terrainGenerator;
-        this.fieldEffectSpawner = fieldEffectSpawner;
-        this.powerUpSpawner = powerUpSpawner;
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
-
         scheduleNextEvent();
     }
 
@@ -101,14 +97,13 @@ public class EventSystem {
     private void scheduleNextEvent() {
         double baseInterval = rules.getRandomEventInterval();
         double variance = rules.getRandomEventIntervalVariance();
-        
+
         // Calculate interval with variance
         double varianceAmount = baseInterval * variance;
         double randomVariance = ThreadLocalRandom.current().nextDouble(-varianceAmount, varianceAmount);
         double actualInterval = Math.max(30.0, baseInterval + randomVariance); // Minimum 30 seconds
 
         nextEventTime = (long) (System.currentTimeMillis() + (actualInterval * 1000));
-        log.info("Game {} - Next event scheduled in {:.1f} seconds", gameId, actualInterval);
     }
 
     /**
@@ -131,7 +126,7 @@ public class EventSystem {
      */
     private EnvironmentalEvent selectRandomEvent() {
         List<EnvironmentalEvent> enabledEvents = rules.getEnabledEvents();
-        
+
         // If no specific events are enabled, use all events
         if (enabledEvents == null || enabledEvents.isEmpty()) {
             enabledEvents = Arrays.asList(EnvironmentalEvent.values());
@@ -201,7 +196,7 @@ public class EventSystem {
     private void spawnWarningZones(ActiveGameEvent event) {
         for (Vector2 location : event.getTargetLocations()) {
             double radius = getWarningRadius(event.getEventType());
-            
+
             FieldEffect warningZone = new FieldEffect(
                     Config.nextId(),
                     -1, // No owner (system event)
@@ -213,11 +208,12 @@ public class EventSystem {
                     0 // No team
             );
 
-            fieldEffectSpawner.accept(warningZone);
+            gameEntities.addFieldEffect(warningZone);
+            gameEntities.getWorld().addBody(warningZone.getBody());
             event.addWarningZoneId(warningZone.getId());
         }
 
-        log.debug("Game {} - Spawned {} warning zones for {}", gameId, 
+        log.debug("Game {} - Spawned {} warning zones for {}", gameId,
                 event.getTargetLocations().size(), event.getEventType().name());
     }
 
@@ -266,9 +262,9 @@ public class EventSystem {
                     FieldEffectType.EXPLOSION.getDefaultDuration(),
                     0 // No team
             );
-            fieldEffectSpawner.accept(explosion);
+            gameEntities.addFieldEffect(explosion);
+            gameEntities.getWorld().addBody(explosion.getBody());
         }
-        log.info("Game {} - Meteor shower triggered with {} impacts", gameId, event.getTargetLocations().size());
     }
 
     /**
@@ -287,7 +283,8 @@ public class EventSystem {
                     FieldEffectType.EXPLOSION.getDefaultDuration(),
                     0
             );
-            fieldEffectSpawner.accept(explosion);
+            gameEntities.addFieldEffect(explosion);
+            gameEntities.getWorld().addBody(explosion.getBody());
 
             // Spawn random power-up
             PowerUp.PowerUpType powerUpType = getRandomPowerUpType();
@@ -299,9 +296,9 @@ public class EventSystem {
                     30.0, // Duration
                     1.5 // Strength
             );
-            powerUpSpawner.accept(powerUp);
+            gameEntities.addPowerUp(powerUp);
+            gameEntities.getWorld().addBody(powerUp.getBody());
         }
-        log.info("Game {} - Supply drop delivered {} power-ups", gameId, event.getTargetLocations().size());
     }
 
     /**
@@ -315,13 +312,15 @@ public class EventSystem {
                     FieldEffectType.FIRE,
                     location,
                     rules.getEruptionRadius(),
+                    rules.getEruptionRadius() * 2.5,
                     rules.getEruptionDamage(),
                     event.getEventType().getBaseDuration(),
+                    0,
                     0
             );
-            fieldEffectSpawner.accept(eruption);
+            gameEntities.addFieldEffect(eruption);
+            gameEntities.getWorld().addBody(eruption.getBody());
         }
-        log.info("Game {} - Volcanic eruption with {} zones", gameId, event.getTargetLocations().size());
     }
 
     /**
@@ -339,9 +338,9 @@ public class EventSystem {
                     event.getEventType().getBaseDuration(),
                     0
             );
-            fieldEffectSpawner.accept(earthquake);
+            gameEntities.addFieldEffect(earthquake);
+            gameEntities.getWorld().addBody(earthquake.getBody());
         }
-        log.info("Game {} - Earthquake triggered", gameId);
     }
 
     /**
@@ -359,9 +358,9 @@ public class EventSystem {
                     event.getEventType().getBaseDuration(),
                     0
             );
-            fieldEffectSpawner.accept(fire);
+            gameEntities.addFieldEffect(fire);
+            gameEntities.getWorld().addBody(fire.getBody());
         }
-        log.info("Game {} - Solar flare with {} burn zones", gameId, event.getTargetLocations().size());
     }
 
     /**
@@ -379,9 +378,9 @@ public class EventSystem {
                     event.getEventType().getBaseDuration(),
                     0
             );
-            fieldEffectSpawner.accept(electric);
+            gameEntities.addFieldEffect(electric);
+            gameEntities.getWorld().addBody(electric.getBody());
         }
-        log.info("Game {} - Ion storm with {} zones", gameId, event.getTargetLocations().size());
     }
 
     /**
@@ -399,9 +398,9 @@ public class EventSystem {
                     event.getEventType().getBaseDuration(),
                     0
             );
-            fieldEffectSpawner.accept(freeze);
+            gameEntities.addFieldEffect(freeze);
+            gameEntities.getWorld().addBody(freeze.getBody());
         }
-        log.info("Game {} - Blizzard with {} freeze zones", gameId, event.getTargetLocations().size());
     }
 
     /**
@@ -420,18 +419,11 @@ public class EventSystem {
     }
 
     /**
-     * Get the current active event (or null if none).
-     */
-    public ActiveGameEvent getCurrentEvent() {
-        return currentEvent;
-    }
-
-    /**
      * Get event state data for client broadcasting.
      */
     public List<Object> getEventData() {
         List<Object> eventData = new ArrayList<>();
-        
+
         if (currentEvent != null && !currentEvent.isCompleted()) {
             eventData.add(new EventStateData(
                     currentEvent.getEventType().name(),
@@ -441,7 +433,7 @@ public class EventSystem {
                     currentEvent.isActive() ? currentEvent.getEventTimeRemaining() : 0.0
             ));
         }
-        
+
         return eventData;
     }
 
@@ -454,6 +446,7 @@ public class EventSystem {
             boolean active,
             double warningTimeRemaining,
             double eventTimeRemaining
-    ) {}
+    ) {
+    }
 }
 
