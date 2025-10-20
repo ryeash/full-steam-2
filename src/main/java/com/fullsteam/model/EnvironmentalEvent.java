@@ -4,7 +4,7 @@ package com.fullsteam.model;
  * Types of random environmental events that can occur during gameplay.
  * These create hazards and dynamic moments like meteor showers and supply drops.
  */
-public enum EnvironmentalEvent {
+public enum     EnvironmentalEvent {
     METEOR_SHOWER("Meteor Shower", "☄️", 15.0),
     SUPPLY_DROP("Supply Drop", "📦", 30.0),
     VOLCANIC_ERUPTION("Volcanic Eruption", "🌋", 20.0),
