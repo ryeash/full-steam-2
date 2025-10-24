@@ -222,7 +222,6 @@ class StockRuleSystemTest extends BaseTestClass {
         gameEntities.addPlayer(player);
 
         // End first round
-        Thread.sleep(120000);
         ruleSystem.update(120.0);
         assertEquals(GameState.ROUND_END, ruleSystem.getGameState());
 

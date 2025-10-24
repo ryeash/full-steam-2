@@ -1722,6 +1722,8 @@ class GameEngine {
      * Create a score row for a player
      */
     createScoreRow(score, rank = null) {
+        const isLocalPlayer = score.playerId === this.myPlayerId;
+        
         const row = document.createElement('div');
         row.style.cssText = `
             display: flex;
@@ -1729,15 +1731,16 @@ class GameEngine {
             align-items: center;
             padding: 12px 15px;
             margin: 5px 0;
-            background: rgba(255, 255, 255, 0.05);
+            background: ${isLocalPlayer ? 'rgba(255, 215, 0, 0.2)' : 'rgba(255, 255, 255, 0.05)'};
             border-radius: 6px;
             border-left: 3px solid ${this.getTeamColorCSS(score.team)};
+            ${isLocalPlayer ? 'box-shadow: 0 0 15px rgba(255, 215, 0, 0.4); border: 2px solid rgba(255, 215, 0, 0.6);' : ''}
         `;
         
         const nameSection = document.createElement('div');
         nameSection.style.cssText = `
             flex: 1;
-            color: #ffffff;
+            color: ${isLocalPlayer ? '#FFD700' : '#ffffff'};
             font-size: 16px;
             font-weight: bold;
         `;
@@ -1940,6 +1943,8 @@ class GameEngine {
      * Create a score row for the game over screen
      */
     createFinalScoreRow(score, rank, gameOverData) {
+        const isLocalPlayer = score.playerId === this.myPlayerId;
+        
         const row = document.createElement('div');
         row.style.cssText = `
             display: flex;
@@ -1947,9 +1952,10 @@ class GameEngine {
             align-items: center;
             padding: 15px 20px;
             margin: 8px 0;
-            background: ${rank === 1 ? 'rgba(255, 215, 0, 0.15)' : 'rgba(255, 255, 255, 0.05)'};
+            background: ${isLocalPlayer ? 'rgba(255, 215, 0, 0.25)' : (rank === 1 ? 'rgba(255, 215, 0, 0.15)' : 'rgba(255, 255, 255, 0.05)')};
             border-radius: 8px;
             border-left: 4px solid ${this.getRankColor(rank)};
+            ${isLocalPlayer ? 'box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); border: 2px solid rgba(255, 215, 0, 0.7);' : ''}
         `;
         
         // Rank and name
@@ -1975,7 +1981,7 @@ class GameEngine {
             nameText.style.color = this.getTeamColorCSS(score.team);
         } else {
             nameText.textContent = score.playerName || `Player ${score.playerId}`;
-            nameText.style.color = '#ffffff';
+            nameText.style.color = isLocalPlayer ? '#FFD700' : '#ffffff';
         }
         nameText.style.cssText += `
             font-size: 20px;

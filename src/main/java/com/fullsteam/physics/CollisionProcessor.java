@@ -177,6 +177,9 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 projectile.getId(), player.getId(), player.getPosition().x, player.getPosition().y);
         bulletEffectProcessor.processEffectHit(projectile, player.getPosition());
 
+        // Apply direct status effects from bullet on hit
+        applyDirectBulletEffects(player, projectile);
+
         if (player.takeDamage(projectile.getDamage())) {
             Player killer = gameEntities.getPlayer(projectile.getOwnerId());
             gameManager.killPlayer(player, killer);
@@ -187,6 +190,52 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         // Deactivate projectile unless it pierces
         if (!shouldPierce) {
             projectile.setActive(false);
+        }
+    }
+
+    /**
+     * Apply direct status effects from bullet hits (burn, freeze, poison).
+     * These are applied immediately on hit, separate from area effects.
+     */
+    private void applyDirectBulletEffects(Player player, Projectile projectile) {
+        Set<BulletEffect> effects = projectile.getBulletEffects();
+        
+        // Incendiary bullets apply burn status directly
+        if (effects.contains(BulletEffect.INCENDIARY)) {
+            double burnDamage = projectile.getDamage() * 0.15; // 15% of projectile damage per second
+            double burnDuration = 3.0; // 3 seconds of burning
+            StatusEffects.applyBurning(gameManager, player, burnDamage, burnDuration, projectile.getOwnerId());
+            log.debug("Applied burn status to player {} from incendiary projectile ({}dps for {}s)",
+                    player.getId(), burnDamage, burnDuration);
+        }
+        
+        // Freezing bullets apply slow status directly
+        if (effects.contains(BulletEffect.FREEZING)) {
+            double slowAmount = 0.5; // 50% speed reduction
+            double slowDuration = 2.0; // 2 seconds
+            Player shooter = gameEntities.getPlayer(projectile.getOwnerId());
+            String source = shooter != null ? shooter.getPlayerName() : "Freezing Projectile";
+            StatusEffects.applySlowEffect(player, slowAmount, slowDuration, source);
+            log.debug("Applied freeze slow to player {} from freezing projectile", player.getId());
+        }
+        
+        // Poison bullets apply poison status directly
+        if (effects.contains(BulletEffect.POISON)) {
+            double poisonDamage = projectile.getDamage() * 0.1; // 10% of projectile damage per second
+            double poisonDuration = 4.0; // 4 seconds of poison
+            StatusEffects.applyPoison(gameManager, player, poisonDamage, poisonDuration, projectile.getOwnerId());
+            log.debug("Applied poison status to player {} from poison projectile ({}dps for {}s)",
+                    player.getId(), poisonDamage, poisonDuration);
+        }
+        
+        // Electric bullets apply brief slow from shock
+        if (effects.contains(BulletEffect.ELECTRIC)) {
+            double slowAmount = 0.3; // 30% speed reduction
+            double slowDuration = 1.0; // 1 second shock
+            Player shooter = gameEntities.getPlayer(projectile.getOwnerId());
+            String source = shooter != null ? shooter.getPlayerName() : "Electric Projectile";
+            StatusEffects.applySlowEffect(player, slowAmount, slowDuration, source);
+            log.debug("Applied electric shock slow to player {} from electric projectile", player.getId());
         }
     }
 

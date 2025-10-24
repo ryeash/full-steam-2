@@ -174,6 +174,23 @@ public class GameController {
         presets.put("MEDIC_BEAM", createPresetData(WeaponConfig.MEDIC_BEAM_PRESET));
         presets.put("RAIL_CANNON", createPresetData(WeaponConfig.RAIL_CANNON_PRESET));
 
+        // Advanced combination weapons
+        presets.put("STORM_CALLER", createPresetData(WeaponConfig.STORM_CALLER_PRESET));
+        presets.put("NAPALM_LAUNCHER", createPresetData(WeaponConfig.NAPALM_LAUNCHER_PRESET));
+        presets.put("CRYO_SHOTGUN", createPresetData(WeaponConfig.CRYO_SHOTGUN_PRESET));
+        presets.put("VENOM_NEEDLER", createPresetData(WeaponConfig.VENOM_NEEDLER_PRESET));
+        presets.put("THUNDERBOLT_CANNON", createPresetData(WeaponConfig.THUNDERBOLT_CANNON_PRESET));
+        presets.put("RICOCHET_RIFLE", createPresetData(WeaponConfig.RICOCHET_RIFLE_PRESET));
+        presets.put("PLAGUE_MORTAR", createPresetData(WeaponConfig.PLAGUE_MORTAR_PRESET));
+        presets.put("WILDFIRE_SPRAYER", createPresetData(WeaponConfig.WILDFIRE_SPRAYER_PRESET));
+        presets.put("FROST_LANCE", createPresetData(WeaponConfig.FROST_LANCE_PRESET));
+        presets.put("SHRAPNEL_CANNON", createPresetData(WeaponConfig.SHRAPNEL_CANNON_PRESET));
+        presets.put("SEEKING_INFERNO", createPresetData(WeaponConfig.SEEKING_INFERNO_PRESET));
+        presets.put("EMP_BURST_GUN", createPresetData(WeaponConfig.EMP_BURST_GUN_PRESET));
+        presets.put("GLACIAL_MORTAR", createPresetData(WeaponConfig.GLACIAL_MORTAR_PRESET));
+        presets.put("PHANTOM_NEEDLES", createPresetData(WeaponConfig.PHANTOM_NEEDLES_PRESET));
+        presets.put("CORROSIVE_CANNON", createPresetData(WeaponConfig.CORROSIVE_CANNON_PRESET));
+
         data.put("presets", presets);
 
         // Point budget

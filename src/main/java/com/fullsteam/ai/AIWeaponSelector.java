@@ -53,6 +53,24 @@ public class AIWeaponSelector {
             WeaponConfig.MEDIC_BEAM_PRESET
     );
 
+    private static final List<WeaponConfig> COMBO_WEAPONS = List.of(
+            WeaponConfig.STORM_CALLER_PRESET,
+            WeaponConfig.NAPALM_LAUNCHER_PRESET,
+            WeaponConfig.CRYO_SHOTGUN_PRESET,
+            WeaponConfig.VENOM_NEEDLER_PRESET,
+            WeaponConfig.THUNDERBOLT_CANNON_PRESET,
+            WeaponConfig.RICOCHET_RIFLE_PRESET,
+            WeaponConfig.PLAGUE_MORTAR_PRESET,
+            WeaponConfig.WILDFIRE_SPRAYER_PRESET,
+            WeaponConfig.FROST_LANCE_PRESET,
+            WeaponConfig.SHRAPNEL_CANNON_PRESET,
+            WeaponConfig.SEEKING_INFERNO_PRESET,
+            WeaponConfig.EMP_BURST_GUN_PRESET,
+            WeaponConfig.GLACIAL_MORTAR_PRESET,
+            WeaponConfig.PHANTOM_NEEDLES_PRESET,
+            WeaponConfig.CORROSIVE_CANNON_PRESET
+    );
+
     // Combined list of all weapon presets for completely random selection
     private static final List<WeaponConfig> ALL_WEAPONS = List.of(
             // Basic weapons
@@ -87,7 +105,24 @@ public class AIWeaponSelector {
             WeaponConfig.RAIL_CANNON_PRESET,
 
             // Support weapons
-            WeaponConfig.MEDIC_BEAM_PRESET
+            WeaponConfig.MEDIC_BEAM_PRESET,
+
+            // Combo weapons
+            WeaponConfig.STORM_CALLER_PRESET,
+            WeaponConfig.NAPALM_LAUNCHER_PRESET,
+            WeaponConfig.CRYO_SHOTGUN_PRESET,
+            WeaponConfig.VENOM_NEEDLER_PRESET,
+            WeaponConfig.THUNDERBOLT_CANNON_PRESET,
+            WeaponConfig.RICOCHET_RIFLE_PRESET,
+            WeaponConfig.PLAGUE_MORTAR_PRESET,
+            WeaponConfig.WILDFIRE_SPRAYER_PRESET,
+            WeaponConfig.FROST_LANCE_PRESET,
+            WeaponConfig.SHRAPNEL_CANNON_PRESET,
+            WeaponConfig.SEEKING_INFERNO_PRESET,
+            WeaponConfig.EMP_BURST_GUN_PRESET,
+            WeaponConfig.GLACIAL_MORTAR_PRESET,
+            WeaponConfig.PHANTOM_NEEDLES_PRESET,
+            WeaponConfig.CORROSIVE_CANNON_PRESET
     );
 
     /**
@@ -112,10 +147,21 @@ public class AIWeaponSelector {
         switch (personality.getPersonalityType()) {
             case "Berserker":
                 // Berserkers prefer explosive and high-damage weapons
-                if (random.nextDouble() < 0.7) {
+                double berserkerRoll = random.nextDouble();
+                if (berserkerRoll < 0.5) {
                     return EXPLOSIVE_WEAPONS.get(random.nextInt(EXPLOSIVE_WEAPONS.size()));
-                } else {
+                } else if (berserkerRoll < 0.8) {
                     return EFFECT_WEAPONS.get(random.nextInt(EFFECT_WEAPONS.size()));
+                } else {
+                    // 20% chance for aggressive combo weapons
+                    List<WeaponConfig> berserkerCombos = List.of(
+                            WeaponConfig.NAPALM_LAUNCHER_PRESET,
+                            WeaponConfig.THUNDERBOLT_CANNON_PRESET,
+                            WeaponConfig.SHRAPNEL_CANNON_PRESET,
+                            WeaponConfig.WILDFIRE_SPRAYER_PRESET,
+                            WeaponConfig.CORROSIVE_CANNON_PRESET
+                    );
+                    return berserkerCombos.get(random.nextInt(berserkerCombos.size()));
                 }
 
             case "Sniper":
@@ -126,7 +172,11 @@ public class AIWeaponSelector {
                         WeaponConfig.PRECISION_DART_GUN_PRESET,
                         WeaponConfig.LASER_RIFLE_PRESET,
                         WeaponConfig.RAIL_CANNON_PRESET,
-                        WeaponConfig.SNIPER_RIFLE_PRESET
+                        WeaponConfig.SNIPER_RIFLE_PRESET,
+                        // Combo weapons suitable for snipers
+                        WeaponConfig.VENOM_NEEDLER_PRESET,
+                        WeaponConfig.FROST_LANCE_PRESET,
+                        WeaponConfig.RICOCHET_RIFLE_PRESET
                 );
                 return sniperWeapons.get(random.nextInt(sniperWeapons.size()));
 
@@ -138,15 +188,20 @@ public class AIWeaponSelector {
                         WeaponConfig.FLAME_PROJECTOR_PRESET,
                         WeaponConfig.ARC_PISTOL_PRESET,
                         WeaponConfig.ASSAULT_RIFLE_PRESET,
-                        WeaponConfig.TWIN_SIXES_PRESET
+                        WeaponConfig.TWIN_SIXES_PRESET,
+                        // Combo weapons suitable for rushers
+                        WeaponConfig.STORM_CALLER_PRESET,
+                        WeaponConfig.CRYO_SHOTGUN_PRESET,
+                        WeaponConfig.WILDFIRE_SPRAYER_PRESET
                 );
                 return rusherWeapons.get(random.nextInt(rusherWeapons.size()));
 
             case "Strategist":
                 // Strategists prefer tactical weapons and special ordinance
-                if (random.nextDouble() < 0.5) {
+                double strategistRoll = random.nextDouble();
+                if (strategistRoll < 0.4) {
                     return ORDINANCE_WEAPONS.get(random.nextInt(ORDINANCE_WEAPONS.size()));
-                } else {
+                } else if (strategistRoll < 0.7) {
                     // Tactical weapons with special effects
                     List<WeaponConfig> tacticalWeapons = List.of(
                             WeaponConfig.SEEKER_DART_PRESET,
@@ -155,14 +210,25 @@ public class AIWeaponSelector {
                             WeaponConfig.ARC_PISTOL_PRESET
                     );
                     return tacticalWeapons.get(random.nextInt(tacticalWeapons.size()));
+                } else {
+                    // 30% chance for tactical combo weapons
+                    List<WeaponConfig> strategistCombos = List.of(
+                            WeaponConfig.PLAGUE_MORTAR_PRESET,
+                            WeaponConfig.GLACIAL_MORTAR_PRESET,
+                            WeaponConfig.PHANTOM_NEEDLES_PRESET,
+                            WeaponConfig.EMP_BURST_GUN_PRESET,
+                            WeaponConfig.SEEKING_INFERNO_PRESET
+                    );
+                    return strategistCombos.get(random.nextInt(strategistCombos.size()));
                 }
 
             case "Support":
                 // Support AIs prefer utility weapons, area effects, and healing
-                if (random.nextDouble() < 0.3) {
+                double supportRoll = random.nextDouble();
+                if (supportRoll < 0.25) {
                     // Healing beam for team support
                     return WeaponConfig.MEDIC_BEAM_PRESET;
-                } else if (random.nextDouble() < 0.6) {
+                } else if (supportRoll < 0.55) {
                     // Area denial and utility weapons
                     List<WeaponConfig> supportWeapons = List.of(
                             WeaponConfig.TOXIC_SPRAYER_PRESET,
@@ -172,15 +238,25 @@ public class AIWeaponSelector {
                             WeaponConfig.PLASMA_CANNON_PRESET
                     );
                     return supportWeapons.get(random.nextInt(supportWeapons.size()));
-                } else {
+                } else if (supportRoll < 0.8) {
                     return BASIC_WEAPONS.get(random.nextInt(BASIC_WEAPONS.size()));
+                } else {
+                    // 20% chance for support combo weapons
+                    List<WeaponConfig> supportCombos = List.of(
+                            WeaponConfig.STORM_CALLER_PRESET,
+                            WeaponConfig.PLAGUE_MORTAR_PRESET,
+                            WeaponConfig.GLACIAL_MORTAR_PRESET,
+                            WeaponConfig.FROST_LANCE_PRESET
+                    );
+                    return supportCombos.get(random.nextInt(supportCombos.size()));
                 }
 
             case "Guardian":
                 // Guardians prefer defensive weapons and area denial
-                if (random.nextDouble() < 0.5) {
+                double guardianRoll = random.nextDouble();
+                if (guardianRoll < 0.4) {
                     return BASIC_WEAPONS.get(random.nextInt(BASIC_WEAPONS.size()));
-                } else {
+                } else if (guardianRoll < 0.7) {
                     // Area denial weapons
                     List<WeaponConfig> guardianWeapons = List.of(
                             WeaponConfig.TOXIC_SPRAYER_PRESET,
@@ -188,6 +264,15 @@ public class AIWeaponSelector {
                             WeaponConfig.FLAME_PROJECTOR_PRESET
                     );
                     return guardianWeapons.get(random.nextInt(guardianWeapons.size()));
+                } else {
+                    // 30% chance for defensive combo weapons
+                    List<WeaponConfig> guardianCombos = List.of(
+                            WeaponConfig.CRYO_SHOTGUN_PRESET,
+                            WeaponConfig.GLACIAL_MORTAR_PRESET,
+                            WeaponConfig.WILDFIRE_SPRAYER_PRESET,
+                            WeaponConfig.PLAGUE_MORTAR_PRESET
+                    );
+                    return guardianCombos.get(random.nextInt(guardianCombos.size()));
                 }
 
             case "Soldier":
@@ -263,7 +348,11 @@ public class AIWeaponSelector {
                     WeaponConfig.TOXIC_SPRAYER_PRESET,
                     WeaponConfig.BOUNCY_SMG_PRESET,
                     WeaponConfig.ARC_PISTOL_PRESET,
-                    WeaponConfig.TWIN_SIXES_PRESET
+                    WeaponConfig.TWIN_SIXES_PRESET,
+                    // Combo short-range weapons
+                    WeaponConfig.CRYO_SHOTGUN_PRESET,
+                    WeaponConfig.WILDFIRE_SPRAYER_PRESET,
+                    WeaponConfig.STORM_CALLER_PRESET
             );
             return shortRange.get(random.nextInt(shortRange.size()));
         }
@@ -275,7 +364,12 @@ public class AIWeaponSelector {
                     WeaponConfig.EXPLOSIVE_SNIPER_PRESET,
                     WeaponConfig.PRECISION_DART_GUN_PRESET,
                     WeaponConfig.LASER_RIFLE_PRESET,
-                    WeaponConfig.RAIL_CANNON_PRESET
+                    WeaponConfig.RAIL_CANNON_PRESET,
+                    // Combo long-range weapons
+                    WeaponConfig.VENOM_NEEDLER_PRESET,
+                    WeaponConfig.FROST_LANCE_PRESET,
+                    WeaponConfig.RICOCHET_RIFLE_PRESET,
+                    WeaponConfig.THUNDERBOLT_CANNON_PRESET
             );
             return longRange.get(random.nextInt(longRange.size()));
         }
@@ -302,7 +396,9 @@ public class AIWeaponSelector {
         return weapon.range <= 6 || weapon == WeaponConfig.INCENDIARY_SHOTGUN_PRESET
                || weapon == WeaponConfig.FLAME_PROJECTOR_PRESET
                || weapon == WeaponConfig.TOXIC_SPRAYER_PRESET
-               || weapon == WeaponConfig.TWIN_SIXES_PRESET;
+               || weapon == WeaponConfig.TWIN_SIXES_PRESET
+               || weapon == WeaponConfig.CRYO_SHOTGUN_PRESET
+               || weapon == WeaponConfig.WILDFIRE_SPRAYER_PRESET;
     }
 
     private static boolean isBeamWeapon(WeaponConfig weapon) {

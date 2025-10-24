@@ -17,12 +17,12 @@ public enum WeaponAttribute {
             return 0.3 + points * 0.3;
         }
     },
-    // Range: 150-1400 units (base 150 + 50 per point, max 25 points)
+    // Range: 150-1550 units (base 150 + 40 per point, max 35 points)
     RANGE(-3, 35) {
         @Override
         public double compute(int points) {
             validate(points);
-            return 150 + points * 35;
+            return 150 + points * 40;
         }
     },
     // Accuracy: 0.5-0.99 (base 0.5 + 0.02 per point, max 25 points)
