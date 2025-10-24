@@ -31,7 +31,10 @@ public class AIPlayerManager {
     // Available behavior types
     private final List<AIBehavior> behaviorTemplates = List.of(
             new IdleBehavior(),
-            new CombatBehavior()
+            new CombatBehavior(),
+            new FlagBehavior(),
+            new KothBehavior(),
+            new HeadquartersBehavior()
     );
 
     private final GameConfig gameConfig;
@@ -255,6 +258,12 @@ public class AIPlayerManager {
             return new IdleBehavior();
         } else if (template instanceof CombatBehavior) {
             return new CombatBehavior();
+        } else if (template instanceof FlagBehavior) {
+            return new FlagBehavior();
+        } else if (template instanceof KothBehavior) {
+            return new KothBehavior();
+        } else if (template instanceof HeadquartersBehavior) {
+            return new HeadquartersBehavior();
         }
         return new IdleBehavior(); // Fallback
     }

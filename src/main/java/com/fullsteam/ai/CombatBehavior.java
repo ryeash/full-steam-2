@@ -154,25 +154,39 @@ public class CombatBehavior implements AIBehavior {
         Vector2 targetPos = target.getPosition();
         double distance = playerPos.distance(targetPos);
 
-        // Advanced target prediction
-        Vector2 targetVelocity = target.getVelocity();
-        double projectileSpeed = aiPlayer.getCurrentWeapon().getProjectileSpeed();
-        double timeToTarget = distance / projectileSpeed;
+        // Check if using beam weapon (instant hit, no prediction needed)
+        boolean isBeamWeapon = isBeamWeapon(aiPlayer);
+        
+        Vector2 aimPos;
+        if (isBeamWeapon) {
+            // Beam weapons are instant hit - aim directly at target
+            aimPos = targetPos.copy();
+            
+            // Add slight inaccuracy based on personality
+            double accuracy = aiPlayer.getPersonality().getAccuracy();
+            double spread = (1.0 - accuracy) * 15;
+            aimPos.add((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread);
+        } else {
+            // Projectile weapons - predict target movement
+            Vector2 targetVelocity = target.getVelocity();
+            double projectileSpeed = aiPlayer.getCurrentWeapon().getProjectileSpeed();
+            double timeToTarget = distance / projectileSpeed;
 
-        // Predict target movement with some uncertainty for realism
-        Vector2 predictedPos = targetPos.copy().add(targetVelocity.copy().multiply(timeToTarget));
+            // Predict target movement with some uncertainty for realism
+            aimPos = targetPos.copy().add(targetVelocity.copy().multiply(timeToTarget));
 
-        // Add slight inaccuracy based on distance and personality
-        double accuracy = aiPlayer.getPersonality().getAccuracy();
-        double distanceInaccuracy = Math.max(0, distance - 200) * 0.05 * (1.0 - accuracy);
-        double randomOffsetX = (Math.random() - 0.5) * distanceInaccuracy;
-        double randomOffsetY = (Math.random() - 0.5) * distanceInaccuracy;
+            // Add slight inaccuracy based on distance and personality
+            double accuracy = aiPlayer.getPersonality().getAccuracy();
+            double distanceInaccuracy = Math.max(0, distance - 200) * 0.05 * (1.0 - accuracy);
+            double randomOffsetX = (Math.random() - 0.5) * distanceInaccuracy;
+            double randomOffsetY = (Math.random() - 0.5) * distanceInaccuracy;
 
-        predictedPos.add(randomOffsetX, randomOffsetY);
+            aimPos.add(randomOffsetX, randomOffsetY);
+        }
 
         // Set aim
-        input.setWorldX(predictedPos.x);
-        input.setWorldY(predictedPos.y);
+        input.setWorldX(aimPos.x);
+        input.setWorldY(aimPos.y);
 
         // Enhanced shooting decision
         boolean shouldShoot = shouldShootAtTarget(aiPlayer, target, distance);
@@ -181,21 +195,33 @@ public class CombatBehavior implements AIBehavior {
             lastShotTime = 0;
         }
 
-        // Smart reloading
+        // Smart reloading with improved ammo management
         int currentAmmo = aiPlayer.getCurrentWeapon().getCurrentAmmo();
         int magazineSize = aiPlayer.getCurrentWeapon().getMagazineSize();
+        double ammoPercent = (double) currentAmmo / magazineSize;
 
         boolean shouldReload = false;
         if (currentAmmo == 0) {
             shouldReload = true; // Must reload
+        } else if (isRetreating && ammoPercent < 0.5) {
+            shouldReload = true; // Reload while retreating if below 50%
         } else if (currentAmmo <= 3 && distance > 300) {
-            shouldReload = true; // Reload when safe and low ammo
-        } else if (currentAmmo < magazineSize * 0.3 && !target.isActive()) {
+            shouldReload = true; // Reload when safe and very low ammo
+        } else if (ammoPercent < 0.25 && distance > 250) {
+            shouldReload = true; // Reload when safe and below 25%
+        } else if (ammoPercent < 0.4 && !target.isActive()) {
             shouldReload = true; // Reload during lull in combat
+        }
+
+        // Don't reload if enemy is very close and we have some ammo
+        if (distance < 150 && currentAmmo > magazineSize * 0.15) {
+            shouldReload = false;
         }
 
         if (shouldReload && !aiPlayer.isReloading()) {
             input.setReload(true);
+            // Don't shoot while reloading
+            input.setLeft(false);
         }
         
         // Utility weapon usage during combat
@@ -545,5 +571,15 @@ public class CombatBehavior implements AIBehavior {
         if (shouldUseUtility) {
             input.setAltFire(true);
         }
+    }
+
+    /**
+     * Check if the AI is using a beam weapon (instant hit).
+     */
+    private boolean isBeamWeapon(AIPlayer aiPlayer) {
+        String weaponType = aiPlayer.getCurrentWeapon().getName();
+        return weaponType.contains("Laser") || weaponType.contains("Plasma Beam") 
+               || weaponType.contains("Railgun") || weaponType.contains("Rail Cannon")
+               || weaponType.contains("Medic Beam");
     }
 }

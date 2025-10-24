@@ -49,6 +49,10 @@ public class AIWeaponSelector {
             WeaponConfig.RAIL_CANNON_PRESET
     );
 
+    private static final List<WeaponConfig> SUPPORT_WEAPONS = List.of(
+            WeaponConfig.MEDIC_BEAM_PRESET
+    );
+
     // Combined list of all weapon presets for completely random selection
     private static final List<WeaponConfig> ALL_WEAPONS = List.of(
             // Basic weapons
@@ -80,7 +84,10 @@ public class AIWeaponSelector {
             // Beam weapons
             WeaponConfig.LASER_RIFLE_PRESET,
             WeaponConfig.PLASMA_CANNON_PRESET,
-            WeaponConfig.RAIL_CANNON_PRESET
+            WeaponConfig.RAIL_CANNON_PRESET,
+
+            // Support weapons
+            WeaponConfig.MEDIC_BEAM_PRESET
     );
 
     /**
@@ -112,13 +119,14 @@ public class AIWeaponSelector {
                 }
 
             case "Sniper":
-                // Snipers prefer long-range precision weapons
+                // Snipers prefer long-range precision weapons including beam weapons
                 List<WeaponConfig> sniperWeapons = List.of(
                         WeaponConfig.PIERCING_RIFLE_PRESET,
                         WeaponConfig.EXPLOSIVE_SNIPER_PRESET,
                         WeaponConfig.PRECISION_DART_GUN_PRESET,
                         WeaponConfig.LASER_RIFLE_PRESET,
-                        WeaponConfig.RAIL_CANNON_PRESET
+                        WeaponConfig.RAIL_CANNON_PRESET,
+                        WeaponConfig.SNIPER_RIFLE_PRESET
                 );
                 return sniperWeapons.get(random.nextInt(sniperWeapons.size()));
 
@@ -150,14 +158,18 @@ public class AIWeaponSelector {
                 }
 
             case "Support":
-                // Support AIs prefer utility weapons and area effects
-                if (random.nextDouble() < 0.6) {
+                // Support AIs prefer utility weapons, area effects, and healing
+                if (random.nextDouble() < 0.3) {
+                    // Healing beam for team support
+                    return WeaponConfig.MEDIC_BEAM_PRESET;
+                } else if (random.nextDouble() < 0.6) {
                     // Area denial and utility weapons
                     List<WeaponConfig> supportWeapons = List.of(
                             WeaponConfig.TOXIC_SPRAYER_PRESET,
                             WeaponConfig.ICE_CANNON_PRESET,
                             WeaponConfig.ARC_PISTOL_PRESET,
-                            WeaponConfig.CLUSTER_MORTAR_PRESET
+                            WeaponConfig.CLUSTER_MORTAR_PRESET,
+                            WeaponConfig.PLASMA_CANNON_PRESET
                     );
                     return supportWeapons.get(random.nextInt(supportWeapons.size()));
                 } else {
@@ -273,17 +285,31 @@ public class AIWeaponSelector {
     }
 
     private static boolean isLongRangeWeapon(WeaponConfig weapon) {
+        // Beam weapons are effectively long-range (instant hit)
+        if (isBeamWeapon(weapon)) {
+            return true;
+        }
         return weapon.range >= 15 || weapon == WeaponConfig.PIERCING_RIFLE_PRESET
                || weapon == WeaponConfig.EXPLOSIVE_SNIPER_PRESET
-               || weapon == WeaponConfig.LASER_RIFLE_PRESET
-               || weapon == WeaponConfig.RAIL_CANNON_PRESET;
+               || weapon == WeaponConfig.SNIPER_RIFLE_PRESET;
     }
 
     private static boolean isShortRangeWeapon(WeaponConfig weapon) {
+        // Medic beam is medium range, not short
+        if (weapon == WeaponConfig.MEDIC_BEAM_PRESET) {
+            return false;
+        }
         return weapon.range <= 6 || weapon == WeaponConfig.INCENDIARY_SHOTGUN_PRESET
                || weapon == WeaponConfig.FLAME_PROJECTOR_PRESET
                || weapon == WeaponConfig.TOXIC_SPRAYER_PRESET
                || weapon == WeaponConfig.TWIN_SIXES_PRESET;
+    }
+
+    private static boolean isBeamWeapon(WeaponConfig weapon) {
+        return weapon == WeaponConfig.LASER_RIFLE_PRESET
+               || weapon == WeaponConfig.PLASMA_CANNON_PRESET
+               || weapon == WeaponConfig.RAIL_CANNON_PRESET
+               || weapon == WeaponConfig.MEDIC_BEAM_PRESET;
     }
 
     /**

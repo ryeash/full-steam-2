@@ -104,4 +104,43 @@ public class AIPlayer extends Player {
     public double getTimeSinceLastDecision() {
         return lastDecisionTime;
     }
+
+    /**
+     * Evaluate if AI should switch weapons based on tactical situation.
+     * Returns true if weapon switch would be beneficial.
+     * 
+     * @param targetDistance Distance to current target
+     * @return true if should switch weapons
+     */
+    public boolean shouldSwitchWeapon(double targetDistance) {
+        // Check if out of ammo
+        if (getCurrentWeapon().getCurrentAmmo() == 0 && isReloading()) {
+            return true; // Switch to avoid reload time
+        }
+
+        // Check if weapon is ineffective at current range
+        double weaponRange = getCurrentWeapon().getRange();
+        
+        // Too far for current weapon
+        if (targetDistance > weaponRange * 0.9) {
+            return true;
+        }
+
+        // Very low ammo and enemy is close
+        int currentAmmo = getCurrentWeapon().getCurrentAmmo();
+        int magazineSize = getCurrentWeapon().getMagazineSize();
+        if (currentAmmo < magazineSize * 0.15 && targetDistance < 150) {
+            return true; // Switch instead of reload in close combat
+        }
+
+        return false;
+    }
+
+    /**
+     * Get preferred weapon range based on personality.
+     * Used to select appropriate weapon for situation.
+     */
+    public double getPreferredCombatRange() {
+        return personality.getPreferredCombatRange();
+    }
 }
