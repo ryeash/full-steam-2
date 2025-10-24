@@ -17,12 +17,12 @@ public enum WeaponAttribute {
             return 0.3 + points * 0.3;
         }
     },
-    // Range: 1000-2500 units (base 1000 + 200 per point, max 25 points)
-    RANGE(-10, 25) {
+    // Range: 150-1400 units (base 150 + 50 per point, max 25 points)
+    RANGE(-3, 35) {
         @Override
         public double compute(int points) {
             validate(points);
-            return 250 + points * 100;
+            return 150 + points * 35;
         }
     },
     // Accuracy: 0.5-0.99 (base 0.5 + 0.02 per point, max 25 points)
@@ -30,7 +30,7 @@ public enum WeaponAttribute {
         @Override
         public double compute(int points) {
             validate(points);
-            return 1.0 + (points * 0.1);
+            return 1.0 + (points * 0.13);
         }
     },
     // Magazine Size: 5-35 rounds (base 5 + 1 per point, max 30 points)
@@ -49,12 +49,12 @@ public enum WeaponAttribute {
             return 4.0 - (points * 0.14);
         }
     },
-    // Projectile Speed: 2000-17000 units/sec (base 2000 + 500 per point, max 30 points)
+    // Projectile Speed: 300-900
     PROJECTILE_SPEED(0, 30) {
         @Override
         public double compute(int points) {
             validate(points);
-            return 200 + (points * 20);
+            return 300 + (points * 20);
         }
     },
     // Bullets Per Shot: 1-8 bullets (base 1 + 1 per 5 points, max 35 points)

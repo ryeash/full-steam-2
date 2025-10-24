@@ -143,6 +143,7 @@ public class GameController {
         // Basic ordinance showcases
         presets.put("ASSAULT_RIFLE", createPresetData(WeaponConfig.ASSAULT_RIFLE_PRESET));
         presets.put("HAND_CANNON", createPresetData(WeaponConfig.HAND_CANNON_PRESET));
+        presets.put("SNIPER_RIFLE", createPresetData(WeaponConfig.SNIPER_RIFLE_PRESET));
         presets.put("PLASMA_RIFLE", createPresetData(WeaponConfig.PLASMA_RIFLE_PRESET));
 
         // New ordinance showcases

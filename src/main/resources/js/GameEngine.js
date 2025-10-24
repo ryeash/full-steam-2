@@ -23,8 +23,10 @@ class GameEngine {
         
         // Game settings
         this.zoomLevel = 1.0;
+        this.targetZoomLevel = 1.0;
         this.minZoom = 0.5;
         this.maxZoom = 2.0;
+        this.zoomSmoothingFactor = 0.05; // Smooth zoom transitions
         
         // Store references to event handlers and timeouts for cleanup
         this.eventHandlers = {
@@ -836,6 +838,9 @@ class GameEngine {
             if (myPlayer && myPlayer.playerData) {
                 this.camera.targetX = myPlayer.playerData.x;
                 this.camera.targetY = -myPlayer.playerData.y; // Invert Y for camera following
+                
+                // Update target zoom based on weapon range
+                this.updateZoomForWeaponRange(myPlayer.playerData);
             }
             } else {
             // Default camera position if no player yet
@@ -846,8 +851,46 @@ class GameEngine {
         this.camera.x += (this.camera.targetX - this.camera.x) * this.camera.smoothing;
         this.camera.y += (this.camera.targetY - this.camera.y) * this.camera.smoothing;
         
+        // Smoothly interpolate zoom level
+        this.zoomLevel += (this.targetZoomLevel - this.zoomLevel) * this.zoomSmoothingFactor;
+        
         this.updateCameraTransform();
         this.updateMinimap();
+    }
+    
+    updateZoomForWeaponRange(playerData) {
+        // Only adjust zoom if weaponRange is available
+        if (!playerData.weaponRange) {
+            this.targetZoomLevel = 1.0;
+            return;
+        }
+        
+        // Weapon range values from WeaponAttribute.java:
+        // Min range: 150 + (-3 * 35) = 45 units
+        // Max range: 150 + (35 * 35) = 1375 units
+        // Default/mid range: ~400-600 units
+        
+        const weaponRange = playerData.weaponRange;
+        
+        // Map weapon range to zoom level
+        // Short range weapons (< 300): zoom in more (1.2 - 1.5x)
+        // Medium range weapons (300-700): normal zoom (0.9 - 1.2x)
+        // Long range weapons (> 700): zoom out more (0.6 - 0.9x)
+        
+        let calculatedZoom;
+        if (weaponRange < 300) {
+            // Short range: zoom in (1.5 at range 45, 1.2 at range 300)
+            calculatedZoom = 1.5 - ((weaponRange - 45) / 255) * 0.3;
+        } else if (weaponRange < 700) {
+            // Medium range: normal zoom (1.2 at range 300, 0.9 at range 700)
+            calculatedZoom = 1.2 - ((weaponRange - 300) / 400) * 0.3;
+        } else {
+            // Long range: zoom out (0.9 at range 700, 0.6 at range 1375)
+            calculatedZoom = 0.9 - ((weaponRange - 700) / 675) * 0.3;
+        }
+        
+        // Clamp to min/max zoom bounds
+        this.targetZoomLevel = Math.max(this.minZoom, Math.min(this.maxZoom, calculatedZoom));
     }
     
     updateCameraTransform() {

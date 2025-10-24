@@ -1149,6 +1149,7 @@ public class GameManager {
             playerState.put("ammo", player.getCurrentWeapon().getCurrentAmmo());
             playerState.put("maxAmmo", player.getCurrentWeapon().getMagazineSize());
             playerState.put("reloading", player.isReloading());
+            playerState.put("weaponRange", player.getCurrentWeapon().getRange());
             playerState.put("kills", player.getKills());
             playerState.put("deaths", player.getDeaths());
             playerState.put("captures", player.getCaptures());

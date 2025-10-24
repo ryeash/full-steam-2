@@ -69,6 +69,24 @@ public class WeaponConfig {
             Ordinance.BULLET
     );
 
+    // Pure Sniper Rifle - Maximizes range, damage, and projectile speed
+    // Focus: Long-range precision with high damage per shot
+    // Trade-offs: Very slow fire rate, small magazine, long reload
+    public static final WeaponConfig SNIPER_RIFLE_PRESET = new WeaponConfig(
+            "Sniper Rifle",
+            30,     // High damage (40 dmg total)
+            2,      // Very slow fire rate (0.9 shots/sec)
+            30,     // Very long range (1200 units)
+            0,      // Perfect accuracy (1.0)
+            3,      // Very small magazine (8 rounds)
+            10,     // Medium reload (2.6 sec)
+            25,     // High projectile speed (800 units/sec)
+            0,      // Single shot
+            0,      // No damping (bullets maintain speed)
+            Set.of(),
+            Ordinance.BULLET  // Total: 100 points
+    );
+
     // Example: Explosive Sniper Rifle (75 points + 25 for explosive effect = 100 total)
     public static final WeaponConfig EXPLOSIVE_SNIPER_PRESET = new WeaponConfig(
             "Explosive Sniper Rifle",

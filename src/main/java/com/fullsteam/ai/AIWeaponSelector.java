@@ -16,6 +16,7 @@ public class AIWeaponSelector {
     private static final List<WeaponConfig> BASIC_WEAPONS = List.of(
             WeaponConfig.ASSAULT_RIFLE_PRESET,
             WeaponConfig.HAND_CANNON_PRESET,
+            WeaponConfig.SNIPER_RIFLE_PRESET,
             WeaponConfig.PLASMA_RIFLE_PRESET,
             WeaponConfig.TWIN_SIXES_PRESET
     );
@@ -53,6 +54,7 @@ public class AIWeaponSelector {
             // Basic weapons
             WeaponConfig.ASSAULT_RIFLE_PRESET,
             WeaponConfig.HAND_CANNON_PRESET,
+            WeaponConfig.SNIPER_RIFLE_PRESET,
             WeaponConfig.PLASMA_RIFLE_PRESET,
             WeaponConfig.TWIN_SIXES_PRESET,
 
