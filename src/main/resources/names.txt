@@ -11,6 +11,7 @@ Babka
 Baked Alaska
 Baklava
 Banana Split
+Bananas Foster
 Basbousa
 Battenberg
 Bearclaw
@@ -113,6 +114,7 @@ Kouign-amann
 Kringle
 Kueh Lapis
 Kulfi
+Laddu
 Lady Baltimore
 Ladyfinger
 Lamington
