@@ -39,7 +39,7 @@ class PlayerInterpolator {
             // Large distance change - assume teleport/respawn, snap immediately
             this.sprite.x = x;
             this.sprite.y = y;
-            this.sprite.rotation = -rotation; // Invert for PIXI
+            this.sprite.rotation = rotation;
             
             // Player teleported/respawned - no logging needed for performance
             this.isFirstUpdate = false;
@@ -63,7 +63,7 @@ class PlayerInterpolator {
         
         this.sprite.x += (serverX - this.sprite.x) * lerpFactor;
         this.sprite.y += (serverY - this.sprite.y) * lerpFactor;
-        this.sprite.rotation = this.lerpAngle(this.sprite.rotation, -serverRotation, lerpFactor);
+        this.sprite.rotation = this.lerpAngle(this.sprite.rotation, serverRotation, lerpFactor);
     }
     
     lerpAngle(from, to, factor) {

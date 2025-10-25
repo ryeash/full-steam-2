@@ -173,7 +173,6 @@ public class AIWeaponSelector {
                         WeaponConfig.LASER_RIFLE_PRESET,
                         WeaponConfig.RAIL_CANNON_PRESET,
                         WeaponConfig.SNIPER_RIFLE_PRESET,
-                        // Combo weapons suitable for snipers
                         WeaponConfig.VENOM_NEEDLER_PRESET,
                         WeaponConfig.FROST_LANCE_PRESET,
                         WeaponConfig.RICOCHET_RIFLE_PRESET
@@ -365,7 +364,6 @@ public class AIWeaponSelector {
                     WeaponConfig.PRECISION_DART_GUN_PRESET,
                     WeaponConfig.LASER_RIFLE_PRESET,
                     WeaponConfig.RAIL_CANNON_PRESET,
-                    // Combo long-range weapons
                     WeaponConfig.VENOM_NEEDLER_PRESET,
                     WeaponConfig.FROST_LANCE_PRESET,
                     WeaponConfig.RICOCHET_RIFLE_PRESET,

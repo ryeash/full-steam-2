@@ -265,7 +265,7 @@ public class Player extends GameEntity {
         direction.normalize();
 
         Ordinance ordinance = weapon.getOrdinance();
-        double range = weapon.getRange() * 0.5; // Beams have 50% the range of bullets
+        double range = weapon.getRange() * 0.6; // Beams have 60% the range of bullets
         double damage = weapon.getDamage();
 
         // Create the appropriate beam type based on ordinance

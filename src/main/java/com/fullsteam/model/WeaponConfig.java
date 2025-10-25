@@ -473,19 +473,19 @@ public class WeaponConfig {
             Ordinance.ROCKET  // 20 points, total: 39 + 41 + 20 = 100
     );
 
-    // Ricochet Rifle - Bouncy + Piercing bullets that bounce and pierce
+    // Ricochet Rifle
     public static final WeaponConfig RICOCHET_RIFLE_PRESET = new WeaponConfig(
             "Ricochet Rifle",
-            18,     // Medium damage
+            23,     // Medium damage
             12,     // Medium fire rate
-            12,     // Medium range
+            17,     // Medium range
             0,      // Good accuracy
             10,     // Medium magazine
             8,      // Medium reload
             15,     // Fast projectile
             0,      // Single shot
-            -10,    // Negative damping
-            Set.of(BulletEffect.BOUNCY, BulletEffect.PIERCING),  // 15 + 20 = 35 points
+            0,    // Negative damping
+            Set.of(BulletEffect.BOUNCY),  // 15 + 20 = 35 points
             Ordinance.BULLET  // 0 points, total: 65 + 35 = 100
     );
 

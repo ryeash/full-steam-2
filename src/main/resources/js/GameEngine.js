@@ -134,6 +134,11 @@ class GameEngine {
         this.nameContainer = new PIXI.Container(); // Separate container for name labels
         this.uiContainer = new PIXI.Container();
 
+        // Flip Y-axis to match dyn4j physics coordinate system (Y-up)
+        // This eliminates the need for coordinate conversions between physics and rendering
+        this.gameContainer.scale.y = -1;
+        this.nameContainer.scale.y = -1; // Also flip nameContainer to match
+
         // Set up proper z-ordering
         this.backgroundContainer.zIndex = 0;
         this.gameContainer.zIndex = 1;
@@ -585,6 +590,7 @@ class GameEngine {
         this.hudReloadText = reloadText;
         this.hudTeamText = teamText;
         this.hudInputText = inputText;
+        this.hudLivesLabel = livesLabel;
         this.hudLivesText = livesText;
         
         this.hudContainer.addChild(infoContainer);
@@ -837,7 +843,7 @@ class GameEngine {
             const myPlayer = this.players.get(this.myPlayerId);
             if (myPlayer && myPlayer.playerData) {
                 this.camera.targetX = myPlayer.playerData.x;
-                this.camera.targetY = -myPlayer.playerData.y; // Invert Y for camera following
+                this.camera.targetY = myPlayer.playerData.y; // No inversion needed - coordinates match now!
                 
                 // Update target zoom based on weapon range
                 this.updateZoomForWeaponRange(myPlayer.playerData);
@@ -897,22 +903,23 @@ class GameEngine {
         const centerX = this.app.screen.width / 2;
         const centerY = this.app.screen.height / 2;
         
-        // Apply camera transform to background, game, and name containers
-        [this.backgroundContainer, this.gameContainer, this.nameContainer].forEach(container => {
+        // Apply camera transform to game and name containers (both Y-flipped)
+        [this.gameContainer, this.nameContainer].forEach(container => {
             container.position.set(centerX, centerY);
-            container.scale.set(this.zoomLevel);
+            container.scale.set(this.zoomLevel, -this.zoomLevel); // Preserve Y-flip
             container.pivot.x = this.camera.x;
             container.pivot.y = this.camera.y;
         });
+        
+        // Background container needs same transform but also Y-flipped to match world coordinates
+        this.backgroundContainer.position.set(centerX, centerY);
+        this.backgroundContainer.scale.set(this.zoomLevel, -this.zoomLevel); // Also Y-flip background
+        this.backgroundContainer.pivot.x = this.camera.x;
+        this.backgroundContainer.pivot.y = this.camera.y;
     }
     
-    worldToIsometric(worldX, worldY) {
-        return { x: worldX, y: -worldY };
-    }
-    
-    worldVelocityToIsometric(vx, vy) {
-        return { x: vx, y: -vy };
-    }
+    // Coordinate conversion functions removed - no longer needed!
+    // The gameContainer now uses Y-up coordinates matching dyn4j physics
     
     /**
      * Wrapper for setTimeout that tracks timeouts for cleanup
@@ -951,7 +958,7 @@ class GameEngine {
                 this.handleRoundStart(data);
                 break;
             case 'gameOver':
-                this.handleGameOver(data);
+                this.showGameOverScreen(data);
                 break;
         }
     }
@@ -1264,8 +1271,7 @@ class GameEngine {
      */
     createUtilityEntity(entityData) {
         const entityContainer = new PIXI.Container();
-        const isoPos = this.worldToIsometric(entityData.x, entityData.y);
-        entityContainer.position.set(isoPos.x, isoPos.y);
+        entityContainer.position.set(entityData.x, entityData.y);
         
         // Create graphics based on entity type
         const entityGraphics = this.createUtilityEntityGraphics(entityData);
@@ -1304,8 +1310,7 @@ class GameEngine {
         if (!entityContainer) return;
         
         // Update position
-        const isoPos = this.worldToIsometric(entityData.x, entityData.y);
-        entityContainer.position.set(isoPos.x, isoPos.y);
+        entityContainer.position.set(entityData.x, entityData.y);
         
         // Update visual state based on entity data
         this.updateUtilityEntityVisual(entityContainer, entityData);
@@ -1795,14 +1800,6 @@ class GameEngine {
     }
     
     /**
-     * Handle game over event - show victory screen
-     */
-    handleGameOver(data) {
-        console.log('Game Over:', data);
-        this.showGameOverScreen(data);
-    }
-    
-    /**
      * Show game over screen with final results
      */
     showGameOverScreen(data) {
@@ -2068,16 +2065,15 @@ class GameEngine {
         const sprite = new PIXI.Sprite(this.playerTexture);
         sprite.anchor.set(0.5);
         
-        const isoPos = this.worldToIsometric(playerData.x, playerData.y);
-        sprite.position.set(isoPos.x, isoPos.y);
+        sprite.position.set(playerData.x, playerData.y);
         sprite.rotation = playerData.rotation || 0;
         
         // Color players based on their team
         const playerColor = this.getPlayerColor(playerData);
         sprite.tint = playerColor;
         
-        // Make sprite visible but normal size
-        sprite.scale.set(1.0); // Normal size
+        // Flip Y-axis back so sprite appears right-side up (gameContainer is Y-flipped)
+        sprite.scale.set(1.0, -1.0);
         sprite.alpha = 1.0; // Ensure full opacity
         sprite.visible = true; // Explicitly set visible
         
@@ -2093,7 +2089,8 @@ class GameEngine {
         if (this.deathTexture) {
             const deathMarker = new PIXI.Sprite(this.deathTexture);
             deathMarker.anchor.set(0.5);
-            deathMarker.position.set(isoPos.x, isoPos.y);
+            deathMarker.position.set(playerData.x, playerData.y);
+            deathMarker.scale.y = -1; // Flip Y-axis back
             deathMarker.zIndex = 12; // Above players and projectiles
             deathMarker.visible = false;
             sprite.deathMarker = deathMarker;
@@ -2109,9 +2106,10 @@ class GameEngine {
             strokeThickness: 3
         });
         nameLabel.anchor.set(0.5);
+        nameLabel.scale.y = -1; // Flip Y-axis back so text is readable
         
         // Position name label below health bar
-        nameLabel.position.set(isoPos.x, isoPos.y - 25);
+        nameLabel.position.set(playerData.x, playerData.y - 25);
         
         // Store reference to name label on sprite for easy access
         sprite.nameLabel = nameLabel;
@@ -2146,20 +2144,17 @@ class GameEngine {
             // Use interpolator for smooth movement
             const interpolator = this.playerInterpolators.get(playerData.id);
             if (interpolator) {
-                // Convert server position from world to screen coordinates
-                const isoPos = this.worldToIsometric(playerData.x, playerData.y);
-                interpolator.updateFromServer(isoPos.x, isoPos.y, playerData.rotation || 0);
+                // Update interpolator with server position
+                interpolator.updateFromServer(playerData.x, playerData.y, playerData.rotation || 0);
             } else {
                 // Fallback to direct position update if no interpolator
-                const isoPos = this.worldToIsometric(playerData.x, playerData.y);
-                sprite.position.set(isoPos.x, isoPos.y);
-                sprite.rotation = -(playerData.rotation || 0);
+                sprite.position.set(playerData.x, playerData.y);
+                sprite.rotation = playerData.rotation || 0;
             }
         } else {
             // Direct position update - no interpolation
-            const isoPos = this.worldToIsometric(playerData.x, playerData.y);
-            sprite.position.set(isoPos.x, isoPos.y);
-            sprite.rotation = -(playerData.rotation || 0);
+            sprite.position.set(playerData.x, playerData.y);
+            sprite.rotation = playerData.rotation || 0;
         }
         
         // Handle death marker logic
@@ -2328,8 +2323,7 @@ class GameEngine {
         healthBarContainer.config = config;
         
         // Position above entity
-        const isoPos = this.worldToIsometric(entityData.x, entityData.y);
-        healthBarContainer.position.set(isoPos.x, isoPos.y - (config.yOffset || 0));
+        healthBarContainer.position.set(entityData.x, entityData.y - (config.yOffset || 0));
         
         // Add to name container so it doesn't rotate with entity
         this.nameContainer.addChild(healthBarContainer);
@@ -2454,12 +2448,12 @@ class GameEngine {
             fontFamily: 'Arial'
         });
         reloadText.anchor.set(0.5);
+        reloadText.scale.y = -1; // Flip Y-axis back so text is readable
         reloadText.position.set(0, 0);
         reloadContainer.addChild(reloadText);
         
         // Position above player (will be updated in updatePlayer)
-        const isoPos = this.worldToIsometric(playerData.x, playerData.y);
-        reloadContainer.position.set(isoPos.x, isoPos.y - 50); // Above health bar
+        reloadContainer.position.set(playerData.x, playerData.y - 50); // Above health bar
         
         // Initially hidden
         reloadContainer.visible = false;
@@ -2642,6 +2636,7 @@ class GameEngine {
             fontWeight: 'bold'
         });
         text.anchor.set(0.5);
+        text.scale.y = -1; // Flip Y-axis back so text is readable
         badge.addChild(text);
         
         return badge;
@@ -2651,13 +2646,14 @@ class GameEngine {
         // Create main projectile container
         const projectileContainer = new PIXI.Container();
         
-        // Convert world coordinates to screen coordinates once
-        const isoPos = this.worldToIsometric(projectileData.x, projectileData.y);
-        projectileContainer.position.set(isoPos.x, isoPos.y);
+        projectileContainer.position.set(projectileData.x, projectileData.y);
         
         // Create the main projectile sprite
         const sprite = new PIXI.Sprite(this.projectileTexture);
         sprite.anchor.set(0.5);
+        
+        // Flip Y-axis back so sprite appears right-side up (gameContainer is Y-flipped)
+        sprite.scale.y = -1;
         
         // Customize projectile appearance based on ordinance type
         this.customizeProjectileAppearance(sprite, projectileData);
@@ -2694,12 +2690,10 @@ class GameEngine {
         this.gameContainer.addChild(projectileContainer);
         
         // Create interpolator for smooth movement
-        // Convert server velocity from world coordinates to isometric screen coordinates
-        const worldVel = { x: projectileData.vx || 0, y: projectileData.vy || 0 };
-        const isoVel = this.worldVelocityToIsometric(worldVel.x, worldVel.y);
+        const velocity = { x: projectileData.vx || 0, y: projectileData.vy || 0 };
         
-        // Initialize interpolator with screen coordinates (already converted)
-        const interpolator = new ProjectileInterpolator(projectileContainer, isoVel);
+        // Initialize interpolator with velocity
+        const interpolator = new ProjectileInterpolator(projectileContainer, velocity);
         this.projectileInterpolators.set(projectileData.id, interpolator);
     }
     
@@ -3016,19 +3010,14 @@ class GameEngine {
         // Use interpolator for smooth movement
         const interpolator = this.projectileInterpolators.get(projectileData.id);
         if (interpolator) {
-            // Convert server position and velocity from world to isometric coordinates
-            // Batch coordinate transformations for better performance
-            const isoPos = this.worldToIsometric(projectileData.x, projectileData.y);
-            const worldVel = { x: projectileData.vx || 0, y: projectileData.vy || 0 };
-            const isoVel = this.worldVelocityToIsometric(worldVel.x, worldVel.y);
+            const velocity = { x: projectileData.vx || 0, y: projectileData.vy || 0 };
             
-            // Update interpolator with converted coordinates
-            interpolator.updateFromServer(isoPos.x, isoPos.y, isoVel.x, isoVel.y);
+            // Update interpolator with server data
+            interpolator.updateFromServer(projectileData.x, projectileData.y, velocity.x, velocity.y);
         } else {
             // Fallback to direct position update if no interpolator
             // This should rarely happen, but provides safety
-            const isoPos = this.worldToIsometric(projectileData.x, projectileData.y);
-            projectileContainer.position.set(isoPos.x, isoPos.y);
+            projectileContainer.position.set(projectileData.x, projectileData.y);
         }
     }
     
@@ -3133,11 +3122,8 @@ class GameEngine {
 
     createObstacle(obstacleData) {
         const graphics = this.createObstacleGraphics(obstacleData);
-        const isoPos = this.worldToIsometric(obstacleData.x, obstacleData.y);
-        graphics.position.set(isoPos.x, isoPos.y);
-        // Since we're inverting Y coordinates in vertices, we need to also invert rotation
-        // to maintain the correct orientation
-        graphics.rotation = -(obstacleData.rotation || 0);
+        graphics.position.set(obstacleData.x, obstacleData.y);
+        graphics.rotation = obstacleData.rotation || 0;
         graphics.zIndex = 5;
         this.obstacles.set(obstacleData.id, graphics);
         this.gameContainer.addChild(graphics);
@@ -3262,11 +3248,9 @@ class GameEngine {
         
         const points = [];
         vertices.forEach(vertex => {
-            // Transform from physics coordinates (Y-up) to PIXI coordinates (Y-down)
-            // The obstacle's rotation is handled by the graphics.rotation property,
-            // so we just need to invert the Y coordinate here
+            // No coordinate conversion needed - gameContainer Y-axis is flipped to match physics
             points.push(vertex.x);
-            points.push(-vertex.y);  // Invert Y for PIXI coordinate system
+            points.push(vertex.y);
         });
         graphics.drawPolygon(points);
     }
@@ -3274,10 +3258,8 @@ class GameEngine {
     updateObstacle(obstacleData) {
         const graphics = this.obstacles.get(obstacleData.id);
         if (!graphics) return;
-        const isoPos = this.worldToIsometric(obstacleData.x, obstacleData.y);
-        graphics.position.set(isoPos.x, isoPos.y);
-        // Consistent with createObstacle - invert rotation for PIXI coordinate system
-        graphics.rotation = -(obstacleData.rotation || 0);
+        graphics.position.set(obstacleData.x, obstacleData.y);
+        graphics.rotation = obstacleData.rotation || 0;
         
         // Update health bar if it exists
         if (this.obstacleHealthBars && this.obstacleHealthBars.has(obstacleData.id)) {
@@ -3350,8 +3332,7 @@ class GameEngine {
         };
         
         // Position above obstacle (will be updated in updateObstacleHealthBar)
-        const isoPos = this.worldToIsometric(obstacleData.x, obstacleData.y);
-        healthBarContainer.position.set(isoPos.x, isoPos.y - 25); // Closer to obstacle than player health bars
+        healthBarContainer.position.set(obstacleData.x, obstacleData.y - 25); // Closer to obstacle than player health bars
         
         // Add to name container so it doesn't rotate with obstacle
         this.nameContainer.addChild(healthBarContainer);
@@ -3367,11 +3348,12 @@ class GameEngine {
      */
     createFieldEffect(effectData) {
         const effectContainer = new PIXI.Container();
-        const isoPos = this.worldToIsometric(effectData.x, effectData.y);
-        effectContainer.position.set(isoPos.x, isoPos.y);
+        effectContainer.position.set(effectData.x, effectData.y);
         
-        // Set z-index above players but below UI
-        effectContainer.zIndex = 20;
+        // Set z-index based on effect type
+        // Ground effects (heal zones, speed boosts) should render beneath players
+        // Dangerous effects (fire, explosions) should render above players
+        effectContainer.zIndex = this.getFieldEffectZIndex(effectData.type);
         
         // Create the main effect visual based on type
         const effectGraphics = this.createEffectGraphics(effectData);
@@ -3398,8 +3380,7 @@ class GameEngine {
         if (!effectContainer) return;
         
         // Update position (in case effect moves)
-        const isoPos = this.worldToIsometric(effectData.x, effectData.y);
-        effectContainer.position.set(isoPos.x, isoPos.y);
+        effectContainer.position.set(effectData.x, effectData.y);
         
         // Handle growing effects (like ERUPTION)
         if (!effectContainer.initialRadius) {
@@ -3452,15 +3433,11 @@ class GameEngine {
     createBeam(beamData) {
         const beamContainer = new PIXI.Container();
         
-        // Convert world coordinates to screen coordinates
-        const startPos = this.worldToIsometric(beamData.startX, beamData.startY);
-        const endPos = this.worldToIsometric(beamData.endX, beamData.endY);
-        
-        beamContainer.position.set(startPos.x, startPos.y);
+        beamContainer.position.set(beamData.startX, beamData.startY);
         
         // Calculate beam length and angle
-        const dx = endPos.x - startPos.x;
-        const dy = endPos.y - startPos.y;
+        const dx = beamData.endX - beamData.startX;
+        const dy = beamData.endY - beamData.startY;
         const length = Math.sqrt(dx * dx + dy * dy);
         const angle = Math.atan2(dy, dx);
         
@@ -3497,14 +3474,11 @@ class GameEngine {
         if (!beamContainer) return;
         
         // Update position and angle
-        const startPos = this.worldToIsometric(beamData.startX, beamData.startY);
-        const endPos = this.worldToIsometric(beamData.endX, beamData.endY);
-        
-        beamContainer.position.set(startPos.x, startPos.y);
+        beamContainer.position.set(beamData.startX, beamData.startY);
         
         // Recalculate beam properties
-        const dx = endPos.x - startPos.x;
-        const dy = endPos.y - startPos.y;
+        const dx = beamData.endX - beamData.startX;
+        const dy = beamData.endY - beamData.startY;
         const length = Math.sqrt(dx * dx + dy * dy);
         const angle = Math.atan2(dy, dx);
         
@@ -3555,9 +3529,7 @@ class GameEngine {
     createFlag(flagData) {
         const flagContainer = new PIXI.Container();
         
-        // Convert world coordinates to screen coordinates
-        const pos = this.worldToIsometric(flagData.x, flagData.y);
-        flagContainer.position.set(pos.x, pos.y);
+        flagContainer.position.set(flagData.x, flagData.y);
         
         // Create flag pole
         const pole = new PIXI.Graphics();
@@ -3594,6 +3566,7 @@ class GameEngine {
             strokeThickness: 2
         });
         teamText.anchor.set(0.5);
+        teamText.scale.y = -1; // Flip Y-axis back so text is readable
         teamText.position.set(10, -20);
         flagContainer.addChild(teamText);
         
@@ -3628,8 +3601,7 @@ class GameEngine {
         if (!flagContainer) return;
         
         // Update position (important for carried flags)
-        const pos = this.worldToIsometric(flagData.x, flagData.y);
-        flagContainer.position.set(pos.x, pos.y);
+        flagContainer.position.set(flagData.x, flagData.y);
         
         // Update visual state based on flag state
         const state = flagData.state;
@@ -3677,9 +3649,7 @@ class GameEngine {
     createKothZone(zoneData) {
         const zoneContainer = new PIXI.Container();
         
-        // Convert world coordinates to screen coordinates
-        const pos = this.worldToIsometric(zoneData.x, zoneData.y);
-        zoneContainer.position.set(pos.x, pos.y);
+        zoneContainer.position.set(zoneData.x, zoneData.y);
         
         // Create zone circle (base layer)
         const baseCircle = new PIXI.Graphics();
@@ -3705,6 +3675,7 @@ class GameEngine {
             strokeThickness: 3
         });
         zoneText.anchor.set(0.5);
+        zoneText.scale.y = -1; // Flip Y-axis back so text is readable
         zoneContainer.addChild(zoneText);
         zoneContainer.zoneText = zoneText;
         
@@ -3717,6 +3688,7 @@ class GameEngine {
             strokeThickness: 2
         });
         statusText.anchor.set(0.5);
+        statusText.scale.y = -1; // Flip Y-axis back so text is readable
         statusText.position.set(0, 20);
         zoneContainer.addChild(statusText);
         zoneContainer.statusText = statusText;
@@ -3729,6 +3701,7 @@ class GameEngine {
             strokeThickness: 2
         });
         playerCountText.anchor.set(0.5);
+        playerCountText.scale.y = -1; // Flip Y-axis back so text is readable
         playerCountText.position.set(0, 35);
         zoneContainer.addChild(playerCountText);
         zoneContainer.playerCountText = playerCountText;
@@ -3756,8 +3729,7 @@ class GameEngine {
         if (!zoneContainer) return;
         
         // Update position
-        const pos = this.worldToIsometric(zoneData.x, zoneData.y);
-        zoneContainer.position.set(pos.x, pos.y);
+        zoneContainer.position.set(zoneData.x, zoneData.y);
         
         // Store updated data
         zoneContainer.zoneData = zoneData;
@@ -4056,7 +4028,6 @@ class GameEngine {
      * Create graphics for utility entities based on type
      */
     createUtilityEntityGraphics(entityData) {
-        console.log('DEBUG: createUtilityEntityGraphics called with type:', entityData.type);
         const graphics = new PIXI.Graphics();
         
         switch (entityData.type) {
@@ -4077,7 +4048,6 @@ class GameEngine {
             case 'POWERUP':
                 return this.createPowerUpGraphics(graphics, entityData);
             default:
-                console.log('DEBUG: Using default graphics for type:', entityData.type);
                 return this.createGenericUtilityGraphics(graphics, entityData);
         }
     }
@@ -4670,6 +4640,7 @@ class GameEngine {
             strokeThickness: 3
         });
         teamText.anchor.set(0.5);
+        teamText.scale.y = -1; // Flip Y-axis back so text is readable
         graphics.addChild(teamText);
         
         // Health bar above HQ
@@ -4705,6 +4676,7 @@ class GameEngine {
             strokeThickness: 2
         });
         healthText.anchor.set(0.5);
+        healthText.scale.y = -1; // Flip Y-axis back so text is readable
         healthText.position.set(0, barY - 12);
         graphics.addChild(healthText);
         
@@ -4835,6 +4807,46 @@ class GameEngine {
     }
     
     /**
+     * Get z-index for field effects based on type
+     * Ground/support effects render below players, dangerous effects above
+     */
+    getFieldEffectZIndex(effectType) {
+        switch (effectType) {
+            // Ground/support effects - render beneath players
+            case 'HEAL_ZONE':
+            case 'SPEED_BOOST':
+                return 6;  // Above obstacles, below players
+            
+            // Dangerous/active effects - render above players for visibility
+            case 'EXPLOSION':
+            case 'FRAGMENTATION':
+            case 'FIRE':
+            case 'ELECTRIC':
+            case 'POISON':
+            case 'ERUPTION':
+                return 20; // Above players
+            
+            // Crowd control effects - render above players
+            case 'SLOW_FIELD':
+            case 'GRAVITY_WELL':
+                return 20; // Above players
+            
+            // Defensive effects - render above players
+            case 'SHIELD_BARRIER':
+                return 15; // Above players but below dangerous effects
+            
+            // Environmental effects
+            case 'WARNING_ZONE':
+            case 'EARTHQUAKE':
+            case 'VISION_REVEAL':
+                return 20; // Above players
+            
+            default:
+                return 20; // Default above players
+        }
+    }
+    
+    /**
      * Update utility entity visual state
      */
     updateUtilityEntityVisual(container, entityData) {
@@ -4935,9 +4947,8 @@ class GameEngine {
     createTeleportConnection(padId1, padId2, padData1, padData2) {
         const connectionGraphics = new PIXI.Graphics();
         
-        // Convert world positions to screen coordinates
-        const pos1 = this.worldToIsometric(padData1.x, padData1.y);
-        const pos2 = this.worldToIsometric(padData2.x, padData2.y);
+        const pos1 = { x: padData1.x, y: padData1.y };
+        const pos2 = { x: padData2.x, y: padData2.y };
         
         // Create animated connection line
         this.drawAnimatedConnectionLine(connectionGraphics, pos1, pos2);
@@ -5044,7 +5055,7 @@ class GameEngine {
      * Update turret visual effects
      */
     updateTurretVisual(container, entityData) {
-        container.rotation = -(entityData.rotation || 0);
+        container.rotation = entityData.rotation || 0;
         
         // Update health bar if it exists
         if (container.healthBar) {
@@ -5053,7 +5064,7 @@ class GameEngine {
     }
 
     updateNetVisual(container, entityData) {
-        container.rotation = -(entityData.rotation || 0);
+        container.rotation = entityData.rotation || 0;
     }
     
     /**
@@ -5061,7 +5072,7 @@ class GameEngine {
      */
     updateDefenseLaserVisual(container, entityData) {
         // Update rotation of the visual indicator to show beam direction
-        container.rotation = -(entityData.rotation || 0);
+        container.rotation = entityData.rotation || 0;
         
         // Add pulsing effect to show it's active
         const time = Date.now() * 0.003; // Slow pulse
@@ -5240,8 +5251,7 @@ class GameEngine {
         };
         
         // Position above turret
-        const isoPos = this.worldToIsometric(entityData.x, entityData.y);
-        healthBarContainer.position.set(isoPos.x, isoPos.y - 30);
+        healthBarContainer.position.set(entityData.x, entityData.y - 30);
         
         return healthBarContainer;
     }
@@ -5664,43 +5674,54 @@ class GameEngine {
     }
     
     /**
-     * Create heal zone effect graphics
+     * Create heal zone effect graphics - classic medical red cross design
      */
     createHealZoneGraphics(graphics, radius, effectData) {
-        // Outer healing aura - soft green
-        graphics.beginFill(0x2ecc71, 0.2);
+        // Outer soft glow - subtle white aura
+        graphics.beginFill(0xf0f0f0, 0.15);
         graphics.drawCircle(0, 0, radius);
         graphics.endFill();
         
-        // Middle healing field - brighter green
-        graphics.beginFill(0x27ae60, 0.4);
-        graphics.drawCircle(0, 0, radius * 0.7);
+        // Main background - greyish white circle
+        graphics.beginFill(0xe8e8e8, 0.7);
+        graphics.drawCircle(0, 0, radius * 0.75);
         graphics.endFill();
         
-        // Inner core - bright healing light
-        graphics.beginFill(0x2ecc71, 0.6);
-        graphics.drawCircle(0, 0, radius * 0.3);
+        // Inner background - lighter center
+        graphics.beginFill(0xf5f5f5, 0.8);
+        graphics.drawCircle(0, 0, radius * 0.65);
         graphics.endFill();
         
-        // Add healing cross symbol
-        graphics.lineStyle(3, 0x2ecc71, 0.8);
-        const crossSize = radius * 0.4;
-        // Vertical line
-        graphics.moveTo(0, -crossSize);
-        graphics.lineTo(0, crossSize);
-        // Horizontal line
-        graphics.moveTo(-crossSize, 0);
-        graphics.lineTo(crossSize, 0);
+        // Create the classic red cross symbol
+        const crossSize = radius * 0.45;
+        const crossThickness = radius * 0.15;
         
-        // Add healing particles
-        for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2;
-            const distance = radius * (0.5 + Math.random() * 0.3);
+        // Red cross color
+        const redCross = 0xdc143c; // Crimson red
+        
+        // Vertical bar of the cross
+        graphics.beginFill(redCross, 0.9);
+        graphics.drawRect(-crossThickness / 2, -crossSize, crossThickness, crossSize * 2);
+        graphics.endFill();
+        
+        // Horizontal bar of the cross
+        graphics.beginFill(redCross, 0.9);
+        graphics.drawRect(-crossSize, -crossThickness / 2, crossSize * 2, crossThickness);
+        graphics.endFill();
+        
+        // Add subtle border to the main circle
+        graphics.lineStyle(2, 0xcccccc, 0.5);
+        graphics.drawCircle(0, 0, radius * 0.75);
+        
+        // Add small healing sparkles around the edge
+        for (let i = 0; i < 12; i++) {
+            const angle = (i / 12) * Math.PI * 2;
+            const distance = radius * 0.85;
             const x = Math.cos(angle) * distance;
             const y = Math.sin(angle) * distance;
-            const size = 2 + Math.random() * 3;
+            const size = 2;
             
-            graphics.beginFill(0x58d68d, 0.7);
+            graphics.beginFill(0xffffff, 0.6);
             graphics.drawCircle(x, y, size);
             graphics.endFill();
         }
@@ -6304,16 +6325,16 @@ class GameEngine {
     animateHealZone(container) {
         const time = container.animationTime;
         
-        // Gentle pulsing for healing effect
-        const pulse = 0.9 + Math.sin(time * 4) * 0.1;
+        // Gentle pulsing scale for the entire zone (like a heartbeat)
+        const pulse = 0.95 + Math.sin(time * 3) * 0.05;
         container.scale.set(pulse);
         
-        // Soft breathing alpha
-        const breathe = 0.8 + Math.sin(time * 3) * 0.2;
+        // Pulsing alpha to make the red cross appear to "breathe" or pulse
+        // This creates the active healing indicator effect
+        const breathe = 0.85 + Math.sin(time * 4) * 0.15;
         container.alpha = breathe;
         
-        // Slow rotation for mystical feel
-        container.rotation = time * 0.5;
+        // No rotation - keep the cross upright and recognizable
     }
     
     
@@ -6606,19 +6627,25 @@ class GameEngine {
         
         // Update lives info
         if (this.hudLivesText) {
-            const livesRemaining = myPlayer.livesRemaining || -1;
+            const livesRemaining = myPlayer.livesRemaining !== undefined ? myPlayer.livesRemaining : -1;
             if (livesRemaining === -1) {
-                // Unlimited lives (default mode)
-                this.hudLivesText.text = '∞';
-                this.hudLivesText.style.fill = 0x44ff44; // Green for unlimited
-            } else if (livesRemaining === 0) {
-                // Eliminated
-                this.hudLivesText.text = 'ELIM';
-                this.hudLivesText.style.fill = 0xff4444; // Red for eliminated
+                // Unlimited lives (default mode) - hide the lives display
+                this.hudLivesLabel.visible = false;
+                this.hudLivesText.visible = false;
             } else {
-                // Limited lives (stock mode)
-                this.hudLivesText.text = livesRemaining.toString();
-                this.hudLivesText.style.fill = 0xffaa00; // Orange for limited lives
+                // Show lives display for limited lives modes (including elimination)
+                this.hudLivesLabel.visible = true;
+                this.hudLivesText.visible = true;
+                
+                if (livesRemaining === 0) {
+                    // Eliminated
+                    this.hudLivesText.text = 'ELIM';
+                    this.hudLivesText.style.fill = 0xff4444; // Red for eliminated
+                } else {
+                    // Limited lives (stock mode)
+                    this.hudLivesText.text = livesRemaining.toString();
+                    this.hudLivesText.style.fill = 0xffaa00; // Orange for limited lives
+                }
             }
         }
     }
@@ -6786,7 +6813,7 @@ class GameEngine {
             if (!data.active) return;
             
             const x = (data.x + this.worldBounds.width / 2) * scale + offsetX;
-            const y = ((-data.y) + this.worldBounds.height / 2) * scale + offsetY; // Invert Y for minimap
+            const y = (-data.y + this.worldBounds.height / 2) * scale + offsetY; // Flip y-axis to match physics world
             
             const playerDot = new PIXI.Graphics();
             
@@ -7003,7 +7030,7 @@ class GameEngine {
             graphics.lineStyle(2, teamColor, 0.5);
             graphics.drawRect(
                 areaData.minX, 
-                -areaData.maxY, // Invert Y for PIXI
+                areaData.minY, // No inversion needed - coordinates match now!
                 areaData.maxX - areaData.minX,
                 areaData.maxY - areaData.minY
             );
@@ -7136,7 +7163,6 @@ class GameEngine {
         // Clean up any orphaned interpolators
         this.projectileInterpolators.forEach((interpolator, id) => {
             if (!this.projectiles.has(id)) {
-                console.warn(`Found orphaned projectile interpolator for ID ${id}, cleaning up`);
                 interpolator.destroy();
                 this.projectileInterpolators.delete(id);
             }
@@ -7144,7 +7170,6 @@ class GameEngine {
         
         this.playerInterpolators.forEach((interpolator, id) => {
             if (!this.players.has(id)) {
-                console.warn(`Found orphaned player interpolator for ID ${id}, cleaning up`);
                 interpolator.destroy();
                 this.playerInterpolators.delete(id);
             }
@@ -7153,12 +7178,10 @@ class GameEngine {
         // Clean up any field effects with orphaned animation functions
         this.fieldEffects.forEach((effect, id) => {
             if (effect.animationFunction && (!effect.parent || !effect.effectData)) {
-                console.warn(`Found orphaned field effect animation for ID ${id}, cleaning up`);
                 this.app.ticker.remove(effect.animationFunction);
                 effect.animationFunction = null;
             }
             if (effect.fadeOutFunction && (!effect.parent || effect.alpha <= 0)) {
-                console.warn(`Found orphaned field effect fade for ID ${id}, cleaning up`);
                 this.app.ticker.remove(effect.fadeOutFunction);
                 effect.fadeOutFunction = null;
             }
@@ -7168,7 +7191,6 @@ class GameEngine {
         if (this.obstacleHealthBars) {
             this.obstacleHealthBars.forEach((healthBar, obstacleId) => {
                 if (!this.obstacles.has(obstacleId)) {
-                    console.warn(`Found orphaned obstacle health bar for ID ${obstacleId}, cleaning up`);
                     if (healthBar.parent) {
                         healthBar.parent.removeChild(healthBar);
                     }
@@ -7194,8 +7216,6 @@ class GameEngine {
      * Clean up all resources when the game engine is destroyed
      */
     destroy() {
-        console.log('Destroying game engine...');
-        
         // Clear the memory cleanup interval
         if (this.memoryCleanupInterval) {
             clearInterval(this.memoryCleanupInterval);
@@ -7351,7 +7371,5 @@ class GameEngine {
         this.nameContainer = null;
         this.camera = null;
         this.gameState = null;
-        
-        console.log('GameEngine destroyed and cleaned up');
     }
 }

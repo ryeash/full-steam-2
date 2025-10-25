@@ -102,7 +102,7 @@ public class RuleSystem {
                     worldWidth,
                     worldHeight
             );
-            log.info("Event system initialized for game {}", gameId);
+            log.debug("Event system initialized for game {}", gameId);
         }
     }
 
@@ -286,7 +286,9 @@ public class RuleSystem {
     }
 
     private void checkVictoryConditions() {
-        if (gameOver) return;
+        if (gameOver) {
+            return;
+        }
 
         VictoryCondition condition = rules.getVictoryCondition();
         if (condition == null || condition == VictoryCondition.ENDLESS) {
@@ -443,11 +445,10 @@ public class RuleSystem {
     }
 
     private void enableSuddenDeath() {
-        if (gameOver) return;
-
-        log.info("Game {} entering sudden death mode - next score wins!", gameId);
+        if (gameOver) {
+            return;
+        }
         gameEventManager.broadcastSystemMessage("⚠️ SUDDEN DEATH! Next score wins!");
-
         int currentHighest = getCurrentHighestScore();
         rules.setScoreLimit(currentHighest + 1);
     }

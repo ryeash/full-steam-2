@@ -566,7 +566,6 @@
                     <h3>🎯 Weapon Presets</h3>
                     <div class="preset-tabs">
                         <button class="preset-tab active" data-category="basic">Basic</button>
-                        <button class="preset-tab" data-category="ordinance">Ordinance</button>
                         <button class="preset-tab" data-category="effects">Effects</button>
                         <button class="preset-tab" data-category="explosive">Explosive</button>
                         <button class="preset-tab" data-category="beam">Beam</button>
@@ -576,12 +575,6 @@
                     <div class="preset-category active" id="category-basic">
                         <div class="preset-buttons" id="preset-buttons-basic">
                             <!-- Basic preset buttons will be populated by JavaScript -->
-                        </div>
-                    </div>
-                    
-                    <div class="preset-category" id="category-ordinance">
-                        <div class="preset-buttons" id="preset-buttons-ordinance">
-                            <!-- Ordinance preset buttons will be populated by JavaScript -->
                         </div>
                     </div>
                     
@@ -850,13 +843,12 @@
     function createPresetButtons() {
         // Define preset categories
         const categories = {
-            basic: ['ASSAULT_RIFLE', 'HAND_CANNON', 'SNIPER_RIFLE', 'PLASMA_RIFLE', 'TWIN_SIXES'],
-            ordinance: ['SIEGE_CANNON', 'PRECISION_DART_GUN', 'FLAME_PROJECTOR'],
-            effects: ['BOUNCY_SMG', 'PIERCING_RIFLE', 'INCENDIARY_SHOTGUN', 'SEEKER_DART', 'ARC_PISTOL', 'TOXIC_SPRAYER', 'ICE_CANNON'],
+            basic: ['ASSAULT_RIFLE', 'HAND_CANNON', 'SNIPER_RIFLE', 'PLASMA_RIFLE', 'TWIN_SIXES', 'PRECISION_DART_GUN', 'FLAME_PROJECTOR'],
+            effects: ['BOUNCY_SMG', 'PIERCING_RIFLE', 'INCENDIARY_SHOTGUN', 'SEEKER_DART', 'ARC_PISTOL', 'TOXIC_SPRAYER', 'ICE_CANNON', 'RICOCHET_RIFLE'],
             explosive: ['EXPLOSIVE_SNIPER', 'ROCKET_LAUNCHER', 'GRENADE_LAUNCHER', 'CLUSTER_MORTAR'],
             beam: ['LASER_RIFLE', 'PLASMA_CANNON', 'MEDIC_BEAM', 'RAIL_CANNON'],
             combo: ['STORM_CALLER', 'NAPALM_LAUNCHER', 'CRYO_SHOTGUN', 'VENOM_NEEDLER', 'THUNDERBOLT_CANNON', 
-                   'RICOCHET_RIFLE', 'PLAGUE_MORTAR', 'WILDFIRE_SPRAYER', 'FROST_LANCE', 'SHRAPNEL_CANNON',
+                   'PLAGUE_MORTAR', 'WILDFIRE_SPRAYER', 'FROST_LANCE', 'SHRAPNEL_CANNON',
                    'SEEKING_INFERNO', 'EMP_BURST_GUN', 'GLACIAL_MORTAR', 'PHANTOM_NEEDLES', 'CORROSIVE_CANNON']
         };
         

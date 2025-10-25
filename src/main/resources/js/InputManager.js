@@ -131,10 +131,9 @@ class InputManager {
             const screenPos = new PIXI.Point(this.mouse.x, this.mouse.y);
             const worldPos = gameEngine.gameContainer.toLocal(screenPos);
 
-            // The world uses a Y-up coordinate system for physics, but PIXI uses Y-down.
-            // We need to send the physics-correct coordinates to the server.
+            // gameContainer now uses Y-up coordinates matching physics - no conversion needed!
             this.mouse.worldX = worldPos.x;
-            this.mouse.worldY = -worldPos.y; // Invert Y for the physics engine
+            this.mouse.worldY = worldPos.y;
         }
     }
     
