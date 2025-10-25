@@ -2,7 +2,7 @@ package com.fullsteam.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fullsteam.games.AbstractGameStateManager;
+import com.fullsteam.games.GameManager;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
@@ -19,7 +19,7 @@ import java.util.Map;
 
 import static com.fullsteam.controller.PlayerConnectionService.SESSION_KEY;
 
-@ServerWebSocket("/game/{gameId}/{gameType}")
+@ServerWebSocket("/game/{gameId}")
 public class GameWebSocketEndpoint {
 
     private static final Logger log = LoggerFactory.getLogger(GameWebSocketEndpoint.class);
@@ -34,9 +34,13 @@ public class GameWebSocketEndpoint {
     }
 
     @OnOpen
-    public void onOpen(WebSocketSession session, String gameId, String gameType) {
-        if (!connectionService.connectPlayer(session, gameId, gameType)) {
+    public void onOpen(WebSocketSession session, String gameId) {
+        log.info("WebSocket connection opened for gameId: {}", gameId);
+        if (!connectionService.connectPlayer(session, gameId)) {
+            log.warn("Failed to connect player to game {}, closing session", gameId);
             session.close();
+        } else {
+            log.info("Player successfully connected to game {}", gameId);
         }
     }
 
@@ -48,8 +52,8 @@ public class GameWebSocketEndpoint {
             return; // No player session found
         }
 
-        AbstractGameStateManager game = playerSession.getGame();
-        Long playerId = playerSession.getPlayerId();
+        GameManager game = playerSession.getGame();
+        int playerId = playerSession.getPlayerId();
 
         if (game == null) {
             log.warn("Received message from session without game context. Closing.");
@@ -84,6 +88,7 @@ public class GameWebSocketEndpoint {
 
     @OnClose
     public void onClose(WebSocketSession session) {
+        log.info("WebSocket connection closed for session: {}", session.getId());
         connectionService.disconnectPlayer(session);
     }
 }

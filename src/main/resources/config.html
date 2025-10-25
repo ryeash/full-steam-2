@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Game Configuration</title>
+    <link rel="stylesheet" type="text/css" href="unified.css">
+    <style>
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 30px;
+            min-height: calc(100vh - 40px);
+        }
+        
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .player-section {
+            background: rgba(0, 0, 0, 0.8);
+            border: 3px solid #00ff88;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .player-section h2 {
+            color: #00ff88;
+            margin: 0 0 15px 0;
+            font-size: 1.3em;
+        }
+        
+        .player-section input {
+            width: 100%;
+            padding: 12px;
+            font-size: 1.1em;
+            border: 2px solid #444;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            margin-bottom: 20px;
+        }
+        
+        .player-section input:focus {
+            border-color: #00ff88;
+            outline: none;
+        }
+        
+        .start-game-section {
+            /* Button appears directly under player section */
+        }
+        
+        .weapon-customization {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .customization-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .customization-section {
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #444;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        .customization-section h3 {
+            color: #00ff88;
+            margin-top: 0;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 1.2em;
+        }
+        
+        .attribute-slider {
+            margin-bottom: 15px;
+        }
+        
+        .attribute-slider label {
+            display: block;
+            color: #fff;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+        
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .slider {
+            flex: 1;
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #00ff88;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        .slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: #00ff88;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .slider-value {
+            color: #00ff88;
+            font-weight: bold;
+            min-width: 30px;
+            text-align: right;
+        }
+        
+        .effect-checkbox {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .effect-checkbox:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .effect-checkbox input[type="checkbox"] {
+            margin-right: 10px;
+            transform: scale(1.2);
+        }
+        
+        .effect-info {
+            flex: 1;
+        }
+        
+        .effect-name {
+            color: #fff;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .effect-description {
+            color: #ccc;
+            font-size: 0.8em;
+            margin-top: 2px;
+        }
+        
+        .effect-cost {
+            color: #ffaa00;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .ordinance-option {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .ordinance-option:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .ordinance-option input[type="radio"] {
+            margin-right: 10px;
+            transform: scale(1.2);
+        }
+        
+        .ordinance-info {
+            flex: 1;
+        }
+        
+        .ordinance-name {
+            color: #fff;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .ordinance-description {
+            color: #ccc;
+            font-size: 0.8em;
+            margin-top: 2px;
+        }
+        
+        .ordinance-cost {
+            color: #ffaa00;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .utility-weapon-option {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .utility-weapon-option:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .utility-weapon-option input[type="radio"] {
+            margin-right: 10px;
+            transform: scale(1.2);
+        }
+        
+        .utility-info {
+            flex: 1;
+        }
+        
+        .utility-name {
+            color: #fff;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .utility-description {
+            color: #ccc;
+            font-size: 0.8em;
+            margin-top: 2px;
+        }
+        
+        .utility-category {
+            color: #00ff88;
+            font-weight: bold;
+            font-size: 0.8em;
+        }
+        
+        .utility-cooldown {
+            color: #ffaa00;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .point-tracker {
+            background: rgba(0, 0, 0, 0.8);
+            border: 3px solid #00ff88;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .point-display {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .points-used {
+            color: #00ff88;
+        }
+        
+        .points-over {
+            color: #ff4444;
+        }
+        
+        .points-under {
+            color: #ffaa00;
+        }
+        
+        .point-breakdown {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 15px;
+            font-size: 0.9em;
+        }
+        
+        .breakdown-item {
+            text-align: center;
+        }
+        
+        .breakdown-label {
+            color: #ccc;
+            display: block;
+        }
+        
+        .breakdown-value {
+            color: #fff;
+            font-weight: bold;
+        }
+        
+        .preset-section {
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #444;
+            border-radius: 10px;
+            padding: 15px;
+        }
+        
+        .preset-section h3 {
+            color: #00ff88;
+            margin: 0 0 15px 0;
+            text-align: center;
+            font-size: 1.1em;
+        }
+        
+        .preset-tabs {
+            display: flex;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #444;
+        }
+        
+        .preset-tab {
+            flex: 1;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: none;
+            color: #ccc;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+        }
+        
+        .preset-tab:first-child {
+            border-radius: 5px 0 0 0;
+        }
+        
+        .preset-tab:last-child {
+            border-radius: 0 5px 0 0;
+        }
+        
+        .preset-tab.active {
+            background: #00ff88;
+            color: #000;
+            font-weight: bold;
+        }
+        
+        .preset-tab:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+        
+        .preset-category {
+            display: none;
+        }
+        
+        .preset-category.active {
+            display: block;
+        }
+        
+        .preset-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .preset-button {
+            background: linear-gradient(45deg, #333, #555);
+            border: 2px solid #666;
+            border-radius: 6px;
+            color: #fff;
+            padding: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        
+        .preset-button:hover {
+            background: linear-gradient(45deg, #444, #666);
+            border-color: #00ff88;
+            transform: translateY(-1px);
+        }
+        
+        .preset-name {
+            font-weight: bold;
+            font-size: 0.9em;
+            margin-bottom: 3px;
+        }
+        
+        .preset-points {
+            color: #ffaa00;
+            font-size: 0.8em;
+        }
+        
+        .validation-message {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .validation-error {
+            background: rgba(255, 68, 68, 0.2);
+            border: 2px solid #ff4444;
+            color: #ff4444;
+        }
+        
+        .validation-warning {
+            background: rgba(255, 170, 0, 0.2);
+            border: 2px solid #ffaa00;
+            color: #ffaa00;
+        }
+        
+        .validation-success {
+            background: rgba(0, 255, 136, 0.2);
+            border: 2px solid #00ff88;
+            color: #00ff88;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        #start-game {
+            width: 100%;
+            padding: 18px;
+            font-size: 1.3em;
+            font-weight: bold;
+            background: linear-gradient(45deg, #00ff88, #00cc66);
+            border: none;
+            border-radius: 12px;
+            color: #000;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 255, 136, 0.3);
+        }
+        
+        #start-game:hover:not(:disabled) {
+            background: linear-gradient(45deg, #00cc66, #00aa44);
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 255, 136, 0.4);
+        }
+        
+        #start-game:disabled {
+            background: #666;
+            color: #999;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #00ff88;
+            font-size: 1.2em;
+            padding: 50px;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 1200px) {
+            .main-container {
+                grid-template-columns: 280px 1fr;
+                gap: 20px;
+            }
+            
+            .customization-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        
+        @media (max-width: 900px) {
+            .main-container {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .left-panel {
+                order: 2;
+            }
+            
+            .weapon-customization {
+                order: 1;
+            }
+            
+            .customization-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .preset-buttons {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            }
+        }
+        
+        @media (max-width: 600px) {
+            .main-container {
+                padding: 10px;
+            }
+            
+            .preset-tabs {
+                flex-wrap: wrap;
+            }
+            
+            .preset-tab {
+                flex: 1 1 50%;
+                min-width: 80px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div id="config-wrapper">
+    <h1>Game Configuration</h1>
+    
+    <div class="main-container">
+        <div class="left-panel">
+            <div class="player-section">
+                <h2>⚙️ Weapon Setup</h2>
+                
+                <div class="point-tracker">
+                    <div class="point-display">
+                        <span id="points-used">0</span> / <span id="points-max">100</span> Points
+                    </div>
+                    <div id="validation-message" class="validation-message hidden"></div>
+                    <div class="point-breakdown">
+                        <div class="breakdown-item">
+                            <span class="breakdown-label">Attributes</span>
+                            <span class="breakdown-value" id="attr-points">0</span>
+                        </div>
+                        <div class="breakdown-item">
+                            <span class="breakdown-label">Effects</span>
+                            <span class="breakdown-value" id="effect-points">0</span>
+                        </div>
+                        <div class="breakdown-item">
+                            <span class="breakdown-label">Ordinance</span>
+                            <span class="breakdown-value" id="ordinance-points">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="start-game-section">
+                <button id="start-game" disabled>🚀 Start Game</button>
+            </div>
+        </div>
+        
+        <div class="weapon-customization">
+            <div id="loading-message" class="loading">
+                Loading weapon customization data...
+            </div>
+            
+            <div id="customization-content" class="hidden">
+                <div class="preset-section">
+                    <h3>🎯 Weapon Presets</h3>
+                    <div class="preset-tabs">
+                        <button class="preset-tab active" data-category="basic">Basic</button>
+                        <button class="preset-tab" data-category="effects">Effects</button>
+                        <button class="preset-tab" data-category="explosive">Explosive</button>
+                        <button class="preset-tab" data-category="beam">Beam</button>
+                        <button class="preset-tab" data-category="combo">Combo</button>
+                    </div>
+                    
+                    <div class="preset-category active" id="category-basic">
+                        <div class="preset-buttons" id="preset-buttons-basic">
+                            <!-- Basic preset buttons will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div class="preset-category" id="category-effects">
+                        <div class="preset-buttons" id="preset-buttons-effects">
+                            <!-- Effect preset buttons will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div class="preset-category" id="category-explosive">
+                        <div class="preset-buttons" id="preset-buttons-explosive">
+                            <!-- Explosive preset buttons will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div class="preset-category" id="category-beam">
+                        <div class="preset-buttons" id="preset-buttons-beam">
+                            <!-- Beam preset buttons will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div class="preset-category" id="category-combo">
+                        <div class="preset-buttons" id="preset-buttons-combo">
+                            <!-- Combo preset buttons will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="customization-grid">
+                    <div class="customization-section">
+                        <h3>⚙️ Primary Weapon Attributes</h3>
+                        <div id="attribute-sliders">
+                            <!-- Attribute sliders will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div class="customization-section">
+                        <h3>💥 Bullet Effects</h3>
+                        <div id="effect-checkboxes">
+                            <!-- Effect checkboxes will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div class="customization-section">
+                        <h3>🚀 Ordinance Type</h3>
+                        <div id="ordinance-radios">
+                            <!-- Ordinance radio buttons will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div class="customization-section">
+                        <h3>🛠️ Utility Weapon</h3>
+                        <div id="utility-weapon-selection">
+                            <!-- Utility weapon selection will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let weaponData = null;
+    let currentWeapon = {
+        attributes: {},
+        effects: [],
+        ordinance: 'BULLET'
+    };
+    let currentUtilityWeapon = 'HEAL_ZONE'; // Default utility weapon
+
+    // Load weapon customization data
+    async function loadWeaponData() {
+        try {
+            const response = await fetch('/api/weapon-customization');
+            weaponData = await response.json();
+            initializeUI();
+        } catch (error) {
+            console.error('Failed to load weapon data:', error);
+            document.getElementById('loading-message').textContent = 'Failed to load weapon data. Please refresh the page.';
+        }
+    }
+
+    function initializeUI() {
+        document.getElementById('loading-message').classList.add('hidden');
+        document.getElementById('customization-content').classList.remove('hidden');
+        
+        createAttributeSliders();
+        createEffectCheckboxes();
+        createOrdinanceRadios();
+        createUtilityWeaponSelection();
+        createPresetButtons();
+        
+        // Try to load saved configuration, otherwise use defaults
+        if (!loadSavedConfiguration()) {
+            resetToDefaults();
+        }
+        updatePointDisplay();
+    }
+
+    function createAttributeSliders() {
+        const container = document.getElementById('attribute-sliders');
+        container.innerHTML = '';
+        
+        Object.entries(weaponData.attributes).forEach(([key, attr]) => {
+            const sliderDiv = document.createElement('div');
+            sliderDiv.className = 'attribute-slider';
+            
+            sliderDiv.innerHTML = `
+                <label for="attr-${key}">${attr.displayName}</label>
+                <div class="slider-container">
+                    <input type="range" 
+                           id="attr-${key}" 
+                           class="slider" 
+                           min="${attr.min}" 
+                           max="${attr.max}" 
+                           value="0"
+                           data-attribute="${key}">
+                    <span class="slider-value" id="value-${key}">0</span>
+                </div>
+            `;
+            
+            container.appendChild(sliderDiv);
+            
+            // Add event listener
+            const slider = sliderDiv.querySelector('.slider');
+            const valueSpan = sliderDiv.querySelector('.slider-value');
+            
+            slider.addEventListener('input', (e) => {
+                const value = parseInt(e.target.value);
+                valueSpan.textContent = value;
+                currentWeapon.attributes[key] = value;
+                updatePointDisplay();
+            });
+        });
+    }
+
+    function createEffectCheckboxes() {
+        const container = document.getElementById('effect-checkboxes');
+        container.innerHTML = '';
+        
+        weaponData.effects.forEach(effect => {
+            const checkboxDiv = document.createElement('div');
+            checkboxDiv.className = 'effect-checkbox';
+            
+            checkboxDiv.innerHTML = `
+                <input type="checkbox" id="effect-${effect.name}" data-effect="${effect.name}">
+                <div class="effect-info">
+                    <div class="effect-name">${effect.displayName}</div>
+                    <div class="effect-description">${effect.description}</div>
+                </div>
+                <div class="effect-cost">${effect.cost} pts</div>
+            `;
+            
+            container.appendChild(checkboxDiv);
+            
+            // Add event listener
+            const checkbox = checkboxDiv.querySelector('input[type="checkbox"]');
+            checkbox.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    currentWeapon.effects.push(effect.name);
+                } else {
+                    currentWeapon.effects = currentWeapon.effects.filter(eff => eff !== effect.name);
+                }
+                updatePointDisplay();
+            });
+            
+            // Make the whole div clickable
+            checkboxDiv.addEventListener('click', (e) => {
+                if (e.target.type !== 'checkbox') {
+                    checkbox.click();
+                }
+            });
+        });
+    }
+
+    function createOrdinanceRadios() {
+        const container = document.getElementById('ordinance-radios');
+        container.innerHTML = '';
+        
+        weaponData.ordinances.forEach(ord => {
+            const radioDiv = document.createElement('div');
+            radioDiv.className = 'ordinance-option';
+            
+            radioDiv.innerHTML = `
+                <input type="radio" 
+                       name="ordinance" 
+                       id="ord-${ord.name}" 
+                       value="${ord.name}"
+                       ${ord.name === 'BULLET' ? 'checked' : ''}>
+                <div class="ordinance-info">
+                    <div class="ordinance-name">${ord.displayName}</div>
+                    <div class="ordinance-description">${ord.description}</div>
+                </div>
+                <div class="ordinance-cost">${ord.cost} pts</div>
+            `;
+            
+            container.appendChild(radioDiv);
+            
+            // Add event listener
+            const radio = radioDiv.querySelector('input[type="radio"]');
+            radio.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    currentWeapon.ordinance = ord.name;
+                    updatePointDisplay();
+                }
+            });
+            
+            // Make the whole div clickable
+            radioDiv.addEventListener('click', (e) => {
+                if (e.target.type !== 'radio') {
+                    radio.click();
+                }
+            });
+        });
+    }
+
+    function createUtilityWeaponSelection() {
+        const container = document.getElementById('utility-weapon-selection');
+        container.innerHTML = '';
+        
+        // Use utility weapon data from the server
+        if (!weaponData.utilityWeapons) {
+            console.error('No utility weapon data available');
+            return;
+        }
+        
+        weaponData.utilityWeapons.forEach(utility => {
+            const utilityDiv = document.createElement('div');
+            utilityDiv.className = 'utility-weapon-option';
+            
+            utilityDiv.innerHTML = `
+                <input type="radio" 
+                       name="utilityWeapon" 
+                       id="utility-${utility.name}" 
+                       value="${utility.name}"
+                       ${utility.name === currentUtilityWeapon ? 'checked' : ''}>
+                <div class="utility-info">
+                    <div class="utility-name">${utility.displayName}</div>
+                    <div class="utility-category">${utility.category}</div>
+                    <div class="utility-description">${utility.description}</div>
+                </div>
+                <div class="utility-cooldown">${utility.cooldown}s</div>
+            `;
+            
+            container.appendChild(utilityDiv);
+            
+            // Add event listener
+            const radio = utilityDiv.querySelector('input[type="radio"]');
+            radio.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    currentUtilityWeapon = utility.name;
+                    console.log('Selected utility weapon:', utility.displayName);
+                }
+            });
+            
+            // Make the whole div clickable
+            utilityDiv.addEventListener('click', (e) => {
+                if (e.target.type !== 'radio') {
+                    radio.click();
+                }
+            });
+        });
+    }
+
+    function createPresetButtons() {
+        // Define preset categories
+        const categories = {
+            basic: ['ASSAULT_RIFLE', 'HAND_CANNON', 'SNIPER_RIFLE', 'PLASMA_RIFLE', 'TWIN_SIXES', 'PRECISION_DART_GUN', 'FLAME_PROJECTOR'],
+            effects: ['BOUNCY_SMG', 'PIERCING_RIFLE', 'INCENDIARY_SHOTGUN', 'SEEKER_DART', 'ARC_PISTOL', 'TOXIC_SPRAYER', 'ICE_CANNON', 'RICOCHET_RIFLE'],
+            explosive: ['EXPLOSIVE_SNIPER', 'ROCKET_LAUNCHER', 'GRENADE_LAUNCHER', 'CLUSTER_MORTAR'],
+            beam: ['LASER_RIFLE', 'PLASMA_CANNON', 'MEDIC_BEAM', 'RAIL_CANNON'],
+            combo: ['STORM_CALLER', 'NAPALM_LAUNCHER', 'CRYO_SHOTGUN', 'VENOM_NEEDLER', 'THUNDERBOLT_CANNON', 
+                   'PLAGUE_MORTAR', 'WILDFIRE_SPRAYER', 'FROST_LANCE', 'SHRAPNEL_CANNON',
+                   'SEEKING_INFERNO', 'EMP_BURST_GUN', 'GLACIAL_MORTAR', 'PHANTOM_NEEDLES', 'CORROSIVE_CANNON']
+        };
+        
+        // Create buttons for each category
+        Object.entries(categories).forEach(([categoryName, presetKeys]) => {
+            const container = document.getElementById(`preset-buttons-${categoryName}`);
+            container.innerHTML = '';
+            
+            presetKeys.forEach(key => {
+                const preset = weaponData.presets[key];
+                if (preset) {
+                    const button = document.createElement('div');
+                    button.className = 'preset-button';
+                    button.innerHTML = `
+                        <div class="preset-name">${preset.displayName}</div>
+                        <div class="preset-points">${preset.totalPoints}/100</div>
+                    `;
+                    
+                    button.addEventListener('click', () => {
+                        applyPreset(preset);
+                    });
+                    
+                    container.appendChild(button);
+                }
+            });
+        });
+        
+        // Add tab functionality
+        document.querySelectorAll('.preset-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Remove active class from all tabs and categories
+                document.querySelectorAll('.preset-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.preset-category').forEach(c => c.classList.remove('active'));
+                
+                // Add active class to clicked tab and corresponding category
+                tab.classList.add('active');
+                const category = tab.dataset.category;
+                document.getElementById(`category-${category}`).classList.add('active');
+            });
+        });
+    }
+
+    function applyPreset(preset) {
+        // Reset current weapon
+        resetToDefaults();
+        
+        // Apply attributes
+        Object.entries(preset.attributes).forEach(([key, value]) => {
+            currentWeapon.attributes[key] = value;
+            const slider = document.getElementById(`attr-${key}`);
+            const valueSpan = document.getElementById(`value-${key}`);
+            if (slider && valueSpan) {
+                slider.value = value;
+                valueSpan.textContent = value;
+            }
+        });
+        
+        // Apply effects
+        currentWeapon.effects = [...preset.effects];
+        weaponData.effects.forEach(effect => {
+            const checkbox = document.getElementById(`effect-${effect.name}`);
+            if (checkbox) {
+                checkbox.checked = preset.effects.includes(effect.name);
+            }
+        });
+        
+        // Apply ordinance
+        currentWeapon.ordinance = preset.ordinance;
+        const radio = document.getElementById(`ord-${preset.ordinance}`);
+        if (radio) {
+            radio.checked = true;
+        }
+        
+        updatePointDisplay();
+    }
+
+    function resetToDefaults() {
+        currentWeapon = {
+            attributes: {},
+            effects: [],
+            ordinance: 'BULLET'
+        };
+        
+        // Reset all sliders to 0
+        Object.keys(weaponData.attributes).forEach(key => {
+            currentWeapon.attributes[key] = 0;
+            const slider = document.getElementById(`attr-${key}`);
+            const valueSpan = document.getElementById(`value-${key}`);
+            if (slider && valueSpan) {
+                slider.value = 0;
+                valueSpan.textContent = 0;
+            }
+        });
+        
+        // Uncheck all effects
+        weaponData.effects.forEach(effect => {
+            const checkbox = document.getElementById(`effect-${effect.name}`);
+            if (checkbox) {
+                checkbox.checked = false;
+            }
+        });
+        
+        // Select BULLET ordinance
+        const bulletRadio = document.getElementById('ord-BULLET');
+        if (bulletRadio) {
+            bulletRadio.checked = true;
+        }
+    }
+
+    function updatePointDisplay() {
+        // Calculate points
+        const attrPoints = Object.values(currentWeapon.attributes).reduce((sum, val) => sum + val, 0);
+        
+        const effectPoints = currentWeapon.effects.reduce((sum, effectName) => {
+            const effect = weaponData.effects.find(e => e.name === effectName);
+            return sum + (effect ? effect.cost : 0);
+        }, 0);
+        
+        const ordinance = weaponData.ordinances.find(o => o.name === currentWeapon.ordinance);
+        const ordinancePoints = ordinance ? ordinance.cost : 0;
+        
+        const totalPoints = attrPoints + effectPoints + ordinancePoints;
+        const maxPoints = weaponData.maxPoints;
+        
+        // Update display
+        document.getElementById('points-used').textContent = totalPoints;
+        document.getElementById('points-max').textContent = maxPoints;
+        document.getElementById('attr-points').textContent = attrPoints;
+        document.getElementById('effect-points').textContent = effectPoints;
+        document.getElementById('ordinance-points').textContent = ordinancePoints;
+        
+        // Update point display colors and validation
+        const pointsUsedElement = document.getElementById('points-used');
+        const validationElement = document.getElementById('validation-message');
+        const startButton = document.getElementById('start-game');
+        
+        pointsUsedElement.className = '';
+        validationElement.className = 'validation-message';
+        
+        if (totalPoints > maxPoints) {
+            pointsUsedElement.classList.add('points-over');
+            validationElement.classList.add('validation-error');
+            validationElement.textContent = `Over budget by ${totalPoints - maxPoints} points! Reduce allocations.`;
+            validationElement.classList.remove('hidden');
+            startButton.disabled = true;
+        } else if (totalPoints < maxPoints) {
+            pointsUsedElement.classList.add('points-under');
+            validationElement.classList.add('validation-warning');
+            validationElement.textContent = `${maxPoints - totalPoints} points remaining. Consider allocating more for better performance.`;
+            validationElement.classList.remove('hidden');
+            startButton.disabled = false;
+        } else {
+            pointsUsedElement.classList.add('points-used');
+            validationElement.classList.add('validation-success');
+            validationElement.textContent = 'Perfect allocation! All points used efficiently.';
+            validationElement.classList.remove('hidden');
+            startButton.disabled = false;
+        }
+        
+        // Auto-save configuration when valid
+        if (totalPoints <= maxPoints) {
+            saveConfiguration();
+        }
+    }
+
+    function saveConfiguration() {
+        try {
+            const config = {
+                weapon: currentWeapon,
+                utilityWeapon: currentUtilityWeapon,
+                timestamp: Date.now()
+            };
+            localStorage.setItem('weaponConfig', JSON.stringify(config));
+        } catch (error) {
+            console.error('Failed to save configuration:', error);
+        }
+    }
+
+    function loadSavedConfiguration() {
+        try {
+            const saved = localStorage.getItem('weaponConfig');
+            if (!saved) {
+                return false;
+            }
+
+            const config = JSON.parse(saved);
+            
+            // Validate the saved configuration structure
+            if (!config.weapon || !config.weapon.attributes || !config.weapon.effects || !config.weapon.ordinance) {
+                return false;
+            }
+
+            // Load weapon configuration
+            currentWeapon = {
+                attributes: { ...config.weapon.attributes },
+                effects: [...config.weapon.effects],
+                ordinance: config.weapon.ordinance
+            };
+
+            // Load utility weapon
+            if (config.utilityWeapon) {
+                currentUtilityWeapon = config.utilityWeapon;
+            }
+
+            // Apply to UI
+            applyConfigurationToUI();
+            
+            return true;
+        } catch (error) {
+            console.error('Failed to load saved configuration:', error);
+            return false;
+        }
+    }
+
+    function applyConfigurationToUI() {
+        // Apply attributes to sliders
+        Object.entries(currentWeapon.attributes).forEach(([key, value]) => {
+            const slider = document.getElementById(`attr-${key}`);
+            const valueSpan = document.getElementById(`value-${key}`);
+            if (slider && valueSpan) {
+                slider.value = value;
+                valueSpan.textContent = value;
+            }
+        });
+
+        // Apply effects to checkboxes
+        weaponData.effects.forEach(effect => {
+            const checkbox = document.getElementById(`effect-${effect.name}`);
+            if (checkbox) {
+                checkbox.checked = currentWeapon.effects.includes(effect.name);
+            }
+        });
+
+        // Apply ordinance to radio buttons
+        const radio = document.getElementById(`ord-${currentWeapon.ordinance}`);
+        if (radio) {
+            radio.checked = true;
+        }
+
+        // Apply utility weapon to radio buttons
+        const utilityRadio = document.getElementById(`utility-${currentUtilityWeapon}`);
+        if (utilityRadio) {
+            utilityRadio.checked = true;
+        }
+    }
+
+    function getPlayerConfig() {
+        // Map enum names to Java field names
+        const attributeMapping = {
+            'DAMAGE': 'damage',
+            'FIRE_RATE': 'fireRate',
+            'RANGE': 'range',
+            'ACCURACY': 'accuracy',
+            'MAGAZINE_SIZE': 'magazineSize',
+            'RELOAD_TIME': 'reloadTime',
+            'PROJECTILE_SPEED': 'projectileSpeed',
+            'BULLETS_PER_SHOT': 'bulletsPerShot',
+            'LINEAR_DAMPING': 'linearDamping'
+        };
+        
+        // Convert attribute names
+        const mappedAttributes = {};
+        Object.entries(currentWeapon.attributes).forEach(([enumName, value]) => {
+            const fieldName = attributeMapping[enumName];
+            if (fieldName) {
+                mappedAttributes[fieldName] = value;
+            }
+        });
+        
+        const weaponConfig = {
+            type: 'Custom Weapon',
+            bulletEffects: currentWeapon.effects,
+            ordinance: currentWeapon.ordinance,
+            ...mappedAttributes  // Put mapped attributes last to ensure they override any conflicts
+        };
+
+        return {
+            weaponConfig: weaponConfig,
+            utilityWeapon: currentUtilityWeapon,
+            timestamp: Date.now()
+        };
+    }
+
+    function encodePlayerConfig(config) {
+        try {
+            const jsonString = JSON.stringify(config);
+            return btoa(unescape(encodeURIComponent(jsonString)));
+        } catch (error) {
+            console.error('Failed to encode player config:', error);
+            return null;
+        }
+    }
+
+    // Start game button handler
+    document.getElementById('start-game').addEventListener('click', () => {
+        // Save current configuration before starting game
+        saveConfiguration();
+        
+        const playerConfig = getPlayerConfig();
+        const encodedConfig = encodePlayerConfig(playerConfig);
+        
+        if (!encodedConfig) {
+            alert('Failed to encode player configuration. Please try again.');
+            return;
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const gameId = params.get('gameId');
+        const gameType = params.get('gameType');
+        const spectate = params.get('spectate');
+
+        const newParams = new URLSearchParams();
+        newParams.set('config', encodedConfig);
+        if (gameId) newParams.set('gameId', gameId);
+        if (gameType) newParams.set('gameType', gameType);
+        if (spectate) newParams.set('spectate', spectate);
+
+        console.log('Starting game with config:', playerConfig);
+        window.location.href = `/game.html?${newParams.toString()}`;
+    });
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', loadWeaponData);
+</script>
+</body>
+</html>

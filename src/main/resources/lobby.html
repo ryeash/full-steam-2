@@ -13,6 +13,166 @@
     <meta property="og:type" content="website">
     <meta name="game:category" content="Multiplayer Shooter">
     <link rel="stylesheet" type="text/css" href="unified.css">
+    <style>
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal:not(.hidden) {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: rgba(0, 0, 0, 0.95);
+            border: 2px solid #00ff88;
+            border-radius: 12px;
+            max-width: 1200px;
+            width: 95%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            padding: 20px;
+            border-bottom: 2px solid #00ff88;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-header h2 {
+            margin: 0;
+            color: #00ff88;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 2em;
+            cursor: pointer;
+            line-height: 1;
+            padding: 0;
+            width: 40px;
+            height: 40px;
+        }
+        
+        .modal-close:hover {
+            color: #ff4444;
+        }
+        
+        .modal-body {
+            padding: 20px;
+        }
+        
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+        
+        .config-section {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        
+        .config-section h3 {
+            margin: 0 0 15px 0;
+            color: #00ff88;
+            font-size: 1.1em;
+        }
+        
+        .config-item {
+            margin-bottom: 15px;
+        }
+        
+        .config-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .config-item label {
+            display: block;
+            color: #ccc;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+        
+        .config-item input,
+        .config-item select {
+            width: 100%;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 1em;
+        }
+        
+        .config-item input:focus,
+        .config-item select:focus {
+            outline: none;
+            border-color: #00ff88;
+        }
+        
+        .modal-footer {
+            padding: 20px;
+            border-top: 2px solid #444;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        
+        .modal-button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .modal-button.cancel {
+            background: #555;
+            color: #fff;
+        }
+        
+        .modal-button.cancel:hover {
+            background: #666;
+        }
+        
+        .modal-button.create {
+            background: linear-gradient(45deg, #00ff88, #00cc66);
+            color: #000;
+        }
+        
+        .modal-button.create:hover {
+            background: linear-gradient(45deg, #00cc66, #00aa44);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 255, 136, 0.4);
+        }
+        
+        #create-buttons button.custom-game {
+            background: linear-gradient(45deg, #ff9500, #ff6600);
+            border: 2px solid #ff9500;
+        }
+        
+        #create-buttons button.custom-game:hover {
+            background: linear-gradient(45deg, #ff6600, #ff4400);
+            border-color: #ff6600;
+        }
+    </style>
 </head>
 <body>
 <div id="lobby-wrapper">
@@ -42,6 +202,255 @@
     <ul id="games-list">
         <li class="loading">Loading games...</li>
     </ul>
+</div>
+
+<!-- Custom Game Configuration Modal -->
+<div id="custom-game-modal" class="modal hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>⚙️ Custom Game Configuration</h2>
+            <button class="modal-close" onclick="closeCustomGameModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="config-grid">
+                <div class="config-section">
+                    <h3>🎮 Game Settings</h3>
+                    <div class="config-item">
+                        <label for="maxPlayers">Max Players:</label>
+                        <input type="number" id="maxPlayers" min="2" max="50" value="10">
+                    </div>
+                    <div class="config-item">
+                        <label for="teamCount">Team Mode:</label>
+                        <select id="teamCount">
+                            <option value="0">Free For All</option>
+                            <option value="2" selected>2 Teams</option>
+                            <option value="3">3 Teams</option>
+                            <option value="4">4 Teams</option>
+                        </select>
+                    </div>
+                    <div class="config-item">
+                        <label for="scoreStyle">Score Style:</label>
+                        <select id="scoreStyle">
+                            <option value="TOTAL_KILLS">Total Kills (Deathmatch)</option>
+                            <option value="OBJECTIVE">Objectives Only (CTF/KOTH/etc.)</option>
+                            <option value="TOTAL">Total (Kills + Objectives)</option>
+                        </select>
+                    </div>
+                    <div class="config-item">
+                        <label for="enableAIFilling">🤖 Fill with AI Players:</label>
+                        <input type="checkbox" id="enableAIFilling" checked>
+                        <span class="checkbox-label">Automatically fill empty slots with AI players</span>
+                    </div>
+                </div>
+                
+                <div class="config-section">
+                    <h3>🗺️ World Settings</h3>
+                    <div class="config-item">
+                        <label for="worldWidth">World Width:</label>
+                        <input type="number" id="worldWidth" min="1000" max="5000" step="100" value="2000">
+                    </div>
+                    <div class="config-item">
+                        <label for="worldHeight">World Height:</label>
+                        <input type="number" id="worldHeight" min="1000" max="5000" step="100" value="2000">
+                    </div>
+                </div>
+                
+                <div class="config-section">
+                    <h3>⚔️ Player Settings</h3>
+                    <div class="config-item">
+                        <label for="playerMaxHealth">Max Health:</label>
+                        <input type="number" id="playerMaxHealth" min="50" max="500" step="10" value="100">
+                    </div>
+                </div>
+                
+                <div class="config-section">
+                    <h3>⏱️ Round Rules</h3>
+                    <div class="config-item">
+                        <label for="roundDuration">Round Duration (seconds):</label>
+                        <input type="number" id="roundDuration" min="0" max="600" step="30" value="0">
+                        <small style="color: #888; font-size: 0.8em;">0 = infinite (no rounds)</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="restDuration">Rest Between Rounds (seconds):</label>
+                        <input type="number" id="restDuration" min="5" max="60" step="5" value="10">
+                    </div>
+                </div>
+                
+                <div class="config-section">
+                    <h3>🚩 Capture the Flag</h3>
+                    <div class="config-item">
+                        <label for="flagsPerTeam">Flags Per Team:</label>
+                        <input type="number" id="flagsPerTeam" min="0" max="3" value="0">
+                        <small style="color: #888; font-size: 0.8em;">0 = disabled, 1-3 = CTF mode</small>
+                    </div>
+                </div>
+                
+                <div class="config-section">
+                    <h3>👑 King of the Hill</h3>
+                    <div class="config-item">
+                        <label for="kothZones">Number of Zones:</label>
+                        <input type="number" id="kothZones" min="0" max="4" value="0">
+                        <small style="color: #888; font-size: 0.8em;">0 = disabled, 1-4 = KOTH zones</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="kothPointsPerSecond">Points Per Second:</label>
+                        <input type="number" id="kothPointsPerSecond" min="0.5" max="5" step="0.5" value="1.0">
+                        <small style="color: #888; font-size: 0.8em;">Points awarded for controlling a zone</small>
+                    </div>
+                </div>
+                
+                <div class="config-section">
+                    <h3>🏭 Workshops</h3>
+                    <div class="config-item">
+                        <label for="addWorkshops">Enable Workshops:</label>
+                        <input type="checkbox" id="addWorkshops">
+                        <small style="color: #888; font-size: 0.8em;">Each team gets one workshop in their spawn zone</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="workshopCraftTime">Craft Time (seconds):</label>
+                        <input type="number" id="workshopCraftTime" min="5" max="30" step="1" value="10">
+                        <small style="color: #888; font-size: 0.8em;">Time required to craft a power-up</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="workshopCraftRadius">Craft Radius:</label>
+                        <input type="number" id="workshopCraftRadius" min="50" max="150" step="10" value="80">
+                        <small style="color: #888; font-size: 0.8em;">Range around workshop for crafting</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="maxPowerUpsPerWorkshop">Max Power-ups per Workshop:</label>
+                        <input type="number" id="maxPowerUpsPerWorkshop" min="1" max="8" value="3">
+                        <small style="color: #888; font-size: 0.8em;">Maximum power-ups that can exist around each workshop</small>
+                    </div>
+                </div>
+                
+                <div class="config-section">
+                    <h3>🏛️ Headquarters</h3>
+                    <div class="config-item">
+                        <label for="addHeadquarters">Enable Headquarters:</label>
+                        <input type="checkbox" id="addHeadquarters" checked>
+                        <small style="color: #888; font-size: 0.8em;">Each team gets a destructible base in their spawn zone</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="headquartersMaxHealth">Max Health:</label>
+                        <input type="number" id="headquartersMaxHealth" min="500" max="5000" step="100" value="1000">
+                        <small style="color: #888; font-size: 0.8em;">Health of each headquarters structure</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="headquartersPointsPerDamage">Points Per Damage:</label>
+                        <input type="number" id="headquartersPointsPerDamage" min="0" max="1" step="0.05" value="0.1">
+                        <small style="color: #888; font-size: 0.8em;">Points awarded per damage dealt (0.1 = 1 point per 10 damage)</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="headquartersDestructionBonus">Destruction Bonus:</label>
+                        <input type="number" id="headquartersDestructionBonus" min="0" max="500" step="10" value="100">
+                        <small style="color: #888; font-size: 0.8em;">Bonus points for destroying enemy HQ</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="headquartersDestructionEndsGame">
+                            <input type="checkbox" id="headquartersDestructionEndsGame" checked style="width: auto; margin-right: 5px;">
+                            HQ Destruction Ends Game
+                        </label>
+                        <small style="color: #888; font-size: 0.8em;">Game ends immediately when a headquarters is destroyed</small>
+                    </div>
+                </div>
+                
+                <div class="config-section">
+                    <h3>🏆 Victory Conditions</h3>
+                    <div class="config-item">
+                        <label for="victoryCondition">Win Condition:</label>
+                        <select id="victoryCondition" onchange="updateVictoryFields()">
+                            <option value="ENDLESS">Endless (No Win Condition)</option>
+                            <option value="SCORE_LIMIT">Score Limit (First to X)</option>
+                            <option value="TIME_LIMIT">Time Limit (Most at Time)</option>
+                            <option value="OBJECTIVE">Objective (CTF/KOTH)</option>
+                        </select>
+                    </div>
+                    <div class="config-item" id="scoreLimitField" style="display: none;">
+                        <label for="scoreLimit">Score Limit:</label>
+                        <input type="number" id="scoreLimit" min="1" max="200" value="50">
+                        <small style="color: #888; font-size: 0.8em;">First to reach this score wins</small>
+                    </div>
+                    <div class="config-item" id="timeLimitField" style="display: none;">
+                        <label for="timeLimit">Time Limit (seconds):</label>
+                        <input type="number" id="timeLimit" min="60" max="3600" step="60" value="600">
+                        <small style="color: #888; font-size: 0.8em;">Game duration (10 min default)</small>
+                    </div>
+                    <div class="config-item" id="suddenDeathField" style="display: none;">
+                        <label for="suddenDeath">
+                            <input type="checkbox" id="suddenDeath" style="width: auto; margin-right: 5px;">
+                            Enable Sudden Death (Next score wins on tie)
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="config-section">
+                    <h3>🔄 Respawn Rules</h3>
+                    <div class="config-item">
+                        <label for="respawnMode">Respawn Mode:</label>
+                        <select id="respawnMode" onchange="updateRespawnFields()">
+                            <option value="INSTANT">Instant (Respawn after delay)</option>
+                            <option value="WAVE">Wave (Team respawns together)</option>
+                            <option value="NEXT_ROUND">Next Round (No respawn until round ends)</option>
+                            <option value="ELIMINATION">Elimination (One life only)</option>
+                            <option value="LIMITED">Limited (X lives per player)</option>
+                        </select>
+                    </div>
+                    <div class="config-item" id="respawnDelayField">
+                        <label for="respawnDelay">Respawn Delay (seconds):</label>
+                        <input type="number" id="respawnDelay" min="0" max="30" step="1" value="5">
+                        <small style="color: #888; font-size: 0.8em;">Time before respawn</small>
+                    </div>
+                    <div class="config-item" id="waveIntervalField" style="display: none;">
+                        <label for="waveRespawnInterval">Wave Interval (seconds):</label>
+                        <input type="number" id="waveRespawnInterval" min="10" max="120" step="10" value="30">
+                        <small style="color: #888; font-size: 0.8em;">Time between wave respawns</small>
+                    </div>
+                    <div class="config-item" id="maxLivesField" style="display: none;">
+                        <label for="maxLives">Max Lives Per Player:</label>
+                        <input type="number" id="maxLives" min="1" max="10" value="3">
+                        <small style="color: #888; font-size: 0.8em;">Lives before elimination</small>
+                    </div>
+                </div>
+                
+                <div class="config-section">
+                    <h3>🌋 Environmental Events</h3>
+                    <div class="config-item">
+                        <label for="enableRandomEvents">
+                            <input type="checkbox" id="enableRandomEvents" style="width: auto; margin-right: 5px;" onchange="updateEventFields()">
+                            Enable Random Events
+                        </label>
+                        <small style="color: #888; font-size: 0.8em;">Dynamic hazards and supply drops during gameplay</small>
+                    </div>
+                    <div id="eventConfigFields" style="display: none;">
+                        <div class="config-item">
+                            <label for="randomEventInterval">Event Interval (seconds):</label>
+                            <input type="number" id="randomEventInterval" min="20" max="300" step="10" value="40">
+                            <small style="color: #888; font-size: 0.8em;">Average time between events</small>
+                        </div>
+                        <div class="config-item">
+                            <label for="eventWarningDuration">Warning Duration (seconds):</label>
+                            <input type="number" id="eventWarningDuration" min="1" max="10" step="0.5" value="3">
+                            <small style="color: #888; font-size: 0.8em;">Warning time before event activates</small>
+                        </div>
+                        <div class="config-item">
+                            <label for="meteorShowerCount">Meteor Shower Intensity:</label>
+                            <input type="number" id="meteorShowerCount" min="3" max="20" value="8">
+                            <small style="color: #888; font-size: 0.8em;">Number of meteor impacts</small>
+                        </div>
+                        <div class="config-item">
+                            <label for="supplyDropCount">Supply Drop Count:</label>
+                            <input type="number" id="supplyDropCount" min="1" max="15" value="5">
+                            <small style="color: #888; font-size: 0.8em;">Number of power-up drops</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="modal-button cancel" onclick="closeCustomGameModal()">Cancel</button>
+            <button class="modal-button create" onclick="createCustomGame()">🚀 Create Game</button>
+        </div>
+    </div>
 </div>
 
 <script type="text/javascript">
@@ -100,20 +509,54 @@
 
         // Update "Create Game" buttons
         createButtons.innerHTML = '';
-        if (lobbyInfo.gameTypes && lobbyInfo.gameTypes.length > 0) {
-            lobbyInfo.gameTypes.forEach(gameType => {
-                const button = document.createElement('button');
-                button.textContent = gameType;
-                button.onclick = () => createGame(gameType);
-                createButtons.appendChild(button);
-            });
-        } else {
-            createButtons.innerHTML = `
-                <div class="empty-state" style="margin: 0;">
-                    <div>No game types available</div>
-                </div>
-            `;
-        }
+        
+        // Add preset game buttons
+        const teamBattleButton = document.createElement('button');
+        teamBattleButton.textContent = '⚔️ Team Battle';
+        teamBattleButton.onclick = () => createPresetGame('team-battle');
+        createButtons.appendChild(teamBattleButton);
+        
+        const ffaButton = document.createElement('button');
+        ffaButton.textContent = '💥 Free For All';
+        ffaButton.onclick = () => createPresetGame('ffa');
+        createButtons.appendChild(ffaButton);
+        
+        const ctfButton = document.createElement('button');
+        ctfButton.textContent = '🚩 Capture The Flag';
+        ctfButton.onclick = () => createPresetGame('ctf');
+        createButtons.appendChild(ctfButton);
+        
+        const dominationButton = document.createElement('button');
+        dominationButton.textContent = '👑 Domination';
+        dominationButton.onclick = () => createPresetGame('domination');
+        createButtons.appendChild(dominationButton);
+        
+        const eliminationButton = document.createElement('button');
+        eliminationButton.textContent = '💀 Elimination';
+        eliminationButton.onclick = () => createPresetGame('elimination');
+        createButtons.appendChild(eliminationButton);
+        
+        const stockBattleButton = document.createElement('button');
+        stockBattleButton.textContent = '❤️ Stock Battle';
+        stockBattleButton.onclick = () => createPresetGame('stock-battle');
+        createButtons.appendChild(stockBattleButton);
+        
+        const headquartersButton = document.createElement('button');
+        headquartersButton.textContent = '🏛️ Headquarters Assault';
+        headquartersButton.onclick = () => createPresetGame('headquarters-assault');
+        createButtons.appendChild(headquartersButton);
+        
+        const chaosButton = document.createElement('button');
+        chaosButton.textContent = '🌋 Chaos Mode';
+        chaosButton.onclick = () => createPresetGame('chaos-mode');
+        createButtons.appendChild(chaosButton);
+        
+        // Add custom game button
+        const customButton = document.createElement('button');
+        customButton.textContent = '⚙️ Custom Game';
+        customButton.className = 'custom-game';
+        customButton.onclick = () => openCustomGameModal();
+        createButtons.appendChild(customButton);
 
         // Update active games list
         gamesList.innerHTML = '';
@@ -128,7 +571,7 @@
 
                 listItem.innerHTML = `
                     <div class="game-header">
-                        <div class="game-type">${game.gameType}</div>
+                        <div class="game-type">Game ${game.gameId}</div>
                         <div class="game-status ${isFull ? 'full' : ''}">${isFull ? 'Full' : 'Open'}</div>
                     </div>
                     <div class="game-info">
@@ -158,7 +601,7 @@
                         </div>
                     </div>
                     <div class="game-actions">
-                        ${!isFull ? `<button class="join-button" onclick="joinGame('${game.gameId}', '${game.gameType}')">🎯 Join Game</button>` : 
+                        ${!isFull ? `<button class="join-button" onclick="joinGame('${game.gameId}')">🎯 Join Game</button>` : 
                           `<button class="join-button" disabled>Game Full</button>`}
                         <button class="join-button spectate-button" onclick="spectateGame('${game.gameId}')">👁️ Spectate</button>
                     </div>
@@ -192,16 +635,289 @@
         return `${diffDays}d ${diffHours % 24}h ago`;
     }
 
-    function joinGame(gameId, gameType) {
-        window.location.href = `/game.html?gameId=${gameId}&gameType=${gameType}`;
+    function joinGame(gameId) {
+        window.location.href = `/config.html?gameId=${gameId}`;
     }
 
-    function createGame(gameType) {
-        window.location.href = `/game.html?gameType=${gameType}`;
+    async function createPresetGame(presetType) {
+        let gameConfig;
+        
+        if (presetType === 'team-battle') {
+            gameConfig = {
+                maxPlayers: 20,
+                teamCount: 4,
+                worldWidth: 2500,
+                worldHeight: 2500,
+                playerMaxHealth: 100,
+                aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
+                rules: {
+                    roundDuration: 120,
+                    restDuration: 10,
+                    flagsPerTeam: 0,
+                    scoreStyle: 'TOTAL_KILLS',
+                    victoryCondition: 'TIME_LIMIT',
+                    scoreLimit: 50,
+                    timeLimit: 600,  // 10 minutes
+                    suddenDeath: true,
+                    respawnMode: 'INSTANT',
+                    respawnDelay: 5,
+                    waveRespawnInterval: 30,
+                    maxLives: -1,
+                    kothZones: 0,
+                    kothPointsPerSecond: 1.0,
+                    workshops: 0,
+                    workshopCraftTime: 10,
+                    workshopCraftRadius: 80,
+                    maxPowerUpsPerWorkshop: 3
+                }
+            };
+        } else if (presetType === 'ffa') {
+            gameConfig = {
+                maxPlayers: 10,
+                teamCount: 0,
+                worldWidth: 1500,
+                worldHeight: 1500,
+                playerMaxHealth: 100,
+                aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
+                rules: {
+                    roundDuration: 120,
+                    restDuration: 10,
+                    flagsPerTeam: 0,
+                    scoreStyle: 'TOTAL_KILLS',
+                    victoryCondition: 'SCORE_LIMIT',
+                    scoreLimit: 25,  // First to 25 kills
+                    timeLimit: 600,
+                    suddenDeath: false,
+                    respawnMode: 'INSTANT',
+                    respawnDelay: 3,  // Faster respawn for FFA
+                    waveRespawnInterval: 30,
+                    maxLives: -1,
+                    kothZones: 0,
+                    kothPointsPerSecond: 1.0,
+                    workshops: 0,
+                    workshopCraftTime: 10,
+                    workshopCraftRadius: 80,
+                    maxPowerUpsPerWorkshop: 3
+                }
+            };
+        } else if (presetType === 'ctf') {
+            gameConfig = {
+                maxPlayers: 24,                 // Increased for 3 teams
+                teamCount: 3,                   // 3-way CTF battle
+                worldWidth: 2500,               // Larger world for 3 teams
+                worldHeight: 2500,
+                playerMaxHealth: 100,
+                aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
+                rules: {
+                    roundDuration: 300,         // 5 minute rounds
+                    restDuration: 15,           // 15 second rest
+                    flagsPerTeam: 1,            // Classic CTF - 1 flag per team
+                    scoreStyle: 'OBJECTIVE',    // Score by objectives only
+                    victoryCondition: 'OBJECTIVE',
+                    scoreLimit: 5,              // First to 5 captures wins (more for 3 teams)
+                    timeLimit: 600,
+                    suddenDeath: true,          // Sudden death if tied
+                    respawnMode: 'WAVE',        // Wave respawns for coordinated pushes
+                    respawnDelay: 5,
+                    waveRespawnInterval: 20,    // 20 second waves for CTF
+                    maxLives: -1,
+                    kothZones: 0,               // No KOTH zones in CTF
+                    kothPointsPerSecond: 1.0,
+                    workshops: 0,
+                    workshopCraftTime: 10,
+                    workshopCraftRadius: 80,
+                    maxPowerUpsPerWorkshop: 3
+                }
+            };
+        } else if (presetType === 'domination') {
+            gameConfig = {
+                maxPlayers: 16,
+                teamCount: 3,                   // 3-way battle for zones
+                worldWidth: 2200,
+                worldHeight: 2200,
+                playerMaxHealth: 100,
+                aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
+                rules: {
+                    roundDuration: 240,         // 4 minute rounds
+                    restDuration: 15,
+                    flagsPerTeam: 0,            // No flags in domination
+                    scoreStyle: 'OBJECTIVE',    // Points from zone control only
+                    victoryCondition: 'SCORE_LIMIT',
+                    scoreLimit: 200,            // First to 200 points (zone control only)
+                    timeLimit: 900,             // 15 minute fallback
+                    suddenDeath: true,
+                    respawnMode: 'INSTANT',
+                    respawnDelay: 4,
+                    waveRespawnInterval: 30,
+                    maxLives: -1,
+                    kothZones: 3,               // 3 zones to fight over!
+                    kothPointsPerSecond: 2.0    // 2 points/second for holding zones
+                }
+            };
+        } else if (presetType === 'elimination') {
+            gameConfig = {
+                maxPlayers: 20,                 // Battle royale scale
+                teamCount: 0,                   // Every player for themselves
+                worldWidth: 2000,
+                worldHeight: 2000,
+                playerMaxHealth: 100,
+                aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
+                rules: {
+                    roundDuration: 0,           // No rounds - single continuous game
+                    restDuration: 10,
+                    flagsPerTeam: 0,            // No flags
+                    scoreStyle: 'TOTAL_KILLS',  // Kills matter for placement
+                    victoryCondition: 'ELIMINATION',  // Last player standing wins!
+                    scoreLimit: 50,
+                    timeLimit: 900,             // 15 minute max (safety limit)
+                    suddenDeath: false,
+                    respawnMode: 'ELIMINATION', // ONE LIFE - Battle Royale style!
+                    respawnDelay: 0,
+                    waveRespawnInterval: 30,
+                    maxLives: -1,
+                    kothZones: 0,
+                    kothPointsPerSecond: 1.0,
+                    workshops: 0,
+                    workshopCraftTime: 10,
+                    workshopCraftRadius: 80,
+                    maxPowerUpsPerWorkshop: 3
+                }
+            };
+        } else if (presetType === 'stock-battle') {
+            gameConfig = {
+                maxPlayers: 16,
+                teamCount: 4,                   // 4 teams, Smash Bros style
+                worldWidth: 1800,
+                worldHeight: 1800,
+                playerMaxHealth: 100,
+                aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
+                rules: {
+                    roundDuration: 180,         // 3 minute rounds
+                    restDuration: 12,
+                    flagsPerTeam: 0,
+                    scoreStyle: 'TOTAL_KILLS',
+                    victoryCondition: 'ELIMINATION',  // Last team with lives wins
+                    scoreLimit: 50,
+                    timeLimit: 600,             // 10 minute fallback
+                    suddenDeath: true,          // Sudden death if time runs out
+                    respawnMode: 'LIMITED',     // Limited lives per player
+                    respawnDelay: 3,            // Quick respawn to keep action flowing
+                    waveRespawnInterval: 30,
+                    maxLives: 5,                // 5 stocks per player (like Smash Bros!)
+                    kothZones: 0,
+                    kothPointsPerSecond: 1.0,
+                    workshops: 0,
+                    workshopCraftTime: 10,
+                    workshopCraftRadius: 80,
+                    maxPowerUpsPerWorkshop: 3
+                }
+            };
+        } else if (presetType === 'headquarters-assault') {
+            gameConfig = {
+                maxPlayers: 16,
+                teamCount: 2,                   // 2 teams competing for headquarters destruction
+                worldWidth: 4000,               // Wide battlefield
+                worldHeight: 1000,              // Shorter height creates lanes/frontlines
+                playerMaxHealth: 100,
+                aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
+                rules: {
+                    roundDuration: 0,           // No rounds - continuous battle
+                    restDuration: 10,
+                    flagsPerTeam: 0,            // No flags in HQ assault
+                    scoreStyle: 'TOTAL',        // Kills + HQ damage points
+                    victoryCondition: 'OBJECTIVE',  // Win by destroying enemy HQ
+                    scoreLimit: 300,            // Fallback score limit
+                    timeLimit: 900,             // 15 minute fallback
+                    suddenDeath: false,
+                    respawnMode: 'WAVE',        // Wave respawns for coordinated attacks
+                    respawnDelay: 5,
+                    waveRespawnInterval: 25,    // 25 second waves
+                    maxLives: -1,               // Infinite lives
+                    kothZones: 0,               // No KOTH zones
+                    kothPointsPerSecond: 1.0,
+                    addWorkshops: true,         // Workshops enabled for power-up crafting
+                    workshopCraftTime: 12,      // 12 seconds to craft
+                    workshopCraftRadius: 80,
+                    maxPowerUpsPerWorkshop: 4,  // More power-ups for strategic gameplay
+                    addHeadquarters: true,      // Headquarters are the main objective
+                    headquartersMaxHealth: 1500,  // Durable headquarters
+                    headquartersPointsPerDamage: 0.1,  // Points for damaging HQ
+                    headquartersDestructionBonus: 150,  // Big bonus for destroying enemy HQ
+                    headquartersDestructionEndsGame: true  // Game ends when HQ destroyed
+                }
+            };
+        } else if (presetType === 'chaos-mode') {
+            gameConfig = {
+                maxPlayers: 16,
+                teamCount: 3,                   // 3-way battle increases chaos
+                worldWidth: 2000,
+                worldHeight: 2000,
+                playerMaxHealth: 100,
+                aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
+                rules: {
+                    roundDuration: 180,         // 3 minute rounds
+                    restDuration: 12,
+                    flagsPerTeam: 0,
+                    scoreStyle: 'TOTAL',        // All points count
+                    victoryCondition: 'TIME_LIMIT',  // Survive the chaos for 10 minutes
+                    scoreLimit: 100,
+                    timeLimit: 600,             // 10 minutes of mayhem
+                    suddenDeath: true,
+                    respawnMode: 'INSTANT',     // Fast respawns keep action flowing
+                    respawnDelay: 3,
+                    waveRespawnInterval: 30,
+                    maxLives: -1,
+                    kothZones: 2,               // Some zones to fight over
+                    kothPointsPerSecond: 1.5,
+                    addWorkshops: false,
+                    workshopCraftTime: 10,
+                    workshopCraftRadius: 80,
+                    maxPowerUpsPerWorkshop: 3,
+                    addHeadquarters: false,
+                    headquartersMaxHealth: 1000,
+                    headquartersPointsPerDamage: 0.1,
+                    headquartersDestructionBonus: 100,
+                    headquartersDestructionEndsGame: false,
+                    enableRandomEvents: true,
+                    randomEventInterval: 15,     // Events every 15 seconds on average
+                    eventWarningDuration: 3,     // 3 second warning
+                    meteorShowerCount: 17,       // Intense meteor showers
+                    supplyDropCount: 8           // Generous supply drops
+                }
+            };
+        }
+        
+        try {
+            const response = await fetch('/api/games', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(gameConfig)
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to create game');
+            }
+
+            const result = await response.json();
+            window.location.href = `/config.html?gameId=${result.gameId}`;
+        } catch (error) {
+            console.error('Error creating preset game:', error);
+            alert('Failed to create game. Please try again.');
+        }
     }
 
     function spectateGame(gameId) {
-        window.location.href = `/game.html?spectate=true&gameId=${gameId}`;
+        window.location.href = `/config.html?spectate=true&gameId=${gameId}`;
     }
 
     // Add connection status monitoring
@@ -233,6 +949,228 @@
     document.addEventListener('visibilitychange', function() {
         if (document.visibilityState === 'visible') {
             fetchLobbyInfo(); // Refresh when user comes back to tab
+        }
+    });
+
+    // Custom Game Modal Functions
+    async function openCustomGameModal() {
+        try {
+            // Fetch default configuration from server
+            const response = await fetch('/api/game-config/default');
+            const defaultConfig = await response.json();
+            
+            // Populate form with default values
+            document.getElementById('maxPlayers').value = defaultConfig.maxPlayers;
+            document.getElementById('teamCount').value = defaultConfig.teamCount;
+            document.getElementById('worldWidth').value = defaultConfig.worldWidth;
+            document.getElementById('worldHeight').value = defaultConfig.worldHeight;
+            document.getElementById('playerMaxHealth').value = defaultConfig.playerMaxHealth;
+            document.getElementById('enableAIFilling').checked = defaultConfig.enableAIFilling;
+            
+            // Populate rules fields
+            if (defaultConfig.rules) {
+                document.getElementById('roundDuration').value = defaultConfig.rules.roundDuration || 0;
+                document.getElementById('restDuration').value = defaultConfig.rules.restDuration || 10;
+                document.getElementById('flagsPerTeam').value = defaultConfig.rules.flagsPerTeam || 0;
+                document.getElementById('scoreStyle').value = defaultConfig.rules.scoreStyle || 'TOTAL_KILLS';
+                document.getElementById('victoryCondition').value = defaultConfig.rules.victoryCondition || 'ENDLESS';
+                document.getElementById('scoreLimit').value = defaultConfig.rules.scoreLimit || 50;
+                document.getElementById('timeLimit').value = defaultConfig.rules.timeLimit || 600;
+                document.getElementById('suddenDeath').checked = defaultConfig.rules.suddenDeath || false;
+                document.getElementById('respawnMode').value = defaultConfig.rules.respawnMode || 'INSTANT';
+                document.getElementById('respawnDelay').value = defaultConfig.rules.respawnDelay || 5;
+                document.getElementById('waveRespawnInterval').value = defaultConfig.rules.waveRespawnInterval || 30;
+                document.getElementById('maxLives').value = defaultConfig.rules.maxLives || 3;
+                document.getElementById('kothZones').value = defaultConfig.rules.kothZones || 0;
+                document.getElementById('kothPointsPerSecond').value = defaultConfig.rules.kothPointsPerSecond || 1.0;
+                document.getElementById('addWorkshops').checked = defaultConfig.rules.addWorkshops || false;
+                document.getElementById('workshopCraftTime').value = defaultConfig.rules.workshopCraftTime || 10;
+                document.getElementById('workshopCraftRadius').value = defaultConfig.rules.workshopCraftRadius || 80;
+                document.getElementById('maxPowerUpsPerWorkshop').value = defaultConfig.rules.maxPowerUpsPerWorkshop || 3;
+                document.getElementById('enableRandomEvents').checked = defaultConfig.rules.enableRandomEvents || false;
+                document.getElementById('randomEventInterval').value = defaultConfig.rules.randomEventInterval || 40;
+                document.getElementById('eventWarningDuration').value = defaultConfig.rules.eventWarningDuration || 3;
+                document.getElementById('meteorShowerCount').value = defaultConfig.rules.meteorShowerCount || 8;
+                document.getElementById('supplyDropCount').value = defaultConfig.rules.supplyDropCount || 5;
+            } else {
+                document.getElementById('roundDuration').value = 0;
+                document.getElementById('restDuration').value = 10;
+                document.getElementById('flagsPerTeam').value = 0;
+                document.getElementById('scoreStyle').value = 'TOTAL_KILLS';
+                document.getElementById('victoryCondition').value = 'ENDLESS';
+                document.getElementById('scoreLimit').value = 50;
+                document.getElementById('timeLimit').value = 600;
+                document.getElementById('suddenDeath').checked = false;
+                document.getElementById('respawnMode').value = 'INSTANT';
+                document.getElementById('respawnDelay').value = 5;
+                document.getElementById('kothZones').value = 0;
+                document.getElementById('kothPointsPerSecond').value = 1.0;
+                document.getElementById('waveRespawnInterval').value = 30;
+                document.getElementById('maxLives').value = 3;
+                document.getElementById('addWorkshops').checked = false;
+                document.getElementById('workshopCraftTime').value = 10;
+                document.getElementById('workshopCraftRadius').value = 80;
+                document.getElementById('maxPowerUpsPerWorkshop').value = 3;
+                document.getElementById('enableRandomEvents').checked = false;
+                document.getElementById('randomEventInterval').value = 40;
+                document.getElementById('eventWarningDuration').value = 3;
+                document.getElementById('meteorShowerCount').value = 8;
+                document.getElementById('supplyDropCount').value = 5;
+            }
+            
+            // Update field visibility
+            updateVictoryFields();
+            updateRespawnFields();
+            updateEventFields();
+            
+            // Show modal
+            document.getElementById('custom-game-modal').classList.remove('hidden');
+        } catch (error) {
+            console.error('Error loading default config:', error);
+            alert('Failed to load configuration. Please try again.');
+        }
+    }
+
+    function updateVictoryFields() {
+        const victoryCondition = document.getElementById('victoryCondition').value;
+        const scoreLimitField = document.getElementById('scoreLimitField');
+        const timeLimitField = document.getElementById('timeLimitField');
+        const suddenDeathField = document.getElementById('suddenDeathField');
+        
+        // Hide all fields by default
+        scoreLimitField.style.display = 'none';
+        timeLimitField.style.display = 'none';
+        suddenDeathField.style.display = 'none';
+        
+        // Show relevant fields based on selection
+        switch (victoryCondition) {
+            case 'SCORE_LIMIT':
+                scoreLimitField.style.display = 'block';
+                break;
+            case 'TIME_LIMIT':
+                timeLimitField.style.display = 'block';
+                suddenDeathField.style.display = 'block';
+                break;
+            case 'OBJECTIVE':
+                scoreLimitField.style.display = 'block';
+                suddenDeathField.style.display = 'block';
+                break;
+        }
+    }
+    
+    function updateEventFields() {
+        const enableEvents = document.getElementById('enableRandomEvents').checked;
+        const eventConfigFields = document.getElementById('eventConfigFields');
+        eventConfigFields.style.display = enableEvents ? 'block' : 'none';
+    }
+    
+    function updateRespawnFields() {
+        const respawnMode = document.getElementById('respawnMode').value;
+        const respawnDelayField = document.getElementById('respawnDelayField');
+        const waveIntervalField = document.getElementById('waveIntervalField');
+        const maxLivesField = document.getElementById('maxLivesField');
+        
+        // Hide all fields by default
+        respawnDelayField.style.display = 'none';
+        waveIntervalField.style.display = 'none';
+        maxLivesField.style.display = 'none';
+        
+        // Show relevant fields based on selection
+        switch (respawnMode) {
+            case 'INSTANT':
+                respawnDelayField.style.display = 'block';
+                break;
+            case 'WAVE':
+                waveIntervalField.style.display = 'block';
+                break;
+            case 'LIMITED':
+                respawnDelayField.style.display = 'block';
+                maxLivesField.style.display = 'block';
+                break;
+            // NEXT_ROUND and ELIMINATION don't need extra fields
+        }
+    }
+    
+    function closeCustomGameModal() {
+        document.getElementById('custom-game-modal').classList.add('hidden');
+    }
+
+    async function createCustomGame() {
+        const gameConfig = {
+            maxPlayers: parseInt(document.getElementById('maxPlayers').value),
+            teamCount: parseInt(document.getElementById('teamCount').value),
+            worldWidth: parseFloat(document.getElementById('worldWidth').value),
+            worldHeight: parseFloat(document.getElementById('worldHeight').value),
+            playerMaxHealth: parseFloat(document.getElementById('playerMaxHealth').value),
+            aiCheckIntervalMs: 10000,
+            enableAIFilling: document.getElementById('enableAIFilling').checked,
+            rules: {
+                roundDuration: parseFloat(document.getElementById('roundDuration').value),
+                restDuration: parseFloat(document.getElementById('restDuration').value),
+                flagsPerTeam: parseInt(document.getElementById('flagsPerTeam').value),
+                scoreStyle: document.getElementById('scoreStyle').value,
+                victoryCondition: document.getElementById('victoryCondition').value,
+                scoreLimit: parseInt(document.getElementById('scoreLimit').value),
+                timeLimit: parseFloat(document.getElementById('timeLimit').value),
+                suddenDeath: document.getElementById('suddenDeath').checked,
+                respawnMode: document.getElementById('respawnMode').value,
+                respawnDelay: parseFloat(document.getElementById('respawnDelay').value),
+                waveRespawnInterval: parseFloat(document.getElementById('waveRespawnInterval').value),
+                maxLives: parseInt(document.getElementById('maxLives').value),
+                kothZones: parseInt(document.getElementById('kothZones').value),
+                kothPointsPerSecond: parseFloat(document.getElementById('kothPointsPerSecond').value),
+                addWorkshops: document.getElementById('addWorkshops').checked,
+                workshopCraftTime: parseFloat(document.getElementById('workshopCraftTime').value),
+                workshopCraftRadius: parseFloat(document.getElementById('workshopCraftRadius').value),
+                maxPowerUpsPerWorkshop: parseInt(document.getElementById('maxPowerUpsPerWorkshop').value),
+                addHeadquarters: document.getElementById('addHeadquarters').checked,
+                headquartersMaxHealth: parseFloat(document.getElementById('headquartersMaxHealth').value),
+                headquartersPointsPerDamage: parseFloat(document.getElementById('headquartersPointsPerDamage').value),
+                headquartersDestructionBonus: parseInt(document.getElementById('headquartersDestructionBonus').value),
+                headquartersDestructionEndsGame: document.getElementById('headquartersDestructionEndsGame').checked,
+                enableRandomEvents: document.getElementById('enableRandomEvents').checked,
+                randomEventInterval: parseFloat(document.getElementById('randomEventInterval').value),
+                eventWarningDuration: parseFloat(document.getElementById('eventWarningDuration').value),
+                meteorShowerCount: parseInt(document.getElementById('meteorShowerCount').value),
+                supplyDropCount: parseInt(document.getElementById('supplyDropCount').value)
+            }
+        };
+
+        try {
+            const response = await fetch('/api/games', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(gameConfig)
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to create game');
+            }
+
+            const result = await response.json();
+            closeCustomGameModal();
+            
+            // Redirect to weapon config page for the new game
+            window.location.href = `/config.html?gameId=${result.gameId}`;
+        } catch (error) {
+            console.error('Error creating custom game:', error);
+            alert('Failed to create custom game. Please try again.');
+        }
+    }
+
+    // Close modal when clicking outside
+    document.getElementById('custom-game-modal').addEventListener('click', function(event) {
+        if (event.target === this) {
+            closeCustomGameModal();
+        }
+    });
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            closeCustomGameModal();
         }
     });
 </script>

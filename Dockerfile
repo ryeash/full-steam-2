@@ -1,6 +1,6 @@
 # Stage 1: Build Stage
 FROM gradle:jdk21-corretto AS build
-ARG GITHUB_REPO_URL=https://github.com/ryeash/full-steam
+ARG GITHUB_REPO_URL=https://github.com/ryeash/full-steam-2
 ARG BRANCH=master
 
 # Clone the repository

@@ -2,15 +2,14 @@ plugins {
     id 'java'
     id 'io.micronaut.application' version '4.5.4'
     id 'com.gradleup.shadow' version "8.3.9"
-    id 'org.graalvm.buildtools.native' version '0.11.0'
 }
 
 group = 'com.fullsteam'
 version = '1.0.0-SNAPSHOT'
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
 repositories {
@@ -22,9 +21,11 @@ micronaut {
 }
 
 dependencies {
+    annotationProcessor("org.projectlombok:lombok:1.18.40")
     annotationProcessor("io.micronaut:micronaut-core")
     annotationProcessor("io.micronaut:micronaut-inject-java")
 
+    compileOnly 'org.projectlombok:lombok:1.18.40'
     implementation("io.micronaut:micronaut-http-server-netty")
     implementation("io.micronaut:micronaut-websocket")
     implementation("io.micronaut:micronaut-jackson-databind")
@@ -61,28 +62,3 @@ shadowJar {
     zip64 = true
 }
 
-graalvmNative {
-    agent {
-        defaultMode = "standard"
-        enabled = false
-    }
-    binaries {
-        main {
-            mainClass = 'com.fullsteam.Application'
-            fallback = false
-            useFatJar = true
-//             buildArgs.add('--verbose')
-            buildArgs.add('--add-opens=java.base/java.nio=ALL-UNNAMED')
-            buildArgs.add('--add-opens=java.base/jdk.internal.misc=ALL-UNNAMED')
-            buildArgs.add('--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED')
-            buildArgs.add('--trace-class-initialization=ch.qos.logback.classic.Logger')
-            buildArgs.add('--trace-object-instantiation=ch.qos.logback.core.AsyncAppenderBase$Worker')
-            buildArgs.add('--initialize-at-build-time=org.slf4j.LoggerFactory,ch.qos.logback')
-            buildArgs.add('--initialize-at-run-time=io.netty')
-        }
-
-        configureEach {
-            resources.autodetect()
-        }
-    }
-}

@@ -2,6 +2,7 @@ Affogato
 Alfajor
 Ambrosia
 Angel Cake
+Angel Food
 Anmitsu
 Anzac Biscuit
 Apple Pie
@@ -10,11 +11,17 @@ Babka
 Baked Alaska
 Baklava
 Banana Split
+Bananas Foster
+Basbousa
 Battenberg
+Bearclaw
 Beignet
 Berliner
+Bibingka
 Biscotti
+Biscuit
 Black Forest
+Blackout Cake
 Blancmange
 Blondie
 Bombe
@@ -24,6 +31,7 @@ Bread Pudding
 Brigadeiro
 Brioche
 Brownie
+Brookie
 Bûche de Noël
 Bundt Cake
 Butterscotch
@@ -35,6 +43,7 @@ Carrot Cake
 Cassata
 Castella
 Charlotte
+Chebakia
 Cheesecake
 Chiffon Cake
 Churro
@@ -50,6 +59,7 @@ Croissant
 Cronut
 Crumble
 Cupcake
+Daifuku
 Dango
 Danish
 Devil's Food Cake
@@ -57,10 +67,12 @@ Divinity
 Dobos Torte
 Donut
 Dorayaki
+Dulce de Leche
 Eccles Cake
 Eclair
 Esterhazy Torte
 Eton Mess
+Faworki
 Financier
 Flan
 Florentine
@@ -72,49 +84,67 @@ Funnel Cake
 Galette
 Gateau
 Gelato
+Genoise
 German Chocolate
 Gingersnap
 Gingerbread
+Gjetost
 Granita
 Gulab Jamun
+Halawet El Jibn
 Halva
 Hamentashen
 Haupia
 Hummingbird Cake
 Ice Cream
+Ice Cream Sandwich
 Icebox Cake
 Italian Ice
 Jaffa Cake
 Jalebi
 Jawbreaker
 Jelly Bean
+Joconde
+Kanafeh
 Key Lime Pie
 Kheer
-King Cake
+King of Cake
+Koeksister
 Kouign-amann
 Kringle
+Kueh Lapis
 Kulfi
+Laddu
+Lady Baltimore
 Ladyfinger
 Lamington
 Lava Cake
 Lebkuchen
+Lemon Bar
 Lemon Meringue Pie
 Lemon Tart
 Linzer Torte
 Lollipop
+Loukoumades
 Lukum
 Macaron
 Macaroon
+Madeira
 Madeleine
 Malva Pudding
+Mandelbrot
 Mango Sticky Rice
 Marble Cake
 Marron Glacé
 Marshmallow
 Marzipan
+Medovik
 Melomakarona
 Meringue
+Miguelitos
 Milkshake
+Mille-feuille
+Mississippi Mud Pie
 Mochi
 Mooncake
 Mousse
@@ -137,10 +167,12 @@ Parkin
 Pastel de Nata
 Pavlova
 Pecan Pie
+Pecan Sandy
 Petit Four
 Pfeffernusse
 Phirni
 Pineapple Upside-Down
+Pisang Goreng
 Pizzelle
 Polvorón
 Popsicle
@@ -154,6 +186,7 @@ Qatayef
 Queen of Puddings
 Rasgulla
 Red Velvet
+Rhubarb Pie
 Rice Pudding
 Rock Candy
 Rugelach
@@ -161,6 +194,7 @@ Sachertorte
 Sago
 Scone
 Semifreddo
+Semla
 Sfogliatelle
 Sherbet
 Shortbread
@@ -168,6 +202,7 @@ Shortcake
 Slushie
 Snickerdoodle
 Snow Cone
+Sopaipilla
 Sorbet
 Souffle
 Speculoos
@@ -184,6 +219,7 @@ Taiyaki
 Tangyuan
 Tapioca
 Tartlet
+Teacake
 Thumbprint Cookie
 Tiramisu
 Toffee
@@ -194,28 +230,11 @@ Turrón
 Turnover
 Victoria Sponge
 Waffle
+Wagashi
 Whoopie Pie
 Yatsuhashi
+Youtiao
 Yorkshire Pudding
 Zabaglione
 Zeppole
-Basbousa
-Bibingka
-Chebakia
-Daifuku
-Dulce de Leche
-Faworki
-Gjetost
-Halawet El Jibn
-Kanafeh
-Koeksister
-Kueh Lapis
-Loukoumades
-Mandelbrot
-Medovik
-Miguelitos
-Pisang Goreng
-Semla
-Wagashi
-Youtiao
 Zlabia

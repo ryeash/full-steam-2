@@ -3,269 +3,238 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Full Steam</title>
+    <title>Full Steam - Battle Arena</title>
+    <meta name="description" content="Full Steam multiplayer battle arena featuring strategic locations and customizable weapons">
+    <meta name="keywords" content="multiplayer, battle arena, browser game, websockets, strategic combat">
+    <meta property="og:title" content="Full Steam - Battle Arena">
+    <meta property="og:description" content="Real-time multiplayer battle arena in your browser">
+    <meta property="og:type" content="website">
+    <meta name="game:category" content="Multiplayer Battle Arena">
     <link rel="stylesheet" type="text/css" href="unified.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #1a1a1a;
+            font-family: 'Arial', sans-serif;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .loading-content {
+            text-align: center;
+            color: white;
+        }
+        
+        .loading-bar {
+            width: 300px;
+            height: 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        
+        .loading-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #3498db, #2ecc71);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        #game-ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+        
+        /* Old HUD styles removed - now using PIXI-based consolidated HUD */
+        
+        /* Additional old HUD styles removed */
+        
+        #scoreboard {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            border-radius: 10px;
+            padding: 20px;
+            min-width: 400px;
+            color: white;
+            pointer-events: all;
+            z-index: 9999; /* Ensure scoreboard is always on top */
+        }
+        
+        .scoreboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        #close-scoreboard {
+            background: #e74c3c;
+            border: none;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        #capture-progress {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            padding: 15px 30px;
+            border-radius: 10px;
+            color: white;
+            text-align: center;
+        }
+        
+        .capture-bar {
+            position: relative;
+            width: 300px;
+            height: 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        
+        .capture-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3498db, #2ecc71);
+            width: 0%;
+            transition: width 0.1s ease;
+        }
+        
+        .capture-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+        
+        #death-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: all;
+        }
+        
+        .death-content {
+            background: rgba(20,20,20,0.95);
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            color: white;
+            border: 2px solid #e74c3c;
+        }
+        
+        #respawn-timer {
+            margin-top: 20px;
+            font-size: 18px;
+            color: #f39c12;
+        }
+        
+        #pixi-container {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+    <script src="color-palette.js"></script>
+    <script src="js/PlayerInterpolator.js"></script>
+    <script src="js/ProjectileInterpolator.js"></script>
+    <script src="js/InputManager.js"></script>
+    <script src="js/GameEngine.js"></script>
+    <script type="text/javascript">
+        // Initialize the game when everything is loaded
+        window.addEventListener('load', () => {
+            try {
+                new GameEngine();
+            } catch (error) {
+                console.error('Failed to initialize game:', error);
+                document.getElementById('loading-status').textContent = 'Failed to load game: ' + error.message;
+            }
+        });
+    </script>
 </head>
 <body>
-<div id="game-wrapper">
-    <div id="main-content">
-        <div class="info-bar">
-            <div class="game-info-left">
-                <span>Team: <b id="yourTeam">?</b></span>
-                <span>Players: <b id="playerCount">0</b></span>
+<div id="game-container">
+    <div id="loading-screen">
+        <div class="loading-content">
+            <h2>Loading Battle Arena...</h2>
+            <div class="loading-bar">
+                <div class="loading-progress" id="loading-progress"></div>
             </div>
+            <div id="loading-status">Initializing PixiJS...</div>
+        </div>
+    </div>
+    
+    <!-- Game UI Overlay -->
+    <div id="game-ui" style="display: none;">
+        <div id="scoreboard" style="display: none;">
             <div class="scoreboard-header">
-                <span id="team1Score" class="team1">0</span>
-                <span id="roundTimer" style="margin: 0 20px; color: var(--accent-gold);">00:00</span>
-                <span id="team2Score" class="team2">0</span>
+                <h3>Scoreboard</h3>
+                <button id="close-scoreboard">×</button>
             </div>
-            <div class="game-info-right">
-                <span>Ping: <b id="latency" style="color: white;">--</b> ms</span>
-                <span>Status: <b id="status" style="color: var(--accent-gold);">Connecting...</b></span>
+            <div id="scoreboard-content"></div>
+        </div>
+        
+        <div id="capture-progress" style="display: none;">
+            <div class="capture-bar">
+                <div class="capture-fill" id="capture-fill"></div>
+                <span class="capture-text" id="capture-text">Capturing...</span>
             </div>
         </div>
-        <canvas id="gameCanvas" width="1000" height="800" tabindex="-1" style="outline: none;"></canvas>
-    </div>
-
-    <div id="scoreboard-container">
-        <h2 id="gameModeDisplay">
-            Loading...
-        </h2>
-        <span id="gameIdIndicator" style="font-size: 0.6em; color: var(--text-muted); font-weight: normal;"></span>
-
-        <div id="player-config">
-            <div class="config-item">
-                <label for="nameInput">Name:</label>
-                <input type="text" id="nameInput" placeholder="Your Name">
+        
+        <div id="death-screen" style="display: none;">
+            <div class="death-content">
+                <h2>You were eliminated!</h2>
+                <div id="death-info"></div>
+                <div id="respawn-timer">Respawning in <span id="respawn-countdown">5</span>s</div>
             </div>
-            <div class="config-item">
-                <label for="weaponSelector">Weapon:</label>
-                <select id="weaponSelector">
-                    <option>Loading...</option>
-                </select>
-            </div>
-            <button id="switchTeamBtn">Switch Team</button>
-        </div>
-
-        <div id="team1-scoreboard">
-            <h3 class="team1">Team 1</h3>
-            <ul id="team1-players">
-                <!-- Team 1 players will be populated here -->
-            </ul>
-        </div>
-        <div id="team2-scoreboard">
-            <h3 class="team2">Team 2</h3>
-            <ul id="team2-players">
-                <!-- Team 2 players will be populated here -->
-            </ul>
-        </div>
-        <div id="ffa-scoreboard" style="display: none;">
-            <h3 style="color: var(--accent-gold);">Players</h3>
-            <ul id="ffa-players">
-                <!-- FFA players will be populated here -->
-            </ul>
-        </div>
-        <div style="text-align: center; margin-top: 20px; padding: 0 5px;">
-            <button id="leaveGameBtn">Leave Game</button>
-            <button id="spectatorBtn">Switch to Spectator</button>
-        </div>
-        <div>
-            <p>* Hold Tab/Menu to see controls</p>
         </div>
     </div>
+    
+    <div id="pixi-container"></div>
 </div>
-
-<!-- Game Info Overlay -->
-<div id="game-info-overlay">
-    <div id="game-info-content">
-        <div id="game-info-header">
-            <h1 id="overlay-game-mode">Game Mode</h1>
-            <div class="game-mode-subtitle" id="overlay-game-subtitle">Loading...</div>
-        </div>
-
-        <div class="info-section" id="objective-section">
-            <h2>Objective</h2>
-            <div class="objective-text" id="objective-text">
-                Loading game mode information...
-            </div>
-            <div id="team-objectives" style="display: none;">
-                <div class="team-objective">
-                    <div class="team1-objective">
-                        <h4 style="margin-top: 0; color: var(--team1-primary);">Team 1 (Green)</h4>
-                        <div id="team1-objective-text"></div>
-                    </div>
-                    <div class="team2-objective">
-                        <h4 style="margin-top: 0; color: var(--team2-primary);">Team 2 (Red)</h4>
-                        <div id="team2-objective-text"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="info-section">
-            <h2>Controls</h2>
-            <div class="controls-grid">
-                <div class="controls-column">
-                    <h3>Keyboard & Mouse</h3>
-                    <table class="controls-table">
-                        <thead>
-                        <tr>
-                            <th>Action</th>
-                            <th>Control</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        <tr>
-                            <td>Move</td>
-                            <td>WASD / Arrow Keys</td>
-                        </tr>
-                        <tr>
-                            <td>Aim</td>
-                            <td>Mouse</td>
-                        </tr>
-                        <tr>
-                            <td>Shoot</td>
-                            <td>Left Mouse Button</td>
-                        </tr>
-                        <tr>
-                            <td>Reload</td>
-                            <td>R</td>
-                        </tr>
-                        <tr>
-                            <td>Action/Build</td>
-                            <td>E</td>
-                        </tr>
-                        <tr>
-                            <td>Enter/Exit Vehicle</td>
-                            <td>F</td>
-                        </tr>
-                        <tr>
-                            <td>Alt-Fire</td>
-                            <td>Q</td>
-                        </tr>
-                        <tr>
-                            <td>Game Info</td>
-                            <td>Tab (hold)</td>
-                        </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="controls-column">
-                    <h3>Gamepad</h3>
-                    <table class="controls-table">
-                        <thead>
-                        <tr>
-                            <th>Action</th>
-                            <th>Control</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        <tr>
-                            <td>Move</td>
-                            <td>Left Stick</td>
-                        </tr>
-                        <tr>
-                            <td>Aim</td>
-                            <td>Right Stick</td>
-                        </tr>
-                        <tr>
-                            <td>Shoot</td>
-                            <td>RT / R2</td>
-                        </tr>
-                        <tr>
-                            <td>Reload</td>
-                            <td>X / □</td>
-                        </tr>
-                        <tr>
-                            <td>Action/Build</td>
-                            <td>RB / R1</td>
-                        </tr>
-                        <tr>
-                            <td>Enter/Exit Vehicle</td>
-                            <td>A / X</td>
-                        </tr>
-                        <tr>
-                            <td>Swap Weapon</td>
-                            <td>Y / △</td>
-                        </tr>
-                        <tr>
-                            <td>Alt-Fire</td>
-                            <td>LT / L2</td>
-                        </tr>
-                        <tr>
-                            <td>Game Info</td>
-                            <td>Menu / Options</td>
-                        </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <div class="close-hint">
-            Release Tab or press Menu/Options again to close
-        </div>
-    </div>
-</div>
-
-<script src="color-palette.js"></script>
-<script src="game-engine.js"></script>
-<script type="text/javascript">
-    function initializeColorPalette() {
-        const root = document.documentElement;
-
-        // Background colors
-        root.style.setProperty('--bg-primary', GameColors.background.primary);
-        root.style.setProperty('--bg-secondary', GameColors.background.secondary);
-        root.style.setProperty('--bg-panel', GameColors.background.panel);
-        root.style.setProperty('--bg-card', GameColors.background.card);
-
-        // Team colors
-        root.style.setProperty('--team1-primary', GameColors.teams.team1.primary);
-        root.style.setProperty('--team1-secondary', GameColors.teams.team1.secondary);
-        root.style.setProperty('--team1-dark', GameColors.teams.team1.dark);
-        root.style.setProperty('--team2-primary', GameColors.teams.team2.primary);
-        root.style.setProperty('--team2-secondary', GameColors.teams.team2.secondary);
-        root.style.setProperty('--team2-dark', GameColors.teams.team2.dark);
-
-        // Border colors
-        root.style.setProperty('--border-primary', GameColors.borders.primary);
-        root.style.setProperty('--border-secondary', GameColors.borders.secondary);
-        root.style.setProperty('--border-light', GameColors.borders.light);
-        root.style.setProperty('--border-lighter', GameColors.borders.lighter);
-
-        // Text colors
-        root.style.setProperty('--text-primary', GameColors.text.primary);
-        root.style.setProperty('--text-secondary', GameColors.text.secondary);
-        root.style.setProperty('--text-muted', GameColors.text.muted);
-
-        // Accent colors
-        root.style.setProperty('--accent-gold', GameColors.accent.gold);
-        root.style.setProperty('--accent-yellow', GameColors.accent.yellow);
-        root.style.setProperty('--accent-blue', GameColors.accent.blue);
-
-        // Interactive elements
-        root.style.setProperty('--btn-primary', GameColors.interactive.button.primary);
-        root.style.setProperty('--btn-hover', GameColors.interactive.button.hover);
-        root.style.setProperty('--btn-border', GameColors.interactive.button.border);
-        root.style.setProperty('--input-bg', GameColors.interactive.input.background);
-        root.style.setProperty('--input-border', GameColors.interactive.input.border);
-        root.style.setProperty('--input-text', GameColors.interactive.input.text);
-
-        // Health colors
-        root.style.setProperty('--health-high', GameColors.health.high);
-        root.style.setProperty('--health-medium', GameColors.health.medium);
-        root.style.setProperty('--health-low', GameColors.health.low);
-        root.style.setProperty('--health-bg', GameColors.health.background);
-        root.style.setProperty('--health-border', GameColors.health.border);
-    }
-
-    // Initialize colors when DOM is ready
-    document.addEventListener('DOMContentLoaded', initializeColorPalette);
-    window.addEventListener('load', () => {
-        window.gameInfoOverlay = new GameInfoOverlay();
-        new Game(document.getElementById('gameCanvas'));
-    });
-</script>
 </body>
 </html>

@@ -14,6 +14,20 @@ const GameColors = {
       dark: '#C62828',         // Dark red - borders/shadows
       darker: '#B71C1C',       // Darker red - additional contrast
       bright: '#FF3232'        // Bright red - laser effects
+    },
+    team3: {
+      primary: '#2196F3',      // Blue - main team color
+      secondary: '#64B5F6',    // Light blue - secondary elements
+      dark: '#1565C0',         // Dark blue - borders/shadows
+      darker: '#0D47A1',       // Darker blue - additional contrast
+      bright: '#00B0FF'        // Bright blue - laser effects
+    },
+    team4: {
+      primary: '#FF9800',      // Orange - main team color
+      secondary: '#FFB74D',    // Light orange - secondary elements
+      dark: '#E65100',         // Dark orange - borders/shadows
+      darker: '#EF6C00',       // Darker orange - additional contrast
+      bright: '#FFAB00'        // Bright orange - laser effects
     }
   },
 
@@ -183,13 +197,6 @@ const GameColors = {
         medium: 'rgba(119, 136, 153, 0.4)', // Light slate gray
         dark: 'rgba(70, 130, 180, 0)'       // Steel blue fade
       }
-    },
-    smoke: {
-      light: 'rgba(180, 180, 180, 0.5)',   // Light gray
-      medium: 'rgba(120, 120, 120, 0.4)',  // Medium gray
-      dark: 'rgba(80, 80, 80, 0.3)',       // Dark gray
-      fade: 'rgba(60, 60, 60, 0)',         // Fade to transparent
-      swirl: 'rgba(160, 160, 160, 0.3)'    // Swirl effect
     }
   },
 

@@ -34,8 +34,8 @@ public class Application {
                     .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
                     .configure(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY, true)
                     .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS)
-                    .setSerializationInclusion(JsonInclude.Include.NON_DEFAULT)
-                    .setDefaultPropertyInclusion(JsonInclude.Include.NON_DEFAULT)
+                    .setSerializationInclusion(JsonInclude.Include.ALWAYS)
+                    .setDefaultPropertyInclusion(JsonInclude.Include.ALWAYS)
                     .registerModule(new SimpleModule()
                             .addSerializer(Double.class, new SerializerDouble())
                             .addSerializer(double.class, new SerializerDouble())
@@ -48,7 +48,7 @@ public class Application {
         @Override
         public void serialize(BigDecimal value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
             if (value != null) {
-                gen.writeNumber(value.setScale(1, RoundingMode.FLOOR));
+                gen.writeNumber(value.setScale(2, RoundingMode.FLOOR));
             } else {
                 gen.writeNull();
             }
@@ -59,8 +59,12 @@ public class Application {
         @Override
         public void serialize(Double value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
             if (value != null) {
-                BigDecimal bd = BigDecimal.valueOf(value);
-                gen.writeNumber(bd.setScale(1, RoundingMode.FLOOR));
+                if (value.isInfinite()) {
+                    gen.writeNumber(999999); // a large number
+                } else {
+                    BigDecimal bd = BigDecimal.valueOf(value);
+                    gen.writeNumber(bd.setScale(2, RoundingMode.FLOOR));
+                }
             } else {
                 gen.writeNull();
             }
