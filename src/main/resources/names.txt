@@ -2,6 +2,7 @@ Affogato
 Alfajor
 Ambrosia
 Angel Cake
+Angel Food
 Anmitsu
 Anzac Biscuit
 Apple Pie
@@ -11,10 +12,13 @@ Baked Alaska
 Baklava
 Banana Split
 Battenberg
+Bearclaw
 Beignet
 Berliner
 Biscotti
+Biscuit
 Black Forest
+Blackout Cake
 Blancmange
 Blondie
 Bombe
@@ -24,6 +28,7 @@ Bread Pudding
 Brigadeiro
 Brioche
 Brownie
+Brookie
 Bûche de Noël
 Bundt Cake
 Butterscotch
@@ -72,6 +77,7 @@ Funnel Cake
 Galette
 Gateau
 Gelato
+Genoise
 German Chocolate
 Gingersnap
 Gingerbread
@@ -82,22 +88,27 @@ Hamentashen
 Haupia
 Hummingbird Cake
 Ice Cream
+Ice Cream Sandwich
 Icebox Cake
 Italian Ice
+Joconde
 Jaffa Cake
 Jalebi
 Jawbreaker
 Jelly Bean
 Key Lime Pie
+King of Cake
 Kheer
 King of Cake
 Kouign-amann
 Kringle
 Kulfi
+Lady Baltimore
 Ladyfinger
 Lamington
 Lava Cake
 Lebkuchen
+Lemon Bar
 Lemon Meringue Pie
 Lemon Tart
 Linzer Torte
@@ -105,6 +116,7 @@ Lollipop
 Lukum
 Macaron
 Macaroon
+Madeira
 Madeleine
 Malva Pudding
 Mango Sticky Rice
@@ -115,6 +127,8 @@ Marzipan
 Melomakarona
 Meringue
 Milkshake
+Mille-feuille
+Mississippi Mud Pie
 Mochi
 Mooncake
 Mousse
@@ -137,6 +151,7 @@ Parkin
 Pastel de Nata
 Pavlova
 Pecan Pie
+Pecan Sandy
 Petit Four
 Pfeffernusse
 Phirni
@@ -156,6 +171,7 @@ Rasgulla
 Red Velvet
 Rice Pudding
 Rock Candy
+Rhubarb Pie
 Rugelach
 Sachertorte
 Sago
@@ -168,6 +184,7 @@ Shortcake
 Slushie
 Snickerdoodle
 Snow Cone
+Sopaipilla
 Sorbet
 Souffle
 Speculoos
@@ -184,6 +201,7 @@ Taiyaki
 Tangyuan
 Tapioca
 Tartlet
+Teacake
 Thumbprint Cookie
 Tiramisu
 Toffee
