@@ -117,7 +117,7 @@ public class AIMemory {
      */
     @Getter
     public static class PlayerBehaviorPattern {
-        private Vector2 averagePosition = new Vector2(0, 0);
+        private final Vector2 averagePosition = new Vector2(0, 0);
         private double averageSpeed = 0;
         private int observationCount = 0;
         private long lastObservationTime = 0;

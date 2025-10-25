@@ -338,16 +338,6 @@ public class Player extends GameEntity {
         health = 0;
     }
 
-    /**
-     * Respawn at a specific location (for team-based spawning).
-     *
-     * @param newRespawnPoint New spawn location
-     */
-    public void respawnAt(Vector2 newRespawnPoint) {
-        this.respawnPoint = newRespawnPoint.copy();
-        respawn();
-    }
-
     public void addKill() {
         kills++;
     }
@@ -383,14 +373,6 @@ public class Player extends GameEntity {
      */
     public boolean hasLivesRemaining() {
         return livesRemaining != 0; // -1 (unlimited) or > 0
-    }
-
-    /**
-     * Mark player as eliminated (for ELIMINATION mode).
-     */
-    public void eliminate() {
-        this.eliminated = true;
-        this.active = false;
     }
 
     public Weapon getCurrentWeapon() {

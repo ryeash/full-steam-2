@@ -17,9 +17,9 @@ public class KothBehavior implements AIBehavior {
     private int targetZoneId = -1;
     private double zoneEvaluationTime = 0;
     private static final double ZONE_EVALUATION_INTERVAL = 5.0; // Re-evaluate target zone every 5 seconds
-    
+
     // Track time spent in each zone for persistence
-    private Map<Integer, Double> zoneCommitmentTime = new HashMap<>();
+    private final Map<Integer, Double> zoneCommitmentTime = new HashMap<>();
     private static final double ZONE_COMMITMENT_DURATION = 8.0; // Stay committed to a zone for 8 seconds
 
     @Override
@@ -27,11 +27,9 @@ public class KothBehavior implements AIBehavior {
         PlayerInput input = new PlayerInput();
 
         zoneEvaluationTime += deltaTime;
-        
+
         // Update commitment times
-        for (Integer zoneId : zoneCommitmentTime.keySet()) {
-            zoneCommitmentTime.put(zoneId, zoneCommitmentTime.get(zoneId) + deltaTime);
-        }
+        zoneCommitmentTime.replaceAll((i, v) -> zoneCommitmentTime.get(i) + deltaTime);
 
         // Re-evaluate target zone periodically or if we don't have one
         if (targetZoneId == -1 || zoneEvaluationTime >= ZONE_EVALUATION_INTERVAL) {
@@ -59,13 +57,13 @@ public class KothBehavior implements AIBehavior {
     private void evaluateTargetZone(AIPlayer aiPlayer, GameEntities gameEntities) {
         Vector2 myPos = aiPlayer.getPosition();
         int myTeam = aiPlayer.getTeam();
-        
+
         KothZone bestZone = null;
         double bestScore = -1;
 
         for (KothZone zone : gameEntities.getAllKothZones()) {
             double score = evaluateZoneScore(aiPlayer, zone, gameEntities);
-            
+
             // Bonus for zone commitment (stick with current zone unless much better option)
             if (zone.getId() == targetZoneId) {
                 Double commitmentTime = zoneCommitmentTime.get(targetZoneId);
@@ -125,7 +123,7 @@ public class KothBehavior implements AIBehavior {
         // Teammate presence (more teammates = less need for us)
         int teammatesInZone = countTeammatesInZone(aiPlayer, zone, gameEntities);
         int enemiesInZone = countEnemiesInZone(aiPlayer, zone, gameEntities);
-        
+
         if (teammatesInZone == 0 && enemiesInZone > 0) {
             score += 25; // No teammates but enemies present - high priority
         } else if (teammatesInZone > 2) {
@@ -140,11 +138,11 @@ public class KothBehavior implements AIBehavior {
         // Personality factors
         double aggressiveness = aiPlayer.getPersonality().getAggressiveness();
         double strategicThinking = aiPlayer.getPersonality().getStrategicThinking();
-        
+
         if (zone.getState() == KothZone.ZoneState.CONTESTED) {
             score += aggressiveness * 15; // Aggressive AIs prefer contested zones
         }
-        
+
         if (zone.getControllingTeam() != myTeam && zone.getState() == KothZone.ZoneState.CONTROLLED) {
             score += strategicThinking * 10; // Strategic AIs target enemy-controlled zones
         }
@@ -182,9 +180,8 @@ public class KothBehavior implements AIBehavior {
     private void moveTowardsZone(AIPlayer aiPlayer, KothZone zone, PlayerInput input) {
         Vector2 myPos = aiPlayer.getPosition();
         Vector2 zonePos = zone.getPosition();
-        
+
         Vector2 direction = zonePos.copy().subtract(myPos);
-        double distance = direction.getMagnitude();
         direction.normalize();
 
         // Add tactical weaving when approaching contested zones
@@ -220,10 +217,10 @@ public class KothBehavior implements AIBehavior {
             // Circle strafe within zone
             double strafeAngle = (System.currentTimeMillis() / 2000.0) % (Math.PI * 2);
             Vector2 strafeDirection = new Vector2(
-                Math.cos(strafeAngle),
-                Math.sin(strafeAngle)
+                    Math.cos(strafeAngle),
+                    Math.sin(strafeAngle)
             );
-            
+
             // Adjust strafe to stay in zone
             Vector2 futurePos = myPos.copy().add(strafeDirection.copy().multiply(20));
             if (futurePos.distance(zonePos) > zoneRadius * 0.8) {
@@ -244,7 +241,7 @@ public class KothBehavior implements AIBehavior {
     private void engageEnemiesInZone(AIPlayer aiPlayer, KothZone zone, GameEntities gameEntities, PlayerInput input) {
         Vector2 myPos = aiPlayer.getPosition();
         Vector2 zonePos = zone.getPosition();
-        
+
         Player bestTarget = null;
         double bestScore = -1;
 
@@ -262,7 +259,7 @@ public class KothBehavior implements AIBehavior {
 
             // Prioritize enemies in or near zone
             double score = 0;
-            
+
             if (distanceToZone < 80) {
                 score += 50; // In zone - highest priority
             } else if (distanceToZone < 200) {
@@ -380,15 +377,15 @@ public class KothBehavior implements AIBehavior {
         // Higher priority if zone is contested or enemy-controlled
         if (nearestZone.getState() == KothZone.ZoneState.CONTESTED) {
             priority += 10;
-        } else if (nearestZone.getState() == KothZone.ZoneState.CONTROLLED 
-                   && nearestZone.getControllingTeam() != myTeam) {
+        } else if (nearestZone.getState() == KothZone.ZoneState.CONTROLLED
+                && nearestZone.getControllingTeam() != myTeam) {
             priority += 8;
         }
 
         // Personality modifiers
         double strategicThinking = aiPlayer.getPersonality().getStrategicThinking();
         double teamwork = aiPlayer.getPersonality().getTeamwork();
-        
+
         priority += (int) (strategicThinking * 10);
         priority += (int) (teamwork * 5);
 

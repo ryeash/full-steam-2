@@ -43,35 +43,6 @@ public class AIWeaponSelector {
             WeaponConfig.CLUSTER_MORTAR_PRESET
     );
 
-    private static final List<WeaponConfig> BEAM_WEAPONS = List.of(
-            WeaponConfig.LASER_RIFLE_PRESET,
-            WeaponConfig.PLASMA_CANNON_PRESET,
-            WeaponConfig.RAIL_CANNON_PRESET
-    );
-
-    private static final List<WeaponConfig> SUPPORT_WEAPONS = List.of(
-            WeaponConfig.MEDIC_BEAM_PRESET
-    );
-
-    private static final List<WeaponConfig> COMBO_WEAPONS = List.of(
-            WeaponConfig.STORM_CALLER_PRESET,
-            WeaponConfig.NAPALM_LAUNCHER_PRESET,
-            WeaponConfig.CRYO_SHOTGUN_PRESET,
-            WeaponConfig.VENOM_NEEDLER_PRESET,
-            WeaponConfig.THUNDERBOLT_CANNON_PRESET,
-            WeaponConfig.RICOCHET_RIFLE_PRESET,
-            WeaponConfig.PLAGUE_MORTAR_PRESET,
-            WeaponConfig.WILDFIRE_SPRAYER_PRESET,
-            WeaponConfig.FROST_LANCE_PRESET,
-            WeaponConfig.SHRAPNEL_CANNON_PRESET,
-            WeaponConfig.SEEKING_INFERNO_PRESET,
-            WeaponConfig.EMP_BURST_GUN_PRESET,
-            WeaponConfig.GLACIAL_MORTAR_PRESET,
-            WeaponConfig.PHANTOM_NEEDLES_PRESET,
-            WeaponConfig.CORROSIVE_CANNON_PRESET
-    );
-
-    // Combined list of all weapon presets for completely random selection
     private static final List<WeaponConfig> ALL_WEAPONS = List.of(
             // Basic weapons
             WeaponConfig.ASSAULT_RIFLE_PRESET,

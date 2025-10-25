@@ -446,9 +446,7 @@ public class GameManager {
             processPlayerRespawns();
 
             aiPlayerManager.update(gameEntities, deltaTime);
-            aiPlayerManager.getAllPlayerInputs().forEach((playerId, input) -> {
-                gameEntities.getPlayerInputs().put(playerId, input);
-            });
+            gameEntities.getPlayerInputs().putAll(aiPlayerManager.getAllPlayerInputs());
             checkAndAdjustAIPlayers();
 
             gameEntities.getPlayerInputs().forEach(this::processPlayerInput);
@@ -605,7 +603,7 @@ public class GameManager {
                 playerSession.getPlayerId(), playerSession.getPlayerName(), gameId, gameEntities.getPlayers().size(), gameEntities.getPlayerSessions().size());
 
         // Broadcast player join event with team color
-        broadcastPlayerJoin(playerSession.getPlayerName(), assignedTeam);
+        gameEventManager.broadcastPlayerJoin(playerSession.getPlayerName(), assignedTeam);
 
         // Adjust AI players when a human player joins
         adjustAIPlayers();
@@ -1063,43 +1061,6 @@ public class GameManager {
                             flag.getId(), flag.getPosition().x, flag.getPosition().y, carrierId);
                 }
             }
-        }
-    }
-
-    /**
-     * Broadcast zone control change events to players.
-     * Called by CollisionProcessor.
-     */
-    public void broadcastZoneControlChange(KothZone zone, int previousController, KothZone.ZoneState previousState) {
-        int currentController = zone.getControllingTeam();
-        KothZone.ZoneState currentState = zone.getState();
-        String zoneName = "Zone " + (zone.getZoneNumber() + 1);
-
-        // Zone captured
-        if (currentState == KothZone.ZoneState.CONTROLLED && previousState != KothZone.ZoneState.CONTROLLED) {
-            String teamName = getTeamName(currentController);
-            broadcastGameEvent(
-                    String.format("%s captured %s!", teamName, zoneName),
-                    "ZONE_CAPTURE",
-                    getTeamColorHex(currentController)
-            );
-            log.info("Zone {} captured by team {}", zone.getZoneNumber(), currentController);
-        }
-        // Zone contested
-        else if (currentState == KothZone.ZoneState.CONTESTED && previousState != KothZone.ZoneState.CONTESTED) {
-            broadcastGameEvent(
-                    String.format("%s is contested!", zoneName),
-                    "ZONE_CONTESTED",
-                    "#FF8800"
-            );
-        }
-        // Zone neutralized
-        else if (currentState == KothZone.ZoneState.NEUTRAL && previousController >= 0) {
-            broadcastGameEvent(
-                    String.format("%s neutralized", zoneName),
-                    "ZONE_NEUTRAL",
-                    "#888888"
-            );
         }
     }
 
@@ -1842,58 +1803,6 @@ public class GameManager {
         world.addBody(powerUp.getBody());
     }
 
-    // Game Event Broadcasting Convenience Methods
-
-    /**
-     * Broadcast a player join event with team color
-     */
-    public void broadcastPlayerJoin(String playerName, int teamNumber) {
-        gameEventManager.broadcastPlayerJoin(playerName, teamNumber);
-    }
-
-    /**
-     * Broadcast a system message to all players
-     */
-    public void broadcastSystemMessage(String message) {
-        gameEventManager.broadcastSystemMessage(message);
-    }
-
-    /**
-     * Broadcast a custom message with color to all players
-     */
-    public void broadcastMessage(String message, String color) {
-        gameEventManager.broadcastCustomMessage(message, color,
-                GameEvent.EventTarget.builder().type(GameEvent.EventTarget.TargetType.ALL).build());
-    }
-
-    /**
-     * Broadcast a team-specific message
-     */
-    public void broadcastTeamMessage(String message, int teamId, GameEvent.EventCategory category) {
-        gameEventManager.broadcastTeamMessage(message, teamId, category);
-    }
-
-    /**
-     * Broadcast to a specific player
-     */
-    public void broadcastToPlayer(String message, int playerId, GameEvent.EventCategory category) {
-        gameEventManager.broadcastToPlayer(message, playerId, category);
-    }
-
-    /**
-     * Broadcast an achievement
-     */
-    public void broadcastAchievement(String playerName, String achievement) {
-        gameEventManager.broadcastAchievement(playerName, achievement);
-    }
-
-    /**
-     * Broadcast a custom game event
-     */
-    public void broadcastGameEvent(GameEvent event) {
-        gameEventManager.broadcastEvent(event);
-    }
-
     /**
      * Broadcast a custom game event (convenience overload).
      */
@@ -1922,8 +1831,6 @@ public class GameManager {
      */
     public void awardCapture(Player player, int capturedFlagTeam) {
         player.addCapture();
-        log.info("Player {} (team {}) awarded capture. Total captures: {}",
-                player.getId(), player.getTeam(), player.getCaptures());
     }
 
     /**

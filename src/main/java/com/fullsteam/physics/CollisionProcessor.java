@@ -799,10 +799,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         }
     }
 
-    /**
-     * Update all workshops - mimic KOTH zone approach for continuous player tracking.
-     * This ensures continuous distance checking for crafting mechanics.
-     */
     public void updateWorkshops(double deltaTime) {
         for (Workshop workshop : gameEntities.getAllWorkshops()) {
             if (!workshop.isActive()) {
