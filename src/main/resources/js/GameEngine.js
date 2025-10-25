@@ -314,7 +314,16 @@ class GameEngine {
         // Clear old team score containers
         for (let [teamId, container] of this.teamScoreContainers) {
             if (!teams.includes(teamId)) {
+                // Properly destroy the container and its children to prevent memory leak
+                if (container.colorBar) {
+                    container.colorBar.clear();
+                    container.colorBar.destroy();
+                }
+                if (container.scoreText) {
+                    container.scoreText.destroy();
+                }
                 this.roundTimerContainer.removeChild(container);
+                container.destroy({ children: true, texture: false, baseTexture: false });
                 this.teamScoreContainers.delete(teamId);
             }
         }
@@ -764,6 +773,7 @@ class GameEngine {
         playerGraphics.endFill();
         
         this.playerTexture = this.app.renderer.generateTexture(playerGraphics);
+        playerGraphics.destroy(); // Clean up graphics after generating texture
         
         // Projectile - simple bullet
         const projectileGraphics = new PIXI.Graphics();
@@ -771,6 +781,7 @@ class GameEngine {
         projectileGraphics.drawCircle(0, 0, 3);
         projectileGraphics.endFill();
         this.projectileTexture = this.app.renderer.generateTexture(projectileGraphics);
+        projectileGraphics.destroy(); // Clean up graphics after generating texture
 
         // Obstacle - boulder
         const boulderGraphics = new PIXI.Graphics();
@@ -778,6 +789,7 @@ class GameEngine {
         boulderGraphics.drawCircle(0, 0, 20);
         boulderGraphics.endFill();
         this.boulderTexture = this.app.renderer.generateTexture(boulderGraphics);
+        boulderGraphics.destroy(); // Clean up graphics after generating texture
         
         // Death marker - tombstone/X
         const deathGraphics = new PIXI.Graphics();
@@ -793,6 +805,7 @@ class GameEngine {
         deathGraphics.drawCircle(0, 0, 18);
         deathGraphics.endFill();
         this.deathTexture = this.app.renderer.generateTexture(deathGraphics);
+        deathGraphics.destroy(); // Clean up graphics after generating texture
     }
     
     
@@ -2515,7 +2528,14 @@ class GameEngine {
         if (activePowerUps.length > 0) {
             this.updatePowerUpVisuals(sprite.powerUpContainer, activePowerUps, sprite);
         } else {
-            // Clear all power-up effects if no active power-ups
+            // Clear all power-up effects if no active power-ups - properly destroy to prevent memory leak
+            const childrenToDestroy = [...sprite.powerUpContainer.children];
+            childrenToDestroy.forEach(child => {
+                if (child.clear && typeof child.clear === 'function') {
+                    child.clear();
+                }
+                child.destroy({ children: true, texture: false, baseTexture: false });
+            });
             sprite.powerUpContainer.removeChildren();
         }
     }
@@ -2536,7 +2556,14 @@ class GameEngine {
             };
         });
         
-        // Clear existing visuals
+        // Clear existing visuals - properly destroy to prevent memory leak
+        const childrenToDestroy = [...container.children];
+        childrenToDestroy.forEach(child => {
+            if (child.clear && typeof child.clear === 'function') {
+                child.clear();
+            }
+            child.destroy({ children: true, texture: false, baseTexture: false });
+        });
         container.removeChildren();
         
         // Create visual effect for each active power-up
@@ -4698,9 +4725,11 @@ class GameEngine {
         const graphics = container.getChildAt(0);
         if (graphics) {
             graphics.clear();
-            // Remove old text children
+            // Remove and destroy old text children to prevent memory leak
             while (graphics.children.length > 0) {
-                graphics.removeChildAt(0);
+                const child = graphics.children[0];
+                graphics.removeChild(child);
+                child.destroy({ children: true, texture: false, baseTexture: false });
             }
             this.createHeadquartersGraphics(graphics, entityData);
         }
@@ -4822,6 +4851,7 @@ class GameEngine {
             case 'FRAGMENTATION':
             case 'FIRE':
             case 'ELECTRIC':
+            case 'FREEZE':
             case 'POISON':
             case 'ERUPTION':
                 return 20; // Above players
@@ -4903,13 +4933,23 @@ class GameEngine {
      * Update teleport pad visual effects
      */
     updateTeleportPadVisual(container, entityData) {
+        // Only recreate graphics if state changed (cooldown, active, etc)
+        // This prevents memory leak from recreating graphics every frame
+        const stateKey = `${entityData.active}_${entityData.cooldownRemaining || 0}`;
+        if (container.lastStateKey === stateKey) {
+            return; // No change, skip recreation
+        }
+        
         // Recreate graphics for dynamic effects
-        container.removeChild(container.entityGraphics);
-        container.entityGraphics.destroy();
+        if (container.entityGraphics) {
+            container.removeChild(container.entityGraphics);
+            container.entityGraphics.destroy({ children: true, texture: false, baseTexture: false });
+        }
         
         const newGraphics = this.createTeleportPadGraphics(new PIXI.Graphics(), entityData);
         container.addChild(newGraphics);
         container.entityGraphics = newGraphics;
+        container.lastStateKey = stateKey;
         
         // Update connection lines if this pad is linked
         this.updateTeleportPadConnections(entityData);
@@ -5570,6 +5610,9 @@ class GameEngine {
                 branchY + Math.sin(angle - Math.PI/4) * branchLength
             );
         }
+        
+        // Reset line style before drawing filled center
+        graphics.lineStyle(0);
         
         // Frozen center
         graphics.beginFill(0xffffff, 0.7);
@@ -6785,7 +6828,17 @@ class GameEngine {
         
         // Clear previous minimap content (keep background and title)
         if (this.minimapContent) {
+            // Properly destroy all Graphics objects to prevent memory leak
+            const childrenToDestroy = [...this.minimapContent.children];
+            childrenToDestroy.forEach(child => {
+                if (child.clear && typeof child.clear === 'function') {
+                    child.clear(); // Clear graphics content first
+                }
+                child.destroy({ children: true, texture: false, baseTexture: false });
+            });
+            
             this.hudMinimap.removeChild(this.minimapContent);
+            this.minimapContent.destroy({ children: true, texture: false, baseTexture: false });
         }
         
         // Create new minimap content container
@@ -7063,6 +7116,14 @@ class GameEngine {
      * Create simple dark background for better visibility.
      */
     createSimpleDarkBackground() {
+        // Properly destroy existing background children to prevent memory leak
+        const childrenToDestroy = [...this.backgroundContainer.children];
+        childrenToDestroy.forEach(child => {
+            if (child.clear && typeof child.clear === 'function') {
+                child.clear();
+            }
+            child.destroy({ children: true, texture: false, baseTexture: false });
+        });
         this.backgroundContainer.removeChildren();
         const graphics = new PIXI.Graphics();
         graphics.beginFill(0x1a1a1a); // Dark grey
