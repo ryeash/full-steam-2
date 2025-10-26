@@ -138,6 +138,21 @@ public class Rules {
     @Builder.Default
     private int maxPowerUpsPerWorkshop = 3;
     
+    // ===== Oddball Rules =====
+    
+    /**
+     * Whether to enable Oddball mode. When enabled, a single ball spawns at the world center.
+     * Players score points by holding the ball, but cannot fire weapons while carrying it.
+     */
+    @Builder.Default
+    private boolean enableOddball = false;
+    
+    /**
+     * Points awarded per second for holding the oddball.
+     */
+    @Builder.Default
+    private double oddballPointsPerSecond = 1.0;
+    
     // ===== Headquarters Rules =====
     
     /**
@@ -332,5 +347,12 @@ public class Rules {
      */
     public boolean hasScoreLimit() {
         return victoryCondition == VictoryCondition.SCORE_LIMIT && scoreLimit > 0;
+    }
+    
+    /**
+     * Check if this game mode uses oddball.
+     */
+    public boolean hasOddball() {
+        return enableOddball;
     }
 }

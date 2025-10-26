@@ -300,6 +300,23 @@
                 </div>
                 
                 <div class="config-section">
+                    <h3>⭐ Oddball</h3>
+                    <div class="config-item">
+                        <label for="enableOddball">Enable Oddball:</label>
+                        <input type="checkbox" id="enableOddball">
+                        <small style="color: #888; font-size: 0.8em;">Neutral ball spawns at center - hold it to score!</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="oddballPointsPerSecond">Points Per Second:</label>
+                        <input type="number" id="oddballPointsPerSecond" min="0.5" max="5" step="0.5" value="1.0">
+                        <small style="color: #888; font-size: 0.8em;">Points awarded for holding the ball</small>
+                    </div>
+                    <div class="config-item">
+                        <small style="color: #ff9500; font-size: 0.8em;">⚠️ Ball carrier cannot fire weapons!</small>
+                    </div>
+                </div>
+                
+                <div class="config-section">
                     <h3>🏭 Workshops</h3>
                     <div class="config-item">
                         <label for="addWorkshops">Enable Workshops:</label>
@@ -550,6 +567,11 @@
         chaosButton.textContent = '🌋 Chaos Mode';
         chaosButton.onclick = () => createPresetGame('chaos-mode');
         createButtons.appendChild(chaosButton);
+        
+        const oddballButton = document.createElement('button');
+        oddballButton.textContent = '⭐ Oddball';
+        oddballButton.onclick = () => createPresetGame('oddball');
+        createButtons.appendChild(oddballButton);
         
         // Add custom game button
         const customButton = document.createElement('button');
@@ -893,6 +915,48 @@
                     supplyDropCount: 8           // Generous supply drops
                 }
             };
+        } else if (presetType === 'oddball') {
+            gameConfig = {
+                maxPlayers: 12,
+                teamCount: 4,                   // 4 teams competing for the ball
+                worldWidth: 1800,
+                worldHeight: 1800,
+                playerMaxHealth: 100,
+                aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
+                rules: {
+                    roundDuration: 180,         // 3 minute rounds
+                    restDuration: 15,
+                    flagsPerTeam: 0,            // No flags in oddball
+                    scoreStyle: 'OBJECTIVE',    // Score by holding the ball
+                    victoryCondition: 'SCORE_LIMIT',
+                    scoreLimit: 150,            // First to 150 points (2.5 minutes of holding)
+                    timeLimit: 600,             // 10 minute fallback
+                    suddenDeath: true,
+                    respawnMode: 'INSTANT',
+                    respawnDelay: 4,
+                    waveRespawnInterval: 30,
+                    maxLives: -1,
+                    kothZones: 0,               // No KOTH zones in oddball
+                    kothPointsPerSecond: 1.0,
+                    addWorkshops: false,
+                    workshopCraftTime: 10,
+                    workshopCraftRadius: 80,
+                    maxPowerUpsPerWorkshop: 3,
+                    addHeadquarters: false,
+                    headquartersMaxHealth: 1000,
+                    headquartersPointsPerDamage: 0.1,
+                    headquartersDestructionBonus: 100,
+                    headquartersDestructionEndsGame: false,
+                    enableRandomEvents: false,
+                    randomEventInterval: 40,
+                    eventWarningDuration: 3,
+                    meteorShowerCount: 8,
+                    supplyDropCount: 5,
+                    enableOddball: true,        // Enable oddball mode!
+                    oddballPointsPerSecond: 1.0 // 1 point per second for holding ball
+                }
+            };
         }
         
         try {
@@ -983,6 +1047,8 @@
                 document.getElementById('maxLives').value = defaultConfig.rules.maxLives || 3;
                 document.getElementById('kothZones').value = defaultConfig.rules.kothZones || 0;
                 document.getElementById('kothPointsPerSecond').value = defaultConfig.rules.kothPointsPerSecond || 1.0;
+                document.getElementById('enableOddball').checked = defaultConfig.rules.enableOddball || false;
+                document.getElementById('oddballPointsPerSecond').value = defaultConfig.rules.oddballPointsPerSecond || 1.0;
                 document.getElementById('addWorkshops').checked = defaultConfig.rules.addWorkshops || false;
                 document.getElementById('workshopCraftTime').value = defaultConfig.rules.workshopCraftTime || 10;
                 document.getElementById('workshopCraftRadius').value = defaultConfig.rules.workshopCraftRadius || 80;
@@ -1005,6 +1071,8 @@
                 document.getElementById('respawnDelay').value = 5;
                 document.getElementById('kothZones').value = 0;
                 document.getElementById('kothPointsPerSecond').value = 1.0;
+                document.getElementById('enableOddball').checked = false;
+                document.getElementById('oddballPointsPerSecond').value = 1.0;
                 document.getElementById('waveRespawnInterval').value = 30;
                 document.getElementById('maxLives').value = 3;
                 document.getElementById('addWorkshops').checked = false;
@@ -1119,6 +1187,8 @@
                 maxLives: parseInt(document.getElementById('maxLives').value),
                 kothZones: parseInt(document.getElementById('kothZones').value),
                 kothPointsPerSecond: parseFloat(document.getElementById('kothPointsPerSecond').value),
+                enableOddball: document.getElementById('enableOddball').checked,
+                oddballPointsPerSecond: parseFloat(document.getElementById('oddballPointsPerSecond').value),
                 addWorkshops: document.getElementById('addWorkshops').checked,
                 workshopCraftTime: parseFloat(document.getElementById('workshopCraftTime').value),
                 workshopCraftRadius: parseFloat(document.getElementById('workshopCraftRadius').value),

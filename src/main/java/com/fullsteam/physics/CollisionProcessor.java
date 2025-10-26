@@ -554,6 +554,11 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 .anyMatch(f -> f.isCarried() && f.getCarriedByPlayerId() == player.getId());
 
         if (alreadyCarrying) {
+            // Oddball has no capture mechanic, players just hold it for points
+            if (flag.isOddball()) {
+                return;
+            }
+            
             // Player is already carrying a flag, check if they're in their own base for capture
             if (playerTeam == flagTeam && flag.isAtHome()) {
                 // Player is in their own base with enemy flag - CAPTURE!
@@ -565,14 +570,15 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         // Try to pick up the flag
         if (flag.canBeCapturedBy(playerTeam)) {
             pickUpFlag(player, flag);
-        } else if (playerTeam == flagTeam && !flag.isAtHome()) {
+        } else if (!flag.isOddball() && playerTeam == flagTeam && !flag.isAtHome()) {
             // Player touched their own flag that's not at home - return it
+            // (doesn't apply to oddball)
             returnFlag(flag);
         }
     }
 
     /**
-     * Player picks up an enemy flag.
+     * Player picks up an enemy flag or oddball.
      */
     private void pickUpFlag(Player player, Flag flag) {
         flag.pickUp(player.getId());
@@ -580,14 +586,26 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         log.info("Player {} (team {}) picked up flag {} (team {})",
                 player.getId(), player.getTeam(), flag.getId(), flag.getOwnerTeam());
 
-        // Broadcast pickup event
-        gameManager.broadcastGameEvent(
-                String.format("%s picked up %s flag!",
-                        player.getPlayerName(),
-                        getTeamName(flag.getOwnerTeam())),
-                "FLAG_PICKUP",
-                "#ffaa00"
-        );
+        // Apply ball carrier status effect for oddball mode
+        if (flag.isOddball()) {
+            com.fullsteam.model.StatusEffects.applyBallCarrier(player);
+            
+            // Broadcast oddball pickup event
+            gameManager.broadcastGameEvent(
+                    String.format("%s picked up the ODDBALL!", player.getPlayerName()),
+                    "ODDBALL_PICKUP",
+                    "#FFD700"
+            );
+        } else {
+            // Broadcast flag pickup event
+            gameManager.broadcastGameEvent(
+                    String.format("%s picked up %s flag!",
+                            player.getPlayerName(),
+                            getTeamName(flag.getOwnerTeam())),
+                    "FLAG_PICKUP",
+                    "#ffaa00"
+            );
+        }
     }
 
     /**
@@ -796,6 +814,27 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 }
             }
             zone.clearPlayers();
+        }
+    }
+
+    /**
+     * Update oddball scoring - called once per physics step with proper deltaTime.
+     * Awards points to the player currently carrying the oddball.
+     */
+    public void updateOddball(double deltaTime) {
+        for (Flag flag : gameEntities.getAllFlags()) {
+            if (flag.isOddball() && flag.isCarried()) {
+                int carrierId = flag.getCarriedByPlayerId();
+                Player carrier = gameEntities.getPlayer(carrierId);
+                
+                if (carrier != null && carrier.isActive()) {
+                    // Award points based on configured rate via RuleSystem
+                    double points = gameManager.getGameConfig().getRules().getOddballPointsPerSecond() * deltaTime;
+                    if (points > 0) {
+                        gameManager.getRuleSystem().awardOddballPoints(carrierId, points);
+                    }
+                }
+            }
         }
     }
 

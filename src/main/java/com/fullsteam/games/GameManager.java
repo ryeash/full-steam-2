@@ -103,7 +103,10 @@ public class GameManager {
         // Initialize AI management settings from config
         this.aiCheckIntervalMs = gameConfig.getAiCheckIntervalMs();
         this.teamSpawnManager = new TeamSpawnManager(gameConfig.getWorldWidth(), gameConfig.getWorldHeight(), gameConfig.getTeamCount());
-        this.terrainGenerator = new TerrainGenerator(gameConfig.getWorldWidth(), gameConfig.getWorldHeight());
+        
+        // Pass oddball info to terrain generator so it can reserve center area
+        boolean hasOddball = gameConfig.getRules().hasOddball();
+        this.terrainGenerator = new TerrainGenerator(gameConfig.getWorldWidth(), gameConfig.getWorldHeight(), hasOddball);
 
         this.world = new World<>();
 
@@ -145,6 +148,7 @@ public class GameManager {
         createWorldBoundaries();
         createObstacles();
         createFlags();
+        createOddball();
         createKothZones();
         createWorkshops();
         createHeadquarters();
@@ -453,6 +457,7 @@ public class GameManager {
             gameEntities.updateAll(deltaTime);
             updateCarriedFlags(); // Update flag positions for carried flags
             collisionProcessor.updateKothZones(deltaTime); // Update KOTH zone control and award points (using proper deltaTime)
+            collisionProcessor.updateOddball(deltaTime); // Update oddball scoring (using proper deltaTime)
             collisionProcessor.updateWorkshops(deltaTime); // Update workshop crafting mechanics (using proper deltaTime)
             gameEntities.getProjectiles().entrySet().removeIf(entry -> {
                 Projectile projectile = entry.getValue();
@@ -834,6 +839,43 @@ public class GameManager {
     }
 
     /**
+     * Create the oddball if oddball mode is enabled.
+     * The oddball is a neutral flag (team 0) spawned at the world center.
+     */
+    private void createOddball() {
+        if (!gameConfig.getRules().hasOddball()) {
+            return; // Oddball not enabled
+        }
+
+        log.info("Creating oddball at world center for game {}", gameId);
+
+        // Create oddball at world center (team 0 = neutral)
+        Vector2 centerPosition = new Vector2(0, 0);
+
+        // Ensure position is clear of obstacles
+        if (!terrainGenerator.isPositionClear(centerPosition, 30.0)) {
+            // Try to find a nearby clear position
+            for (int attempt = 0; attempt < 10; attempt++) {
+                double offsetX = (Math.random() - 0.5) * 200;
+                double offsetY = (Math.random() - 0.5) * 200;
+                Vector2 candidate = new Vector2(offsetX, offsetY);
+
+                if (terrainGenerator.isPositionClear(candidate, 30.0)) {
+                    centerPosition = candidate;
+                    break;
+                }
+            }
+        }
+
+        // Use flag ID 9999 for oddball to distinguish it from regular flags
+        Flag oddball = new Flag(9999, 0, centerPosition.x, centerPosition.y);
+        gameEntities.addFlag(oddball);
+        world.addBody(oddball.getBody());
+
+        log.info("Created oddball at position ({}, {})", centerPosition.x, centerPosition.y);
+    }
+
+    /**
      * Create King of the Hill zones if enabled in rules.
      * Zones are placed strategically between team spawn areas for fair gameplay.
      */
@@ -1057,6 +1099,12 @@ public class GameManager {
                 } else {
                     // Carrier is no longer active, drop the flag
                     flag.drop();
+                    
+                    // Remove ball carrier status effect if this was the oddball
+                    if (flag.isOddball() && carrier != null) {
+                        com.fullsteam.model.StatusEffects.removeBallCarrier(carrier);
+                    }
+                    
                     log.info("Flag {} dropped at ({}, {}) - carrier {} inactive",
                             flag.getId(), flag.getPosition().x, flag.getPosition().y, carrierId);
                 }
@@ -1422,10 +1470,36 @@ public class GameManager {
                 flagState.put("homeX", flag.getHomePosition().x);
                 flagState.put("homeY", flag.getHomePosition().y);
                 flagState.put("captureCount", flag.getCaptureCount());
+                flagState.put("isOddball", flag.isOddball());
                 flagStates.add(flagState);
             }
             gameState.put("flags", flagStates);
             gameState.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
+        }
+        
+        // Include oddball states if oddball mode is enabled (even without CTF flags)
+        if (gameConfig.getRules().hasOddball()) {
+            List<Map<String, Object>> flagStates = new ArrayList<>();
+            for (Flag flag : gameEntities.getAllFlags()) {
+                if (flag.isOddball()) {
+                    Vector2 pos = flag.getPosition();
+                    Map<String, Object> flagState = new HashMap<>();
+                    flagState.put("id", flag.getId());
+                    flagState.put("x", pos.x);
+                    flagState.put("y", pos.y);
+                    flagState.put("ownerTeam", flag.getOwnerTeam());
+                    flagState.put("state", flag.getState().name());
+                    flagState.put("carriedBy", flag.getCarriedByPlayerId());
+                    flagState.put("homeX", flag.getHomePosition().x);
+                    flagState.put("homeY", flag.getHomePosition().y);
+                    flagState.put("isOddball", true);
+                    flagStates.add(flagState);
+                }
+            }
+            if (!flagStates.isEmpty()) {
+                gameState.put("flags", flagStates);
+                gameState.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
+            }
         }
 
         broadcast(gameState);
@@ -1644,11 +1718,27 @@ public class GameManager {
                 flagData.put("ownerTeam", flag.getOwnerTeam());
                 flagData.put("homeX", flag.getHomePosition().x);
                 flagData.put("homeY", flag.getHomePosition().y);
+                flagData.put("isOddball", flag.isOddball());
                 flagsData.add(flagData);
             }
             state.put("flags", flagsData);
             state.put("flagsPerTeam", gameConfig.getRules().getFlagsPerTeam());
             state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
+        }
+
+        // Add oddball information if oddball mode is enabled
+        if (gameConfig.getRules().hasOddball()) {
+            for (Flag flag : gameEntities.getAllFlags()) {
+                if (flag.isOddball()) {
+                    Map<String, Object> oddballData = new HashMap<>();
+                    oddballData.put("id", flag.getId());
+                    oddballData.put("homeX", flag.getHomePosition().x);
+                    oddballData.put("homeY", flag.getHomePosition().y);
+                    oddballData.put("pointsPerSecond", gameConfig.getRules().getOddballPointsPerSecond());
+                    state.put("oddball", oddballData);
+                    break;
+                }
+            }
         }
 
         return state;
@@ -1697,6 +1787,12 @@ public class GameManager {
         for (Flag flag : gameEntities.getAllFlags()) {
             if (flag.isCarried() && flag.getCarriedByPlayerId() == victim.getId()) {
                 flag.drop();
+                
+                // Remove ball carrier status effect if they were carrying the oddball
+                if (flag.isOddball()) {
+                    com.fullsteam.model.StatusEffects.removeBallCarrier(victim);
+                }
+                
                 log.info("Player {} died, dropped flag {}", victim.getId(), flag.getId());
             }
         }

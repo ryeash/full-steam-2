@@ -19,13 +19,19 @@ public class TerrainGenerator {
 
     private final double worldWidth;
     private final double worldHeight;
+    private final boolean reserveCenterForOddball;
 
     // Generated terrain data
     private final List<Obstacle> generatedObstacles = new ArrayList<>();
 
     public TerrainGenerator(double worldWidth, double worldHeight) {
+        this(worldWidth, worldHeight, false);
+    }
+
+    public TerrainGenerator(double worldWidth, double worldHeight, boolean reserveCenterForOddball) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
+        this.reserveCenterForOddball = reserveCenterForOddball;
         generateTerrain();
     }
 
@@ -114,6 +120,15 @@ public class TerrainGenerator {
     private boolean isObstaclePositionClear(Obstacle obstacle) {
         Vector2 position = obstacle.getPosition();
         double radius = obstacle.getBoundingRadius();
+
+        // If oddball is enabled, exclude center area (100 unit radius to be safe)
+        if (reserveCenterForOddball) {
+            double distanceFromCenter = position.distance(new Vector2(0, 0));
+            double oddballClearZone = 100.0; // Clear 100 units around center for oddball
+            if (distanceFromCenter < oddballClearZone + radius) {
+                return false; // Too close to oddball spawn
+            }
+        }
 
         // Add minimum spacing buffer to prevent tight packing
         double spacing = Math.max(10.0, radius * 0.2); // At least 10 units or 20% of radius

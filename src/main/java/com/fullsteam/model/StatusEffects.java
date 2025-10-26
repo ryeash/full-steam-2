@@ -215,4 +215,63 @@ public class StatusEffects {
             }
         });
     }
+
+    /**
+     * Apply ball carrier effect to a player (for Oddball mode).
+     * Ball carriers cannot fire weapons but score points over time.
+     */
+    public static void applyBallCarrier(Player player) {
+        applyEffect(player, new BaseAttributeModification(Long.MAX_VALUE) { // No expiration - removed when ball is dropped
+            @Override
+            public String uniqueKey() {
+                return "ballCarrier";
+            }
+
+            @Override
+            public String renderHint() {
+                return "oddball_carrier:#FFD700:star:true:Ball Carrier";
+            }
+
+            @Override
+            public Weapon update(Weapon weapon) {
+                // Return a disabled weapon that can't fire by setting fire rate to 0
+                return new Weapon(weapon) {
+                    @Override
+                    public double getFireRate() {
+                        return 0.0; // Cannot fire (no shots per second)
+                    }
+
+                    @Override
+                    public double getDamage() {
+                        return 0.0; // No damage even if somehow fired
+                    }
+
+                    @Override
+                    public int getCurrentAmmo() {
+                        // Return magazine size so AI doesn't think it needs to reload
+                        return getMagazineSize();
+                    }
+                };
+            }
+
+            @Override
+            public void update(Player player, double delta) {
+                player.setLastShotTime(Long.MAX_VALUE);
+                super.update(player, delta);
+            }
+
+            @Override
+            public void revert(Player player) {
+                player.setLastShotTime(0L);
+                super.revert(player);
+            }
+        });
+    }
+
+    /**
+     * Remove ball carrier effect from a player.
+     */
+    public static void removeBallCarrier(Player player) {
+        player.getAttributeModifications().removeIf(am -> "ballCarrier".equals(am.uniqueKey()));
+    }
 }

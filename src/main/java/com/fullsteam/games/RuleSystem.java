@@ -65,6 +65,9 @@ public class RuleSystem {
 
     // Bonus points tracking (for HQ damage, objectives, etc.)
     private final Map<Integer, Integer> bonusTeamPoints = new HashMap<>();
+    
+    // Oddball scoring tracking (playerId -> total points earned)
+    private final Map<Integer, Double> oddballPlayerScores = new HashMap<>();
 
     public RuleSystem(String gameId, Rules rules, GameEntities gameEntities,
                       GameEventManager gameEventManager, Consumer<Map<String, Object>> broadcaster,
@@ -521,7 +524,7 @@ public class RuleSystem {
             }
         }
 
-        // Add objective scores (KOTH zones, captures) based on ScoreStyle
+        // Add objective scores (KOTH zones, captures, oddball) based on ScoreStyle
         if (rules.getScoreStyle() == ScoreStyle.OBJECTIVE ||
                 rules.getScoreStyle() == ScoreStyle.TOTAL) {
 
@@ -539,6 +542,17 @@ public class RuleSystem {
                     // Convert KOTH points to integer for scoring
                     int kothScore = (int) Math.round(kothPoints);
                     teamScores.merge(team, kothScore, Integer::sum);
+                }
+            }
+            
+            // Add oddball scores (per player, then summed to team)
+            if (rules.hasOddball()) {
+                for (Map.Entry<Integer, Double> entry : oddballPlayerScores.entrySet()) {
+                    Player player = gameEntities.getPlayer(entry.getKey());
+                    if (player != null) {
+                        int oddballScore = (int) Math.round(entry.getValue());
+                        teamScores.merge(player.getTeam(), oddballScore, Integer::sum);
+                    }
                 }
             }
         }
@@ -565,13 +579,49 @@ public class RuleSystem {
             checkVictoryConditions();
         }
     }
+    
+    /**
+     * Award oddball points to a player for holding the ball.
+     * This method is called by CollisionProcessor during gameplay.
+     * 
+     * @param playerId The player ID to award points to
+     * @param points The number of points to award
+     */
+    public void awardOddballPoints(int playerId, double points) {
+        if (playerId >= 0 && points > 0) {
+            oddballPlayerScores.merge(playerId, points, Double::sum);
+            log.debug("Awarded {} oddball points to player {}. Total: {}",
+                    points, playerId, oddballPlayerScores.get(playerId));
+            
+            // Check victory conditions after adding points
+            checkVictoryConditions();
+        }
+    }
+    
+    /**
+     * Get the oddball score for a specific player.
+     * 
+     * @param playerId The player ID
+     * @return The total oddball points earned by this player
+     */
+    public double getOddballScore(int playerId) {
+        return oddballPlayerScores.getOrDefault(playerId, 0.0);
+    }
 
     private int getPlayerScore(Player player) {
-        return switch (rules.getScoreStyle()) {
+        int score = switch (rules.getScoreStyle()) {
             case TOTAL_KILLS -> player.getKills();
             case OBJECTIVE -> player.getCaptures(); // Only captures for individual scoring; KOTH is team-based
             case TOTAL -> player.getKills() + player.getCaptures();
         };
+        
+        // Add oddball scores for this player
+        if (rules.hasOddball()) {
+            double oddballScore = getOddballScore(player.getId());
+            score += (int) Math.round(oddballScore);
+        }
+        
+        return score;
     }
 
     private String getScoreTypeName() {

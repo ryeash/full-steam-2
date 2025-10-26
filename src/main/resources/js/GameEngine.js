@@ -3551,13 +3551,127 @@ class GameEngine {
     // ===== Flag Management (CTF Mode) =====
     
     /**
-     * Create a flag for capture-the-flag mode
+     * Create a flag for capture-the-flag mode or oddball
      */
     createFlag(flagData) {
         const flagContainer = new PIXI.Container();
         
         flagContainer.position.set(flagData.x, flagData.y);
         
+        // Check if this is an oddball (ownerTeam === 0)
+        const isOddball = flagData.ownerTeam === 0 || flagData.isOddball;
+        
+        if (isOddball) {
+            // Create ODDBALL - basketball style
+            this.createOddballGraphics(flagContainer, flagData);
+        } else {
+            // Create regular CTF flag
+            this.createCTFFlagGraphics(flagContainer, flagData);
+        }
+        
+        // Set z-index (above players for visibility when carried)
+        flagContainer.zIndex = 11;
+        
+        // Store flag data
+        flagContainer.flagData = flagData;
+        flagContainer.isOddball = isOddball;
+        this.flags.set(flagData.id, flagContainer);
+        this.gameContainer.addChild(flagContainer);
+        
+        // Enable sorting for proper z-index handling
+        this.gameContainer.sortableChildren = true;
+    }
+    
+    /**
+     * Create oddball graphics (yellow ball with star design)
+     */
+    createOddballGraphics(flagContainer, flagData) {
+        // Create yellow sphere
+        const ball = new PIXI.Graphics();
+        
+        // Draw main yellow ball
+        const ballColor = 0xFFFF00; // Bright yellow
+        ball.beginFill(ballColor);
+        ball.drawCircle(0, 0, 20);
+        ball.endFill();
+        
+        // Add darker yellow/gold outline
+        ball.lineStyle(2, 0xFFAA00, 1);
+        ball.drawCircle(0, 0, 20);
+        
+        // Draw star pattern in the center
+        ball.lineStyle(0); // No outline for star
+        ball.beginFill(0xFFFFFF, 0.9); // White star
+        
+        // Draw a 5-pointed star
+        const starPoints = 5;
+        const outerRadius = 12;
+        const innerRadius = 5;
+        
+        for (let i = 0; i < starPoints * 2; i++) {
+            const radius = i % 2 === 0 ? outerRadius : innerRadius;
+            const angle = (i * Math.PI) / starPoints - Math.PI / 2;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+            
+            if (i === 0) {
+                ball.moveTo(x, y);
+            } else {
+                ball.lineTo(x, y);
+            }
+        }
+        ball.closePath();
+        ball.endFill();
+        
+        // Add star outline
+        ball.lineStyle(1.5, 0xFFAA00, 1);
+        for (let i = 0; i < starPoints * 2; i++) {
+            const radius = i % 2 === 0 ? outerRadius : innerRadius;
+            const angle = (i * Math.PI) / starPoints - Math.PI / 2;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+            
+            if (i === 0) {
+                ball.moveTo(x, y);
+            } else {
+                ball.lineTo(x, y);
+            }
+        }
+        ball.closePath();
+        
+        flagContainer.addChild(ball);
+        flagContainer.ballSprite = ball;
+        
+        // Add golden glow for oddball
+        const glow = new PIXI.Graphics();
+        glow.beginFill(0xFFFF00, 0.4); // Yellow glow
+        glow.drawCircle(0, 0, 30);
+        glow.endFill();
+        flagContainer.addChildAt(glow, 0); // Behind ball
+        flagContainer.glow = glow;
+        
+        // Add "ODDBALL" label
+        const label = new PIXI.Text('⭐ ODDBALL', {
+            fontSize: 10,
+            fill: 0xFFFFFF,
+            fontWeight: 'bold',
+            stroke: 0x000000,
+            strokeThickness: 3
+        });
+        label.anchor.set(0.5);
+        label.scale.y = -1; // Flip Y-axis back
+        label.position.set(0, 35);
+        flagContainer.addChild(label);
+        flagContainer.label = label;
+        
+        // Animate glow pulsing
+        flagContainer.glowPhase = 0;
+    }
+    
+    /**
+     * Create CTF flag graphics (traditional flag)
+     */
+    createCTFFlagGraphics(flagContainer, flagData) {
         // Create flag pole
         const pole = new PIXI.Graphics();
         pole.beginFill(0x333333);
@@ -3607,17 +3721,6 @@ class GameEngine {
         
         // Animate glow
         flagContainer.glowPhase = 0;
-        
-        // Set z-index (above players for visibility when carried)
-        flagContainer.zIndex = 11;
-        
-        // Store flag data
-        flagContainer.flagData = flagData;
-        this.flags.set(flagData.id, flagContainer);
-        this.gameContainer.addChild(flagContainer);
-        
-        // Enable sorting for proper z-index handling
-        this.gameContainer.sortableChildren = true;
     }
     
     /**
@@ -3632,25 +3735,49 @@ class GameEngine {
         
         // Update visual state based on flag state
         const state = flagData.state;
+        const isOddball = flagContainer.isOddball;
         
         if (state === 'CARRIED') {
-            // Flag is being carried - make it bob and pulse
+            // Flag/ball is being carried - make it bob and pulse
             flagContainer.alpha = 0.9;
             flagContainer.scale.set(0.8);
+            
+            // Extra spin animation for oddball
+            if (isOddball && flagContainer.ballSprite) {
+                flagContainer.ballSprite.rotation += 0.05;
+            }
         } else if (state === 'DROPPED') {
-            // Flag is dropped - pulse slowly
+            // Flag/ball is dropped - pulse slowly
             flagContainer.alpha = 0.8 + Math.sin(Date.now() / 500) * 0.2;
             flagContainer.scale.set(1.0);
+            
+            // Bounce animation for oddball
+            if (isOddball && flagContainer.ballSprite) {
+                const bounce = Math.abs(Math.sin(Date.now() / 300)) * 5;
+                flagContainer.ballSprite.position.y = -bounce;
+            }
         } else {
-            // Flag is at home - full opacity
+            // Flag/ball is at home - full opacity
             flagContainer.alpha = 1.0;
             flagContainer.scale.set(1.0);
+            
+            // Gentle float for oddball at home
+            if (isOddball && flagContainer.ballSprite) {
+                const float = Math.sin(Date.now() / 800) * 3;
+                flagContainer.ballSprite.position.y = float;
+            }
         }
         
         // Animate glow
         flagContainer.glowPhase += 0.05;
         if (flagContainer.glow) {
-            flagContainer.glow.alpha = 0.2 + Math.sin(flagContainer.glowPhase) * 0.1;
+            if (isOddball) {
+                // Oddball has more intense golden glow pulse
+                flagContainer.glow.alpha = 0.3 + Math.sin(flagContainer.glowPhase) * 0.2;
+            } else {
+                // CTF flag has subtle glow
+                flagContainer.glow.alpha = 0.2 + Math.sin(flagContainer.glowPhase) * 0.1;
+            }
         }
         
         flagContainer.flagData = flagData;

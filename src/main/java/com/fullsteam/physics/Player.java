@@ -39,12 +39,12 @@ public class Player extends GameEntity {
     private Vector2 respawnPoint;
     private double maxSpeed = Config.PLAYER_SPEED;
     private final Set<AttributeModification> attributeModifications = new HashSet<>();
-    
+
     // Respawn rules tracking
     private int livesRemaining = -1; // -1 = unlimited, 0 = eliminated
     /**
      * -- GETTER --
-     *  Check if player is permanently eliminated.
+     * Check if player is permanently eliminated.
      */
     private boolean eliminated = false; // Permanently eliminated (no more respawns)
 
@@ -169,10 +169,10 @@ public class Player extends GameEntity {
         double fireInterval = 1000.0 / weapon.getFireRate();
         // Check if we have enough ammo for at least one bullet (partial bursts are allowed)
         return isActive()
-               && health > 0
-               && !isReloading
-               && weapon.getCurrentAmmo() > 0
-               && (now - lastShotTime) >= fireInterval;
+                && health > 0
+                && !isReloading
+                && weapon.getCurrentAmmo() > 0
+                && (now - lastShotTime) >= fireInterval;
     }
 
     public boolean canUseUtility() {
@@ -184,7 +184,7 @@ public class Player extends GameEntity {
         double cooldownMs = utilityWeapon.getCooldown() * 1000.0;
         return (now - lastUtilityUseTime) >= cooldownMs;
     }
-    
+
     /**
      * Refund the utility cooldown (e.g. when placement fails).
      * Resets the cooldown timer to allow immediate reuse.
@@ -336,16 +336,20 @@ public class Player extends GameEntity {
         active = false;
         deaths++;
         health = 0;
+        attributeModifications.removeIf(am -> {
+            am.revert(this);
+            return true;
+        });
     }
 
     public void addKill() {
         kills++;
     }
-    
+
     public void addCapture() {
         captures++;
     }
-    
+
     /**
      * Initialize lives for LIMITED respawn mode.
      */
@@ -353,7 +357,7 @@ public class Player extends GameEntity {
         this.livesRemaining = maxLives;
         this.eliminated = false;
     }
-    
+
     /**
      * Consume one life. Returns true if player is now eliminated.
      */
@@ -367,7 +371,7 @@ public class Player extends GameEntity {
         }
         return false;
     }
-    
+
     /**
      * Check if player has lives remaining.
      */
