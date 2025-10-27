@@ -183,8 +183,13 @@ public class IdleBehavior implements AIBehavior {
     }
     
     private boolean isTeammate(AIPlayer aiPlayer, AITargetWrapper target) {
-        // In FFA mode (team 0), everyone is an enemy
-        if (aiPlayer.getTeam() == 0 || target.getTeam() == 0) {
+        // In FFA mode (team 0), check if it's the AI's own turret
+        if (aiPlayer.getTeam() == 0) {
+            // Don't attack your own turrets in FFA
+            if (target.isTurret() && target.getOwnerId() == aiPlayer.getId()) {
+                return true;
+            }
+            // Everyone else is an enemy in FFA
             return false;
         }
         

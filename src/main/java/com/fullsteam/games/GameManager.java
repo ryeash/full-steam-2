@@ -103,10 +103,16 @@ public class GameManager {
         // Initialize AI management settings from config
         this.aiCheckIntervalMs = gameConfig.getAiCheckIntervalMs();
         this.teamSpawnManager = new TeamSpawnManager(gameConfig.getWorldWidth(), gameConfig.getWorldHeight(), gameConfig.getTeamCount());
-        
-        // Pass oddball info to terrain generator so it can reserve center area
+
+        // Pass oddball info and obstacle density to terrain generator
         boolean hasOddball = gameConfig.getRules().hasOddball();
-        this.terrainGenerator = new TerrainGenerator(gameConfig.getWorldWidth(), gameConfig.getWorldHeight(), hasOddball);
+        com.fullsteam.model.ObstacleDensity obstacleDensity = gameConfig.getRules().getObstacleDensity();
+        this.terrainGenerator = new TerrainGenerator(
+                gameConfig.getWorldWidth(),
+                gameConfig.getWorldHeight(),
+                hasOddball,
+                obstacleDensity
+        );
 
         this.world = new World<>();
 
@@ -180,6 +186,13 @@ public class GameManager {
         if (gameEntities.getPlayerSessions().size() >= getMaxPlayers()) {
             return false;
         }
+
+        // Check if game is locked to new players
+        if (isGameLocked()) {
+            log.info("Player {} attempted to join locked game {}", playerSession.getPlayerId(), gameId);
+            return false;
+        }
+
         gameEntities.addPlayerSession(playerSession);
         onPlayerJoined(playerSession);
         return true;
@@ -236,12 +249,25 @@ public class GameManager {
                 gameEntities.getPlayerSessions().size(),
                 getMaxPlayers(),
                 gameStartTime,
-                gameRunning ? "running" : "waiting"
+                gameRunning ? "running" : "waiting",
+                gameConfig
         );
     }
 
     public int getPlayerCount() {
         return gameEntities.getPlayerSessions().size();
+    }
+
+    /**
+     * Check if the game is locked to new players based on elapsed time.
+     */
+    public boolean isGameLocked() {
+        if (!gameConfig.getRules().shouldLockGame()) {
+            return false; // Game never locks
+        }
+
+        double elapsedSeconds = (System.currentTimeMillis() - gameStartTime) / 1000.0;
+        return elapsedSeconds >= gameConfig.getRules().getLockGameAfterSeconds();
     }
 
     public void shutdown() {
@@ -1099,12 +1125,12 @@ public class GameManager {
                 } else {
                     // Carrier is no longer active, drop the flag
                     flag.drop();
-                    
+
                     // Remove ball carrier status effect if this was the oddball
                     if (flag.isOddball() && carrier != null) {
                         com.fullsteam.model.StatusEffects.removeBallCarrier(carrier);
                     }
-                    
+
                     log.info("Flag {} dropped at ({}, {}) - carrier {} inactive",
                             flag.getId(), flag.getPosition().x, flag.getPosition().y, carrierId);
                 }
@@ -1476,7 +1502,7 @@ public class GameManager {
             gameState.put("flags", flagStates);
             gameState.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
         }
-        
+
         // Include oddball states if oddball mode is enabled (even without CTF flags)
         if (gameConfig.getRules().hasOddball()) {
             List<Map<String, Object>> flagStates = new ArrayList<>();
@@ -1774,6 +1800,17 @@ public class GameManager {
         }
         victim.die();
 
+        if (gameConfig.getRules().getVictoryCondition() == VictoryCondition.ELIMINATION) {
+            victim.setEliminated(true);
+            victim.setEliminationTime(System.currentTimeMillis());
+            
+            // Calculate placement based on how many players are still alive
+            int remainingPlayers = (int) gameEntities.getAllPlayers().stream()
+                    .filter(p -> !p.isEliminated())
+                    .count();
+            victim.setPlacement(remainingPlayers + 1); // +1 because this player just got eliminated
+        }
+
         // Check if player lost their last life
         if (victim.loseLife()) {
             gameEventManager.broadcastElimination(
@@ -1787,12 +1824,12 @@ public class GameManager {
         for (Flag flag : gameEntities.getAllFlags()) {
             if (flag.isCarried() && flag.getCarriedByPlayerId() == victim.getId()) {
                 flag.drop();
-                
+
                 // Remove ball carrier status effect if they were carrying the oddball
                 if (flag.isOddball()) {
                     com.fullsteam.model.StatusEffects.removeBallCarrier(victim);
                 }
-                
+
                 log.info("Player {} died, dropped flag {}", victim.getId(), flag.getId());
             }
         }

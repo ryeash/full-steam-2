@@ -172,6 +172,40 @@
             background: linear-gradient(45deg, #ff6600, #ff4400);
             border-color: #ff6600;
         }
+        
+        .game-config-summary {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(0, 255, 136, 0.05);
+            border: 1px solid rgba(0, 255, 136, 0.2);
+            border-radius: 6px;
+            font-size: 0.85em;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .config-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 8px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            color: #fff;
+            font-size: 0.9em;
+            white-space: nowrap;
+        }
+        
+        .config-tag-icon {
+            margin-right: 4px;
+        }
+        
+        .config-tag.highlight {
+            background: rgba(0, 255, 136, 0.2);
+            border-color: rgba(0, 255, 136, 0.4);
+            color: #00ff88;
+        }
     </style>
 </head>
 <body>
@@ -242,7 +276,7 @@
                         <span class="checkbox-label">Automatically fill empty slots with AI players</span>
                     </div>
                 </div>
-                
+
                 <div class="config-section">
                     <h3>🗺️ World Settings</h3>
                     <div class="config-item">
@@ -253,8 +287,26 @@
                         <label for="worldHeight">World Height:</label>
                         <input type="number" id="worldHeight" min="1000" max="5000" step="100" value="2000">
                     </div>
+                    <div class="config-item">
+                        <label for="obstacleDensity">Obstacle Density:</label>
+                        <select id="obstacleDensity">
+                            <option value="RANDOM">Random (Varies Each Game)</option>
+                            <option value="SPARSE">Sparse (Open Battlefield)</option>
+                            <option value="DENSE">Dense (Balanced Cover)</option>
+                            <option value="CHOKED">Choked (Heavy Cover)</option>
+                        </select>
+                    </div>
+                    <div class="config-item">
+                        <label for="enableRandomEvents">
+                            <input type="checkbox" id="enableRandomEvents" style="width: auto; margin-right: 5px;"
+                                   onchange="updateEventFields()">
+                            Enable Random Events
+                        </label>
+                        <small style="color: #888; font-size: 0.8em;">Dynamic hazards and supply drops during
+                            gameplay</small>
+                    </div>
                 </div>
-                
+
                 <div class="config-section">
                     <h3>⚔️ Player Settings</h3>
                     <div class="config-item">
@@ -262,7 +314,7 @@
                         <input type="number" id="playerMaxHealth" min="50" max="500" step="10" value="100">
                     </div>
                 </div>
-                
+
                 <div class="config-section">
                     <h3>⏱️ Round Rules</h3>
                     <div class="config-item">
@@ -275,7 +327,7 @@
                         <input type="number" id="restDuration" min="5" max="60" step="5" value="10">
                     </div>
                 </div>
-                
+
                 <div class="config-section">
                     <h3>🚩 Capture the Flag</h3>
                     <div class="config-item">
@@ -284,7 +336,7 @@
                         <small style="color: #888; font-size: 0.8em;">0 = disabled, 1-3 = CTF mode</small>
                     </div>
                 </div>
-                
+
                 <div class="config-section">
                     <h3>👑 King of the Hill</h3>
                     <div class="config-item">
@@ -298,13 +350,14 @@
                         <small style="color: #888; font-size: 0.8em;">Points awarded for controlling a zone</small>
                     </div>
                 </div>
-                
+
                 <div class="config-section">
                     <h3>⭐ Oddball</h3>
                     <div class="config-item">
                         <label for="enableOddball">Enable Oddball:</label>
                         <input type="checkbox" id="enableOddball">
-                        <small style="color: #888; font-size: 0.8em;">Neutral ball spawns at center - hold it to score!</small>
+                        <small style="color: #888; font-size: 0.8em;">Neutral ball spawns at center - hold it to
+                            score!</small>
                     </div>
                     <div class="config-item">
                         <label for="oddballPointsPerSecond">Points Per Second:</label>
@@ -315,13 +368,14 @@
                         <small style="color: #ff9500; font-size: 0.8em;">⚠️ Ball carrier cannot fire weapons!</small>
                     </div>
                 </div>
-                
+
                 <div class="config-section">
                     <h3>🏭 Workshops</h3>
                     <div class="config-item">
                         <label for="addWorkshops">Enable Workshops:</label>
                         <input type="checkbox" id="addWorkshops">
-                        <small style="color: #888; font-size: 0.8em;">Each team gets one workshop in their spawn zone</small>
+                        <small style="color: #888; font-size: 0.8em;">Each team gets one workshop in their spawn
+                            zone</small>
                     </div>
                     <div class="config-item">
                         <label for="workshopCraftTime">Craft Time (seconds):</label>
@@ -336,16 +390,18 @@
                     <div class="config-item">
                         <label for="maxPowerUpsPerWorkshop">Max Power-ups per Workshop:</label>
                         <input type="number" id="maxPowerUpsPerWorkshop" min="1" max="8" value="3">
-                        <small style="color: #888; font-size: 0.8em;">Maximum power-ups that can exist around each workshop</small>
+                        <small style="color: #888; font-size: 0.8em;">Maximum power-ups that can exist around each
+                            workshop</small>
                     </div>
                 </div>
-                
+
                 <div class="config-section">
                     <h3>🏛️ Headquarters</h3>
                     <div class="config-item">
                         <label for="addHeadquarters">Enable Headquarters:</label>
-                        <input type="checkbox" id="addHeadquarters" checked>
-                        <small style="color: #888; font-size: 0.8em;">Each team gets a destructible base in their spawn zone</small>
+                        <input type="checkbox" id="addHeadquarters">
+                        <small style="color: #888; font-size: 0.8em;">Each team gets a destructible base in their spawn
+                            zone</small>
                     </div>
                     <div class="config-item">
                         <label for="headquartersMaxHealth">Max Health:</label>
@@ -355,7 +411,8 @@
                     <div class="config-item">
                         <label for="headquartersPointsPerDamage">Points Per Damage:</label>
                         <input type="number" id="headquartersPointsPerDamage" min="0" max="1" step="0.05" value="0.1">
-                        <small style="color: #888; font-size: 0.8em;">Points awarded per damage dealt (0.1 = 1 point per 10 damage)</small>
+                        <small style="color: #888; font-size: 0.8em;">Points awarded per damage dealt (0.1 = 1 point per
+                            10 damage)</small>
                     </div>
                     <div class="config-item">
                         <label for="headquartersDestructionBonus">Destruction Bonus:</label>
@@ -364,13 +421,15 @@
                     </div>
                     <div class="config-item">
                         <label for="headquartersDestructionEndsGame">
-                            <input type="checkbox" id="headquartersDestructionEndsGame" checked style="width: auto; margin-right: 5px;">
+                            <input type="checkbox" id="headquartersDestructionEndsGame" checked
+                                   style="width: auto; margin-right: 5px;">
                             HQ Destruction Ends Game
                         </label>
-                        <small style="color: #888; font-size: 0.8em;">Game ends immediately when a headquarters is destroyed</small>
+                        <small style="color: #888; font-size: 0.8em;">Game ends immediately when a headquarters is
+                            destroyed</small>
                     </div>
                 </div>
-                
+
                 <div class="config-section">
                     <h3>🏆 Victory Conditions</h3>
                     <div class="config-item">
@@ -398,8 +457,13 @@
                             Enable Sudden Death (Next score wins on tie)
                         </label>
                     </div>
+                    <div class="config-item">
+                        <label for="lockGameAfterSeconds">Lock Game After (seconds):</label>
+                        <input type="number" id="lockGameAfterSeconds" min="0" max="600" step="10" value="0">
+                        <small style="color: #888; font-size: 0.8em;">Prevent new players from joining after this time (0 = never lock, useful for Battle Royale)</small>
+                    </div>
                 </div>
-                
+
                 <div class="config-section">
                     <h3>🔄 Respawn Rules</h3>
                     <div class="config-item">
@@ -428,17 +492,11 @@
                         <small style="color: #888; font-size: 0.8em;">Lives before elimination</small>
                     </div>
                 </div>
-                
+
                 <div class="config-section">
-                    <h3>🌋 Environmental Events</h3>
-                    <div class="config-item">
-                        <label for="enableRandomEvents">
-                            <input type="checkbox" id="enableRandomEvents" style="width: auto; margin-right: 5px;" onchange="updateEventFields()">
-                            Enable Random Events
-                        </label>
-                        <small style="color: #888; font-size: 0.8em;">Dynamic hazards and supply drops during gameplay</small>
-                    </div>
+                    <h3>🌋 Event Configuration</h3>
                     <div id="eventConfigFields" style="display: none;">
+                        <small style="color: #888; font-size: 0.9em; display: block; margin-bottom: 10px;">Configure event timing and intensity (enable in World Settings)</small>
                         <div class="config-item">
                             <label for="randomEventInterval">Event Interval (seconds):</label>
                             <input type="number" id="randomEventInterval" min="20" max="300" step="10" value="40">
@@ -549,7 +607,7 @@
         createButtons.appendChild(dominationButton);
         
         const eliminationButton = document.createElement('button');
-        eliminationButton.textContent = '💀 Elimination';
+        eliminationButton.textContent = '🎯 Battle Royale';
         eliminationButton.onclick = () => createPresetGame('elimination');
         createButtons.appendChild(eliminationButton);
         
@@ -591,6 +649,8 @@
                 const gameAge = getGameAge(game.createdTime);
                 const playerPercentage = Math.round(((game.playerCount || 0) / game.maxPlayers) * 100);
 
+                const configHtml = game.gameConfig ? createGameConfigSummary(game.gameConfig) : '';
+                
                 listItem.innerHTML = `
                     <div class="game-header">
                         <div class="game-type">Game ${game.gameId}</div>
@@ -622,6 +682,7 @@
                             </div>
                         </div>
                     </div>
+                    ${configHtml}
                     <div class="game-actions">
                         ${!isFull ? `<button class="join-button" onclick="joinGame('${game.gameId}')">🎯 Join Game</button>` : 
                           `<button class="join-button" disabled>Game Full</button>`}
@@ -655,6 +716,86 @@
         
         const diffDays = Math.floor(diffHours / 24);
         return `${diffDays}d ${diffHours % 24}h ago`;
+    }
+
+    function createGameConfigSummary(config) {
+        const rules = config.rules || {};
+        const tags = [];
+        
+        // Helper to format time concisely
+        const formatTime = (seconds) => {
+            if (!seconds || seconds === 0) return null;
+            if (seconds < 60) return `${seconds}s`;
+            const minutes = Math.floor(seconds / 60);
+            return `${minutes}m`;
+        };
+        
+        // World size
+        tags.push(`🗺️ ${config.worldWidth}×${config.worldHeight}`);
+        
+        // Team mode
+        if (config.teamCount === 0) {
+            tags.push(`💥 FFA`);
+        } else {
+            tags.push(`👥 ${config.teamCount} Teams`);
+        }
+        
+        // Victory condition
+        if (rules.victoryCondition === 'ELIMINATION') {
+            tags.push({ text: '🎯 Battle Royale', highlight: true });
+        } else if (rules.victoryCondition === 'SCORE_LIMIT') {
+            tags.push(`🏆 First to ${rules.scoreLimit}`);
+        } else if (rules.victoryCondition === 'TIME_LIMIT') {
+            const time = formatTime(rules.timeLimit);
+            tags.push(`⏱️ ${time} Match`);
+        } else if (rules.victoryCondition === 'OBJECTIVE') {
+            tags.push(`🎯 Objective`);
+        }
+        
+        // Respawn mode
+        if (rules.respawnMode === 'ELIMINATION') {
+            tags.push({ text: '💀 One Life', highlight: true });
+        } else if (rules.respawnMode === 'LIMITED') {
+            tags.push(`❤️ ${rules.maxLives} Lives`);
+        } else if (rules.respawnMode === 'WAVE') {
+            tags.push(`🌊 Wave Respawn`);
+        }
+        
+        // Game modes
+        if (rules.flagsPerTeam > 0) {
+            tags.push({ text: `🚩 CTF`, highlight: true });
+        }
+        if (rules.kothZones > 0) {
+            tags.push({ text: `👑 KOTH (${rules.kothZones})`, highlight: true });
+        }
+        if (rules.enableOddball) {
+            tags.push({ text: `⭐ Oddball`, highlight: true });
+        }
+        if (rules.addWorkshops) {
+            tags.push(`🏭 Workshops`);
+        }
+        if (rules.addHeadquarters) {
+            tags.push({ text: `🏛️ HQ Assault`, highlight: true });
+        }
+        
+        // Special features
+        if (rules.enableRandomEvents) {
+            tags.push(`🌋 Events`);
+        }
+        if (rules.lockGameAfterSeconds > 0) {
+            tags.push(`🔒 Locks in ${formatTime(rules.lockGameAfterSeconds)}`);
+        }
+        
+        // Generate HTML
+        const tagHtml = tags.map(tag => {
+            if (typeof tag === 'string') {
+                return `<span class="config-tag">${tag}</span>`;
+            } else {
+                return `<span class="config-tag highlight">${tag.text}</span>`;
+            }
+        }).join('');
+        
+        return `<div class="game-config-summary">${tagHtml}</div>`;
     }
 
     function joinGame(gameId) {
@@ -782,10 +923,10 @@
             };
         } else if (presetType === 'elimination') {
             gameConfig = {
-                maxPlayers: 20,                 // Battle royale scale
-                teamCount: 0,                   // Every player for themselves
-                worldWidth: 2000,
-                worldHeight: 2000,
+                maxPlayers: 50,                 // Battle royale scale - 50 players!
+                teamCount: 0,                   // Every player for themselves (FFA)
+                worldWidth: 4000,               // Much larger world for 50 players
+                worldHeight: 4000,              // Gives space to spread out and strategize
                 playerMaxHealth: 100,
                 aiCheckIntervalMs: 10000,
                 enableAIFilling: true,
@@ -796,18 +937,26 @@
                     scoreStyle: 'TOTAL_KILLS',  // Kills matter for placement
                     victoryCondition: 'ELIMINATION',  // Last player standing wins!
                     scoreLimit: 50,
-                    timeLimit: 900,             // 15 minute max (safety limit)
+                    timeLimit: 1200,            // 20 minute max (safety limit for 50 players)
                     suddenDeath: false,
+                    lockGameAfterSeconds: 30,   // Lock game after 30s - no late joins in BR!
                     respawnMode: 'ELIMINATION', // ONE LIFE - Battle Royale style!
                     respawnDelay: 0,
                     waveRespawnInterval: 30,
                     maxLives: -1,
-                    kothZones: 0,
+                    kothZones: 0,               // No KOTH zones - pure survival
                     kothPointsPerSecond: 1.0,
-                    workshops: 0,
-                    workshopCraftTime: 10,
-                    workshopCraftRadius: 80,
-                    maxPowerUpsPerWorkshop: 3
+                    addWorkshops: true,         // Workshops for power-ups (loot spots!)
+                    workshopCraftTime: 8,       // Faster crafting for BR pace
+                    workshopCraftRadius: 100,   // Larger radius for easier access
+                    maxPowerUpsPerWorkshop: 4,  // More power-ups available (loot!)
+                    obstacleDensity: 'CHOKED',  // Dense obstacles for cover and tactics
+                    enableRandomEvents: true,   // Random events add BR excitement
+                    randomEventInterval: 60,    // Event every ~60 seconds
+                    randomEventIntervalVariance: 0.4,  // Good variance
+                    eventWarningDuration: 4,    // 4 second warning for events
+                    enableOddball: false,       // No oddball in BR
+                    addHeadquarters: false      // No headquarters in BR
                 }
             };
         } else if (presetType === 'stock-battle') {
@@ -1041,6 +1190,7 @@
                 document.getElementById('scoreLimit').value = defaultConfig.rules.scoreLimit || 50;
                 document.getElementById('timeLimit').value = defaultConfig.rules.timeLimit || 600;
                 document.getElementById('suddenDeath').checked = defaultConfig.rules.suddenDeath || false;
+                document.getElementById('lockGameAfterSeconds').value = defaultConfig.rules.lockGameAfterSeconds || 0;
                 document.getElementById('respawnMode').value = defaultConfig.rules.respawnMode || 'INSTANT';
                 document.getElementById('respawnDelay').value = defaultConfig.rules.respawnDelay || 5;
                 document.getElementById('waveRespawnInterval').value = defaultConfig.rules.waveRespawnInterval || 30;
@@ -1049,6 +1199,7 @@
                 document.getElementById('kothPointsPerSecond').value = defaultConfig.rules.kothPointsPerSecond || 1.0;
                 document.getElementById('enableOddball').checked = defaultConfig.rules.enableOddball || false;
                 document.getElementById('oddballPointsPerSecond').value = defaultConfig.rules.oddballPointsPerSecond || 1.0;
+                document.getElementById('obstacleDensity').value = defaultConfig.rules.obstacleDensity || 'RANDOM';
                 document.getElementById('addWorkshops').checked = defaultConfig.rules.addWorkshops || false;
                 document.getElementById('workshopCraftTime').value = defaultConfig.rules.workshopCraftTime || 10;
                 document.getElementById('workshopCraftRadius').value = defaultConfig.rules.workshopCraftRadius || 80;
@@ -1067,12 +1218,14 @@
                 document.getElementById('scoreLimit').value = 50;
                 document.getElementById('timeLimit').value = 600;
                 document.getElementById('suddenDeath').checked = false;
+                document.getElementById('lockGameAfterSeconds').value = 0;
                 document.getElementById('respawnMode').value = 'INSTANT';
                 document.getElementById('respawnDelay').value = 5;
                 document.getElementById('kothZones').value = 0;
                 document.getElementById('kothPointsPerSecond').value = 1.0;
                 document.getElementById('enableOddball').checked = false;
                 document.getElementById('oddballPointsPerSecond').value = 1.0;
+                document.getElementById('obstacleDensity').value = 'RANDOM';
                 document.getElementById('waveRespawnInterval').value = 30;
                 document.getElementById('maxLives').value = 3;
                 document.getElementById('addWorkshops').checked = false;
@@ -1181,6 +1334,7 @@
                 scoreLimit: parseInt(document.getElementById('scoreLimit').value),
                 timeLimit: parseFloat(document.getElementById('timeLimit').value),
                 suddenDeath: document.getElementById('suddenDeath').checked,
+                lockGameAfterSeconds: parseFloat(document.getElementById('lockGameAfterSeconds').value),
                 respawnMode: document.getElementById('respawnMode').value,
                 respawnDelay: parseFloat(document.getElementById('respawnDelay').value),
                 waveRespawnInterval: parseFloat(document.getElementById('waveRespawnInterval').value),
@@ -1189,6 +1343,7 @@
                 kothPointsPerSecond: parseFloat(document.getElementById('kothPointsPerSecond').value),
                 enableOddball: document.getElementById('enableOddball').checked,
                 oddballPointsPerSecond: parseFloat(document.getElementById('oddballPointsPerSecond').value),
+                obstacleDensity: document.getElementById('obstacleDensity').value,
                 addWorkshops: document.getElementById('addWorkshops').checked,
                 workshopCraftTime: parseFloat(document.getElementById('workshopCraftTime').value),
                 workshopCraftRadius: parseFloat(document.getElementById('workshopCraftRadius').value),

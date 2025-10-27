@@ -433,6 +433,7 @@ public class RuleSystem {
             if (totalActivePlayers == 1) {
                 for (Player player : gameEntities.getAllPlayers()) {
                     if (!player.isEliminated() && player.hasLivesRemaining()) {
+                        player.setPlacement(1); // Winner gets 1st place
                         declarePlayerVictory(player.getId(), player.getPlayerName(),
                                 String.format("%s wins! Last player standing!", player.getPlayerName()));
                         break;
@@ -669,7 +670,29 @@ public class RuleSystem {
                 scores.add(teamScore);
             }
         } else {
-            for (Player player : gameEntities.getAllPlayers()) {
+            // FFA mode
+            List<Player> players = new ArrayList<>(gameEntities.getAllPlayers());
+            
+            // In ELIMINATION mode, sort by placement first, then by kills
+            if (rules.getVictoryCondition() == VictoryCondition.ELIMINATION) {
+                players.sort((p1, p2) -> {
+                    // Sort by placement (lower is better: 1st place < 2nd place)
+                    if (p1.getPlacement() != p2.getPlacement()) {
+                        return Integer.compare(p1.getPlacement(), p2.getPlacement());
+                    }
+                    // If placement is the same (or 0), sort by kills (higher is better)
+                    if (p2.getKills() != p1.getKills()) {
+                        return Integer.compare(p2.getKills(), p1.getKills());
+                    }
+                    // If kills are the same, sort by elimination time (later is better - survived longer)
+                    return Long.compare(p2.getEliminationTime(), p1.getEliminationTime());
+                });
+            } else {
+                // Other modes: sort by score
+                players.sort((p1, p2) -> Integer.compare(getPlayerScore(p2), getPlayerScore(p1)));
+            }
+            
+            for (Player player : players) {
                 Map<String, Object> playerScore = new HashMap<>();
                 playerScore.put("playerId", player.getId());
                 playerScore.put("playerName", player.getPlayerName());
@@ -677,6 +700,8 @@ public class RuleSystem {
                 playerScore.put("kills", player.getKills());
                 playerScore.put("deaths", player.getDeaths());
                 playerScore.put("captures", player.getCaptures());
+                playerScore.put("placement", player.getPlacement());
+                playerScore.put("eliminationTime", player.getEliminationTime());
                 scores.add(playerScore);
             }
         }

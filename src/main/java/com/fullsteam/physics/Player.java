@@ -40,13 +40,10 @@ public class Player extends GameEntity {
     private double maxSpeed = Config.PLAYER_SPEED;
     private final Set<AttributeModification> attributeModifications = new HashSet<>();
 
-    // Respawn rules tracking
     private int livesRemaining = -1; // -1 = unlimited, 0 = eliminated
-    /**
-     * -- GETTER --
-     * Check if player is permanently eliminated.
-     */
     private boolean eliminated = false; // Permanently eliminated (no more respawns)
+    private long eliminationTime = 0; // Timestamp when player was eliminated (for Battle Royale ranking)
+    private int placement = 0; // Final placement in elimination modes (1 = winner, 2 = 2nd place, etc.)
 
     public Player(int id, String playerName, double x, double y, int team, double maxHealth) {
         super(id, createPlayerBody(x, y), maxHealth);
@@ -360,9 +357,11 @@ public class Player extends GameEntity {
 
     /**
      * Consume one life. Returns true if player is now eliminated.
+     * In ELIMINATION mode (livesRemaining = -1), first death eliminates the player.
      */
     public boolean loseLife() {
         if (livesRemaining > 0) {
+            // LIMITED mode: consume a life
             livesRemaining--;
             if (livesRemaining == 0) {
                 eliminated = true;

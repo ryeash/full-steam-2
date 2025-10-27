@@ -35,6 +35,7 @@ dependencies {
     implementation("org.apache.commons:commons-lang3:3.18.0")
     implementation("commons-io:commons-io:2.20.0")
     implementation("org.dyn4j:dyn4j:5.0.2")
+    implementation("io.micronaut.validation:micronaut-validation")
     runtimeOnly("org.yaml:snakeyaml")
 
     testAnnotationProcessor "io.micronaut:micronaut-inject-java"

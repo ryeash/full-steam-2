@@ -25,6 +25,7 @@ import io.micronaut.http.exceptions.HttpStatusException;
 import io.micronaut.http.server.types.files.StreamedFile;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.validation.Valid;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,7 +74,7 @@ public class GameController {
     @Post("/api/games")
     @Produces(MediaType.APPLICATION_JSON)
     @Consumes(MediaType.APPLICATION_JSON)
-    public Map<String, String> createGame(@Body GameConfig gameConfig) {
+    public Map<String, String> createGame(@Valid @Body GameConfig gameConfig) {
         try {
             GameManager game;
             if (gameConfig != null) {
@@ -82,12 +83,12 @@ public class GameController {
                 game = gameLobby.createGame();
             }
             return Map.of(
-                "gameId", game.getGameId(),
-                "status", "created"
+                    "gameId", game.getGameId(),
+                    "status", "created"
             );
         } catch (IllegalStateException e) {
-            throw new HttpStatusException(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE, 
-                "Failed to create game: " + e.getMessage());
+            throw new HttpStatusException(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE,
+                    "Failed to create game: " + e.getMessage());
         }
     }
 

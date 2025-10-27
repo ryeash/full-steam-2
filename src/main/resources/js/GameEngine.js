@@ -1906,11 +1906,27 @@ class GameEngine {
                 margin: 20px 0;
             `;
             
-            // Sort scores by score value
-            const sortedScores = [...data.finalScores].sort((a, b) => b.score - a.score);
+            // Sort scores - in ELIMINATION mode, use placement; otherwise use score
+            const isEliminationMode = data.victoryCondition === 'ELIMINATION';
+            const sortedScores = [...data.finalScores].sort((a, b) => {
+                if (isEliminationMode && a.placement && b.placement) {
+                    // Sort by placement (lower is better: 1st < 2nd < 3rd)
+                    if (a.placement !== b.placement) {
+                        return a.placement - b.placement;
+                    }
+                    // If placement is same, sort by kills
+                    if (b.kills !== a.kills) {
+                        return b.kills - a.kills;
+                    }
+                    // If kills are same, sort by elimination time (later is better)
+                    return b.eliminationTime - a.eliminationTime;
+                }
+                // Default: sort by score
+                return b.score - a.score;
+            });
             
             sortedScores.forEach((score, index) => {
-                const scoreRow = this.createFinalScoreRow(score, index + 1, data);
+                const scoreRow = this.createFinalScoreRow(score, index + 1, data, isEliminationMode);
                 scoresContainer.appendChild(scoreRow);
             });
             
@@ -1952,7 +1968,7 @@ class GameEngine {
     /**
      * Create a score row for the game over screen
      */
-    createFinalScoreRow(score, rank, gameOverData) {
+    createFinalScoreRow(score, rank, gameOverData, isEliminationMode = false) {
         const isLocalPlayer = score.playerId === this.myPlayerId;
         
         const row = document.createElement('div');
@@ -1978,7 +1994,9 @@ class GameEngine {
         `;
         
         const rankBadge = document.createElement('span');
-        rankBadge.textContent = this.getRankBadge(rank);
+        // In elimination mode, use actual placement if available
+        const displayRank = isEliminationMode && score.placement ? score.placement : rank;
+        rankBadge.textContent = this.getRankBadge(displayRank);
         rankBadge.style.cssText = `
             font-size: 24px;
             min-width: 40px;
@@ -2010,12 +2028,22 @@ class GameEngine {
             font-size: 16px;
         `;
         
-        const scoreSpan = document.createElement('span');
-        scoreSpan.style.color = '#FFD700';
-        scoreSpan.style.fontWeight = 'bold';
-        scoreSpan.style.fontSize = '20px';
-        scoreSpan.textContent = `${score.score} pts`;
-        stats.appendChild(scoreSpan);
+        // In elimination mode, show placement more prominently
+        if (isEliminationMode && score.placement) {
+            const placementSpan = document.createElement('span');
+            placementSpan.style.color = displayRank <= 3 ? '#FFD700' : '#cccccc';
+            placementSpan.style.fontWeight = 'bold';
+            placementSpan.style.fontSize = '18px';
+            placementSpan.textContent = `#${score.placement}`;
+            stats.appendChild(placementSpan);
+        } else {
+            const scoreSpan = document.createElement('span');
+            scoreSpan.style.color = '#FFD700';
+            scoreSpan.style.fontWeight = 'bold';
+            scoreSpan.style.fontSize = '20px';
+            scoreSpan.textContent = `${score.score} pts`;
+            stats.appendChild(scoreSpan);
+        }
         
         const killsSpan = document.createElement('span');
         killsSpan.style.color = '#4ade80';
