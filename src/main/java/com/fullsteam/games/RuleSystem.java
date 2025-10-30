@@ -68,6 +68,13 @@ public class RuleSystem {
     
     // Oddball scoring tracking (playerId -> total points earned)
     private final Map<Integer, Double> oddballPlayerScores = new HashMap<>();
+    
+    // VIP kill tracking (team number -> VIP kills scored)
+    private final Map<Integer, Integer> vipKillScores = new HashMap<>();
+    
+    // VIP validation timer (check every 2 seconds)
+    private long lastVipCheckTime = 0;
+    private static final long VIP_CHECK_INTERVAL_MS = 2000;
 
     public RuleSystem(String gameId, Rules rules, GameEntities gameEntities,
                       GameEventManager gameEventManager, Consumer<Map<String, Object>> broadcaster,
@@ -82,6 +89,11 @@ public class RuleSystem {
         // Initialize round timer if rounds are enabled
         if (rules.getRoundDuration() > 0) {
             this.roundEndTime = (long) (System.currentTimeMillis() + (rules.getRoundDuration() * 1000));
+        }
+        
+        // Initialize VIP mode if enabled
+        if (rules.hasVip()) {
+            initializeVipMode();
         }
     }
 
@@ -110,6 +122,130 @@ public class RuleSystem {
     }
 
     /**
+     * Initialize VIP mode - select one VIP per team.
+     */
+    private void initializeVipMode() {
+        if (!rules.hasVip() || teamCount == 0) {
+            return;
+        }
+
+        log.info("Initializing VIP mode for game {}", gameId);
+        
+        // Select one VIP per team
+        for (int team = 1; team <= teamCount; team++) {
+            selectVipForTeam(team);
+        }
+    }
+
+    /**
+     * Select a VIP for a specific team.
+     * Chooses the first active player on the team.
+     */
+    private void selectVipForTeam(int teamNumber) {
+        // Find all active players on this team
+        List<Player> teamPlayers = gameEntities.getAllPlayers().stream()
+                .filter(p -> p.getTeam() == teamNumber && p.isActive())
+                .toList();
+
+        if (teamPlayers.isEmpty()) {
+            log.debug("No active players on team {} to select as VIP", teamNumber);
+            return;
+        }
+
+        // Select first player as VIP (could be randomized or based on score)
+        Player vip = teamPlayers.get(0);
+        setPlayerAsVip(vip);
+        
+        log.info("Player {} ({}) selected as VIP for team {}", 
+                vip.getId(), vip.getPlayerName(), teamNumber);
+    }
+
+    /**
+     * Set a player as the VIP for their team.
+     * Removes VIP status from previous VIP if any.
+     */
+    private void setPlayerAsVip(Player player) {
+        int teamNumber = player.getTeam();
+        
+        // Remove VIP status from previous VIP
+        Integer previousVipId = gameEntities.getTeamVip(teamNumber);
+        if (previousVipId != null) {
+            Player previousVip = gameEntities.getPlayer(previousVipId);
+            if (previousVip != null) {
+                com.fullsteam.model.StatusEffects.removeVipStatus(previousVip);
+            }
+        }
+        
+        // Set new VIP
+        gameEntities.setTeamVip(teamNumber, player.getId());
+        com.fullsteam.model.StatusEffects.applyVipStatus(player);
+        
+        // Broadcast VIP selection event
+        gameEventManager.broadcastSystemMessage(
+                String.format("👑 %s is now the VIP for Team %d!", 
+                        player.getPlayerName(), teamNumber));
+    }
+
+    /**
+     * Periodically validate that all teams have valid VIPs assigned.
+     * This runs in the game loop to catch any edge cases where VIP status might be lost.
+     */
+    private void validateVipAssignments() {
+        long currentTime = System.currentTimeMillis();
+        
+        // Only check every VIP_CHECK_INTERVAL_MS to avoid excessive checking
+        if (currentTime - lastVipCheckTime < VIP_CHECK_INTERVAL_MS) {
+            return;
+        }
+        
+        lastVipCheckTime = currentTime;
+        
+        // Check each team
+        for (int team = 1; team <= teamCount; team++) {
+            ensureVipForTeam(team);
+        }
+    }
+
+    /**
+     * Check if VIP needs to be reassigned for a team (e.g., VIP left or died).
+     * Called when a player leaves or when needed.
+     */
+    public void ensureVipForTeam(int teamNumber) {
+        if (!rules.hasVip()) {
+            return;
+        }
+
+        Integer currentVipId = gameEntities.getTeamVip(teamNumber);
+        Player currentVip = currentVipId != null ? gameEntities.getPlayer(currentVipId) : null;
+        
+        // Check if current VIP is still valid
+        if (currentVip != null && currentVip.isActive()) {
+            return; // VIP is still valid
+        }
+        
+        // Need to select a new VIP
+        log.debug("VIP for team {} is no longer valid, selecting new VIP", teamNumber);
+        selectVipForTeam(teamNumber);
+    }
+
+    /**
+     * Award points for a VIP kill.
+     * Only VIP kills count towards objective scoring in VIP mode.
+     */
+    public void awardVipKill(int killerTeam) {
+        if (!rules.hasVip() || killerTeam <= 0) {
+            return;
+        }
+        
+        vipKillScores.merge(killerTeam, 1, Integer::sum);
+        log.info("Team {} scored VIP kill. Total VIP kills: {} (Score Style: {})", 
+                killerTeam, vipKillScores.get(killerTeam), rules.getScoreStyle());
+        
+        // Check victory conditions after VIP kill
+        checkVictoryConditions();
+    }
+
+    /**
      * Update all rule systems with the given time delta.
      */
     public void update(double deltaTime) {
@@ -130,6 +266,11 @@ public class RuleSystem {
         // Update event system if enabled
         if (eventSystem != null) {
             eventSystem.update(deltaTime);
+        }
+        
+        // Periodically validate VIP assignments if VIP mode is enabled
+        if (rules.hasVip()) {
+            validateVipAssignments();
         }
 
         // Check victory conditions
@@ -223,12 +364,20 @@ public class RuleSystem {
         });
 
         bonusTeamPoints.clear();
+        vipKillScores.clear();
 
         gameEntities.getFlags().values().forEach(Flag::returnToHome);
         gameEntities.getDefenseLasers().clear();
         gameEntities.getFieldEffects().clear();
         gameEntities.getBeams().clear();
         gameEntities.getProjectiles().clear();
+        
+        // Reassign VIPs for new round
+        if (rules.hasVip()) {
+            for (int team = 1; team <= teamCount; team++) {
+                selectVipForTeam(team);
+            }
+        }
 
         // Broadcast round start event
         Map<String, Object> roundStartEvent = new HashMap<>();
@@ -525,7 +674,7 @@ public class RuleSystem {
             }
         }
 
-        // Add objective scores (KOTH zones, captures, oddball) based on ScoreStyle
+        // Add objective scores (KOTH zones, captures, oddball, VIP kills) based on ScoreStyle
         if (rules.getScoreStyle() == ScoreStyle.OBJECTIVE ||
                 rules.getScoreStyle() == ScoreStyle.TOTAL) {
 
@@ -554,6 +703,13 @@ public class RuleSystem {
                         int oddballScore = (int) Math.round(entry.getValue());
                         teamScores.merge(player.getTeam(), oddballScore, Integer::sum);
                     }
+                }
+            }
+            
+            // Add VIP kill scores
+            if (rules.hasVip()) {
+                for (Map.Entry<Integer, Integer> entry : vipKillScores.entrySet()) {
+                    teamScores.merge(entry.getKey(), entry.getValue(), Integer::sum);
                 }
             }
         }

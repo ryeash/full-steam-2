@@ -631,6 +631,11 @@
         oddballButton.onclick = () => createPresetGame('oddball');
         createButtons.appendChild(oddballButton);
         
+        const vipButton = document.createElement('button');
+        vipButton.textContent = '👑 VIP';
+        vipButton.onclick = () => createPresetGame('vip-assassination');
+        createButtons.appendChild(vipButton);
+        
         // Add custom game button
         const customButton = document.createElement('button');
         customButton.textContent = '⚙️ Custom Game';
@@ -770,6 +775,9 @@
         }
         if (rules.enableOddball) {
             tags.push({ text: `⭐ Oddball`, highlight: true });
+        }
+        if (rules.enableVip) {
+            tags.push({ text: `👑 VIP`, highlight: true });
         }
         if (rules.addWorkshops) {
             tags.push(`🏭 Workshops`);
@@ -1104,6 +1112,50 @@
                     supplyDropCount: 5,
                     enableOddball: true,        // Enable oddball mode!
                     oddballPointsPerSecond: 1.0 // 1 point per second for holding ball
+                }
+            };
+        } else if (presetType === 'vip-assassination') {
+            gameConfig = {
+                maxPlayers: 16,
+                teamCount: 3,                   // 3 teams - asymmetric VIP hunting
+                worldWidth: 2200,
+                worldHeight: 2200,
+                playerMaxHealth: 100,
+                aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
+                rules: {
+                    roundDuration: 240,         // 4 minute rounds
+                    restDuration: 15,
+                    flagsPerTeam: 0,            // No flags - focus on VIP kills
+                    scoreStyle: 'OBJECTIVE',    // Only VIP kills count!
+                    victoryCondition: 'SCORE_LIMIT',
+                    scoreLimit: 10,             // First to 10 VIP kills wins
+                    timeLimit: 720,             // 12 minute fallback
+                    suddenDeath: true,
+                    respawnMode: 'WAVE',        // Wave respawns for coordinated VIP protection/hunting
+                    respawnDelay: 5,
+                    waveRespawnInterval: 20,    // 20 second waves - keeps action flowing
+                    maxLives: -1,
+                    kothZones: 0,
+                    kothPointsPerSecond: 0.5,
+                    addWorkshops: true,
+                    workshopCraftTime: 10,
+                    workshopCraftRadius: 90,
+                    maxPowerUpsPerWorkshop: 4,  // More power-ups for tactical play
+                    addHeadquarters: false,     // No HQ - pure VIP assassination
+                    headquartersMaxHealth: 1000,
+                    headquartersPointsPerDamage: 0.1,
+                    headquartersDestructionBonus: 100,
+                    headquartersDestructionEndsGame: false,
+                    enableRandomEvents: true,   // Random events add chaos to VIP protection
+                    randomEventInterval: 50,    // Occasional events
+                    eventWarningDuration: 4,
+                    meteorShowerCount: 40,      // really make it wild
+                    supplyDropCount: 6,         // Supply drops create VIP hunting opportunities
+                    enableOddball: false,
+                    oddballPointsPerSecond: 1.0,
+                    enableVip: true,            // VIP MODE ENABLED!
+                    obstacleDensity: 'DENSE'    // Dense obstacles for tactical VIP protection
                 }
             };
         }

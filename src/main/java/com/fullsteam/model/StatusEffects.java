@@ -274,4 +274,37 @@ public class StatusEffects {
     public static void removeBallCarrier(Player player) {
         player.getAttributeModifications().removeIf(am -> "ballCarrier".equals(am.uniqueKey()));
     }
+
+    /**
+     * Apply VIP status to a player (for VIP mode).
+     * VIP players are high-value targets - only their kills count towards objective scoring.
+     */
+    public static void applyVipStatus(Player player) {
+        applyEffect(player, new BaseAttributeModification(Long.MAX_VALUE) { // No expiration - removed when VIP status changes
+            @Override
+            public String uniqueKey() {
+                return "vipStatus";
+            }
+
+            @Override
+            public String renderHint() {
+                return "vip_crown:#FFD700:crown:true:VIP";
+            }
+        });
+    }
+
+    /**
+     * Remove VIP status from a player.
+     */
+    public static void removeVipStatus(Player player) {
+        player.getAttributeModifications().removeIf(am -> "vipStatus".equals(am.uniqueKey()));
+    }
+
+    /**
+     * Check if a player has VIP status.
+     */
+    public static boolean isVip(Player player) {
+        return player.getAttributeModifications().stream()
+                .anyMatch(am -> "vipStatus".equals(am.uniqueKey()));
+    }
 }

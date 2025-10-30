@@ -106,7 +106,7 @@ public class GameManager {
 
         // Pass oddball info and obstacle density to terrain generator
         boolean hasOddball = gameConfig.getRules().hasOddball();
-        com.fullsteam.model.ObstacleDensity obstacleDensity = gameConfig.getRules().getObstacleDensity();
+        ObstacleDensity obstacleDensity = gameConfig.getRules().getObstacleDensity();
         this.terrainGenerator = new TerrainGenerator(
                 gameConfig.getWorldWidth(),
                 gameConfig.getWorldHeight(),
@@ -302,6 +302,11 @@ public class GameManager {
                 aiPlayer.getId(), aiPlayer.getPlayerName(), personalityType,
                 assignedTeam, spawnPoint.x, spawnPoint.y);
 
+        // Ensure VIP is assigned for this team if VIP mode is enabled
+        if (gameConfig.getRules().hasVip()) {
+            ruleSystem.ensureVipForTeam(assignedTeam);
+        }
+
         return true;
     }
 
@@ -311,12 +316,19 @@ public class GameManager {
     public void removeAIPlayer(int playerId) {
         if (aiPlayerManager.isAIPlayer(playerId)) {
             Player player = gameEntities.getPlayer(playerId);
+            int playerTeam = 0;
             if (player != null) {
+                playerTeam = player.getTeam();
                 world.removeBody(player.getBody());
                 gameEntities.removePlayer(playerId);
             }
             aiPlayerManager.removeAIPlayer(playerId);
             log.info("Removed AI player {}", playerId);
+            
+            // Ensure VIP is reassigned if this AI player was the VIP
+            if (gameConfig.getRules().hasVip() && playerTeam > 0) {
+                ruleSystem.ensureVipForTeam(playerTeam);
+            }
         }
     }
 
@@ -636,6 +648,11 @@ public class GameManager {
         // Broadcast player join event with team color
         gameEventManager.broadcastPlayerJoin(playerSession.getPlayerName(), assignedTeam);
 
+        // Ensure VIP is assigned for this team if VIP mode is enabled
+        if (gameConfig.getRules().hasVip()) {
+            ruleSystem.ensureVipForTeam(assignedTeam);
+        }
+
         // Adjust AI players when a human player joins
         adjustAIPlayers();
     }
@@ -644,12 +661,19 @@ public class GameManager {
         gameEntities.getPlayerInputs().remove(playerSession.getPlayerId());
         Player player = gameEntities.getPlayer(playerSession.getPlayerId());
         if (player != null) {
+            int playerTeam = player.getTeam();
+            
             world.removeBody(player.getBody());
             gameEntities.removePlayer(player.getId());
 
             // Remove from AI manager if it's an AI player
             if (aiPlayerManager.isAIPlayer(playerSession.getPlayerId())) {
                 aiPlayerManager.removeAIPlayer(playerSession.getPlayerId());
+            }
+            
+            // Ensure VIP is reassigned if this player was the VIP
+            if (gameConfig.getRules().hasVip() && playerTeam > 0) {
+                ruleSystem.ensureVipForTeam(playerTeam);
             }
         }
         log.info("Player {} left game {}", playerSession.getPlayerId(), gameId);
@@ -1128,7 +1152,7 @@ public class GameManager {
 
                     // Remove ball carrier status effect if this was the oddball
                     if (flag.isOddball() && carrier != null) {
-                        com.fullsteam.model.StatusEffects.removeBallCarrier(carrier);
+                        StatusEffects.removeBallCarrier(carrier);
                     }
 
                     log.info("Flag {} dropped at ({}, {}) - carrier {} inactive",
@@ -1191,6 +1215,11 @@ public class GameManager {
             playerState.put("respawnTime", Math.max(0, ((double) player.getRespawnTime() - System.currentTimeMillis()) / 1000));
             playerState.put("livesRemaining", player.getLivesRemaining());
             playerState.put("eliminated", player.isEliminated());
+            
+            // Include VIP status
+            if (gameConfig.getRules().hasVip()) {
+                playerState.put("isVip", StatusEffects.isVip(player));
+            }
 
             // Include active power-up effects
             List<String> activePowerUps = new ArrayList<>();
@@ -1766,6 +1795,11 @@ public class GameManager {
                 }
             }
         }
+        
+        // Add VIP mode information if enabled
+        if (gameConfig.getRules().hasVip()) {
+            state.put("vipMode", true);
+        }
 
         return state;
     }
@@ -1792,9 +1826,17 @@ public class GameManager {
         player.getBody().getTransform().setTranslation(spawnPoint.x, spawnPoint.y);
         player.getBody().setLinearVelocity(0, 0);
         player.getBody().setAngularVelocity(0);
+        
+        // Ensure VIP is assigned for this team if VIP mode is enabled
+        if (gameConfig.getRules().hasVip()) {
+            ruleSystem.ensureVipForTeam(player.getTeam());
+        }
     }
 
     public void killPlayer(Player victim, Player shooter) {
+        // Check if this was a VIP kill BEFORE calling die() (which clears status effects)
+        boolean wasVip = gameConfig.getRules().hasVip() && StatusEffects.isVip(victim);
+        
         if (shooter != null) {
             shooter.addKill();
         }
@@ -1809,6 +1851,21 @@ public class GameManager {
                     .filter(p -> !p.isEliminated())
                     .count();
             victim.setPlacement(remainingPlayers + 1); // +1 because this player just got eliminated
+        }
+
+        // Award points if this was a VIP kill
+        if (wasVip) {
+            if (shooter != null && shooter.getTeam() != victim.getTeam()) {
+                ruleSystem.awardVipKill(shooter.getTeam());
+                
+                // Broadcast VIP kill event
+                gameEventManager.broadcastSystemMessage(
+                        String.format("💀 %s eliminated the VIP %s! +1 OBJECTIVE", 
+                                shooter.getPlayerName(), victim.getPlayerName()));
+            }
+            
+            // VIP died, need to select a new VIP for their team after respawn
+            // This will be handled in ensureVipForTeam during respawn
         }
 
         // Check if player lost their last life
@@ -1827,7 +1884,7 @@ public class GameManager {
 
                 // Remove ball carrier status effect if they were carrying the oddball
                 if (flag.isOddball()) {
-                    com.fullsteam.model.StatusEffects.removeBallCarrier(victim);
+                    StatusEffects.removeBallCarrier(victim);
                 }
 
                 log.info("Player {} died, dropped flag {}", victim.getId(), flag.getId());

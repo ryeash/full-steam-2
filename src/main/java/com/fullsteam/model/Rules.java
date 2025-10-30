@@ -200,6 +200,17 @@ public class Rules {
     @Builder.Default
     private double oddballPointsPerSecond = 1.0;
     
+    // ===== VIP Rules =====
+    
+    /**
+     * Whether to enable VIP mode. When enabled, one player per team is designated as the VIP.
+     * Only kills of VIP players count towards the objective score.
+     * VIP status passes to another player if the current VIP drops out.
+     */
+    @NotNull
+    @Builder.Default
+    private boolean enableVip = false;
+    
     // ===== Terrain Rules =====
     
     /**
@@ -451,6 +462,13 @@ public class Rules {
      */
     public boolean hasOddball() {
         return enableOddball;
+    }
+    
+    /**
+     * Check if this game mode uses VIP.
+     */
+    public boolean hasVip() {
+        return enableVip;
     }
     
     /**

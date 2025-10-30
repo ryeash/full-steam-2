@@ -2647,6 +2647,62 @@ class GameEngine {
                     aura.drawCircle(x, y, 3);
                 }
                 aura.endFill();
+            } else if (effect.animation === 'crown') {
+                // VIP crown - special prominent indicator
+                const time = Date.now() * 0.003;
+                const pulseSize = 25 + Math.sin(time) * 3;
+                
+                // Outer golden ring
+                aura.lineStyle(3, effect.color, 0.8);
+                aura.drawCircle(0, 0, pulseSize);
+                
+                // Inner star pattern
+                aura.lineStyle(2, effect.color, 0.9);
+                for (let i = 0; i < 5; i++) {
+                    const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
+                    const outerRadius = 30;
+                    const innerRadius = 15;
+                    
+                    const x1 = Math.cos(angle) * outerRadius;
+                    const y1 = Math.sin(angle) * outerRadius;
+                    const x2 = Math.cos(angle + Math.PI / 5) * innerRadius;
+                    const y2 = Math.sin(angle + Math.PI / 5) * innerRadius;
+                    
+                    if (i === 0) {
+                        aura.moveTo(x1, y1);
+                    } else {
+                        aura.lineTo(x1, y1);
+                    }
+                    aura.lineTo(x2, y2);
+                }
+                aura.closePath();
+                
+                // Rotating sparkles (small stars)
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i / 8) * Math.PI * 2 + time * 2;
+                    const distance = 35;
+                    const cx = Math.cos(angle) * distance;
+                    const cy = Math.sin(angle) * distance;
+                    
+                    // Draw a small star manually
+                    aura.beginFill(effect.color, 0.9);
+                    const starPoints = 4;
+                    const outerR = 3;
+                    const innerR = 1.5;
+                    for (let j = 0; j < starPoints * 2; j++) {
+                        const starAngle = (j / (starPoints * 2)) * Math.PI * 2 - Math.PI / 2;
+                        const radius = j % 2 === 0 ? outerR : innerR;
+                        const sx = cx + Math.cos(starAngle) * radius;
+                        const sy = cy + Math.sin(starAngle) * radius;
+                        if (j === 0) {
+                            aura.moveTo(sx, sy);
+                        } else {
+                            aura.lineTo(sx, sy);
+                        }
+                    }
+                    aura.closePath();
+                    aura.endFill();
+                }
             }
             
             // Store animation type for update loop
@@ -6880,15 +6936,17 @@ class GameEngine {
                     </tr>
                 </thead>
                 <tbody>
-                    ${sortedPlayers.map(player => `
+                    ${sortedPlayers.map(player => {
+                        const vipIndicator = player.isVip ? ' 👑' : '';
+                        return `
                         <tr style="${player.id === this.myPlayerId ? 'background: rgba(46, 204, 113, 0.2);' : ''}">
-                            <td><span style="color: ${this.getTeamColorCSS(player.team || 0)}">●</span> ${player.name || `Player ${player.id}`}</td>
+                            <td><span style="color: ${this.getTeamColorCSS(player.team || 0)}">●</span> ${player.name || `Player ${player.id}`}${vipIndicator}</td>
                             <td>${player.kills || 0}</td>
                             <td>${player.deaths || 0}</td>
                             ${hasCaptures ? `<td style="color: #FFD700;">${player.captures || 0} 🚩</td>` : ''}
                             <td>${player.active ? 'Alive' : 'Dead'}</td>
                         </tr>
-                    `).join('')}
+                    `}).join('')}
                 </tbody>
             </table>
         `;
@@ -6950,15 +7008,17 @@ class GameEngine {
                     <table style="width: 100%; font-size: 12px;">
                         ${teamPlayers
                             .sort((a, b) => (b.kills || 0) - (a.kills || 0))
-                            .map(player => `
+                            .map(player => {
+                                const vipIndicator = player.isVip ? ' 👑' : '';
+                                return `
                                 <tr style="${player.id === this.myPlayerId ? 'background: rgba(46, 204, 113, 0.2);' : ''}">
-                                    <td style="padding: 2px;">${player.name || `Player ${player.id}`}</td>
+                                    <td style="padding: 2px;">${player.name || `Player ${player.id}`}${vipIndicator}</td>
                                     <td style="padding: 2px; text-align: center;">${player.kills || 0}K</td>
                                     <td style="padding: 2px; text-align: center;">${player.deaths || 0}D</td>
                                     ${hasCaptures ? `<td style="padding: 2px; text-align: center; color: #FFD700;">${player.captures || 0}🚩</td>` : ''}
                                     <td style="padding: 2px; text-align: center;">${player.active ? '✓' : '✗'}</td>
                                 </tr>
-                            `).join('')}
+                            `}).join('')}
                     </table>
                 </div>
             `;
@@ -7038,6 +7098,12 @@ class GameEngine {
             if (data.id === this.myPlayerId) {
                 playerDot.lineStyle(1, 0xffffff);
                 playerDot.drawCircle(x, y, radius);
+            }
+            
+            // Add golden ring for VIP players
+            if (data.isVip) {
+                playerDot.lineStyle(1, 0xFFD700, 1.0);
+                playerDot.drawCircle(x, y, radius + 1.5);
             }
             
             this.minimapContent.addChild(playerDot);
