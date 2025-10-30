@@ -200,7 +200,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      */
     private void applyDirectBulletEffects(Player player, Projectile projectile) {
         Set<BulletEffect> effects = projectile.getBulletEffects();
-        
+
         // Incendiary bullets apply burn status directly
         if (effects.contains(BulletEffect.INCENDIARY)) {
             double burnDamage = projectile.getDamage() * 0.15; // 15% of projectile damage per second
@@ -209,7 +209,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             log.debug("Applied burn status to player {} from incendiary projectile ({}dps for {}s)",
                     player.getId(), burnDamage, burnDuration);
         }
-        
+
         // Freezing bullets apply slow status directly
         if (effects.contains(BulletEffect.FREEZING)) {
             double slowAmount = 0.5; // 50% speed reduction
@@ -219,7 +219,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             StatusEffectManager.applySlowEffect(player, slowAmount, slowDuration, source);
             log.debug("Applied freeze slow to player {} from freezing projectile", player.getId());
         }
-        
+
         // Poison bullets apply poison status directly
         if (effects.contains(BulletEffect.POISON)) {
             double poisonDamage = projectile.getDamage() * 0.1; // 10% of projectile damage per second
@@ -228,7 +228,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             log.debug("Applied poison status to player {} from poison projectile ({}dps for {}s)",
                     player.getId(), poisonDamage, poisonDuration);
         }
-        
+
         // Electric bullets apply brief slow from shock
         if (effects.contains(BulletEffect.ELECTRIC)) {
             double slowAmount = 0.3; // 30% speed reduction
@@ -572,7 +572,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             if (flag.isOddball()) {
                 return;
             }
-            
+
             // Player is already carrying a flag, check if they're in their own base for capture
             if (playerTeam == flagTeam && flag.isAtHome()) {
                 // Player is in their own base with enemy flag - CAPTURE!
@@ -603,7 +603,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         // Apply ball carrier status effect for oddball mode
         if (flag.isOddball()) {
             StatusEffectManager.applyBallCarrier(player);
-            
+
             // Broadcast oddball pickup event
             gameManager.broadcastGameEvent(
                     String.format("%s picked up the ODDBALL!", player.getPlayerName()),
@@ -721,8 +721,10 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
             // Remove the power-up from the game
             powerUp.setActive(false);
-            gameEntities.removePowerUp(powerUp.getId());
-            gameEntities.getWorld().removeBody(powerUp.getBody());
+            gameEntities.addPostUpdateHook(() -> {
+                gameEntities.removePowerUp(powerUp.getId());
+                gameEntities.getWorld().removeBody(powerUp.getBody());
+            });
 
             log.info("Player {} collected power-up {} (type: {})",
                     player.getId(), powerUp.getId(), powerUp.getType());
@@ -840,7 +842,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             if (flag.isOddball() && flag.isCarried()) {
                 int carrierId = flag.getCarriedByPlayerId();
                 Player carrier = gameEntities.getPlayer(carrierId);
-                
+
                 if (carrier != null && carrier.isActive()) {
                     // Award points based on configured rate via RuleSystem
                     double points = gameManager.getGameConfig().getRules().getOddballPointsPerSecond() * deltaTime;

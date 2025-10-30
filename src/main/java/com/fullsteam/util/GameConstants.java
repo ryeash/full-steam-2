@@ -86,6 +86,7 @@ public final class GameConstants {
     public static final long CLEANUP_CHECK_INTERVAL_MS = 30_000; // 30 seconds
     public static final long AI_ONLY_GRACE_PERIOD_MS = 120_000; // 2 minutes
     public static final long VIP_CHECK_INTERVAL_MS = 5000; // 5 seconds
+    public static final double SPAWN_INVINCIBILITY_DURATION = 3.0; // seconds of invincibility after spawn/respawn
 
     // ========== COLLISION CATEGORIES ==========
     public static final long CATEGORY_PLAYER = 0x0001;

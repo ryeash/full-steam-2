@@ -327,6 +327,9 @@ public class GameManager {
         // Initialize lives based on respawn mode (delegated to RuleSystem)
         ruleSystem.initializePlayerLives(aiPlayer);
 
+        // Apply spawn invincibility to give AI player time to get their bearings
+        StatusEffectManager.applySpawnInvincibility(aiPlayer);
+
         // Add to game entities
         gameEntities.addPlayer(aiPlayer);
         world.addBody(aiPlayer.getBody());
@@ -674,6 +677,9 @@ public class GameManager {
             log.info("Player {} initialized with {} lives", player.getId(), gameConfig.getRules().getMaxLives());
         }
 
+        // Apply spawn invincibility to give player time to get their bearings
+        StatusEffectManager.applySpawnInvincibility(player);
+
         gameEntities.addPlayer(player);
         world.addBody(player.getBody());
 
@@ -998,6 +1004,9 @@ public class GameManager {
         player.getBody().getTransform().setTranslation(spawnPoint.x, spawnPoint.y);
         player.getBody().setLinearVelocity(0, 0);
         player.getBody().setAngularVelocity(0);
+        
+        // Apply spawn invincibility to give player time to get their bearings
+        StatusEffectManager.applySpawnInvincibility(player);
         
         // Ensure VIP is assigned for this team if VIP mode is enabled
         if (gameConfig.getRules().hasVip()) {

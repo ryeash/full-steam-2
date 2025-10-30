@@ -5,13 +5,14 @@ import com.fullsteam.model.AttributeModification;
 import com.fullsteam.model.BaseAttributeModification;
 import com.fullsteam.model.Weapon;
 import com.fullsteam.physics.Player;
+import com.fullsteam.util.GameConstants;
 
 /**
  * Manages status effects that can be applied to players during gameplay.
  * This class provides pre-configured attribute modifications for common game scenarios.
  * 
  * Status effects include:
- * - Buffs: Speed boost, damage boost, health regeneration, damage resistance
+ * - Buffs: Speed boost, damage boost, health regeneration, damage resistance, invincibility
  * - Debuffs: Burning, poison, slow
  * - Game mode effects: Ball carrier (Oddball), VIP status
  */
@@ -101,6 +102,45 @@ public final class StatusEffectManager {
                 return super.modifyDamageReceived(damage * (resistancePercentage / 100));
             }
         });
+    }
+
+    /**
+     * Apply invincibility effect to a player (spawn protection).
+     * Invincible players take no damage from any source.
+     */
+    public static void applyInvincibility(Player player, double durationSeconds, String source) {
+        applyEffect(player, new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+            @Override
+            public String uniqueKey() {
+                return "invincible";
+            }
+
+            @Override
+            public String renderHint() {
+                return "invincibility:#00FFFF:shield:true:Invincible";
+            }
+
+            @Override
+            public double modifyDamageReceived(double damage) {
+                return 0.0; // No damage taken
+            }
+        });
+    }
+
+    /**
+     * Apply spawn invincibility to a player using the default duration.
+     * This is the standard spawn protection applied when players join or respawn.
+     */
+    public static void applySpawnInvincibility(Player player) {
+        applyInvincibility(player, GameConstants.SPAWN_INVINCIBILITY_DURATION, "spawn_protection");
+    }
+
+    /**
+     * Check if a player is currently invincible.
+     */
+    public static boolean isInvincible(Player player) {
+        return player.getAttributeModifications().stream()
+                .anyMatch(am -> "invincible".equals(am.uniqueKey()));
     }
 
     /**
