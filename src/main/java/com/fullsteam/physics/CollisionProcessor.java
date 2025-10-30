@@ -400,21 +400,19 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 StatusEffectManager.applySpeedBoost(player, 0, 2.0, String.valueOf(fieldEffect.getOwnerId()));
             }
             case PROXIMITY_MINE -> {
+                fieldEffect.setActive(false);
+                FieldEffect explosion = new FieldEffect(
+                        IdGenerator.nextEntityId(), // Offset ID to avoid conflicts
+                        fieldEffect.getOwnerId(),
+                        FieldEffectType.EXPLOSION,
+                        fieldEffect.getPosition(),
+                        80.0,
+                        60.0,
+                        FieldEffectType.EXPLOSION.getDefaultDuration(),
+                        fieldEffect.getOwnerTeam()
+                );
+                gameEntities.addFieldEffect(explosion);
                 gameEntities.addPostUpdateHook(() -> {
-                    fieldEffect.setActive(false);
-                    gameEntities.removeFieldEffect(fieldEffect.getId());
-                    gameEntities.getWorld().removeBody(fieldEffect.getBody());
-                    FieldEffect explosion = new FieldEffect(
-                            IdGenerator.nextEntityId(), // Offset ID to avoid conflicts
-                            fieldEffect.getOwnerId(),
-                            FieldEffectType.EXPLOSION,
-                            fieldEffect.getPosition(),
-                            80.0,
-                            60.0,
-                            FieldEffectType.EXPLOSION.getDefaultDuration(),
-                            fieldEffect.getOwnerTeam()
-                    );
-                    gameEntities.addFieldEffect(explosion);
                     gameEntities.getWorld().addBody(explosion.getBody());
                 });
             }
@@ -500,8 +498,10 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                     FieldEffectType.EXPLOSION.getDefaultDuration(),
                     turret.getOwnerTeam()
             );
-            gameEntities.getWorld().addBody(explosion.getBody());
             gameEntities.addFieldEffect(explosion);
+            gameEntities.addPostUpdateHook(() -> {
+                gameEntities.getWorld().addBody(explosion.getBody());
+            });
         }
 
         // Check if projectile should pierce through the turret
@@ -718,15 +718,8 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             // Apply the power-up effect
             PowerUp.PowerUpEffect effect = powerUp.getEffect();
             applyPowerUpEffect(player, effect);
-
-            // Remove the power-up from the game
             powerUp.setActive(false);
-            gameEntities.addPostUpdateHook(() -> {
-                gameEntities.removePowerUp(powerUp.getId());
-                gameEntities.getWorld().removeBody(powerUp.getBody());
-            });
-
-            log.info("Player {} collected power-up {} (type: {})",
+            log.debug("Player {} collected power-up {} (type: {})",
                     player.getId(), powerUp.getId(), powerUp.getType());
         }
     }
@@ -922,7 +915,9 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
         // Add to game world
         gameEntities.addPowerUp(powerUp);
-        gameEntities.getWorld().addBody(powerUp.getBody());
+        gameEntities.addPostUpdateHook(() -> {
+            gameEntities.getWorld().addBody(powerUp.getBody());
+        });
     }
 
     /**

@@ -226,6 +226,15 @@ public class GameEntities {
             return false;
         });
 
+        powerUps.entrySet().removeIf(entry -> {
+            PowerUp o = entry.getValue();
+            if (o.isExpired()) {
+                world.removeBody(o.getBody());
+                return true;
+            }
+            return false;
+        });
+
         // Note: Flags are intentionally NOT cleaned up here as they persist for the entire game
         // Flags are only removed when a game ends or when explicitly removed via removeFlag()
     }
