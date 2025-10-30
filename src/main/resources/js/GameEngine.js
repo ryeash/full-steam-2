@@ -4,7 +4,6 @@ class GameEngine {
         this.gameContainer = null;
         this.uiContainer = null;
         this.players = new Map();
-        this.playerInterpolators = new Map();
         this.projectiles = new Map();
         this.projectileInterpolators = new Map();
         this.obstacles = new Map();
@@ -2165,11 +2164,6 @@ class GameEngine {
         this.players.set(playerData.id, sprite);
         this.gameContainer.addChild(sprite);
         
-        // Create player interpolator
-        const isLocalPlayer = playerData.id === this.myPlayerId;
-        const interpolator = new PlayerInterpolator(sprite, playerData.id, isLocalPlayer);
-        this.playerInterpolators.set(playerData.id, interpolator);
-        
         // Enable sorting for this container
         this.gameContainer.sortableChildren = true;
     }
@@ -2178,25 +2172,9 @@ class GameEngine {
         const sprite = this.players.get(playerData.id);
         if (!sprite) return;
 
-        // Enable interpolation for smoothness, but keep prediction disabled
-        const USE_INTERPOLATION = false;
-        
-        if (USE_INTERPOLATION) {
-            // Use interpolator for smooth movement
-            const interpolator = this.playerInterpolators.get(playerData.id);
-            if (interpolator) {
-                // Update interpolator with server position
-                interpolator.updateFromServer(playerData.x, playerData.y, playerData.rotation || 0);
-            } else {
-                // Fallback to direct position update if no interpolator
-                sprite.position.set(playerData.x, playerData.y);
-                sprite.rotation = playerData.rotation || 0;
-            }
-        } else {
-            // Direct position update - no interpolation
-            sprite.position.set(playerData.x, playerData.y);
-            sprite.rotation = playerData.rotation || 0;
-        }
+        // Direct position update - no interpolation
+        sprite.position.set(playerData.x, playerData.y);
+        sprite.rotation = playerData.rotation || 0;
         
         // Handle death marker logic
         const isDead = !playerData.active && playerData.respawnTime > 0;
@@ -2245,13 +2223,6 @@ class GameEngine {
             // Remove sprite from game container
             this.gameContainer.removeChild(sprite);
             this.players.delete(playerId);
-        }
-        
-        // Clean up player interpolator
-        const interpolator = this.playerInterpolators.get(playerId);
-        if (interpolator) {
-            interpolator.destroy();
-            this.playerInterpolators.delete(playerId);
         }
     }
     
@@ -7472,14 +7443,7 @@ class GameEngine {
                 this.projectileInterpolators.delete(id);
             }
         });
-        
-        this.playerInterpolators.forEach((interpolator, id) => {
-            if (!this.players.has(id)) {
-                interpolator.destroy();
-                this.playerInterpolators.delete(id);
-            }
-        });
-        
+
         // Clean up any field effects with orphaned animation functions
         this.fieldEffects.forEach((effect, id) => {
             if (effect.animationFunction && (!effect.parent || !effect.effectData)) {
@@ -7581,9 +7545,6 @@ class GameEngine {
         // Clean up all interpolators
         this.projectileInterpolators.forEach(interpolator => interpolator.destroy());
         this.projectileInterpolators.clear();
-        
-        this.playerInterpolators.forEach(interpolator => interpolator.destroy());
-        this.playerInterpolators.clear();
         
         // Clean up all game objects
         this.projectiles.forEach(projectile => this.cleanupProjectileContainer(projectile));

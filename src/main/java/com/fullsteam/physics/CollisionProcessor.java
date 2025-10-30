@@ -1,12 +1,11 @@
 package com.fullsteam.physics;
 
-import com.fullsteam.Config;
-import com.fullsteam.util.IdGenerator;
 import com.fullsteam.games.GameManager;
+import com.fullsteam.games.StatusEffectManager;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
-import com.fullsteam.games.StatusEffectManager;
+import com.fullsteam.util.IdGenerator;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
@@ -18,7 +17,8 @@ import org.dyn4j.world.listener.CollisionListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
@@ -115,6 +115,12 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             return handleProjectileTurretCollision(projectile, turret);
         } else if (entity1 instanceof Turret turret && entity2 instanceof Projectile projectile) {
             return handleProjectileTurretCollision(projectile, turret);
+        } else if (entity1 instanceof Beam beam && entity2 instanceof Turret turret) {
+            handleBeamTurretCollision(beam, turret);
+            return true;
+        } else if (entity1 instanceof Turret turret && entity2 instanceof Beam beam) {
+            handleBeamTurretCollision(beam, turret);
+            return true;
         } else if (entity1 instanceof NetProjectile net) {
             return handleNetCollision(net, entity2);
         } else if (entity2 instanceof NetProjectile net) {
@@ -529,6 +535,59 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
         // In team mode, can only damage turrets on different teams
         return projectile.getOwnerTeam() != turret.getOwnerTeam();
+    }
+
+    /**
+     * Handle beam hitting a turret.
+     */
+    private void handleBeamTurretCollision(Beam beam, Turret turret) {
+        if (!beam.isActive() || !turret.isActive()) {
+            return;
+        }
+
+        // Check if beam can damage the turret (team rules)
+        if (!canBeamDamageTurret(beam, turret)) {
+            return; // Friendly fire protection
+        }
+
+        // Apply damage (beams deal damage continuously)
+        boolean turretDestroyed = turret.takeDamage(beam.getDamage());
+
+        if (turretDestroyed) {
+            // Create zero-damage explosion field effect
+            FieldEffect explosion = new FieldEffect(
+                    IdGenerator.nextEntityId(),
+                    turret.getOwnerId(), // Use turret owner for attribution
+                    FieldEffectType.EXPLOSION,
+                    turret.getPosition(),
+                    turret.getBody().getFixture(0).getShape().getRadius(), // Same size as turret
+                    0.0, // Zero damage - purely visual
+                    FieldEffectType.EXPLOSION.getDefaultDuration(),
+                    turret.getOwnerTeam()
+            );
+            gameEntities.addFieldEffect(explosion);
+            gameEntities.addPostUpdateHook(() -> {
+                gameEntities.getWorld().addBody(explosion.getBody());
+            });
+        }
+    }
+
+    /**
+     * Check if a beam can damage a turret (team protection).
+     */
+    private boolean canBeamDamageTurret(Beam beam, Turret turret) {
+        // Can't damage own turret
+        if (beam.getOwnerId() == turret.getOwnerId()) {
+            return false;
+        }
+
+        // In FFA mode (team 0), can damage any turret except own
+        if (beam.getOwnerTeam() == 0 || turret.getOwnerTeam() == 0) {
+            return true;
+        }
+
+        // In team mode, can only damage turrets on different teams
+        return beam.getOwnerTeam() != turret.getOwnerTeam();
     }
 
     private boolean handleNetCollision(NetProjectile net, GameEntity entity) {
