@@ -18,6 +18,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BiFunction;
 
 /**
  * Manages random events and environmental hazards during gameplay.
@@ -153,17 +155,49 @@ public class EventSystem {
     }
 
     /**
-     * Get the number of locations for an event type.
+     * Get the number of locations for an event type based on map size and density settings.
+     * All events scale with map area and use their configured density multipliers.
      */
     private int getEventLocationCount(EnvironmentalEvent eventType) {
+        double mapArea = worldWidth * worldHeight;
+
         return switch (eventType) {
-            case METEOR_SHOWER -> rules.getMeteorShowerCount();
-            case SUPPLY_DROP -> rules.getSupplyDropCount();
-            case VOLCANIC_ERUPTION -> rules.getVolcanicEruptionCount();
-            case EARTHQUAKE -> 1; // Single large area
-            case SOLAR_FLARE -> 3; // Multiple burn zones
-            case ION_STORM -> rules.getIonStormZones();
-            case BLIZZARD -> 4; // Multiple freeze zones
+            case METEOR_SHOWER -> {
+                // Base: 1 meteor per 500,000 square units
+                double baseCount = mapArea / 500000.0;
+                double multiplier = rules.getMeteorShowerDensity().getMultiplier();
+                yield (int) Math.max(3, Math.round(baseCount * multiplier));
+            }
+            case SUPPLY_DROP -> {
+                // Base: 1 drop per 800,000 square units (more sparse)
+                double baseCount = mapArea / 800000.0;
+                double multiplier = rules.getSupplyDropDensity().getMultiplier();
+                yield (int) Math.max(2, Math.round(baseCount * multiplier));
+            }
+            case VOLCANIC_ERUPTION -> {
+                // Base: 1 eruption per 1,000,000 square units
+                double baseCount = mapArea / 1000000.0;
+                double multiplier = rules.getVolcanicEruptionDensity().getMultiplier();
+                yield (int) Math.max(2, Math.round(baseCount * multiplier));
+            }
+            case EARTHQUAKE -> {
+                // Base: 1 quake per 4,000,000 square units (very sparse - large area effect)
+                double baseCount = mapArea / 4000000.0;
+                double multiplier = rules.getEarthquakeDensity().getMultiplier();
+                yield (int) Math.max(1, Math.round(baseCount * multiplier));
+            }
+            case ION_STORM -> {
+                // Base: 1 zone per 666,666 square units
+                double baseCount = mapArea / 666666.0;
+                double multiplier = rules.getIonStormDensity().getMultiplier();
+                yield (int) Math.max(3, Math.round(baseCount * multiplier));
+            }
+            case BLIZZARD -> {
+                // Base: 1 freeze zone per 1,000,000 square units
+                double baseCount = mapArea / 1000000.0;
+                double multiplier = rules.getBlizzardDensity().getMultiplier();
+                yield (int) Math.max(2, Math.round(baseCount * multiplier));
+            }
         };
     }
 
@@ -227,7 +261,6 @@ public class EventSystem {
             case SUPPLY_DROP -> 50.0;
             case VOLCANIC_ERUPTION -> rules.getEruptionRadius();
             case EARTHQUAKE -> worldWidth * 0.3; // Large area
-            case SOLAR_FLARE -> 100.0;
             case ION_STORM -> 80.0;
             case BLIZZARD -> 90.0;
         };
@@ -235,172 +268,127 @@ public class EventSystem {
 
     /**
      * Trigger the actual event effects.
+     * For events with staggered timing, schedule individual impacts over time.
      */
     private void triggerEvent(ActiveGameEvent event) {
         switch (event.getEventType()) {
-            case METEOR_SHOWER -> triggerMeteorShower(event);
-            case SUPPLY_DROP -> triggerSupplyDrop(event);
-            case VOLCANIC_ERUPTION -> triggerVolcanicEruption(event);
-            case EARTHQUAKE -> triggerEarthquake(event);
-            case SOLAR_FLARE -> triggerSolarFlare(event);
-            case ION_STORM -> triggerIonStorm(event);
-            case BLIZZARD -> triggerBlizzard(event);
+            case METEOR_SHOWER -> triggerStaggeredEventFieldEffect(event, (e, l) ->
+                    new FieldEffect(
+                            IdGenerator.nextEntityId(),
+                            -1, // System event
+                            FieldEffectType.EXPLOSION,
+                            l,
+                            rules.getMeteorRadius(),
+                            rules.getMeteorDamage(),
+                            FieldEffectType.EXPLOSION.getDefaultDuration(),
+                            0 // No team
+                    ));
+            case VOLCANIC_ERUPTION -> triggerStaggeredEventFieldEffect(event, (e, l) ->
+                    new FieldEffect(
+                            IdGenerator.nextEntityId(),
+                            -1,
+                            FieldEffectType.FIRE,
+                            l,
+                            rules.getEruptionRadius(),
+                            rules.getEruptionRadius() * 2.5,
+                            rules.getEruptionDamage(),
+                            event.getEventType().getBaseDuration(),
+                            0,
+                            0
+                    ));
+            case EARTHQUAKE -> triggerStaggeredEventFieldEffect(event, (e, l) ->
+                    new FieldEffect(
+                            IdGenerator.nextEntityId(),
+                            -1,
+                            FieldEffectType.EARTHQUAKE,
+                            l,
+                            worldWidth * 0.3, // Large radius
+                            rules.getEarthquakeDamage(),
+                            event.getEventType().getBaseDuration(),
+                            0
+                    ));
+            case ION_STORM -> triggerStaggeredEventFieldEffect(event, (e, l) ->
+                    new FieldEffect(
+                            IdGenerator.nextEntityId(),
+                            -1,
+                            FieldEffectType.ELECTRIC,
+                            l,
+                            80.0,
+                            rules.getIonStormDamage(),
+                            event.getEventType().getBaseDuration(),
+                            0
+                    ));
+            case BLIZZARD -> triggerStaggeredEventFieldEffect(event, (e, l) ->
+                    new FieldEffect(
+                            IdGenerator.nextEntityId(),
+                            -1,
+                            FieldEffectType.FREEZE,
+                            l,
+                            90.0,
+                            20.0, // Moderate damage
+                            event.getEventType().getBaseDuration(),
+                            0
+                    ));
+            // supply drop is special since the field effect leaves behind power ups
+            case SUPPLY_DROP -> triggerSupplyDropStaggered(event);
+        }
+    }
+
+    private void triggerStaggeredEventFieldEffect(ActiveGameEvent event, BiFunction<ActiveGameEvent, Vector2, FieldEffect> effectBuilder) {
+        List<Vector2> locations = event.getTargetLocations();
+        double totalDuration = event.getEventType().getStaggerTime() + ThreadLocalRandom.current().nextDouble() * event.getEventType().getStaggerTime();
+        for (Vector2 location : locations) {
+            // Random delay within the total duration
+            long delay = (long) (ThreadLocalRandom.current().nextDouble() * totalDuration);
+            Config.EXECUTOR.schedule(() -> {
+                gameEntities.addPostUpdateHook(() -> {
+                    FieldEffect explosion = effectBuilder.apply(event, location);
+                    gameEntities.addFieldEffect(explosion);
+                    gameEntities.getWorld().addBody(explosion.getBody());
+                });
+            }, delay, TimeUnit.MILLISECONDS);
         }
     }
 
     /**
-     * Trigger a meteor shower - multiple explosions.
+     * Trigger supply drops with staggered timing.
+     * Drops arrive over 1-2 seconds.
      */
-    private void triggerMeteorShower(ActiveGameEvent event) {
-        for (Vector2 location : event.getTargetLocations()) {
-            FieldEffect explosion = new FieldEffect(
-                    IdGenerator.nextEntityId(),
-                    -1, // System event
-                    FieldEffectType.EXPLOSION,
-                    location,
-                    rules.getMeteorRadius(),
-                    rules.getMeteorDamage(),
-                    FieldEffectType.EXPLOSION.getDefaultDuration(),
-                    0 // No team
-            );
-            gameEntities.addFieldEffect(explosion);
-            gameEntities.getWorld().addBody(explosion.getBody());
-        }
-    }
+    private void triggerSupplyDropStaggered(ActiveGameEvent event) {
+        List<Vector2> locations = event.getTargetLocations();
+        double totalDuration = event.getEventType().getStaggerTime() + ThreadLocalRandom.current().nextDouble() * event.getEventType().getStaggerTime();
+        for (Vector2 location : locations) {
+            // Random delay within the total duration
+            long delay = (long) (ThreadLocalRandom.current().nextDouble() * totalDuration);
+            Config.EXECUTOR.schedule(() -> {
+                gameEntities.addPostUpdateHook(() -> {
+                    FieldEffect explosion = new FieldEffect(
+                            IdGenerator.nextEntityId(),
+                            -1,
+                            FieldEffectType.EXPLOSION,
+                            location,
+                            50.0,
+                            0.0, // No damage
+                            FieldEffectType.EXPLOSION.getDefaultDuration(),
+                            0
+                    );
+                    gameEntities.addFieldEffect(explosion);
+                    gameEntities.getWorld().addBody(explosion.getBody());
 
-    /**
-     * Trigger a supply drop - spawn power-ups with visual explosion.
-     */
-    private void triggerSupplyDrop(ActiveGameEvent event) {
-        for (Vector2 location : event.getTargetLocations()) {
-            // Visual explosion (no damage)
-            FieldEffect explosion = new FieldEffect(
-                    IdGenerator.nextEntityId(),
-                    -1,
-                    FieldEffectType.EXPLOSION,
-                    location,
-                    50.0,
-                    0.0, // No damage
-                    FieldEffectType.EXPLOSION.getDefaultDuration(),
-                    0
-            );
-            gameEntities.addFieldEffect(explosion);
-            gameEntities.getWorld().addBody(explosion.getBody());
-
-            // Spawn random power-up
-            PowerUp.PowerUpType powerUpType = getRandomPowerUpType();
-            PowerUp powerUp = new PowerUp(
-                    IdGenerator.nextEntityId(),
-                    location,
-                    powerUpType,
-                    -1, // Not from a workshop
-                    30.0, // Duration
-                    1.5 // Strength
-            );
-            gameEntities.addPowerUp(powerUp);
-            gameEntities.getWorld().addBody(powerUp.getBody());
-        }
-    }
-
-    /**
-     * Trigger volcanic eruption - persistent damage zones.
-     */
-    private void triggerVolcanicEruption(ActiveGameEvent event) {
-        for (Vector2 location : event.getTargetLocations()) {
-            FieldEffect eruption = new FieldEffect(
-                    IdGenerator.nextEntityId(),
-                    -1,
-                    FieldEffectType.FIRE,
-                    location,
-                    rules.getEruptionRadius(),
-                    rules.getEruptionRadius() * 2.5,
-                    rules.getEruptionDamage(),
-                    event.getEventType().getBaseDuration(),
-                    0,
-                    0
-            );
-            gameEntities.addFieldEffect(eruption);
-            gameEntities.getWorld().addBody(eruption.getBody());
-        }
-    }
-
-    /**
-     * Trigger earthquake - large area damage.
-     */
-    private void triggerEarthquake(ActiveGameEvent event) {
-        for (Vector2 location : event.getTargetLocations()) {
-            FieldEffect earthquake = new FieldEffect(
-                    IdGenerator.nextEntityId(),
-                    -1,
-                    FieldEffectType.EARTHQUAKE,
-                    location,
-                    worldWidth * 0.3, // Large radius
-                    rules.getEarthquakeDamage(),
-                    event.getEventType().getBaseDuration(),
-                    0
-            );
-            gameEntities.addFieldEffect(earthquake);
-            gameEntities.getWorld().addBody(earthquake.getBody());
-        }
-    }
-
-    /**
-     * Trigger solar flare - fire damage zones.
-     */
-    private void triggerSolarFlare(ActiveGameEvent event) {
-        for (Vector2 location : event.getTargetLocations()) {
-            FieldEffect fire = new FieldEffect(
-                    IdGenerator.nextEntityId(),
-                    -1,
-                    FieldEffectType.FIRE,
-                    location,
-                    100.0,
-                    35.0, // High damage
-                    event.getEventType().getBaseDuration(),
-                    0
-            );
-            gameEntities.addFieldEffect(fire);
-            gameEntities.getWorld().addBody(fire.getBody());
-        }
-    }
-
-    /**
-     * Trigger ion storm - electric fields.
-     */
-    private void triggerIonStorm(ActiveGameEvent event) {
-        for (Vector2 location : event.getTargetLocations()) {
-            FieldEffect electric = new FieldEffect(
-                    IdGenerator.nextEntityId(),
-                    -1,
-                    FieldEffectType.ELECTRIC,
-                    location,
-                    80.0,
-                    rules.getIonStormDamage(),
-                    event.getEventType().getBaseDuration(),
-                    0
-            );
-            gameEntities.addFieldEffect(electric);
-            gameEntities.getWorld().addBody(electric.getBody());
-        }
-    }
-
-    /**
-     * Trigger blizzard - freeze zones.
-     */
-    private void triggerBlizzard(ActiveGameEvent event) {
-        for (Vector2 location : event.getTargetLocations()) {
-            FieldEffect freeze = new FieldEffect(
-                    IdGenerator.nextEntityId(),
-                    -1,
-                    FieldEffectType.FREEZE,
-                    location,
-                    90.0,
-                    20.0, // Moderate damage
-                    event.getEventType().getBaseDuration(),
-                    0
-            );
-            gameEntities.addFieldEffect(freeze);
-            gameEntities.getWorld().addBody(freeze.getBody());
+                    // Spawn random power-up
+                    PowerUp.PowerUpType powerUpType = getRandomPowerUpType();
+                    PowerUp powerUp = new PowerUp(
+                            IdGenerator.nextEntityId(),
+                            location,
+                            powerUpType,
+                            -1, // Not from a workshop
+                            30.0, // Duration
+                            1.5 // Strength
+                    );
+                    gameEntities.addPowerUp(powerUp);
+                    gameEntities.getWorld().addBody(powerUp.getBody());
+                });
+            }, delay, TimeUnit.MILLISECONDS);
         }
     }
 

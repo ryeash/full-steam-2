@@ -2,6 +2,7 @@ package com.fullsteam.games;
 
 import com.fullsteam.BaseTestClass;
 import com.fullsteam.model.EnvironmentalEvent;
+import com.fullsteam.model.EventDensity;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Rules;
@@ -76,12 +77,12 @@ class EventSystemTest extends BaseTestClass {
     void testMeteorShowerEventConfiguration() {
         Rules rules = Rules.builder()
                 .enableRandomEvents(true)
-                .meteorShowerCount(10)
+                .meteorShowerDensity(EventDensity.CHOKED)
                 .meteorDamage(50.0)
                 .meteorRadius(75.0)
                 .build();
 
-        assertEquals(10, rules.getMeteorShowerCount());
+        assertEquals(EventDensity.CHOKED, rules.getMeteorShowerDensity());
         assertEquals(50.0, rules.getMeteorDamage());
         assertEquals(75.0, rules.getMeteorRadius());
     }
@@ -90,22 +91,22 @@ class EventSystemTest extends BaseTestClass {
     void testSupplyDropEventConfiguration() {
         Rules rules = Rules.builder()
                 .enableRandomEvents(true)
-                .supplyDropCount(8)
+                .supplyDropDensity(EventDensity.SPARSE)
                 .build();
 
-        assertEquals(8, rules.getSupplyDropCount());
+        assertEquals(EventDensity.SPARSE, rules.getSupplyDropDensity());
     }
 
     @Test
     void testVolcanicEruptionEventConfiguration() {
         Rules rules = Rules.builder()
                 .enableRandomEvents(true)
-                .volcanicEruptionCount(5)
+                .volcanicEruptionDensity(EventDensity.DENSE)
                 .eruptionDamage(35.0)
                 .eruptionRadius(80.0)
                 .build();
 
-        assertEquals(5, rules.getVolcanicEruptionCount());
+        assertEquals(EventDensity.DENSE, rules.getVolcanicEruptionDensity());
         assertEquals(35.0, rules.getEruptionDamage());
         assertEquals(80.0, rules.getEruptionRadius());
     }
@@ -166,11 +167,11 @@ class EventSystemTest extends BaseTestClass {
     void testIonStormConfiguration() {
         Rules rules = Rules.builder()
                 .enableRandomEvents(true)
-                .ionStormZones(8)
+                .ionStormDensity(EventDensity.DENSE)
                 .ionStormDamage(30.0)
                 .build();
 
-        assertEquals(8, rules.getIonStormZones());
+        assertEquals(EventDensity.DENSE, rules.getIonStormDensity());
         assertEquals(30.0, rules.getIonStormDamage());
     }
 
@@ -222,6 +223,48 @@ class EventSystemTest extends BaseTestClass {
         List<Object> eventData = eventSystem.getEventData();
         assertNotNull(eventData);
         assertEquals(0, eventData.size(), "Should be empty when no events active");
+    }
+    
+    @Test
+    void testEventDensityMultipliers() {
+        // Test SPARSE density range
+        for (int i = 0; i < 10; i++) {
+            double multiplier = EventDensity.SPARSE.getMultiplier();
+            assertTrue(multiplier >= 0.6 && multiplier <= 0.9, 
+                    "SPARSE multiplier should be between 0.6 and 0.9, got: " + multiplier);
+        }
+        
+        // Test DENSE density range
+        for (int i = 0; i < 10; i++) {
+            double multiplier = EventDensity.DENSE.getMultiplier();
+            assertTrue(multiplier >= 1.2 && multiplier <= 1.8, 
+                    "DENSE multiplier should be between 1.2 and 1.8, got: " + multiplier);
+        }
+        
+        // Test CHOKED density range
+        for (int i = 0; i < 10; i++) {
+            double multiplier = EventDensity.CHOKED.getMultiplier();
+            assertTrue(multiplier >= 2.0 && multiplier <= 3.0, 
+                    "CHOKED multiplier should be between 2.0 and 3.0, got: " + multiplier);
+        }
+        
+        // Test RANDOM density (should return values from any of the above ranges)
+        for (int i = 0; i < 10; i++) {
+            double multiplier = EventDensity.RANDOM.getMultiplier();
+            assertTrue(multiplier >= 0.6 && multiplier <= 3.0, 
+                    "RANDOM multiplier should be between 0.6 and 3.0, got: " + multiplier);
+        }
+    }
+    
+    @Test
+    void testEventDensityDefaultValues() {
+        Rules rules = Rules.builder().build();
+        
+        // Check default density values
+        assertEquals(EventDensity.DENSE, rules.getMeteorShowerDensity());
+        assertEquals(EventDensity.SPARSE, rules.getSupplyDropDensity());
+        assertEquals(EventDensity.DENSE, rules.getVolcanicEruptionDensity());
+        assertEquals(EventDensity.DENSE, rules.getIonStormDensity());
     }
 }
 

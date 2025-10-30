@@ -496,7 +496,7 @@
                 <div class="config-section">
                     <h3>🌋 Event Configuration</h3>
                     <div id="eventConfigFields" style="display: none;">
-                        <small style="color: #888; font-size: 0.9em; display: block; margin-bottom: 10px;">Configure event timing and intensity (enable in World Settings)</small>
+                        <small style="color: #888; font-size: 0.9em; display: block; margin-bottom: 10px;">Configure event timing and density (enable in World Settings)</small>
                         <div class="config-item">
                             <label for="randomEventInterval">Event Interval (seconds):</label>
                             <input type="number" id="randomEventInterval" min="20" max="300" step="10" value="40">
@@ -508,14 +508,64 @@
                             <small style="color: #888; font-size: 0.8em;">Warning time before event activates</small>
                         </div>
                         <div class="config-item">
-                            <label for="meteorShowerCount">Meteor Shower Intensity:</label>
-                            <input type="number" id="meteorShowerCount" min="3" max="20" value="8">
-                            <small style="color: #888; font-size: 0.8em;">Number of meteor impacts</small>
+                            <label for="meteorShowerDensity">Meteor Shower Density:</label>
+                            <select id="meteorShowerDensity">
+                                <option value="SPARSE">Sparse (Few Meteors)</option>
+                                <option value="DENSE" selected>Dense (Normal)</option>
+                                <option value="CHOKED">Choked (Many Meteors)</option>
+                                <option value="RANDOM">Random (Varies)</option>
+                            </select>
+                            <small style="color: #888; font-size: 0.8em;">Scales with map size</small>
                         </div>
                         <div class="config-item">
-                            <label for="supplyDropCount">Supply Drop Count:</label>
-                            <input type="number" id="supplyDropCount" min="1" max="15" value="5">
-                            <small style="color: #888; font-size: 0.8em;">Number of power-up drops</small>
+                            <label for="supplyDropDensity">Supply Drop Density:</label>
+                            <select id="supplyDropDensity">
+                                <option value="SPARSE" selected>Sparse (Few Drops)</option>
+                                <option value="DENSE">Dense (Normal)</option>
+                                <option value="CHOKED">Choked (Many Drops)</option>
+                                <option value="RANDOM">Random (Varies)</option>
+                            </select>
+                            <small style="color: #888; font-size: 0.8em;">Scales with map size</small>
+                        </div>
+                        <div class="config-item">
+                            <label for="volcanicEruptionDensity">Volcanic Eruption Density:</label>
+                            <select id="volcanicEruptionDensity">
+                                <option value="SPARSE">Sparse (Few Zones)</option>
+                                <option value="DENSE" selected>Dense (Normal)</option>
+                                <option value="CHOKED">Choked (Many Zones)</option>
+                                <option value="RANDOM">Random (Varies)</option>
+                            </select>
+                            <small style="color: #888; font-size: 0.8em;">Scales with map size</small>
+                        </div>
+                        <div class="config-item">
+                            <label for="ionStormDensity">Ion Storm Density:</label>
+                            <select id="ionStormDensity">
+                                <option value="SPARSE">Sparse (Few Zones)</option>
+                                <option value="DENSE" selected>Dense (Normal)</option>
+                                <option value="CHOKED">Choked (Many Zones)</option>
+                                <option value="RANDOM">Random (Varies)</option>
+                            </select>
+                            <small style="color: #888; font-size: 0.8em;">Scales with map size</small>
+                        </div>
+                        <div class="config-item">
+                            <label for="earthquakeDensity">Earthquake Density:</label>
+                            <select id="earthquakeDensity">
+                                <option value="SPARSE" selected>Sparse (Few Quakes)</option>
+                                <option value="DENSE">Dense (Normal)</option>
+                                <option value="CHOKED">Choked (Many Quakes)</option>
+                                <option value="RANDOM">Random (Varies)</option>
+                            </select>
+                            <small style="color: #888; font-size: 0.8em;">Scales with map size</small>
+                        </div>
+                        <div class="config-item">
+                            <label for="blizzardDensity">Blizzard Density:</label>
+                            <select id="blizzardDensity">
+                                <option value="SPARSE">Sparse (Few Zones)</option>
+                                <option value="DENSE" selected>Dense (Normal)</option>
+                                <option value="CHOKED">Choked (Many Zones)</option>
+                                <option value="RANDOM">Random (Varies)</option>
+                            </select>
+                            <small style="color: #888; font-size: 0.8em;">Scales with map size</small>
                         </div>
                     </div>
                 </div>
@@ -1067,9 +1117,13 @@
                     headquartersDestructionEndsGame: false,
                     enableRandomEvents: true,
                     randomEventInterval: 15,     // Events every 15 seconds on average
-                    eventWarningDuration: 3,     // 3 second warning
-                    meteorShowerCount: 17,       // Intense meteor showers
-                    supplyDropCount: 8           // Generous supply drops
+                    eventWarningDuration: 5,     // 5 second warning
+                    meteorShowerDensity: 'CHOKED',  // Intense meteor showers
+                    supplyDropDensity: 'CHOKED',    // Generous supply drops
+                    volcanicEruptionDensity: 'DENSE',
+                    ionStormDensity: 'DENSE',
+                    earthquakeDensity: 'DENSE',
+                    blizzardDensity: 'DENSE'
                 }
             };
         } else if (presetType === 'oddball') {
@@ -1150,8 +1204,12 @@
                     enableRandomEvents: true,   // Random events add chaos to VIP protection
                     randomEventInterval: 50,    // Occasional events
                     eventWarningDuration: 4,
-                    meteorShowerCount: 40,      // really make it wild
-                    supplyDropCount: 6,         // Supply drops create VIP hunting opportunities
+                    meteorShowerDensity: 'CHOKED',  // Really make it wild
+                    supplyDropDensity: 'DENSE',     // Supply drops create VIP hunting opportunities
+                    volcanicEruptionDensity: 'SPARSE',
+                    ionStormDensity: 'DENSE',
+                    earthquakeDensity: 'SPARSE',
+                    blizzardDensity: 'SPARSE',
                     enableOddball: false,
                     oddballPointsPerSecond: 1.0,
                     enableVip: true,            // VIP MODE ENABLED!
@@ -1259,8 +1317,12 @@
                 document.getElementById('enableRandomEvents').checked = defaultConfig.rules.enableRandomEvents || false;
                 document.getElementById('randomEventInterval').value = defaultConfig.rules.randomEventInterval || 40;
                 document.getElementById('eventWarningDuration').value = defaultConfig.rules.eventWarningDuration || 3;
-                document.getElementById('meteorShowerCount').value = defaultConfig.rules.meteorShowerCount || 8;
-                document.getElementById('supplyDropCount').value = defaultConfig.rules.supplyDropCount || 5;
+                document.getElementById('meteorShowerDensity').value = defaultConfig.rules.meteorShowerDensity || 'DENSE';
+                document.getElementById('supplyDropDensity').value = defaultConfig.rules.supplyDropDensity || 'SPARSE';
+                document.getElementById('volcanicEruptionDensity').value = defaultConfig.rules.volcanicEruptionDensity || 'DENSE';
+                document.getElementById('ionStormDensity').value = defaultConfig.rules.ionStormDensity || 'DENSE';
+                document.getElementById('earthquakeDensity').value = defaultConfig.rules.earthquakeDensity || 'SPARSE';
+                document.getElementById('blizzardDensity').value = defaultConfig.rules.blizzardDensity || 'DENSE';
             } else {
                 document.getElementById('roundDuration').value = 0;
                 document.getElementById('restDuration').value = 10;
@@ -1287,8 +1349,12 @@
                 document.getElementById('enableRandomEvents').checked = false;
                 document.getElementById('randomEventInterval').value = 40;
                 document.getElementById('eventWarningDuration').value = 3;
-                document.getElementById('meteorShowerCount').value = 8;
-                document.getElementById('supplyDropCount').value = 5;
+                document.getElementById('meteorShowerDensity').value = 'DENSE';
+                document.getElementById('supplyDropDensity').value = 'SPARSE';
+                document.getElementById('volcanicEruptionDensity').value = 'DENSE';
+                document.getElementById('ionStormDensity').value = 'DENSE';
+                document.getElementById('earthquakeDensity').value = 'SPARSE';
+                document.getElementById('blizzardDensity').value = 'DENSE';
             }
             
             // Update field visibility
@@ -1408,8 +1474,12 @@
                 enableRandomEvents: document.getElementById('enableRandomEvents').checked,
                 randomEventInterval: parseFloat(document.getElementById('randomEventInterval').value),
                 eventWarningDuration: parseFloat(document.getElementById('eventWarningDuration').value),
-                meteorShowerCount: parseInt(document.getElementById('meteorShowerCount').value),
-                supplyDropCount: parseInt(document.getElementById('supplyDropCount').value)
+                meteorShowerDensity: document.getElementById('meteorShowerDensity').value,
+                supplyDropDensity: document.getElementById('supplyDropDensity').value,
+                volcanicEruptionDensity: document.getElementById('volcanicEruptionDensity').value,
+                ionStormDensity: document.getElementById('ionStormDensity').value,
+                earthquakeDensity: document.getElementById('earthquakeDensity').value,
+                blizzardDensity: document.getElementById('blizzardDensity').value
             }
         };
 

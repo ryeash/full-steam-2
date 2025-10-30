@@ -360,6 +360,19 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 }
                 StatusEffectManager.applyPoison(gameManager, player, effectValue * 0.2, 1.5, fieldEffect.getOwnerId());
             }
+            case EARTHQUAKE -> {
+                double effectValue = fieldEffect.getDamageAtPosition(player.getPosition());
+                if (effectValue <= 0) {
+                    return;
+                }
+                // Apply damage over time
+                if (player.takeDamage(effectValue * deltaTime)) {
+                    gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                }
+                // Apply strong slowing effect (ground shaking makes movement difficult)
+                StatusEffectManager.applySlowEffect(player, 5, 0.7,
+                        "Earthquake");
+            }
             case HEAL_ZONE -> {
                 double effectValue = fieldEffect.getDamageAtPosition(player.getPosition());
                 if (effectValue <= 0) {

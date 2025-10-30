@@ -211,6 +211,26 @@ public class Rules {
     @Builder.Default
     private boolean enableVip = false;
     
+    // ===== Random Weapons Rules =====
+    
+    /**
+     * Whether to enable random weapon rotation. When enabled, all players are assigned
+     * new random weapons (excluding healing weapons) at regular intervals.
+     * Creates chaotic, unpredictable gameplay where players must adapt to different loadouts.
+     */
+    @NotNull
+    @Builder.Default
+    private boolean enableRandomWeapons = false;
+    
+    /**
+     * Interval in seconds between random weapon rotations.
+     * All players receive new weapons simultaneously.
+     */
+    @DecimalMin("5.0")
+    @DecimalMax("300.0")
+    @Builder.Default
+    private double randomWeaponInterval = 30.0;
+    
     // ===== Terrain Rules =====
     
     /**
@@ -312,15 +332,57 @@ public class Rules {
     @Builder.Default
     private List<EnvironmentalEvent> enabledEvents = new ArrayList<>();
     
-    // ===== Event Intensity Settings =====
+    // ===== Event Density Settings =====
     
     /**
-     * Number of impact zones for meteor shower events.
+     * Density of meteor shower impact zones.
+     * Controls how many meteors spawn relative to map size.
      */
-    @Min(1)
-    @Max(50)
+    @NotNull
     @Builder.Default
-    private int meteorShowerCount = 8;
+    private EventDensity meteorShowerDensity = EventDensity.DENSE;
+    
+    /**
+     * Density of supply drop locations.
+     * Controls how many supply drops spawn relative to map size.
+     */
+    @NotNull
+    @Builder.Default
+    private EventDensity supplyDropDensity = EventDensity.SPARSE;
+    
+    /**
+     * Density of volcanic eruption zones.
+     * Controls how many eruption zones spawn relative to map size.
+     */
+    @NotNull
+    @Builder.Default
+    private EventDensity volcanicEruptionDensity = EventDensity.DENSE;
+    
+    /**
+     * Density of ion storm zones.
+     * Controls how many electric zones spawn relative to map size.
+     */
+    @NotNull
+    @Builder.Default
+    private EventDensity ionStormDensity = EventDensity.DENSE;
+    
+    /**
+     * Density of earthquake impact zones.
+     * Controls how many earthquake zones spawn relative to map size.
+     */
+    @NotNull
+    @Builder.Default
+    private EventDensity earthquakeDensity = EventDensity.SPARSE;
+
+    /**
+     * Density of blizzard freeze zones.
+     * Controls how many blizzard zones spawn relative to map size.
+     */
+    @NotNull
+    @Builder.Default
+    private EventDensity blizzardDensity = EventDensity.DENSE;
+    
+    // ===== Event Intensity Settings =====
     
     /**
      * Damage per meteor impact.
@@ -337,22 +399,6 @@ public class Rules {
     @DecimalMax("500.0")
     @Builder.Default
     private double meteorRadius = 60.0;
-    
-    /**
-     * Number of power-ups to spawn during supply drop events.
-     */
-    @Min(1)
-    @Max(50)
-    @Builder.Default
-    private int supplyDropCount = 5;
-    
-    /**
-     * Number of eruption zones for volcanic events.
-     */
-    @Min(1)
-    @Max(20)
-    @Builder.Default
-    private int volcanicEruptionCount = 4;
     
     /**
      * Damage per second from eruption zones.
@@ -377,14 +423,6 @@ public class Rules {
     @DecimalMax("500.0")
     @Builder.Default
     private double earthquakeDamage = 15.0;
-    
-    /**
-     * Number of zones affected by ion storm.
-     */
-    @Min(1)
-    @Max(20)
-    @Builder.Default
-    private int ionStormZones = 6;
     
     /**
      * Damage from ion storm electric fields.
@@ -476,5 +514,12 @@ public class Rules {
      */
     public boolean shouldLockGame() {
         return lockGameAfterSeconds > 0;
+    }
+    
+    /**
+     * Check if this game mode uses random weapon rotation.
+     */
+    public boolean hasRandomWeapons() {
+        return enableRandomWeapons;
     }
 }

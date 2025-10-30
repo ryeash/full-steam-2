@@ -75,6 +75,9 @@ public class RuleSystem {
     // VIP validation timer (check every 2 seconds)
     private long lastVipCheckTime = 0;
     private static final long VIP_CHECK_INTERVAL_MS = 2000;
+    
+    // Random weapon rotation tracking
+    private long nextWeaponRotationTime = 0L;
 
     public RuleSystem(String gameId, Rules rules, GameEntities gameEntities,
                       GameEventManager gameEventManager, Consumer<Map<String, Object>> broadcaster,
@@ -94,6 +97,11 @@ public class RuleSystem {
         // Initialize VIP mode if enabled
         if (rules.hasVip()) {
             initializeVipMode();
+        }
+        
+        // Initialize random weapon rotation if enabled
+        if (rules.hasRandomWeapons()) {
+            scheduleNextWeaponRotation();
         }
     }
 
@@ -271,6 +279,11 @@ public class RuleSystem {
         // Periodically validate VIP assignments if VIP mode is enabled
         if (rules.hasVip()) {
             validateVipAssignments();
+        }
+        
+        // Update random weapon rotation if enabled
+        if (rules.hasRandomWeapons()) {
+            updateWeaponRotation();
         }
 
         // Check victory conditions
@@ -930,6 +943,57 @@ public class RuleSystem {
             gameEventManager.broadcastSystemMessage(
                     String.format("🔄 Round %d - All players have %d lives!",
                             currentRound, rules.getMaxLives()));
+        }
+    }
+    
+    // ===== RANDOM WEAPON ROTATION =====
+    
+    /**
+     * Schedule the next weapon rotation.
+     */
+    private void scheduleNextWeaponRotation() {
+        nextWeaponRotationTime = (long) (System.currentTimeMillis() + 
+                (rules.getRandomWeaponInterval() * 1000));
+        log.debug("Next weapon rotation scheduled for game {} in {} seconds", 
+                gameId, rules.getRandomWeaponInterval());
+    }
+    
+    /**
+     * Update weapon rotation timer and rotate weapons when time is up.
+     */
+    private void updateWeaponRotation() {
+        if (System.currentTimeMillis() >= nextWeaponRotationTime) {
+            rotateAllPlayerWeapons();
+            scheduleNextWeaponRotation();
+        }
+    }
+    
+    /**
+     * Rotate all active players to new random weapons.
+     * Excludes healing weapons to maintain combat focus.
+     */
+    private void rotateAllPlayerWeapons() {
+        int rotatedCount = 0;
+        
+        for (Player player : gameEntities.getAllPlayers()) {
+            if (player.isActive()) {
+                com.fullsteam.model.WeaponConfig newWeapon = 
+                        com.fullsteam.ai.AIWeaponSelector.selectRandomNonHealingWeapon();
+                com.fullsteam.model.UtilityWeapon newUtility = 
+                        com.fullsteam.ai.AIWeaponSelector.selectRandomUtilityWeapon();
+                
+                player.applyWeaponConfig(newWeapon, newUtility);
+                rotatedCount++;
+                
+                log.debug("Player {} ({}) assigned new weapons: {}, {}", 
+                        player.getId(), player.getPlayerName(), 
+                        newWeapon.getType(), newUtility.getDisplayName());
+            }
+        }
+        
+        if (rotatedCount > 0) {
+            gameEventManager.broadcastSystemMessage("🔄 Weapon Rotation! New loadouts assigned!");
+            log.info("Game {} - Rotated weapons for {} players", gameId, rotatedCount);
         }
     }
 }
