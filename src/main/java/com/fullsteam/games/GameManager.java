@@ -115,7 +115,7 @@ public class GameManager {
 
         // Pass oddball info and obstacle density to terrain generator
         boolean hasOddball = gameConfig.getRules().hasOddball();
-        ObstacleDensity obstacleDensity = gameConfig.getRules().getObstacleDensity();
+        EntityWorldDensity obstacleDensity = gameConfig.getRules().getObstacleDensity();
         this.terrainGenerator = new TerrainGenerator(
                 gameConfig.getWorldWidth(),
                 gameConfig.getWorldHeight(),

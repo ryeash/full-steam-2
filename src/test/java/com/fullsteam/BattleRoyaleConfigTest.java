@@ -41,7 +41,7 @@ public class BattleRoyaleConfigTest extends BaseTestClass {
                 .workshopCraftTime(8.0)
                 .workshopCraftRadius(100.0)
                 .maxPowerUpsPerWorkshop(4)
-                .obstacleDensity(ObstacleDensity.CHOKED)  // Dense cover
+                .obstacleDensity(EntityWorldDensity.CHOKED)  // Dense cover
                 .enableRandomEvents(true)  // Random events
                 .randomEventInterval(60.0)
                 .randomEventIntervalVariance(0.4)
@@ -84,7 +84,7 @@ public class BattleRoyaleConfigTest extends BaseTestClass {
         // Verify rules
         assertEquals(RespawnMode.ELIMINATION, rules.getRespawnMode(), "Should use elimination respawn");
         assertEquals(VictoryCondition.ELIMINATION, rules.getVictoryCondition(), "Should use elimination victory");
-        assertEquals(ObstacleDensity.CHOKED, rules.getObstacleDensity(), "Should have choked obstacle density");
+        assertEquals(EntityWorldDensity.CHOKED, rules.getObstacleDensity(), "Should have choked obstacle density");
         assertTrue(rules.hasWorkshops(), "Should have workshops for loot");
         assertTrue(rules.isEnableRandomEvents(), "Should have random events enabled");
         assertEquals(30.0, rules.getLockGameAfterSeconds(), "Should lock game after 30 seconds");

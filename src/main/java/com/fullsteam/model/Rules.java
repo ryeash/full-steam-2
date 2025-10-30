@@ -242,7 +242,7 @@ public class Rules {
      */
     @NotNull
     @Builder.Default
-    private ObstacleDensity obstacleDensity = ObstacleDensity.RANDOM;
+    private EntityWorldDensity obstacleDensity = EntityWorldDensity.RANDOM;
     
     // ===== Headquarters Rules =====
     
@@ -340,7 +340,7 @@ public class Rules {
      */
     @NotNull
     @Builder.Default
-    private EventDensity meteorShowerDensity = EventDensity.DENSE;
+    private EntityWorldDensity meteorShowerDensity = EntityWorldDensity.DENSE;
     
     /**
      * Density of supply drop locations.
@@ -348,7 +348,7 @@ public class Rules {
      */
     @NotNull
     @Builder.Default
-    private EventDensity supplyDropDensity = EventDensity.SPARSE;
+    private EntityWorldDensity supplyDropDensity = EntityWorldDensity.SPARSE;
     
     /**
      * Density of volcanic eruption zones.
@@ -356,7 +356,7 @@ public class Rules {
      */
     @NotNull
     @Builder.Default
-    private EventDensity volcanicEruptionDensity = EventDensity.DENSE;
+    private EntityWorldDensity volcanicEruptionDensity = EntityWorldDensity.DENSE;
     
     /**
      * Density of ion storm zones.
@@ -364,7 +364,7 @@ public class Rules {
      */
     @NotNull
     @Builder.Default
-    private EventDensity ionStormDensity = EventDensity.DENSE;
+    private EntityWorldDensity ionStormDensity = EntityWorldDensity.DENSE;
     
     /**
      * Density of earthquake impact zones.
@@ -372,7 +372,7 @@ public class Rules {
      */
     @NotNull
     @Builder.Default
-    private EventDensity earthquakeDensity = EventDensity.SPARSE;
+    private EntityWorldDensity earthquakeDensity = EntityWorldDensity.SPARSE;
 
     /**
      * Density of blizzard freeze zones.
@@ -380,7 +380,7 @@ public class Rules {
      */
     @NotNull
     @Builder.Default
-    private EventDensity blizzardDensity = EventDensity.DENSE;
+    private EntityWorldDensity blizzardDensity = EntityWorldDensity.DENSE;
     
     // ===== Event Intensity Settings =====
     

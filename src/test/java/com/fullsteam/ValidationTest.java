@@ -1,19 +1,17 @@
 package com.fullsteam;
 
 import com.fullsteam.games.GameConfig;
-import com.fullsteam.model.ObstacleDensity;
 import com.fullsteam.model.Rules;
-import com.fullsteam.model.ScoreStyle;
-import com.fullsteam.model.VictoryCondition;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
+import jakarta.inject.Inject;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.Test;
 
-import jakarta.inject.Inject;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @MicronautTest(startApplication = false)
 public class ValidationTest extends BaseTestClass {
