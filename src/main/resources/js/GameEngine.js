@@ -5176,11 +5176,31 @@ class GameEngine {
         // Remove existing connection for this pad
         if (this.teleportConnections.has(padId)) {
             const connection = this.teleportConnections.get(padId);
+            if (connection.animationFunction) {
+                this.app.ticker.remove(connection.animationFunction);
+                connection.animationFunction = null;
+            }
             if (connection.parent) {
                 connection.parent.removeChild(connection);
             }
             connection.destroy();
             this.teleportConnections.delete(padId);
+        }
+        
+        // Remove any connections pointing TO this pad from other pads
+        // This handles the case where another pad was linked to this one but is now being re-linked
+        for (let [otherPadId, connection] of this.teleportConnections) {
+            if (connection.linkedPadId === padId) {
+                if (connection.animationFunction) {
+                    this.app.ticker.remove(connection.animationFunction);
+                    connection.animationFunction = null;
+                }
+                if (connection.parent) {
+                    connection.parent.removeChild(connection);
+                }
+                connection.destroy();
+                this.teleportConnections.delete(otherPadId);
+            }
         }
         
         // Create new connection if this pad is linked
@@ -5207,6 +5227,9 @@ class GameEngine {
         // Add to game container (behind other entities)
         connectionGraphics.zIndex = 1;
         this.gameContainer.addChild(connectionGraphics);
+        
+        // Store metadata about the connection for cleanup
+        connectionGraphics.linkedPadId = padId2;
         
         // Store connection for cleanup
         this.teleportConnections.set(padId1, connectionGraphics);
@@ -5533,7 +5556,7 @@ class GameEngine {
             
             // Remove any connections TO this pad
             for (let [otherPadId, connection] of this.teleportConnections) {
-                if (connection.entityData && connection.entityData.linkedPadId === padId) {
+                if (connection.linkedPadId === padId) {
                     if (connection.animationFunction) {
                         this.app.ticker.remove(connection.animationFunction);
                     }

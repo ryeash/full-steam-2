@@ -117,7 +117,7 @@ public class FlagBehavior implements AIBehavior {
         Flag carriedFlag = getCarriedFlag(aiPlayer, gameEntities);
         if (carriedFlag != null) {
             // Return flag to home position
-            returnFlagToBase(aiPlayer, carriedFlag, input);
+            returnFlagToBase(aiPlayer, carriedFlag, input, gameEntities);
             
             // Still defend ourselves while carrying
             engageNearbyEnemies(aiPlayer, gameEntities, input, 300);
@@ -148,6 +148,9 @@ public class FlagBehavior implements AIBehavior {
         Vector2 perpendicular = new Vector2(-direction.y, direction.x);
         direction.add(perpendicular.multiply(weaveFactor));
         direction.normalize();
+
+        // Apply hazard avoidance
+        direction = HazardAvoidance.calculateSafeMovement(myPos, direction, gameEntities, 100.0);
 
         input.setMoveX(direction.x * moveIntensity);
         input.setMoveY(direction.y * moveIntensity);
@@ -210,6 +213,10 @@ public class FlagBehavior implements AIBehavior {
             Vector2 patrolTarget = flagPos.copy().add(patrolOffset);
             Vector2 direction = patrolTarget.copy().subtract(myPos);
             direction.normalize();
+            
+            // Apply hazard avoidance
+            direction = HazardAvoidance.calculateSafeMovement(myPos, direction, gameEntities, 100.0);
+            
             input.setMoveX(direction.x * 0.5);
             input.setMoveY(direction.y * 0.5);
         }
@@ -298,7 +305,7 @@ public class FlagBehavior implements AIBehavior {
     /**
      * Return carried flag to home base.
      */
-    private void returnFlagToBase(AIPlayer aiPlayer, Flag flag, PlayerInput input) {
+    private void returnFlagToBase(AIPlayer aiPlayer, Flag flag, PlayerInput input, GameEntities gameEntities) {
         Vector2 myPos = aiPlayer.getPosition();
         Vector2 homePos = flag.getHomePosition();
         double distance = myPos.distance(homePos);
@@ -314,6 +321,9 @@ public class FlagBehavior implements AIBehavior {
             direction.add(perpendicular.multiply(evasion));
             direction.normalize();
         }
+
+        // Apply hazard avoidance (critical when carrying flag!)
+        direction = HazardAvoidance.calculateSafeMovement(myPos, direction, gameEntities, 120.0);
 
         input.setMoveX(direction.x);
         input.setMoveY(direction.y);

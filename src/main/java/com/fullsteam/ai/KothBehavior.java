@@ -161,7 +161,7 @@ public class KothBehavior implements AIBehavior {
 
         if (distance > zoneRadius) {
             // Move towards zone
-            moveTowardsZone(aiPlayer, zone, input);
+            moveTowardsZone(aiPlayer, zone, input, gameEntities);
         } else {
             // Inside zone - hold position and fight
             holdZonePosition(aiPlayer, zone, gameEntities, input, deltaTime);
@@ -177,7 +177,7 @@ public class KothBehavior implements AIBehavior {
     /**
      * Move towards the target zone with tactical movement.
      */
-    private void moveTowardsZone(AIPlayer aiPlayer, KothZone zone, PlayerInput input) {
+    private void moveTowardsZone(AIPlayer aiPlayer, KothZone zone, PlayerInput input, GameEntities gameEntities) {
         Vector2 myPos = aiPlayer.getPosition();
         Vector2 zonePos = zone.getPosition();
 
@@ -191,6 +191,9 @@ public class KothBehavior implements AIBehavior {
             direction.add(perpendicular.multiply(weave));
             direction.normalize();
         }
+
+        // Apply hazard avoidance
+        direction = HazardAvoidance.calculateSafeMovement(myPos, direction, gameEntities, 100.0);
 
         double moveIntensity = 0.8 + (aiPlayer.getPersonality().getMobility() * 0.2);
         input.setMoveX(direction.x * moveIntensity);
@@ -230,6 +233,10 @@ public class KothBehavior implements AIBehavior {
             }
 
             double moveIntensity = 0.6 * aiPlayer.getPersonality().getMobility();
+            
+            // Apply hazard avoidance
+            strafeDirection = HazardAvoidance.calculateSafeMovement(myPos, strafeDirection, gameEntities, 80.0);
+            
             input.setMoveX(strafeDirection.x * moveIntensity);
             input.setMoveY(strafeDirection.y * moveIntensity);
         }

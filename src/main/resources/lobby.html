@@ -370,6 +370,23 @@
                 </div>
 
                 <div class="config-section">
+                    <h3>🔀 Random Weapons</h3>
+                    <div class="config-item">
+                        <label for="enableRandomWeapons">Enable Random Weapons:</label>
+                        <input type="checkbox" id="enableRandomWeapons">
+                        <small style="color: #888; font-size: 0.8em;">All players get new random weapons at regular intervals</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="randomWeaponInterval">Weapon Change Interval (seconds):</label>
+                        <input type="number" id="randomWeaponInterval" min="10" max="120" step="5" value="30">
+                        <small style="color: #888; font-size: 0.8em;">How often weapons change (30s default)</small>
+                    </div>
+                    <div class="config-item">
+                        <small style="color: #ff9500; font-size: 0.8em;">⚠️ Creates chaotic, unpredictable gameplay!</small>
+                    </div>
+                </div>
+
+                <div class="config-section">
                     <h3>🏭 Workshops</h3>
                     <div class="config-item">
                         <label for="addWorkshops">Enable Workshops:</label>
@@ -837,6 +854,9 @@
         }
         
         // Special features
+        if (rules.enableRandomWeapons) {
+            tags.push({ text: `🔀 Random Weapons`, highlight: true });
+        }
         if (rules.enableRandomEvents) {
             tags.push(`🌋 Events`);
         }
@@ -1309,6 +1329,8 @@
                 document.getElementById('kothPointsPerSecond').value = defaultConfig.rules.kothPointsPerSecond || 1.0;
                 document.getElementById('enableOddball').checked = defaultConfig.rules.enableOddball || false;
                 document.getElementById('oddballPointsPerSecond').value = defaultConfig.rules.oddballPointsPerSecond || 1.0;
+                document.getElementById('enableRandomWeapons').checked = defaultConfig.rules.enableRandomWeapons || false;
+                document.getElementById('randomWeaponInterval').value = defaultConfig.rules.randomWeaponInterval || 30;
                 document.getElementById('obstacleDensity').value = defaultConfig.rules.obstacleDensity || 'RANDOM';
                 document.getElementById('addWorkshops').checked = defaultConfig.rules.addWorkshops || false;
                 document.getElementById('workshopCraftTime').value = defaultConfig.rules.workshopCraftTime || 10;
@@ -1339,6 +1361,8 @@
                 document.getElementById('kothPointsPerSecond').value = 1.0;
                 document.getElementById('enableOddball').checked = false;
                 document.getElementById('oddballPointsPerSecond').value = 1.0;
+                document.getElementById('enableRandomWeapons').checked = false;
+                document.getElementById('randomWeaponInterval').value = 30;
                 document.getElementById('obstacleDensity').value = 'RANDOM';
                 document.getElementById('waveRespawnInterval').value = 30;
                 document.getElementById('maxLives').value = 3;
@@ -1461,6 +1485,8 @@
                 kothPointsPerSecond: parseFloat(document.getElementById('kothPointsPerSecond').value),
                 enableOddball: document.getElementById('enableOddball').checked,
                 oddballPointsPerSecond: parseFloat(document.getElementById('oddballPointsPerSecond').value),
+                enableRandomWeapons: document.getElementById('enableRandomWeapons').checked,
+                randomWeaponInterval: parseFloat(document.getElementById('randomWeaponInterval').value),
                 obstacleDensity: document.getElementById('obstacleDensity').value,
                 addWorkshops: document.getElementById('addWorkshops').checked,
                 workshopCraftTime: parseFloat(document.getElementById('workshopCraftTime').value),

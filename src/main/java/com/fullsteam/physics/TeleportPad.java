@@ -83,6 +83,18 @@ public class TeleportPad extends GameEntity {
      * Link this teleport pad to another pad
      */
     public void linkTo(TeleportPad otherPad) {
+        // Unlink from current partner if we have one
+        if (this.linkedPad != null && this.linkedPad != otherPad) {
+            TeleportPad oldPartner = this.linkedPad;
+            this.linkedPad = null;
+            this.isLinked = false;
+            // Unlink the old partner from us (without recursion)
+            if (oldPartner.linkedPad == this) {
+                oldPartner.linkedPad = null;
+                oldPartner.isLinked = false;
+            }
+        }
+        
         this.linkedPad = otherPad;
         this.isLinked = true;
 

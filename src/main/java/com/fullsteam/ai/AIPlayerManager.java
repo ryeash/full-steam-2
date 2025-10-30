@@ -35,7 +35,8 @@ public class AIPlayerManager {
             new FlagBehavior(),
             new KothBehavior(),
             new HeadquartersBehavior(),
-            new OddballBehavior()
+            new OddballBehavior(),
+            new PowerUpBehavior()
     );
 
     private final GameConfig gameConfig;
@@ -267,6 +268,8 @@ public class AIPlayerManager {
             return new HeadquartersBehavior();
         } else if (template instanceof OddballBehavior) {
             return new OddballBehavior();
+        } else if (template instanceof PowerUpBehavior) {
+            return new PowerUpBehavior();
         }
         return new IdleBehavior(); // Fallback
     }

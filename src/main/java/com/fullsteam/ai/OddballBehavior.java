@@ -94,6 +94,9 @@ public class OddballBehavior implements AIBehavior {
             Vector2 awayFromEnemy = myPos.difference(enemyPos);
             awayFromEnemy.normalize();
             
+            // Apply hazard avoidance (critical when carrying ball!)
+            awayFromEnemy = HazardAvoidance.calculateSafeMovement(myPos, awayFromEnemy, gameEntities, 120.0);
+            
             // Move away from enemy
             input.setMoveX(awayFromEnemy.x);
             input.setMoveY(awayFromEnemy.y);
@@ -153,6 +156,9 @@ public class OddballBehavior implements AIBehavior {
         Vector2 toCarrier = carrierPos.difference(myPos);
         toCarrier.normalize();
         
+        // Apply hazard avoidance
+        toCarrier = HazardAvoidance.calculateSafeMovement(myPos, toCarrier, gameEntities, 100.0);
+        
         input.setMoveX(toCarrier.x);
         input.setMoveY(toCarrier.y);
 
@@ -188,6 +194,9 @@ public class OddballBehavior implements AIBehavior {
         // Rush toward oddball
         Vector2 toOddball = oddballPos.difference(myPos);
         toOddball.normalize();
+        
+        // Apply hazard avoidance
+        toOddball = HazardAvoidance.calculateSafeMovement(myPos, toOddball, gameEntities, 100.0);
         
         input.setMoveX(toOddball.x);
         input.setMoveY(toOddball.y);

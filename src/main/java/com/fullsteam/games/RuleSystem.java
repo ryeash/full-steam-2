@@ -1,12 +1,16 @@
 package com.fullsteam.games;
 
+import com.fullsteam.ai.AIWeaponSelector;
 import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.GameState;
 import com.fullsteam.model.RespawnMode;
 import com.fullsteam.model.RoundScore;
 import com.fullsteam.model.Rules;
 import com.fullsteam.model.ScoreStyle;
+import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.VictoryCondition;
+import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.KothZone;
@@ -65,17 +69,17 @@ public class RuleSystem {
 
     // Bonus points tracking (for HQ damage, objectives, etc.)
     private final Map<Integer, Integer> bonusTeamPoints = new HashMap<>();
-    
+
     // Oddball scoring tracking (playerId -> total points earned)
     private final Map<Integer, Double> oddballPlayerScores = new HashMap<>();
-    
+
     // VIP kill tracking (team number -> VIP kills scored)
     private final Map<Integer, Integer> vipKillScores = new HashMap<>();
-    
+
     // VIP validation timer (check every 2 seconds)
     private long lastVipCheckTime = 0;
     private static final long VIP_CHECK_INTERVAL_MS = 2000;
-    
+
     // Random weapon rotation tracking
     private long nextWeaponRotationTime = 0L;
 
@@ -93,12 +97,12 @@ public class RuleSystem {
         if (rules.getRoundDuration() > 0) {
             this.roundEndTime = (long) (System.currentTimeMillis() + (rules.getRoundDuration() * 1000));
         }
-        
+
         // Initialize VIP mode if enabled
         if (rules.hasVip()) {
             initializeVipMode();
         }
-        
+
         // Initialize random weapon rotation if enabled
         if (rules.hasRandomWeapons()) {
             scheduleNextWeaponRotation();
@@ -138,7 +142,7 @@ public class RuleSystem {
         }
 
         log.info("Initializing VIP mode for game {}", gameId);
-        
+
         // Select one VIP per team
         for (int team = 1; team <= teamCount; team++) {
             selectVipForTeam(team);
@@ -163,8 +167,8 @@ public class RuleSystem {
         // Select first player as VIP (could be randomized or based on score)
         Player vip = teamPlayers.get(0);
         setPlayerAsVip(vip);
-        
-        log.info("Player {} ({}) selected as VIP for team {}", 
+
+        log.info("Player {} ({}) selected as VIP for team {}",
                 vip.getId(), vip.getPlayerName(), teamNumber);
     }
 
@@ -174,7 +178,7 @@ public class RuleSystem {
      */
     private void setPlayerAsVip(Player player) {
         int teamNumber = player.getTeam();
-        
+
         // Remove VIP status from previous VIP
         Integer previousVipId = gameEntities.getTeamVip(teamNumber);
         if (previousVipId != null) {
@@ -183,14 +187,14 @@ public class RuleSystem {
                 StatusEffectManager.removeVipStatus(previousVip);
             }
         }
-        
+
         // Set new VIP
         gameEntities.setTeamVip(teamNumber, player.getId());
         StatusEffectManager.applyVipStatus(player);
-        
+
         // Broadcast VIP selection event
         gameEventManager.broadcastSystemMessage(
-                String.format("👑 %s is now the VIP for Team %d!", 
+                String.format("👑 %s is now the VIP for Team %d!",
                         player.getPlayerName(), teamNumber));
     }
 
@@ -200,14 +204,14 @@ public class RuleSystem {
      */
     private void validateVipAssignments() {
         long currentTime = System.currentTimeMillis();
-        
+
         // Only check every VIP_CHECK_INTERVAL_MS to avoid excessive checking
         if (currentTime - lastVipCheckTime < VIP_CHECK_INTERVAL_MS) {
             return;
         }
-        
+
         lastVipCheckTime = currentTime;
-        
+
         // Check each team
         for (int team = 1; team <= teamCount; team++) {
             ensureVipForTeam(team);
@@ -225,12 +229,12 @@ public class RuleSystem {
 
         Integer currentVipId = gameEntities.getTeamVip(teamNumber);
         Player currentVip = currentVipId != null ? gameEntities.getPlayer(currentVipId) : null;
-        
+
         // Check if current VIP is still valid
         if (currentVip != null && currentVip.isActive()) {
             return; // VIP is still valid
         }
-        
+
         // Need to select a new VIP
         log.debug("VIP for team {} is no longer valid, selecting new VIP", teamNumber);
         selectVipForTeam(teamNumber);
@@ -244,11 +248,11 @@ public class RuleSystem {
         if (!rules.hasVip() || killerTeam <= 0) {
             return;
         }
-        
+
         vipKillScores.merge(killerTeam, 1, Integer::sum);
-        log.info("Team {} scored VIP kill. Total VIP kills: {} (Score Style: {})", 
+        log.info("Team {} scored VIP kill. Total VIP kills: {} (Score Style: {})",
                 killerTeam, vipKillScores.get(killerTeam), rules.getScoreStyle());
-        
+
         // Check victory conditions after VIP kill
         checkVictoryConditions();
     }
@@ -275,12 +279,12 @@ public class RuleSystem {
         if (eventSystem != null) {
             eventSystem.update(deltaTime);
         }
-        
+
         // Periodically validate VIP assignments if VIP mode is enabled
         if (rules.hasVip()) {
             validateVipAssignments();
         }
-        
+
         // Update random weapon rotation if enabled
         if (rules.hasRandomWeapons()) {
             updateWeaponRotation();
@@ -384,7 +388,7 @@ public class RuleSystem {
         gameEntities.getFieldEffects().clear();
         gameEntities.getBeams().clear();
         gameEntities.getProjectiles().clear();
-        
+
         // Reassign VIPs for new round
         if (rules.hasVip()) {
             for (int team = 1; team <= teamCount; team++) {
@@ -707,7 +711,7 @@ public class RuleSystem {
                     teamScores.merge(team, kothScore, Integer::sum);
                 }
             }
-            
+
             // Add oddball scores (per player, then summed to team)
             if (rules.hasOddball()) {
                 for (Map.Entry<Integer, Double> entry : oddballPlayerScores.entrySet()) {
@@ -718,7 +722,7 @@ public class RuleSystem {
                     }
                 }
             }
-            
+
             // Add VIP kill scores
             if (rules.hasVip()) {
                 for (Map.Entry<Integer, Integer> entry : vipKillScores.entrySet()) {
@@ -749,28 +753,28 @@ public class RuleSystem {
             checkVictoryConditions();
         }
     }
-    
+
     /**
      * Award oddball points to a player for holding the ball.
      * This method is called by CollisionProcessor during gameplay.
-     * 
+     *
      * @param playerId The player ID to award points to
-     * @param points The number of points to award
+     * @param points   The number of points to award
      */
     public void awardOddballPoints(int playerId, double points) {
         if (playerId >= 0 && points > 0) {
             oddballPlayerScores.merge(playerId, points, Double::sum);
             log.debug("Awarded {} oddball points to player {}. Total: {}",
                     points, playerId, oddballPlayerScores.get(playerId));
-            
+
             // Check victory conditions after adding points
             checkVictoryConditions();
         }
     }
-    
+
     /**
      * Get the oddball score for a specific player.
-     * 
+     *
      * @param playerId The player ID
      * @return The total oddball points earned by this player
      */
@@ -784,13 +788,13 @@ public class RuleSystem {
             case OBJECTIVE -> player.getCaptures(); // Only captures for individual scoring; KOTH is team-based
             case TOTAL -> player.getKills() + player.getCaptures();
         };
-        
+
         // Add oddball scores for this player
         if (rules.hasOddball()) {
             double oddballScore = getOddballScore(player.getId());
             score += (int) Math.round(oddballScore);
         }
-        
+
         return score;
     }
 
@@ -841,7 +845,7 @@ public class RuleSystem {
         } else {
             // FFA mode
             List<Player> players = new ArrayList<>(gameEntities.getAllPlayers());
-            
+
             // In ELIMINATION mode, sort by placement first, then by kills
             if (rules.getVictoryCondition() == VictoryCondition.ELIMINATION) {
                 players.sort((p1, p2) -> {
@@ -860,7 +864,7 @@ public class RuleSystem {
                 // Other modes: sort by score
                 players.sort((p1, p2) -> Integer.compare(getPlayerScore(p2), getPlayerScore(p1)));
             }
-            
+
             for (Player player : players) {
                 Map<String, Object> playerScore = new HashMap<>();
                 playerScore.put("playerId", player.getId());
@@ -945,19 +949,19 @@ public class RuleSystem {
                             currentRound, rules.getMaxLives()));
         }
     }
-    
+
     // ===== RANDOM WEAPON ROTATION =====
-    
+
     /**
      * Schedule the next weapon rotation.
      */
     private void scheduleNextWeaponRotation() {
-        nextWeaponRotationTime = (long) (System.currentTimeMillis() + 
+        nextWeaponRotationTime = (long) (System.currentTimeMillis() +
                 (rules.getRandomWeaponInterval() * 1000));
-        log.debug("Next weapon rotation scheduled for game {} in {} seconds", 
+        log.debug("Next weapon rotation scheduled for game {} in {} seconds",
                 gameId, rules.getRandomWeaponInterval());
     }
-    
+
     /**
      * Update weapon rotation timer and rotate weapons when time is up.
      */
@@ -967,30 +971,32 @@ public class RuleSystem {
             scheduleNextWeaponRotation();
         }
     }
-    
+
     /**
      * Rotate all active players to new random weapons.
      * Excludes healing weapons to maintain combat focus.
      */
     private void rotateAllPlayerWeapons() {
         int rotatedCount = 0;
-        
+
         for (Player player : gameEntities.getAllPlayers()) {
             if (player.isActive()) {
-                com.fullsteam.model.WeaponConfig newWeapon = 
-                        com.fullsteam.ai.AIWeaponSelector.selectRandomNonHealingWeapon();
-                com.fullsteam.model.UtilityWeapon newUtility = 
-                        com.fullsteam.ai.AIWeaponSelector.selectRandomUtilityWeapon();
-                
+                WeaponConfig newWeapon = AIWeaponSelector.selectRandomNonHealingWeapon();
+                UtilityWeapon newUtility = AIWeaponSelector.selectRandomUtilityWeapon();
+
+                // Notify player of their new loadout
+                String message = String.format("🔀 New Loadout: %s + %s", newWeapon.getType(), newUtility.getDisplayName());
+                gameEventManager.broadcastToPlayer(message, player.getId(), GameEvent.EventCategory.INFO);
+
                 player.applyWeaponConfig(newWeapon, newUtility);
                 rotatedCount++;
-                
-                log.debug("Player {} ({}) assigned new weapons: {}, {}", 
-                        player.getId(), player.getPlayerName(), 
+
+                log.debug("Player {} ({}) assigned new weapons: {}, {}",
+                        player.getId(), player.getPlayerName(),
                         newWeapon.getType(), newUtility.getDisplayName());
             }
         }
-        
+
         if (rotatedCount > 0) {
             gameEventManager.broadcastSystemMessage("🔄 Weapon Rotation! New loadouts assigned!");
             log.info("Game {} - Rotated weapons for {} players", gameId, rotatedCount);

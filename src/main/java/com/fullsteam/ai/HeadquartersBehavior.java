@@ -156,6 +156,9 @@ public class HeadquartersBehavior implements AIBehavior {
             direction.add(perpendicular.multiply(evasion));
             direction.normalize();
 
+            // Apply hazard avoidance
+            direction = HazardAvoidance.calculateSafeMovement(myPos, direction, gameEntities, 100.0);
+
             double moveIntensity = 0.8;
             input.setMoveX(direction.x * moveIntensity);
             input.setMoveY(direction.y * moveIntensity);
@@ -254,6 +257,10 @@ public class HeadquartersBehavior implements AIBehavior {
             
             if (direction.getMagnitude() > 20) {
                 direction.normalize();
+                
+                // Apply hazard avoidance
+                direction = HazardAvoidance.calculateSafeMovement(myPos, direction, gameEntities, 80.0);
+                
                 input.setMoveX(direction.x * 0.6);
                 input.setMoveY(direction.y * 0.6);
             }
