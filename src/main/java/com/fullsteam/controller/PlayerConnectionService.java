@@ -3,13 +3,12 @@ package com.fullsteam.controller;
 import com.fullsteam.GameLobby;
 import com.fullsteam.games.GameManager;
 import com.fullsteam.model.PlayerSession;
+import com.fullsteam.util.IdGenerator;
 import io.micronaut.websocket.WebSocketSession;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Singleton
 public class PlayerConnectionService {
@@ -17,7 +16,6 @@ public class PlayerConnectionService {
     private static final Logger log = LoggerFactory.getLogger(PlayerConnectionService.class);
 
     private final GameLobby gameLobby;
-    private final AtomicInteger playerIdCounter = new AtomicInteger(1);
 
     @Inject
     public PlayerConnectionService(GameLobby gameLobby) {
@@ -26,7 +24,7 @@ public class PlayerConnectionService {
 
     public boolean connectPlayer(WebSocketSession session, String gameId) {
         try {
-            int playerId = playerIdCounter.getAndIncrement();
+            int playerId = IdGenerator.nextPlayerId();
             PlayerSession playerSession = new PlayerSession(playerId, session);
 
             // Get or create game

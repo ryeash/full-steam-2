@@ -1,6 +1,6 @@
 package com.fullsteam.games;
 
-import com.fullsteam.Config;
+import com.fullsteam.util.IdGenerator;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.UtilityWeapon;
@@ -64,7 +64,7 @@ public class UtilitySystem {
             targetPos.add(offset);
         }
         FieldEffect fieldEffect = new FieldEffect(
-                Config.nextId(),
+                IdGenerator.nextEntityId(),
                 activation.playerId,
                 effectType,
                 targetPos,
@@ -124,7 +124,7 @@ public class UtilitySystem {
             return;
         }
         Turret turret = new Turret(
-                Config.nextId(),
+                IdGenerator.nextEntityId(),
                 activation.playerId,
                 activation.team,
                 placement,
@@ -145,7 +145,7 @@ public class UtilitySystem {
         placement.add(offset);
 
         Obstacle barrier = Obstacle.createPlayerBarrier(
-                Config.nextId(),
+                IdGenerator.nextEntityId(),
                 activation.playerId,
                 activation.team,
                 placement,
@@ -166,7 +166,7 @@ public class UtilitySystem {
         Vector2 velocity = activation.direction.copy();
         velocity.multiply(300.0);
         NetProjectile netProjectile = new NetProjectile(
-                Config.nextId(),
+                IdGenerator.nextEntityId(),
                 activation.playerId,
                 activation.team,
                 activation.position,
@@ -182,7 +182,7 @@ public class UtilitySystem {
      */
     private void createProximityMine(Player.UtilityActivation activation) {
         FieldEffect mine = new FieldEffect(
-                Config.nextId(),
+                IdGenerator.nextEntityId(),
                 activation.playerId,
                 FieldEffectType.PROXIMITY_MINE,
                 activation.position,
@@ -206,7 +206,7 @@ public class UtilitySystem {
         offset.multiply(30.0);
         placement.add(offset);
         TeleportPad teleportPad = new TeleportPad(
-                Config.nextId(),
+                IdGenerator.nextEntityId(),
                 activation.playerId,
                 activation.team,
                 placement,
@@ -235,7 +235,7 @@ public class UtilitySystem {
             return;
         }
         DefenseLaser defenseLaser = new DefenseLaser(
-                Config.nextId(),
+                IdGenerator.nextEntityId(),
                 activation.playerId,
                 activation.team,
                 placement,

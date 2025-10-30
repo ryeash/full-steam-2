@@ -1,6 +1,6 @@
 package com.fullsteam.controller;
 
-import com.fullsteam.Config;
+import com.fullsteam.util.GameConstants;
 import com.fullsteam.GameLobby;
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.games.GameManager;
@@ -60,7 +60,7 @@ public class GameController {
     public LobbyInfo getGames() {
         return new LobbyInfo(
                 gameLobby.getGlobalPlayerCount(),
-                Config.MAX_GLOBAL_PLAYERS,
+                GameConstants.MAX_GLOBAL_PLAYERS,
                 gameLobby.getActiveGames()
         );
     }

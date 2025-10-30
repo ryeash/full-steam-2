@@ -1,11 +1,12 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.Config;
+import com.fullsteam.util.IdGenerator;
 import com.fullsteam.games.GameManager;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
-import com.fullsteam.model.StatusEffects;
+import com.fullsteam.games.StatusEffectManager;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
@@ -204,7 +205,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         if (effects.contains(BulletEffect.INCENDIARY)) {
             double burnDamage = projectile.getDamage() * 0.15; // 15% of projectile damage per second
             double burnDuration = 3.0; // 3 seconds of burning
-            StatusEffects.applyBurning(gameManager, player, burnDamage, burnDuration, projectile.getOwnerId());
+            StatusEffectManager.applyBurning(gameManager, player, burnDamage, burnDuration, projectile.getOwnerId());
             log.debug("Applied burn status to player {} from incendiary projectile ({}dps for {}s)",
                     player.getId(), burnDamage, burnDuration);
         }
@@ -215,7 +216,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             double slowDuration = 2.0; // 2 seconds
             Player shooter = gameEntities.getPlayer(projectile.getOwnerId());
             String source = shooter != null ? shooter.getPlayerName() : "Freezing Projectile";
-            StatusEffects.applySlowEffect(player, slowAmount, slowDuration, source);
+            StatusEffectManager.applySlowEffect(player, slowAmount, slowDuration, source);
             log.debug("Applied freeze slow to player {} from freezing projectile", player.getId());
         }
         
@@ -223,7 +224,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         if (effects.contains(BulletEffect.POISON)) {
             double poisonDamage = projectile.getDamage() * 0.1; // 10% of projectile damage per second
             double poisonDuration = 4.0; // 4 seconds of poison
-            StatusEffects.applyPoison(gameManager, player, poisonDamage, poisonDuration, projectile.getOwnerId());
+            StatusEffectManager.applyPoison(gameManager, player, poisonDamage, poisonDuration, projectile.getOwnerId());
             log.debug("Applied poison status to player {} from poison projectile ({}dps for {}s)",
                     player.getId(), poisonDamage, poisonDuration);
         }
@@ -234,7 +235,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             double slowDuration = 1.0; // 1 second shock
             Player shooter = gameEntities.getPlayer(projectile.getOwnerId());
             String source = shooter != null ? shooter.getPlayerName() : "Electric Projectile";
-            StatusEffects.applySlowEffect(player, slowAmount, slowDuration, source);
+            StatusEffectManager.applySlowEffect(player, slowAmount, slowDuration, source);
             log.debug("Applied electric shock slow to player {} from electric projectile", player.getId());
         }
     }
@@ -322,7 +323,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 if (player.takeDamage(effectValue * deltaTime)) {
                     gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
                 }
-                StatusEffects.applyBurning(gameManager, player, effectValue * 0.3, 1.0, fieldEffect.getOwnerId());
+                StatusEffectManager.applyBurning(gameManager, player, effectValue * 0.3, 1.0, fieldEffect.getOwnerId());
 
             }
             case ELECTRIC -> {
@@ -333,7 +334,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 if (player.takeDamage(effectValue * deltaTime)) {
                     gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
                 }
-                StatusEffects.applySlowEffect(player, 5, 0.5,
+                StatusEffectManager.applySlowEffect(player, 5, 0.5,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Electric Field"));
 
             }
@@ -345,7 +346,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 if (player.takeDamage(effectValue * deltaTime)) {
                     gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
                 }
-                StatusEffects.applySlowEffect(player, 5, 1.0,
+                StatusEffectManager.applySlowEffect(player, 5, 1.0,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Freeze Field"));
 
             }
@@ -357,7 +358,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 if (player.takeDamage(effectValue * deltaTime)) {
                     gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
                 }
-                StatusEffects.applyPoison(gameManager, player, effectValue * 0.2, 1.5, fieldEffect.getOwnerId());
+                StatusEffectManager.applyPoison(gameManager, player, effectValue * 0.2, 1.5, fieldEffect.getOwnerId());
             }
             case HEAL_ZONE -> {
                 double effectValue = fieldEffect.getDamageAtPosition(player.getPosition());
@@ -368,7 +369,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 player.setHealth(Math.min(gameManager.getGameConfig().getPlayerMaxHealth(), player.getHealth() + healAmount));
             }
             case SLOW_FIELD -> {
-                StatusEffects.applySlowEffect(player, 10, 1.0,
+                StatusEffectManager.applySlowEffect(player, 10, 1.0,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Slow Field"));
             }
             case SHIELD_BARRIER -> {
@@ -383,7 +384,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 }
             }
             case SPEED_BOOST -> {
-                StatusEffects.applySpeedBoost(player, 0, 2.0, String.valueOf(fieldEffect.getOwnerId()));
+                StatusEffectManager.applySpeedBoost(player, 0, 2.0, String.valueOf(fieldEffect.getOwnerId()));
             }
             case PROXIMITY_MINE -> {
                 gameEntities.addPostUpdateHook(() -> {
@@ -391,7 +392,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                     gameEntities.removeFieldEffect(fieldEffect.getId());
                     gameEntities.getWorld().removeBody(fieldEffect.getBody());
                     FieldEffect explosion = new FieldEffect(
-                            Config.nextId(), // Offset ID to avoid conflicts
+                            IdGenerator.nextEntityId(), // Offset ID to avoid conflicts
                             fieldEffect.getOwnerId(),
                             FieldEffectType.EXPLOSION,
                             fieldEffect.getPosition(),
@@ -477,7 +478,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         if (turretDestroyed) {
             // Create zero-damage explosion field effect
             FieldEffect explosion = new FieldEffect(
-                    Config.nextId(),
+                    IdGenerator.nextEntityId(),
                     turret.getOwnerId(), // Use turret owner for attribution
                     FieldEffectType.EXPLOSION,
                     turret.getPosition(),
@@ -588,7 +589,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
         // Apply ball carrier status effect for oddball mode
         if (flag.isOddball()) {
-            com.fullsteam.model.StatusEffects.applyBallCarrier(player);
+            StatusEffectManager.applyBallCarrier(player);
             
             // Broadcast oddball pickup event
             gameManager.broadcastGameEvent(
@@ -896,7 +897,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
         // Create the power-up
         PowerUp powerUp = new PowerUp(
-                Config.nextId(),
+                IdGenerator.nextEntityId(),
                 spawnPos,
                 selectedType,
                 workshop.getId(),
@@ -915,19 +916,19 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     private void applyPowerUpEffect(Player player, PowerUp.PowerUpEffect effect) {
         switch (effect.getType()) {
             case SPEED_BOOST:
-                StatusEffects.applySpeedBoost(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
+                StatusEffectManager.applySpeedBoost(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
                 break;
             case HEALTH_REGENERATION:
-                StatusEffects.applyHealthRegeneration(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
+                StatusEffectManager.applyHealthRegeneration(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
                 break;
             case DAMAGE_BOOST:
-                StatusEffects.applyDamageBoost(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
+                StatusEffectManager.applyDamageBoost(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
                 break;
             case DAMAGE_RESISTANCE:
-                StatusEffects.applyDamageResistance(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
+                StatusEffectManager.applyDamageResistance(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
                 break;
             case BERSERKER_MODE:
-                StatusEffects.applyBerserkerMode(player, effect.getDuration(), "Workshop Power-up");
+                StatusEffectManager.applyBerserkerMode(player, effect.getDuration(), "Workshop Power-up");
                 break;
         }
     }

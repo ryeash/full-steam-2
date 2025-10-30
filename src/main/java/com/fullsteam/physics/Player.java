@@ -1,6 +1,7 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.Config;
+import com.fullsteam.util.IdGenerator;
 import com.fullsteam.model.AttributeModification;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerInput;
@@ -274,7 +275,7 @@ public class Player extends GameEntity {
      */
     private Beam createBeamFromOrdinance(Ordinance ordinance, Vector2 startPoint, Vector2 direction,
                                          double range, double damage) {
-        int beamId = Config.nextId();
+        int beamId = IdGenerator.nextEntityId();
 
         // Single Beam class handles all beam types via ordinance
         return new Beam(beamId, startPoint, direction, range, damage, getId(), getTeam(), ordinance, weapon.getBulletEffects());
@@ -417,17 +418,4 @@ public class Player extends GameEntity {
         return super.takeDamage(modifiedDamage);
     }
 
-    /**
-     * Respawn the player with proper health and state reset.
-     * Note: This method is now deprecated - respawn logic is handled by GameManager.
-     */
-    @Deprecated
-    public void respawn() {
-        active = true;
-        health = 100;
-        setPosition(respawnPoint.x, respawnPoint.y);
-        setVelocity(0, 0);
-        weapon.reload();
-        isReloading = false;
-    }
 }

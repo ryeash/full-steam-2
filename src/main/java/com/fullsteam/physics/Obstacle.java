@@ -1,6 +1,6 @@
 package com.fullsteam.physics;
 
-import com.fullsteam.Config;
+import com.fullsteam.util.IdGenerator;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Circle;
@@ -539,7 +539,7 @@ public class Obstacle extends GameEntity {
         double xOffset = random.nextGaussian() * 15;
         double yOffset = random.nextGaussian() * 15;
 
-        return new Obstacle(Config.nextId(), x + xOffset, y + yOffset, randomType);
+        return new Obstacle(IdGenerator.nextEntityId(), x + xOffset, y + yOffset, randomType);
     }
 
     /**

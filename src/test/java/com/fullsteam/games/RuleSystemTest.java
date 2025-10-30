@@ -4,6 +4,7 @@ import com.fullsteam.BaseTestClass;
 import com.fullsteam.model.*;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
+import com.fullsteam.games.StatusEffectManager;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.world.World;
 import org.junit.jupiter.api.BeforeEach;
@@ -411,8 +412,8 @@ class RuleSystemTest extends BaseTestClass {
         // Verify VIP status is applied
         Player vip1 = vipEntities.getPlayer(team1Vip);
         Player vip2 = vipEntities.getPlayer(team2Vip);
-        assertTrue(StatusEffects.isVip(vip1), "Team 1 VIP should have VIP status");
-        assertTrue(StatusEffects.isVip(vip2), "Team 2 VIP should have VIP status");
+        assertTrue(StatusEffectManager.isVip(vip1), "Team 1 VIP should have VIP status");
+        assertTrue(StatusEffectManager.isVip(vip2), "Team 2 VIP should have VIP status");
     }
 
     @Test
@@ -507,7 +508,7 @@ class RuleSystemTest extends BaseTestClass {
         assertNotEquals(initialVip, newVip, "VIP should be reassigned to different player");
         
         Player newVipPlayer = vipEntities.getPlayer(newVip);
-        assertTrue(StatusEffects.isVip(newVipPlayer), "New VIP should have VIP status");
+        assertTrue(StatusEffectManager.isVip(newVipPlayer), "New VIP should have VIP status");
     }
 
     // ============================================================================

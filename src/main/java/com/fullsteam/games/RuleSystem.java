@@ -172,13 +172,13 @@ public class RuleSystem {
         if (previousVipId != null) {
             Player previousVip = gameEntities.getPlayer(previousVipId);
             if (previousVip != null) {
-                com.fullsteam.model.StatusEffects.removeVipStatus(previousVip);
+                StatusEffectManager.removeVipStatus(previousVip);
             }
         }
         
         // Set new VIP
         gameEntities.setTeamVip(teamNumber, player.getId());
-        com.fullsteam.model.StatusEffects.applyVipStatus(player);
+        StatusEffectManager.applyVipStatus(player);
         
         // Broadcast VIP selection event
         gameEventManager.broadcastSystemMessage(

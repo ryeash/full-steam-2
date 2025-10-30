@@ -1,6 +1,7 @@
 package com.fullsteam.games;
 
 import com.fullsteam.Config;
+import com.fullsteam.util.IdGenerator;
 import com.fullsteam.model.ActiveGameEvent;
 import com.fullsteam.model.EnvironmentalEvent;
 import com.fullsteam.model.FieldEffect;
@@ -198,7 +199,7 @@ public class EventSystem {
             double radius = getWarningRadius(event.getEventType());
 
             FieldEffect warningZone = new FieldEffect(
-                    Config.nextId(),
+                    IdGenerator.nextEntityId(),
                     -1, // No owner (system event)
                     FieldEffectType.WARNING_ZONE,
                     location,
@@ -253,7 +254,7 @@ public class EventSystem {
     private void triggerMeteorShower(ActiveGameEvent event) {
         for (Vector2 location : event.getTargetLocations()) {
             FieldEffect explosion = new FieldEffect(
-                    Config.nextId(),
+                    IdGenerator.nextEntityId(),
                     -1, // System event
                     FieldEffectType.EXPLOSION,
                     location,
@@ -274,7 +275,7 @@ public class EventSystem {
         for (Vector2 location : event.getTargetLocations()) {
             // Visual explosion (no damage)
             FieldEffect explosion = new FieldEffect(
-                    Config.nextId(),
+                    IdGenerator.nextEntityId(),
                     -1,
                     FieldEffectType.EXPLOSION,
                     location,
@@ -289,7 +290,7 @@ public class EventSystem {
             // Spawn random power-up
             PowerUp.PowerUpType powerUpType = getRandomPowerUpType();
             PowerUp powerUp = new PowerUp(
-                    Config.nextId(),
+                    IdGenerator.nextEntityId(),
                     location,
                     powerUpType,
                     -1, // Not from a workshop
@@ -307,7 +308,7 @@ public class EventSystem {
     private void triggerVolcanicEruption(ActiveGameEvent event) {
         for (Vector2 location : event.getTargetLocations()) {
             FieldEffect eruption = new FieldEffect(
-                    Config.nextId(),
+                    IdGenerator.nextEntityId(),
                     -1,
                     FieldEffectType.FIRE,
                     location,
@@ -329,7 +330,7 @@ public class EventSystem {
     private void triggerEarthquake(ActiveGameEvent event) {
         for (Vector2 location : event.getTargetLocations()) {
             FieldEffect earthquake = new FieldEffect(
-                    Config.nextId(),
+                    IdGenerator.nextEntityId(),
                     -1,
                     FieldEffectType.EARTHQUAKE,
                     location,
@@ -349,7 +350,7 @@ public class EventSystem {
     private void triggerSolarFlare(ActiveGameEvent event) {
         for (Vector2 location : event.getTargetLocations()) {
             FieldEffect fire = new FieldEffect(
-                    Config.nextId(),
+                    IdGenerator.nextEntityId(),
                     -1,
                     FieldEffectType.FIRE,
                     location,
@@ -369,7 +370,7 @@ public class EventSystem {
     private void triggerIonStorm(ActiveGameEvent event) {
         for (Vector2 location : event.getTargetLocations()) {
             FieldEffect electric = new FieldEffect(
-                    Config.nextId(),
+                    IdGenerator.nextEntityId(),
                     -1,
                     FieldEffectType.ELECTRIC,
                     location,
@@ -389,7 +390,7 @@ public class EventSystem {
     private void triggerBlizzard(ActiveGameEvent event) {
         for (Vector2 location : event.getTargetLocations()) {
             FieldEffect freeze = new FieldEffect(
-                    Config.nextId(),
+                    IdGenerator.nextEntityId(),
                     -1,
                     FieldEffectType.FREEZE,
                     location,

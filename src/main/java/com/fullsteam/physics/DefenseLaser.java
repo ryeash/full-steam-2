@@ -1,6 +1,6 @@
 package com.fullsteam.physics;
 
-import com.fullsteam.Config;
+import com.fullsteam.util.IdGenerator;
 import com.fullsteam.model.Ordinance;
 import lombok.Getter;
 import lombok.Setter;
@@ -51,7 +51,7 @@ public class DefenseLaser extends GameEntity {
 
     private static Body createDefenseLaserBody(Vector2 position) {
         Body body = new Body();
-        Circle circle = new Circle(Config.PLAYER_RADIUS * 0.8); // Slightly smaller than player
+        Circle circle = new Circle(20.0 * 0.8); // Slightly smaller than player (20.0 is player radius)
         body.addFixture(circle);
         body.setMass(MassType.INFINITE); // Stationary
         body.getTransform().setTranslation(position.x, position.y);
@@ -70,7 +70,7 @@ public class DefenseLaser extends GameEntity {
             Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
             
             Beam beam = new Beam(
-                Config.nextId(),
+                IdGenerator.nextEntityId(),
                 center,
                 direction,
                 beamLength,

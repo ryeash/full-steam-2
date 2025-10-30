@@ -1,7 +1,7 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.Config;
-import com.fullsteam.model.StatusEffects;
+import com.fullsteam.games.StatusEffectManager;
 import lombok.Getter;
 import lombok.Setter;
 import org.dyn4j.dynamics.Body;
@@ -70,7 +70,7 @@ public class NetProjectile extends GameEntity {
 
         // Apply immobilization effect after pushback
         String ownerName = "Net"; // Default name if owner not found
-        StatusEffects.applySlowEffect(player, slowEffect, slowDuration, ownerName);
+        StatusEffectManager.applySlowEffect(player, slowEffect, slowDuration, ownerName);
         // Apply pushback impulse - push player in opposite direction of net's velocity
         player.getBody().applyImpulse(velocity.getNormalized().multiply(pushbackForce));
     }

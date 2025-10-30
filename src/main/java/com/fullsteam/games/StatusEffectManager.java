@@ -1,19 +1,35 @@
-package com.fullsteam.model;
+package com.fullsteam.games;
 
 import com.fullsteam.Config;
-import com.fullsteam.games.GameManager;
+import com.fullsteam.model.AttributeModification;
+import com.fullsteam.model.BaseAttributeModification;
+import com.fullsteam.model.Weapon;
 import com.fullsteam.physics.Player;
 
 /**
- * Collection of common status effects that can be applied to players.
- * These are pre-configured attribute modifications for common game scenarios.
+ * Manages status effects that can be applied to players during gameplay.
+ * This class provides pre-configured attribute modifications for common game scenarios.
+ * 
+ * Status effects include:
+ * - Buffs: Speed boost, damage boost, health regeneration, damage resistance
+ * - Debuffs: Burning, poison, slow
+ * - Game mode effects: Ball carrier (Oddball), VIP status
  */
-public class StatusEffects {
+public final class StatusEffectManager {
 
-    public static void applyEffect(Player player, AttributeModification attributeModification) {
+    private StatusEffectManager() {
+        // Prevent instantiation
+    }
+
+    /**
+     * Apply an effect to a player, replacing any existing effect with the same unique key.
+     */
+    private static void applyEffect(Player player, AttributeModification attributeModification) {
         player.getAttributeModifications().removeIf(am -> am.uniqueKey().equals(attributeModification.uniqueKey()));
         player.getAttributeModifications().add(attributeModification);
     }
+
+    // ========== BUFF EFFECTS ==========
 
     /**
      * Apply a speed boost effect to a player.
@@ -61,39 +77,6 @@ public class StatusEffects {
             public void update(Player player, double delta) {
                 double healthRecovered = healthPerSecond * (delta / 1000);
                 player.setHealth(Math.min(player.getHealth() + healthRecovered, 100));
-            }
-        });
-    }
-
-    public static void applyBurning(GameManager gameManager, Player player, double damagePerSecond, double durationSeconds, int effectOwner) {
-        applyHealthDegeneration(gameManager, "fire:#00FFFF:flame:true:Burning", player, damagePerSecond, durationSeconds, effectOwner);
-    }
-
-    public static void applyPoison(GameManager gameManager, Player player, double damagePerSecond, double durationSeconds, int effectOwner) {
-        applyHealthDegeneration(gameManager, "poison:#00FFFF:pulse:true:Poison", player, damagePerSecond, durationSeconds, effectOwner);
-    }
-
-    /**
-     * Apply health degeneration (poison/bleed) effect to a player.
-     */
-    public static void applyHealthDegeneration(GameManager gameManager, String renderHint, Player player, double damagePerSecond, double durationSeconds, int effectOwner) {
-        applyEffect(player, new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
-            @Override
-            public String uniqueKey() {
-                return "healthDegen";
-            }
-
-            @Override
-            public String renderHint() {
-                return renderHint;
-            }
-
-            @Override
-            public void update(Player player, double delta) {
-                double damage = damagePerSecond * (delta / 1000);
-                if (player.takeDamage(damage)) {
-                    gameManager.killPlayer(player, gameManager.getGameEntities().getPlayer(effectOwner));
-                }
             }
         });
     }
@@ -189,6 +172,47 @@ public class StatusEffects {
         });
     }
 
+    // ========== DEBUFF EFFECTS ==========
+
+    /**
+     * Apply burning effect to a player.
+     */
+    public static void applyBurning(GameManager gameManager, Player player, double damagePerSecond, double durationSeconds, int effectOwner) {
+        applyHealthDegeneration(gameManager, "fire:#00FFFF:flame:true:Burning", player, damagePerSecond, durationSeconds, effectOwner);
+    }
+
+    /**
+     * Apply poison effect to a player.
+     */
+    public static void applyPoison(GameManager gameManager, Player player, double damagePerSecond, double durationSeconds, int effectOwner) {
+        applyHealthDegeneration(gameManager, "poison:#00FFFF:pulse:true:Poison", player, damagePerSecond, durationSeconds, effectOwner);
+    }
+
+    /**
+     * Apply health degeneration (poison/bleed) effect to a player.
+     */
+    private static void applyHealthDegeneration(GameManager gameManager, String renderHint, Player player, double damagePerSecond, double durationSeconds, int effectOwner) {
+        applyEffect(player, new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+            @Override
+            public String uniqueKey() {
+                return "healthDegen";
+            }
+
+            @Override
+            public String renderHint() {
+                return renderHint;
+            }
+
+            @Override
+            public void update(Player player, double delta) {
+                double damage = damagePerSecond * (delta / 1000);
+                if (player.takeDamage(damage)) {
+                    gameManager.killPlayer(player, gameManager.getGameEntities().getPlayer(effectOwner));
+                }
+            }
+        });
+    }
+
     /**
      * Apply slowing effect to a player.
      */
@@ -215,6 +239,8 @@ public class StatusEffects {
             }
         });
     }
+
+    // ========== GAME MODE EFFECTS ==========
 
     /**
      * Apply ball carrier effect to a player (for Oddball mode).
@@ -276,6 +302,14 @@ public class StatusEffects {
     }
 
     /**
+     * Check if a player is carrying the ball.
+     */
+    public static boolean isBallCarrier(Player player) {
+        return player.getAttributeModifications().stream()
+                .anyMatch(am -> "ballCarrier".equals(am.uniqueKey()));
+    }
+
+    /**
      * Apply VIP status to a player (for VIP mode).
      * VIP players are high-value targets - only their kills count towards objective scoring.
      */
@@ -308,3 +342,4 @@ public class StatusEffects {
                 .anyMatch(am -> "vipStatus".equals(am.uniqueKey()));
     }
 }
+

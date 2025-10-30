@@ -3,10 +3,13 @@ package com.fullsteam.games;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fullsteam.Config;
+import com.fullsteam.util.IdGenerator;
 import com.fullsteam.ai.AIGameHelper;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
 import com.fullsteam.model.*;
+import com.fullsteam.util.GameConstants;
+import com.fullsteam.util.WeaponFormatter;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.CollisionProcessor;
 import com.fullsteam.physics.DefenseLaser;
@@ -285,7 +288,7 @@ public class GameManager {
 
         int assignedTeam = assignPlayerToTeam();
         Vector2 spawnPoint = findVariedSpawnPointForTeam(assignedTeam);
-        AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithPersonality(Config.nextId(), spawnPoint.x, spawnPoint.y, personalityType, assignedTeam, gameConfig.getPlayerMaxHealth());
+        AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithPersonality(IdGenerator.nextEntityId(), spawnPoint.x, spawnPoint.y, personalityType, assignedTeam, gameConfig.getPlayerMaxHealth());
         aiPlayer.setHealth(gameConfig.getPlayerMaxHealth());
 
         // Initialize lives based on respawn mode (delegated to RuleSystem)
@@ -774,7 +777,7 @@ public class GameManager {
     private void createWorldBoundaries() {
         double halfWidth = gameConfig.getWorldWidth() / 2.0;
         double halfHeight = gameConfig.getWorldHeight() / 2.0;
-        double wallThickness = 50.0;
+        double wallThickness = GameConstants.WORLD_BOUNDARY_THICKNESS;
 
         Body topWall = new Body();
         topWall.addFixture(new Rectangle(gameConfig.getWorldWidth() + wallThickness * 2, wallThickness));
@@ -940,21 +943,21 @@ public class GameManager {
 
         log.info("Creating {} KOTH zones for game {}", zoneCount, gameId);
 
-        int zoneId = Config.nextId();
+        int zoneId = IdGenerator.nextEntityId();
 
         // Calculate zone positions based on number of zones and teams
         for (int i = 0; i < zoneCount; i++) {
             Vector2 zonePosition = calculateKothZonePosition(i, zoneCount, teamCount);
 
             // Ensure zone position is clear of obstacles
-            if (!terrainGenerator.isPositionClear(zonePosition, 100.0)) {
+            if (!terrainGenerator.isPositionClear(zonePosition, GameConstants.SPAWN_CLEARANCE_RADIUS)) {
                 // Try to find a nearby clear position
                 for (int attempt = 0; attempt < 10; attempt++) {
                     double offsetX = (Math.random() - 0.5) * 200;
                     double offsetY = (Math.random() - 0.5) * 200;
                     Vector2 candidate = new Vector2(zonePosition.x + offsetX, zonePosition.y + offsetY);
 
-                    if (terrainGenerator.isPositionClear(candidate, 100.0)) {
+                    if (terrainGenerator.isPositionClear(candidate, GameConstants.SPAWN_CLEARANCE_RADIUS)) {
                         zonePosition = candidate;
                         break;
                     }
@@ -1047,7 +1050,7 @@ public class GameManager {
             }
 
             Workshop workshop = new Workshop(
-                    Config.nextId(),
+                    IdGenerator.nextEntityId(),
                     workshopPosition,
                     rules.getWorkshopCraftTime(),
                     rules.getMaxPowerUpsPerWorkshop()
@@ -1122,7 +1125,7 @@ public class GameManager {
             }
 
             Headquarters hq = new Headquarters(
-                    Config.nextId(),
+                    IdGenerator.nextEntityId(),
                     teamNumber,
                     hqPosition.x,
                     hqPosition.y,
@@ -1152,7 +1155,7 @@ public class GameManager {
 
                     // Remove ball carrier status effect if this was the oddball
                     if (flag.isOddball() && carrier != null) {
-                        StatusEffects.removeBallCarrier(carrier);
+                        StatusEffectManager.removeBallCarrier(carrier);
                     }
 
                     log.info("Flag {} dropped at ({}, {}) - carrier {} inactive",
@@ -1218,7 +1221,7 @@ public class GameManager {
             
             // Include VIP status
             if (gameConfig.getRules().hasVip()) {
-                playerState.put("isVip", StatusEffects.isVip(player));
+                playerState.put("isVip", StatusEffectManager.isVip(player));
             }
 
             // Include active power-up effects
@@ -1835,7 +1838,7 @@ public class GameManager {
 
     public void killPlayer(Player victim, Player shooter) {
         // Check if this was a VIP kill BEFORE calling die() (which clears status effects)
-        boolean wasVip = gameConfig.getRules().hasVip() && StatusEffects.isVip(victim);
+        boolean wasVip = gameConfig.getRules().hasVip() && StatusEffectManager.isVip(victim);
         
         if (shooter != null) {
             shooter.addKill();
@@ -1884,7 +1887,7 @@ public class GameManager {
 
                 // Remove ball carrier status effect if they were carrying the oddball
                 if (flag.isOddball()) {
-                    StatusEffects.removeBallCarrier(victim);
+                    StatusEffectManager.removeBallCarrier(victim);
                 }
 
                 log.info("Player {} died, dropped flag {}", victim.getId(), flag.getId());
@@ -1896,7 +1899,7 @@ public class GameManager {
         // Broadcast kill event with team colors
         String killerName = shooter != null ? shooter.getPlayerName() : "Unknown";
         String victimName = victim.getPlayerName();
-        String weaponName = shooter != null ? generateWeaponDisplayName(shooter.getCurrentWeapon()) : "Unknown weapon";
+        String weaponName = shooter != null ? WeaponFormatter.getDisplayName(shooter.getCurrentWeapon()) : "Unknown weapon";
         Integer killerTeam = shooter != null ? shooter.getTeam() : null;
         Integer victimTeam = victim.getTeam();
 
@@ -1964,7 +1967,7 @@ public class GameManager {
 
         // Create large explosion effect at HQ location
         FieldEffect explosion = new FieldEffect(
-                Config.nextId(),
+                IdGenerator.nextEntityId(),
                 -1, // No owner
                 FieldEffectType.EXPLOSION,
                 pos,
@@ -2023,46 +2026,4 @@ public class GameManager {
         player.addCapture();
     }
 
-    /**
-     * Generate a meaningful display name for a weapon based on its ordinance and effects.
-     * For custom weapons, shows the ordinance type and primary effects instead of "Custom Weapon".
-     */
-    private String generateWeaponDisplayName(Weapon weapon) {
-        String weaponName = weapon.getName();
-
-        // If it's a preset weapon (not "Custom Weapon"), use the original name
-        if (!"Custom Weapon".equals(weaponName)) {
-            return weaponName;
-        }
-
-        // For custom weapons, generate a name based on ordinance and effects
-        StringBuilder displayName = new StringBuilder();
-
-        // Add ordinance name
-        String ordinanceName = weapon.getOrdinance().name();
-        switch (weapon.getOrdinance()) {
-            case BULLET -> displayName.append("Bullet");
-            case ROCKET -> displayName.append("Rocket");
-            case GRENADE -> displayName.append("Grenade");
-            case PLASMA -> displayName.append("Plasma");
-            case DART -> displayName.append("Dart");
-            case FLAMETHROWER -> displayName.append("Flamethrower");
-            case LASER -> displayName.append("Laser");
-            case PLASMA_BEAM -> displayName.append("Plasma Beam");
-            case HEAL_BEAM -> displayName.append("Heal Beam");
-            case RAILGUN -> displayName.append("Railgun");
-            default -> displayName.append(ordinanceName);
-        }
-
-        // Add primary bullet effects
-        Set<BulletEffect> effects = weapon.getBulletEffects();
-        if (!effects.isEmpty()) {
-            displayName.append(" ");
-            effects.stream()
-                    .min(Comparator.comparing(BulletEffect::ordinal))
-                    .map(e -> "(" + e.toString().toLowerCase() + ")")
-                    .ifPresent(displayName::append);
-        }
-        return displayName.toString();
-    }
 }
