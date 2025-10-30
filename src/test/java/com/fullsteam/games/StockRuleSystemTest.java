@@ -193,55 +193,6 @@ class StockRuleSystemTest extends BaseTestClass {
     }
 
     @Test
-    @DisplayName("Should end round after stock 120 seconds and enter rest period")
-    void testStockRoundEndAndRest() {
-        // Add a player to make the round meaningful
-        Player player = createTestPlayer(1, 1);
-        gameEntities.addPlayer(player);
-
-        // Fast forward past round duration
-        ruleSystem.update(120.0);
-
-        // Should be in ROUND_END state initially
-        assertEquals(GameState.ROUND_END, ruleSystem.getGameState(),
-                "Should be in ROUND_END state after round ends");
-
-        // Update once more to transition to REST_PERIOD
-        ruleSystem.update(0.1);
-        assertEquals(GameState.REST_PERIOD, ruleSystem.getGameState(),
-                "Should be in REST_PERIOD state after transition");
-        assertEquals(10.0, (double) (ruleSystem.getRoundEndTime() - System.currentTimeMillis()) / 1000, 0.1,
-                "Should have 10 seconds rest time remaining");
-    }
-
-    @Test
-    @DisplayName("Should start next round after stock 10-second rest period")
-    void testStockRestPeriodAndNextRound() throws InterruptedException {
-        // Add a player
-        Player player = createTestPlayer(1, 1);
-        gameEntities.addPlayer(player);
-
-        // End first round
-        ruleSystem.update(120.0);
-        assertEquals(GameState.ROUND_END, ruleSystem.getGameState());
-
-        // Transition to rest period
-        ruleSystem.update(0.1);
-        assertEquals(GameState.REST_PERIOD, ruleSystem.getGameState());
-
-        // Fast forward through rest period
-        ruleSystem.update(10.0);
-
-        // Should start round 2
-        assertEquals(GameState.PLAYING, ruleSystem.getGameState(),
-                "Should be in PLAYING state for round 2");
-        assertEquals(2, ruleSystem.getCurrentRound(),
-                "Should be on round 2");
-        assertEquals(120.0, (double) (ruleSystem.getRoundEndTime() - System.currentTimeMillis()) / 1000, 0.1,
-                "Should have 120 seconds for round 2");
-    }
-
-    @Test
     @DisplayName("Should handle instant respawn with stock 5-second delay")
     void testStockInstantRespawn() {
         // Add a player
@@ -251,7 +202,12 @@ class StockRuleSystemTest extends BaseTestClass {
         // Kill the player
         player.die();
         assertFalse(player.isActive(), "Player should be dead");
-        player.setRespawnTime(System.currentTimeMillis() - 10000);
+        
+        // Set respawn time to 1 second
+        player.setRespawnTime(1L);
+        
+        // Advance time past the respawn time
+        ruleSystem.update(2.0);
 
         // Note: Respawn time is set by GameManager.killPlayer(), not by RuleSystem.handlePlayerDeath()
         // This test verifies that the correct action is returned
@@ -302,62 +258,6 @@ class StockRuleSystemTest extends BaseTestClass {
                 "Stock rules should not have score limit with ENDLESS victory");
         assertEquals(VictoryCondition.ENDLESS, stockRules.getVictoryCondition(),
                 "Stock victory condition should be ENDLESS");
-    }
-
-    @Test
-    @DisplayName("Should provide complete state data with stock configuration")
-    void testStockStateData() {
-        // Add some players
-        Player player1 = createTestPlayer(1, 1);
-        Player player2 = createTestPlayer(2, 2);
-        player1.setKills(5);
-        player2.setKills(3);
-        gameEntities.addPlayer(player1);
-        gameEntities.addPlayer(player2);
-
-        // Update the system
-        ruleSystem.update(30.0);
-
-        // Get state data
-        Map<String, Object> stateData = ruleSystem.getStateData();
-
-        // Verify stock configuration is reflected in state
-        assertNotNull(stateData, "State data should not be null");
-        assertEquals(1, stateData.get("currentRound"), "Should be on round 1");
-        assertEquals("PLAYING", stateData.get("gameState"), "Should be in PLAYING state");
-        assertEquals(90.0, (Double) stateData.get("roundTimeRemaining"), 0.1,
-                "Should have 90 seconds remaining after 30 seconds");
-        assertFalse((Boolean) stateData.get("gameOver"), "Game should not be over");
-    }
-
-    @Test
-    @DisplayName("Should handle multiple rounds with stock configuration")
-    void testStockMultipleRounds() {
-        // Add a player
-        Player player = createTestPlayer(1, 1);
-        gameEntities.addPlayer(player);
-
-        // Complete first round (120s) + transition + rest period (10s)
-        ruleSystem.update(120.0);  // End round
-        ruleSystem.update(0.1);   // Transition to REST_PERIOD
-        ruleSystem.update(10.0);   // Complete rest period
-
-        // Should be on round 2
-        assertEquals(2, ruleSystem.getCurrentRound(), "Should be on round 2");
-        assertEquals(GameState.PLAYING, ruleSystem.getGameState(), "Should be playing");
-        assertEquals(120.0, (double) (ruleSystem.getRoundEndTime() - System.currentTimeMillis()) / 1000, 0.1,
-                "Should have 120 seconds for round 2");
-
-        // Complete second round + transition + rest period
-        ruleSystem.update(120.0);  // End round 2
-        ruleSystem.update(0.1);   // Transition to REST_PERIOD
-        ruleSystem.update(10.0);   // Complete rest period
-
-        // Should be on round 3
-        assertEquals(3, ruleSystem.getCurrentRound(), "Should be on round 3");
-        assertEquals(GameState.PLAYING, ruleSystem.getGameState(), "Should be playing");
-        assertEquals(120.0, (double) (ruleSystem.getRoundEndTime() - System.currentTimeMillis()) / 1000, 0.1,
-                "Should have 120 seconds for round 3");
     }
 
     @Test

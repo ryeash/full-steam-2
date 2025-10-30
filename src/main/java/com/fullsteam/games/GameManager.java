@@ -187,13 +187,13 @@ public class GameManager {
                 terrainGenerator
         );
 
-        createWorldBoundaries();
-        createObstacles();
-        createFlags();
-        createOddball();
-        createKothZones();
-        createWorkshops();
-        createHeadquarters();
+        entitySpawner.createWorldBoundaries();
+        entitySpawner.createObstacles();
+        entitySpawner.createFlags();
+        entitySpawner.createOddball();
+        entitySpawner.createKothZones();
+        entitySpawner.createWorkshops();
+        entitySpawner.createHeadquarters();
 
         // Initialize event system if enabled (must be after terrain generation)
         ruleSystem.initializeEventSystem(
@@ -807,22 +807,10 @@ public class GameManager {
         return gameConfig.getMaxPlayers();
     }
 
-    private void createWorldBoundaries() {
-        entitySpawner.createWorldBoundaries();
-    }
-
-
-    private void createObstacles() {
-        entitySpawner.createObstacles();
-    }
 
     /**
      * Create flags for capture-the-flag gameplay if configured.
      */
-    private void createFlags() {
-        entitySpawner.createFlags();
-    }
-
     /**
      * Calculate flag position within a team's area.
      * For multiple flags, distributes them around the team center.
@@ -850,18 +838,10 @@ public class GameManager {
      * Create the oddball if oddball mode is enabled.
      * The oddball is a neutral flag (team 0) spawned at the world center.
      */
-    private void createOddball() {
-        entitySpawner.createOddball();
-    }
-
     /**
      * Create King of the Hill zones if enabled in rules.
      * Zones are placed strategically between team spawn areas for fair gameplay.
      */
-    private void createKothZones() {
-        entitySpawner.createKothZones();
-    }
-
     /**
      * Calculate fair positioning for KOTH zones.
      * Zones are placed equidistant from team spawn areas to ensure no team has an advantage.
@@ -905,18 +885,10 @@ public class GameManager {
      * Create workshops if enabled in rules.
      * Each team gets one workshop placed in their spawn zone.
      */
-    private void createWorkshops() {
-        entitySpawner.createWorkshops();
-    }
-
     /**
      * Create headquarters if enabled in rules.
      * Each team gets one headquarters placed in their spawn zone (defensive position).
      */
-    private void createHeadquarters() {
-        entitySpawner.createHeadquarters();
-    }
-
     /**
      * Update positions of flags that are being carried by players.
      */
@@ -1008,7 +980,6 @@ public class GameManager {
         return gameStateSerializer.createInitialGameState(player);
     }
 
-    // OLD IMPLEMENTATION - TO BE REMOVED
     private void processPlayerRespawns() {
         for (Player player : gameEntities.getAllPlayers()) {
             if (ruleSystem.shouldPlayerRespawn(player)) {

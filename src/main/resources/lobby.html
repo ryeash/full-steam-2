@@ -935,7 +935,7 @@
                 teamCount: 0,                   // Every player for themselves (FFA)
                 worldWidth: 4000,               // Much larger world for 50 players
                 worldHeight: 4000,              // Gives space to spread out and strategize
-                playerMaxHealth: 100,
+                playerMaxHealth: 250,           // More health for more engaging firefights
                 aiCheckIntervalMs: 10000,
                 enableAIFilling: true,
                 rules: {
@@ -947,7 +947,7 @@
                     scoreLimit: 50,
                     timeLimit: 1200,            // 20 minute max (safety limit for 50 players)
                     suddenDeath: false,
-                    lockGameAfterSeconds: 30,   // Lock game after 30s - no late joins in BR!
+                    lockGameAfterSeconds: 15,   // Lock game after 15s - no late joins in BR!
                     respawnMode: 'ELIMINATION', // ONE LIFE - Battle Royale style!
                     respawnDelay: 0,
                     waveRespawnInterval: 30,
