@@ -769,6 +769,9 @@ class GameEngine {
         // Create clean 2D top-down assets
         
         // Player sprite - clean circular design
+        // Use a container to ensure the texture is centered on the circle, not the overall bounds
+        const playerContainer = new PIXI.Container();
+        
         const playerGraphics = new PIXI.Graphics();
         playerGraphics.beginFill(0x8c8c8c);
         playerGraphics.drawCircle(0, 0, 20);
@@ -779,8 +782,16 @@ class GameEngine {
         playerGraphics.drawPolygon([15, 0, 25, -5, 25, 5]);
         playerGraphics.endFill();
         
-        this.playerTexture = this.app.renderer.generateTexture(playerGraphics);
-        playerGraphics.destroy(); // Clean up graphics after generating texture
+        playerContainer.addChild(playerGraphics);
+        
+        // Generate texture with explicit bounds centered on the circle (not the triangle)
+        // This ensures rotation happens around the circle's center
+        const bounds = new PIXI.Rectangle(-25, -25, 50, 50);
+        this.playerTexture = this.app.renderer.generateTexture(playerContainer, {
+            region: bounds,
+            resolution: 1
+        });
+        playerContainer.destroy({ children: true }); // Clean up after generating texture
         
         // Projectile - simple bullet
         const projectileGraphics = new PIXI.Graphics();
