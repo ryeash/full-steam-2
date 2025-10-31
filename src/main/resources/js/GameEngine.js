@@ -826,7 +826,6 @@ class GameEngine {
         deathGraphics.destroy(); // Clean up graphics after generating texture
     }
     
-    
     async connectToServer() {
         const params = new URLSearchParams(window.location.search);
         const gameId = params.get('gameId') || 'default';
@@ -905,7 +904,6 @@ class GameEngine {
         
         // Smoothly interpolate zoom level
         this.zoomLevel += (this.targetZoomLevel - this.zoomLevel) * this.zoomSmoothingFactor;
-        
         this.updateCameraTransform();
         this.updateMinimap();
     }
@@ -1021,8 +1019,6 @@ class GameEngine {
     }
     
     handleSpectatorInit(data) {
-        console.log('Spectator init received', data);
-        
         // Set world bounds (server sends worldWidth/worldHeight directly)
         this.worldBounds.width = data.worldWidth || 2000;
         this.worldBounds.height = data.worldHeight || 2000;
@@ -1602,7 +1598,6 @@ class GameEngine {
      * Handle round end event - display scores
      */
     handleRoundEnd(data) {
-        console.log('Round ended:', data);
         this.showRoundEndScreen(data);
     }
     
@@ -1610,7 +1605,6 @@ class GameEngine {
      * Handle round start event - clear round end screen
      */
     handleRoundStart(data) {
-        console.log('Round started:', data);
         this.hideRoundEndScreen();
     }
     
@@ -7479,8 +7473,6 @@ class GameEngine {
             weaponConfig: weaponConfig,
             utilityWeapon: utilityWeapon
         };
-
-        console.log('Sending player configuration:', message);
         this.websocket.send(JSON.stringify(message));
     }
     
@@ -7630,7 +7622,6 @@ class GameEngine {
      */
     handleWebGLContextLost() {
         console.warn('WebGL context lost - stopping game engine');
-        
         // Clear the memory cleanup interval to prevent errors
         if (this.memoryCleanupInterval) {
             clearInterval(this.memoryCleanupInterval);
@@ -7681,8 +7672,6 @@ class GameEngine {
                           this.fieldEffects.size + this.beams.size + this.utilityEntities.size + 
                           this.flags.size + this.kothZones.size
         };
-        
-        console.log('Entity Management Stats:', stats);
         return stats;
     }
 
