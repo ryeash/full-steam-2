@@ -15,6 +15,49 @@ import com.fullsteam.util.GameConstants;
  * - Buffs: Speed boost, damage boost, health regeneration, damage resistance, invincibility
  * - Debuffs: Burning, poison, slow
  * - Game mode effects: Ball carrier (Oddball), VIP status
+ * 
+ * <h2>RenderHint Format</h2>
+ * Status effects use a declarative renderHint string to control visual appearance on the client:
+ * <pre>
+ * "effect_name:#HEXCOLOR:animation_type:show_icon:Display Name:params"
+ * </pre>
+ * 
+ * <h3>Fields:</h3>
+ * <ul>
+ *   <li><b>effect_name</b>: Internal identifier (e.g., "poison", "fire", "speed_sparks")</li>
+ *   <li><b>#HEXCOLOR</b>: Color in hex format (e.g., "#FF4500" for orange-red)</li>
+ *   <li><b>animation_type</b>: Visual effect type - see Animation Types below</li>
+ *   <li><b>show_icon</b>: "true" to show badge icon, "false" to hide</li>
+ *   <li><b>Display Name</b>: Human-readable name shown to player</li>
+ *   <li><b>params</b>: (Optional) JSON object with animation parameters</li>
+ * </ul>
+ * 
+ * <h3>Animation Types:</h3>
+ * <ul>
+ *   <li><b>pulse/sparkle</b>: Pulsing ring with rotating particles
+ *       <br>Params: {particles, radius, particleDistance, particleSize}</li>
+ *   <li><b>shield</b>: Polygonal shield pattern
+ *       <br>Params: {sides, size}</li>
+ *   <li><b>slow</b>: Dripping effect for debuffs
+ *       <br>Params: {drops, radius, dropSize, dripAmount}</li>
+ *   <li><b>cloud</b>: Billowing cloud effect (poison)
+ *       <br>Params: {radius, puffs, wisps}</li>
+ *   <li><b>flame</b>: Flickering fire particles (burning)
+ *       <br>Params: {count, radius, height}</li>
+ *   <li><b>star</b>: Orbiting stars (special status)
+ *       <br>Params: {count, radius, size}</li>
+ *   <li><b>crown</b>: VIP crown with sparkles</li>
+ * </ul>
+ * 
+ * <h3>Examples:</h3>
+ * <pre>
+ * // Simple format (no params)
+ * "poison:#8BC34A:cloud:true:Poison"
+ * 
+ * // Enhanced format with parameters
+ * "fire:#FF4500:flame:true:Burning:{\"count\":12,\"radius\":22,\"height\":10}"
+ * "speed_sparks:#00FFFF:sparkle:true:Speed Boost:{\"particles\":12,\"particleDistance\":28}"
+ * </pre>
  */
 public final class StatusEffectManager {
 
@@ -44,7 +87,8 @@ public final class StatusEffectManager {
 
             @Override
             public String renderHint() {
-                return "speed_sparks:#00FFFF:sparkle:true:Speed Boost";
+                // Enhanced format with parameters: more particles for speed effect
+                return "speed_sparks:#00FFFF:sparkle:true:Speed Boost:{\"particles\":12,\"particleDistance\":28}";
             }
 
             @Override
@@ -94,7 +138,8 @@ public final class StatusEffectManager {
 
             @Override
             public String renderHint() {
-                return "shield_shimmer:#FFD700:shield:true:Protected!";
+                // Enhanced format: octagonal shield for stronger protection feel
+                return "shield_shimmer:#FFD700:shield:true:Protected!:{\"sides\":8,\"size\":24}";
             }
 
             @Override
@@ -218,7 +263,8 @@ public final class StatusEffectManager {
      * Apply burning effect to a player.
      */
     public static void applyBurning(GameManager gameManager, Player player, double damagePerSecond, double durationSeconds, int effectOwner) {
-        applyHealthDegeneration(gameManager, "fire:#00FFFF:flame:true:Burning", player, damagePerSecond, durationSeconds, effectOwner);
+        // Enhanced format: customizable flame parameters
+        applyHealthDegeneration(gameManager, "fire:#FF4500:flame:true:Burning:{\"count\":12,\"radius\":22,\"height\":10}", player, damagePerSecond, durationSeconds, effectOwner);
     }
 
     /**
