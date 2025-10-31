@@ -2692,6 +2692,43 @@ class GameEngine {
                     aura.drawCircle(x, y, 3);
                 }
                 aura.endFill();
+            } else if (effect.animation === 'cloud') {
+                // Cloud effect - for poison (green pallor cloud)
+                const time = Date.now() * 0.001;
+                const baseRadius = 22;
+                
+                // Create multiple overlapping cloud puffs for organic shape
+                const numPuffs = 6;
+                for (let i = 0; i < numPuffs; i++) {
+                    const angle = (i / numPuffs) * Math.PI * 2 + time * 0.5;
+                    const puffDistance = baseRadius * 0.6;
+                    const x = Math.cos(angle) * puffDistance;
+                    const y = Math.sin(angle) * puffDistance;
+                    const puffSize = baseRadius * (0.5 + Math.sin(time * 2 + i) * 0.1);
+                    
+                    aura.beginFill(effect.color, 0.25 + Math.sin(time * 3 + i) * 0.1);
+                    aura.drawCircle(x, y, puffSize);
+                    aura.endFill();
+                }
+                
+                // Central cloud mass
+                const centralSize = baseRadius * (0.7 + Math.sin(time * 1.5) * 0.1);
+                aura.beginFill(effect.color, 0.3);
+                aura.drawCircle(0, 0, centralSize);
+                aura.endFill();
+                
+                // Add smaller wispy details
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i / 8) * Math.PI * 2 + time * 1.5;
+                    const distance = baseRadius * 0.8;
+                    const x = Math.cos(angle) * distance;
+                    const y = Math.sin(angle) * distance;
+                    const wispSize = 3 + Math.sin(time * 4 + i) * 1;
+                    
+                    aura.beginFill(effect.color, 0.35 + Math.sin(time * 5 + i) * 0.15);
+                    aura.drawCircle(x, y, wispSize);
+                    aura.endFill();
+                }
             } else if (effect.animation === 'crown') {
                 // VIP crown - special prominent indicator
                 const time = Date.now() * 0.003;
@@ -3801,49 +3838,37 @@ class GameEngine {
      * Create CTF flag graphics (traditional flag)
      */
     createCTFFlagGraphics(flagContainer, flagData) {
-        // Create flag pole
+        // Create flag pole (extends upward from base)
         const pole = new PIXI.Graphics();
-        pole.beginFill(0x333333);
-        pole.drawRect(-2, -30, 4, 30);
+        pole.beginFill(0xEEEEEE); // Very bright silver/chrome
+        pole.lineStyle(1, 0xFFFFFF, 0.8); // White outline for extra visibility
+        pole.drawRect(-2, 0, 4, 30);
         pole.endFill();
         flagContainer.addChild(pole);
         
-        // Create flag sprite (triangle)
+        // Create flag sprite (triangle) - flag at top of pole
         const flag = new PIXI.Graphics();
         const teamColor = this.getTeamColor(flagData.ownerTeam);
         flag.beginFill(teamColor);
-        flag.moveTo(0, -30);
-        flag.lineTo(20, -20);
-        flag.lineTo(0, -10);
-        flag.lineTo(0, -30);
+        flag.moveTo(0, 30);
+        flag.lineTo(20, 20);
+        flag.lineTo(0, 10);
+        flag.lineTo(0, 30);
         flag.endFill();
         
         // Add black outline
         flag.lineStyle(1, 0x000000, 1);
-        flag.moveTo(0, -30);
-        flag.lineTo(20, -20);
-        flag.lineTo(0, -10);
+        flag.moveTo(0, 30);
+        flag.lineTo(20, 20);
+        flag.lineTo(0, 10);
         
         flagContainer.addChild(flag);
         flagContainer.flagSprite = flag;
         
-        // Add team number text on flag
-        const teamText = new PIXI.Text(`${flagData.ownerTeam}`, {
-            fontSize: 12,
-            fill: 0xffffff,
-            fontWeight: 'bold',
-            stroke: 0x000000,
-            strokeThickness: 2
-        });
-        teamText.anchor.set(0.5);
-        teamText.scale.y = -1; // Flip Y-axis back so text is readable
-        teamText.position.set(10, -20);
-        flagContainer.addChild(teamText);
-        
         // Add glow effect for visibility
         const glow = new PIXI.Graphics();
         glow.beginFill(teamColor, 0.3);
-        glow.drawCircle(0, -15, 25);
+        glow.drawCircle(0, 15, 25);
         glow.endFill();
         flagContainer.addChildAt(glow, 0); // Behind everything else
         flagContainer.glow = glow;
@@ -5933,63 +5958,67 @@ class GameEngine {
      * Create poison effect graphics
      */
     createPoisonGraphics(graphics, radius, effectData) {
-        // Outer poison cloud - darker green
-        graphics.beginFill(0x2e7d32, 0.3);
+        // Create a pallor-like green cloud effect with multiple overlapping soft circles
+        // to simulate a misty, toxic gas cloud
+        
+        // Outer diffuse cloud - very pale sickly green
+        graphics.beginFill(0x9ccc65, 0.15);
         graphics.drawCircle(0, 0, radius);
         graphics.endFill();
         
-        // Middle poison cloud - medium green
-        graphics.beginFill(0x388e3c, 0.5);
-        graphics.drawCircle(0, 0, radius * 0.7);
-        graphics.endFill();
-        
-        // Inner poison cloud - brighter green
-        graphics.beginFill(0x4caf50, 0.6);
-        graphics.drawCircle(0, 0, radius * 0.4);
-        graphics.endFill();
-        
-        // Toxic bubbles scattered throughout
-        for (let i = 0; i < 15; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * radius * 0.9;
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const size = 1.5 + Math.random() * 3;
+        // Create multiple overlapping cloud puffs for organic cloud shape
+        const numPuffs = 8;
+        for (let i = 0; i < numPuffs; i++) {
+            const angle = (i / numPuffs) * Math.PI * 2;
+            const puffDistance = radius * 0.4;
+            const x = Math.cos(angle) * puffDistance;
+            const y = Math.sin(angle) * puffDistance;
+            const puffSize = radius * (0.5 + Math.random() * 0.2);
             
-            // Vary bubble colors for more realistic poison effect
-            const bubbleColors = [0x66bb6a, 0x81c784, 0x9ccc65, 0x8bc34a];
-            const bubbleColor = bubbleColors[Math.floor(Math.random() * bubbleColors.length)];
-            
-            graphics.beginFill(bubbleColor, 0.7);
-            graphics.drawCircle(x, y, size);
+            // Sickly pale green with varying opacity
+            graphics.beginFill(0x8bc34a, 0.2 + Math.random() * 0.15);
+            graphics.drawCircle(x, y, puffSize);
             graphics.endFill();
         }
         
-        // Poison center - most concentrated
-        graphics.beginFill(0x76ff03, 0.8);
-        graphics.drawCircle(0, 0, radius * 0.2);
+        // Middle layer - more concentrated pallor
+        graphics.beginFill(0x7cb342, 0.25);
+        graphics.drawCircle(0, 0, radius * 0.65);
         graphics.endFill();
         
-        // Add some swirling lines for gas effect
-        graphics.lineStyle(1, 0x689f38, 0.4);
+        // Add smaller wispy cloud details
+        for (let i = 0; i < 12; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.random() * radius * 0.7;
+            const x = Math.cos(angle) * distance;
+            const y = Math.sin(angle) * distance;
+            const wispSize = radius * (0.15 + Math.random() * 0.15);
+            
+            // Varying shades of sickly green
+            const wispColors = [0x9ccc65, 0x8bc34a, 0x7cb342, 0x689f38];
+            const wispColor = wispColors[Math.floor(Math.random() * wispColors.length)];
+            
+            graphics.beginFill(wispColor, 0.2 + Math.random() * 0.15);
+            graphics.drawCircle(x, y, wispSize);
+            graphics.endFill();
+        }
+        
+        // Central denser cloud
+        graphics.beginFill(0x689f38, 0.3);
+        graphics.drawCircle(0, 0, radius * 0.35);
+        graphics.endFill();
+        
+        // Add a few darker spots for depth
         for (let i = 0; i < 5; i++) {
-            const startAngle = (i / 5) * Math.PI * 2;
-            const spiralRadius = radius * 0.6;
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.random() * radius * 0.4;
+            const x = Math.cos(angle) * distance;
+            const y = Math.sin(angle) * distance;
+            const spotSize = radius * (0.08 + Math.random() * 0.1);
             
-            graphics.moveTo(
-                Math.cos(startAngle) * spiralRadius * 0.3,
-                Math.sin(startAngle) * spiralRadius * 0.3
-            );
-            
-            // Create spiral effect
-            for (let j = 1; j <= 8; j++) {
-                const angle = startAngle + (j / 8) * Math.PI * 0.5;
-                const currentRadius = spiralRadius * (0.3 + (j / 8) * 0.7);
-                graphics.lineTo(
-                    Math.cos(angle) * currentRadius,
-                    Math.sin(angle) * currentRadius
-                );
-            }
+            graphics.beginFill(0x558b2f, 0.25);
+            graphics.drawCircle(x, y, spotSize);
+            graphics.endFill();
         }
         
         return graphics;
@@ -6613,32 +6642,30 @@ class GameEngine {
     animatePoison(container) {
         const time = container.animationTime;
         
-        // Slow bubbling effect with multiple frequencies for organic feel
-        const bubble1 = Math.sin(time * 4) * 0.05;
-        const bubble2 = Math.sin(time * 6.5) * 0.03;
-        const bubble3 = Math.sin(time * 8.2) * 0.02;
-        const totalBubble = 0.95 + bubble1 + bubble2 + bubble3;
-        container.scale.set(totalBubble);
+        // Slow billowing cloud effect - gentle expansion and contraction
+        const billow1 = Math.sin(time * 1.2) * 0.04;
+        const billow2 = Math.sin(time * 1.8) * 0.03;
+        const billow3 = Math.sin(time * 2.3) * 0.02;
+        const totalBillow = 1.0 + billow1 + billow2 + billow3;
+        container.scale.set(totalBillow);
         
-        // Gentle swaying with multiple wave components for more natural movement
-        const sway1 = Math.sin(time * 1.8) * 0.03;
-        const sway2 = Math.sin(time * 2.7) * 0.02;
-        container.rotation = sway1 + sway2;
+        // Very slow rotation to simulate cloud swirling
+        container.rotation = time * 0.15;
         
-        // Pulsing alpha to simulate gas density changes
-        const pulse1 = Math.sin(time * 3) * 0.08;
-        const pulse2 = Math.sin(time * 5.3) * 0.05;
-        container.alpha = 0.75 + pulse1 + pulse2;
+        // Pulsing alpha to simulate cloud density changes - more subtle for pallor effect
+        const pulse1 = Math.sin(time * 1.5) * 0.06;
+        const pulse2 = Math.sin(time * 2.2) * 0.04;
+        container.alpha = 0.7 + pulse1 + pulse2;
         
-        // Add subtle position drift to simulate gas movement
+        // Add subtle position drift to simulate gas spreading and movement
         if (!container.originalX) {
             container.originalX = container.x;
             container.originalY = container.y;
         }
         
-        const drift = time * 0.3;
-        container.x = container.originalX + Math.sin(drift) * 2;
-        container.y = container.originalY + Math.cos(drift * 1.3) * 1.5;
+        const drift = time * 0.2;
+        container.x = container.originalX + Math.sin(drift) * 3;
+        container.y = container.originalY + Math.cos(drift * 0.8) * 2.5;
     }
     
     /**

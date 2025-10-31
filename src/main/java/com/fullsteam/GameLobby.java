@@ -48,14 +48,12 @@ public class GameLobby {
     }
 
     public GameManager createGame() {
-        // Use default config
-        GameConfig defaultConfig = GameConfig.builder()
+        return createGameWithConfig(GameConfig.builder()
                 .maxPlayers(18)
                 .teamCount(4)
-                .worldHeight(2000)
+                .worldHeight(3000)
                 .worldWidth(3000)
-                .build();
-        return createGameWithConfig(defaultConfig);
+                .build());
     }
 
     public GameManager createGameWithConfig(GameConfig gameConfig) {

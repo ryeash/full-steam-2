@@ -13,7 +13,6 @@ import java.util.Set;
 public final class WeaponFormatter {
 
     private WeaponFormatter() {
-        // Prevent instantiation
     }
 
     /**

@@ -37,7 +37,7 @@ public final class IdGenerator {
      * @return Unique game ID string
      */
     public static String nextGameId() {
-        return "game_" + GAME_ID.getAndIncrement();
+        return "" + GAME_ID.getAndIncrement();
     }
 
     /**
@@ -47,16 +47,6 @@ public final class IdGenerator {
      */
     public static int nextPlayerId() {
         return PLAYER_ID.getAndIncrement();
-    }
-
-    /**
-     * Reset all ID generators (for testing purposes only).
-     * WARNING: Only call this in test setup!
-     */
-    public static void resetForTesting() {
-        ENTITY_ID.set(1);
-        GAME_ID.set(1);
-        PLAYER_ID.set(1);
     }
 }
 

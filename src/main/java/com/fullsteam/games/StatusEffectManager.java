@@ -225,7 +225,7 @@ public final class StatusEffectManager {
      * Apply poison effect to a player.
      */
     public static void applyPoison(GameManager gameManager, Player player, double damagePerSecond, double durationSeconds, int effectOwner) {
-        applyHealthDegeneration(gameManager, "poison:#00FFFF:pulse:true:Poison", player, damagePerSecond, durationSeconds, effectOwner);
+        applyHealthDegeneration(gameManager, "poison:#8BC34A:cloud:true:Poison", player, damagePerSecond, durationSeconds, effectOwner);
     }
 
     /**
