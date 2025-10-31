@@ -96,6 +96,11 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             handlePlayerProjectileCollision(player, projectile);
             return false; // Prevent physics resolution for projectile hits
 
+        } else if ((entity1 instanceof Projectile || entity1 instanceof Beam) && entity2 instanceof Workshop) {
+            return false; // Projectiles and beams pass through workshops (they're sensors)
+        } else if (entity1 instanceof Workshop && (entity2 instanceof Projectile || entity2 instanceof Beam)) {
+            return false; // Projectiles and beams pass through workshops (they're sensors)
+
         } else if (entity1 instanceof Projectile projectile && entity2 instanceof Obstacle obstacle) {
             return handleProjectileObstacleCollision(projectile, obstacle);
         } else if (entity1 instanceof Obstacle obstacle && entity2 instanceof Projectile projectile) {
