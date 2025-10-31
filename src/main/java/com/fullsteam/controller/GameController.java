@@ -254,8 +254,8 @@ public class GameController {
             "/lobby.html",
             "/game.html",
             "/config.html",
-            "/color-palette.js",
             "/js/{file}",
+            "/js/spectator/{file}",
             "/unified.css",
             "/favicon.ico",
             "/robots.txt"

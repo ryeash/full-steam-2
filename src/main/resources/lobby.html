@@ -1260,7 +1260,8 @@
     }
 
     function spectateGame(gameId) {
-        window.location.href = `/config.html?spectate=true&gameId=${gameId}`;
+        // Spectators go directly to the game, skipping config
+        window.location.href = `/game.html?spectate=true&gameId=${gameId}`;
     }
 
     // Add connection status monitoring

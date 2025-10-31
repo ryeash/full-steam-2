@@ -27,6 +27,10 @@ class GameEngine {
         this.maxZoom = 2.0;
         this.zoomSmoothingFactor = 0.05; // Smooth zoom transitions
         
+        // Spectator mode
+        this.isSpectator = false;
+        this.spectatorMode = null; // Will be SpectatorMode instance if spectating
+        
         // Store references to event handlers and timeouts for cleanup
         this.eventHandlers = {
             webglContextLost: null,
@@ -719,9 +723,13 @@ class GameEngine {
         window.gameEngine = this;
         
         this.inputManager = new InputManager();
-        this.inputManager.onInputChange = (input) => {
-            this.sendPlayerInput(input);
-        };
+        
+        // Spectators don't send input to server
+        if (!this.isSpectator) {
+            this.inputManager.onInputChange = (input) => {
+                this.sendPlayerInput(input);
+            };
+        }
         
         // Store reference for HUD updates
         this.inputManager.gameEngine = this;
@@ -811,15 +819,22 @@ class GameEngine {
     async connectToServer() {
         const params = new URLSearchParams(window.location.search);
         const gameId = params.get('gameId') || 'default';
+        const spectate = params.get('spectate') === 'true';
+        
+        // Set spectator flag
+        this.isSpectator = spectate;
         
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/game/${gameId}`;
+        const wsUrl = `${protocol}//${window.location.host}/game/${gameId}?spectate=${spectate}`;
         
         return new Promise((resolve, reject) => {
             this.websocket = new WebSocket(wsUrl);
             
             this.websocket.onopen = () => {
-                this.sendPlayerConfiguration();
+                // Spectators don't need to send configuration
+                if (!this.isSpectator) {
+                    this.sendPlayerConfiguration();
+                }
                 resolve();
             };
             
@@ -851,23 +866,31 @@ class GameEngine {
     gameLoop() {
         this.gameLoopCounter = (this.gameLoopCounter || 0) + 1;
         
-        if (this.myPlayerId && this.players.has(this.myPlayerId)) {
-            const myPlayer = this.players.get(this.myPlayerId);
-            if (myPlayer && myPlayer.playerData) {
-                this.camera.targetX = myPlayer.playerData.x;
-                this.camera.targetY = myPlayer.playerData.y; // No inversion needed - coordinates match now!
-                
-                // Update target zoom based on weapon range
-                this.updateZoomForWeaponRange(myPlayer.playerData);
-            }
-            } else {
-            // Default camera position if no player yet
-            this.camera.targetX = 0;
-            this.camera.targetY = 0;
-        }
+        const deltaTime = this.app.ticker.deltaMS / 1000;
         
-        this.camera.x += (this.camera.targetX - this.camera.x) * this.camera.smoothing;
-        this.camera.y += (this.camera.targetY - this.camera.y) * this.camera.smoothing;
+        // Update spectator mode if active (spectator handles its own camera)
+        if (this.spectatorMode) {
+            this.spectatorMode.update(deltaTime);
+        } else {
+            // Normal player camera logic
+            if (this.myPlayerId && this.players.has(this.myPlayerId)) {
+                const myPlayer = this.players.get(this.myPlayerId);
+                if (myPlayer && myPlayer.playerData) {
+                    this.camera.targetX = myPlayer.playerData.x;
+                    this.camera.targetY = myPlayer.playerData.y; // No inversion needed - coordinates match now!
+                    
+                    // Update target zoom based on weapon range
+                    this.updateZoomForWeaponRange(myPlayer.playerData);
+                }
+            } else {
+                // Default camera position if no player yet
+                this.camera.targetX = 0;
+                this.camera.targetY = 0;
+            }
+            
+            this.camera.x += (this.camera.targetX - this.camera.x) * this.camera.smoothing;
+            this.camera.y += (this.camera.targetY - this.camera.y) * this.camera.smoothing;
+        }
         
         // Smoothly interpolate zoom level
         this.zoomLevel += (this.targetZoomLevel - this.zoomLevel) * this.zoomSmoothingFactor;
@@ -950,6 +973,17 @@ class GameEngine {
     }
     
     handleServerMessage(data) {
+        // Handle spectator-specific messages
+        if (data.type === 'spectatorInit') {
+            this.handleSpectatorInit(data);
+            return;
+        }
+        
+        // Delegate to spectator mode if active
+        if (this.spectatorMode) {
+            this.spectatorMode.handleServerMessage(data);
+        }
+        
         switch (data.type) {
             case 'initialState':
                 this.handleInitialState(data);
@@ -973,6 +1007,43 @@ class GameEngine {
                 this.showGameOverScreen(data);
                 break;
         }
+    }
+    
+    handleSpectatorInit(data) {
+        console.log('Spectator init received', data);
+        
+        // Set world bounds (server sends worldWidth/worldHeight directly)
+        this.worldBounds.width = data.worldWidth || 2000;
+        this.worldBounds.height = data.worldHeight || 2000;
+        
+        // Store team information (for rendering)
+        this.teamMode = data.teamMode || false;
+        this.teamCount = data.teamCount || 0;
+        
+        // Store terrain information
+        this.terrainData = data.terrain || null;
+        
+        // Create background and grid (same as normal players)
+        if (this.terrainData) {
+            this.createProceduralTerrain();
+        }
+        
+        if (this.teamMode && data.teamAreas) {
+            this.teamAreas = data.teamAreas;
+            this.createTeamSpawnAreas();
+        }
+        
+        this.createCrosshatchGrid();
+        
+        // Don't create minimap for spectators (they have full view)
+        // Spectators don't need player HUD either
+        
+        // Create spectator mode instance
+        this.spectatorMode = new SpectatorMode(this);
+        this.spectatorMode.init(data);
+        
+        // Show game UI
+        document.getElementById('game-ui').style.display = 'block';
     }
     
     handleInitialState(data) {
@@ -1037,6 +1108,9 @@ class GameEngine {
                     this.removePlayer(playerId);
                 }
             }
+            
+            // Update scoreboard for all clients (including spectators)
+            this.updateScoreboard(data.players);
         }
         
         if (data.projectiles) {

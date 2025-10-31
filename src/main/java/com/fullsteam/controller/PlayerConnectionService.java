@@ -23,31 +23,51 @@ public class PlayerConnectionService {
     }
 
     public boolean connectPlayer(WebSocketSession session, String gameId) {
+        return connectPlayer(session, gameId, false);
+    }
+
+    public boolean connectPlayer(WebSocketSession session, String gameId, boolean asSpectator) {
         try {
             int playerId = IdGenerator.nextPlayerId();
             PlayerSession playerSession = new PlayerSession(playerId, session);
+            playerSession.setSpectator(asSpectator);
 
             // Get or create game
             GameManager game = gameLobby.getGame(gameId);
             if (game == null) {
+                if (asSpectator) {
+                    // Spectators can't join non-existent games
+                    log.warn("Spectator {} attempted to join non-existent game {}", playerId, gameId);
+                    return false;
+                }
                 game = gameLobby.createGame();
                 gameId = game.getGameId();
             }
 
-            // Add player to game
+            // Add player/spectator to game
             if (game.addPlayer(playerSession)) {
                 playerSession.setGame(game);
                 session.put(SESSION_KEY, playerSession);
-                gameLobby.incrementPlayerCount();
+                
+                // Only increment player count for actual players, not spectators
+                if (!asSpectator) {
+                    gameLobby.incrementPlayerCount();
+                }
 
-                log.info("Player {} connected to game {}", playerSession.getPlayerId(), gameId);
+                log.info("{} {} connected to game {}", 
+                    asSpectator ? "Spectator" : "Player", 
+                    playerSession.getPlayerId(), 
+                    gameId);
                 return true;
             } else {
-                log.warn("Failed to add player {} to game {}", playerSession.getPlayerId(), gameId);
+                log.warn("Failed to add {} {} to game {}", 
+                    asSpectator ? "spectator" : "player",
+                    playerSession.getPlayerId(), 
+                    gameId);
                 return false;
             }
         } catch (Exception e) {
-            log.error("Error connecting player to game {}", gameId, e);
+            log.error("Error connecting to game {}", gameId, e);
             return false;
         }
     }
@@ -65,8 +85,14 @@ public class PlayerConnectionService {
                 }
             }
 
-            gameLobby.decrementPlayerCount();
-            log.info("Player {} disconnected", playerSession.getPlayerId());
+            // Only decrement player count for actual players, not spectators
+            if (!playerSession.isSpectator()) {
+                gameLobby.decrementPlayerCount();
+            }
+            
+            log.info("{} {} disconnected", 
+                playerSession.isSpectator() ? "Spectator" : "Player",
+                playerSession.getPlayerId());
         }
     }
 }

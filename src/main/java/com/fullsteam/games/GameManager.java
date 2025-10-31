@@ -3,30 +3,37 @@ package com.fullsteam.games;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fullsteam.Config;
-import com.fullsteam.util.IdGenerator;
 import com.fullsteam.ai.AIGameHelper;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
-import com.fullsteam.model.*;
-import com.fullsteam.util.GameConstants;
-import com.fullsteam.util.WeaponFormatter;
+import com.fullsteam.model.EntityWorldDensity;
+import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.FieldEffectType;
+import com.fullsteam.model.GameEvent;
+import com.fullsteam.model.GameInfo;
+import com.fullsteam.model.PlayerConfigRequest;
+import com.fullsteam.model.PlayerInput;
+import com.fullsteam.model.PlayerSession;
+import com.fullsteam.model.Rules;
+import com.fullsteam.model.UtilityWeapon;
+import com.fullsteam.model.VictoryCondition;
+import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.CollisionProcessor;
 import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Headquarters;
-import com.fullsteam.physics.KothZone;
-import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
+import com.fullsteam.physics.PowerUp;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.TeamSpawnArea;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.TeleportPad;
 import com.fullsteam.physics.Turret;
-import com.fullsteam.physics.Workshop;
-import com.fullsteam.physics.PowerUp;
+import com.fullsteam.util.IdGenerator;
+import com.fullsteam.util.WeaponFormatter;
 import io.micronaut.websocket.WebSocketSession;
 import io.micronaut.websocket.exceptions.WebSocketSessionException;
 import lombok.Getter;
@@ -34,9 +41,7 @@ import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.dynamics.Settings;
-import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Ray;
-import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.DetectFilter;
 import org.dyn4j.world.World;
@@ -46,13 +51,10 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -292,6 +294,24 @@ public class GameManager {
 
     public int getPlayerCount() {
         return gameEntities.getPlayerSessions().size();
+    }
+
+    /**
+     * Get the number of spectators in the game.
+     */
+    public int getSpectatorCount() {
+        return (int) gameEntities.getPlayerSessions().values().stream()
+                .filter(PlayerSession::isSpectator)
+                .count();
+    }
+
+    /**
+     * Get list of all spectators.
+     */
+    public List<PlayerSession> getSpectators() {
+        return gameEntities.getPlayerSessions().values().stream()
+                .filter(PlayerSession::isSpectator)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -663,6 +683,30 @@ public class GameManager {
     }
 
     protected void onPlayerJoined(PlayerSession playerSession) {
+        // Handle spectators differently - they don't get a Player entity
+        if (playerSession.isSpectator()) {
+            // Send spectator-specific initial game state
+            send(playerSession.getSession(), gameStateSerializer.createSpectatorInitialState());
+            
+            log.info("Spectator {} joined game {} successfully. Total spectators: {}",
+                    playerSession.getPlayerId(), gameId, getSpectatorCount());
+            
+            // Notify players that a spectator joined (subtle notification)
+            gameEventManager.broadcastEvent(
+                GameEvent.builder()
+                    .message("👁️ A spectator joined")
+                    .category(GameEvent.EventCategory.INFO)
+                    .color(GameEvent.EventCategory.INFO.getDefaultColor())
+                    .target(GameEvent.EventTarget.builder()
+                        .type(GameEvent.EventTarget.TargetType.ALL)
+                        .build())
+                    .displayDuration(2000L)
+                    .build()
+            );
+            return;
+        }
+        
+        // Normal player join logic
         int assignedTeam = assignPlayerToTeam();
         Vector2 spawnPoint = spawnPointManager.findVariedSpawnPointForTeam(assignedTeam);
         log.info("Player {} joining game {} at spawn point ({}, {}) on team {}",

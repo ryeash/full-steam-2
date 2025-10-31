@@ -3,9 +3,21 @@ package com.fullsteam.games;
 import com.fullsteam.model.AttributeModification;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
-import com.fullsteam.model.Rules;
-import com.fullsteam.physics.*;
-import com.fullsteam.util.WeaponFormatter;
+import com.fullsteam.physics.Beam;
+import com.fullsteam.physics.DefenseLaser;
+import com.fullsteam.physics.Flag;
+import com.fullsteam.physics.GameEntities;
+import com.fullsteam.physics.Headquarters;
+import com.fullsteam.physics.KothZone;
+import com.fullsteam.physics.NetProjectile;
+import com.fullsteam.physics.Obstacle;
+import com.fullsteam.physics.Player;
+import com.fullsteam.physics.PowerUp;
+import com.fullsteam.physics.Projectile;
+import com.fullsteam.physics.TeamSpawnManager;
+import com.fullsteam.physics.TeleportPad;
+import com.fullsteam.physics.Turret;
+import com.fullsteam.physics.Workshop;
 import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
 
@@ -20,16 +32,16 @@ import java.util.stream.Collectors;
  * Responsible for creating game state snapshots and initial state data.
  */
 public class GameStateSerializer {
-    
+
     private final GameConfig gameConfig;
     private final GameEntities gameEntities;
     private final RuleSystem ruleSystem;
     private final TeamSpawnManager teamSpawnManager;
     private final TerrainGenerator terrainGenerator;
 
-    public GameStateSerializer(GameConfig gameConfig, GameEntities gameEntities, 
-                              RuleSystem ruleSystem, TeamSpawnManager teamSpawnManager,
-                              TerrainGenerator terrainGenerator) {
+    public GameStateSerializer(GameConfig gameConfig, GameEntities gameEntities,
+                               RuleSystem ruleSystem, TeamSpawnManager teamSpawnManager,
+                               TerrainGenerator terrainGenerator) {
         this.gameConfig = gameConfig;
         this.gameEntities = gameEntities;
         this.ruleSystem = ruleSystem;
@@ -39,6 +51,7 @@ public class GameStateSerializer {
 
     /**
      * Create a complete game state snapshot for broadcasting to all clients.
+     *
      * @return Map containing all current game state data
      */
     public Map<String, Object> createGameState() {
@@ -66,20 +79,20 @@ public class GameStateSerializer {
         if (gameConfig.getRules().hasKothZones()) {
             gameState.put("kothZones", createKothZoneStates());
         }
-        
+
         if (gameConfig.getRules().hasWorkshops()) {
             gameState.put("workshops", createWorkshopStates());
         }
-        
+
         if (gameConfig.getRules().hasHeadquarters()) {
             gameState.put("headquarters", createHeadquartersStates());
         }
-        
+
         if (gameConfig.getRules().hasFlags()) {
             gameState.put("flags", createFlagStates());
             gameState.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
         }
-        
+
         // Include oddball states if oddball mode is enabled (even without CTF flags)
         if (gameConfig.getRules().hasOddball()) {
             List<Map<String, Object>> oddballStates = createOddballStates();
@@ -94,6 +107,7 @@ public class GameStateSerializer {
 
     /**
      * Create initial game state for a newly joined player.
+     *
      * @param player The player joining the game
      * @return Map containing initial state data
      */
@@ -131,7 +145,7 @@ public class GameStateSerializer {
                 state.put("oddball", oddballData);
             }
         }
-        
+
         // Add VIP mode information if enabled
         if (gameConfig.getRules().hasVip()) {
             state.put("vipMode", true);
@@ -140,8 +154,63 @@ public class GameStateSerializer {
         return state;
     }
 
+    /**
+     * Create initial game state for spectators (no player entity).
+     */
+    public Map<String, Object> createSpectatorInitialState() {
+        Map<String, Object> state = new HashMap<>();
+        state.put("type", "spectatorInit");
+        state.put("worldWidth", gameConfig.getWorldWidth());
+        state.put("worldHeight", gameConfig.getWorldHeight());
+        state.put("teamCount", gameConfig.getTeamCount());
+        state.put("teamMode", gameConfig.isTeamMode());
+        state.put("spectatorMode", true);
+
+
+        // Add team spawn area information
+        if (teamSpawnManager.isTeamSpawningEnabled()) {
+            state.put("teamAreas", teamSpawnManager.getTeamAreaInfo());
+        }
+
+        // Add procedural terrain data
+        state.put("terrain", terrainGenerator.getTerrainData());
+
+        // Add obstacles
+        state.put("obstacles", createInitialObstacleStates());
+
+        // Add flag information if flags are enabled
+        if (gameConfig.getRules().hasFlags()) {
+            state.put("flags", createInitialFlagStates());
+            state.put("flagsPerTeam", gameConfig.getRules().getFlagsPerTeam());
+            state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
+        }
+
+        // Add oddball information if oddball mode is enabled
+        if (gameConfig.getRules().hasOddball()) {
+            Map<String, Object> oddballData = createInitialOddballState();
+            if (oddballData != null) {
+                state.put("oddball", oddballData);
+            }
+        }
+
+        // Add VIP mode information if enabled
+        if (gameConfig.getRules().hasVip()) {
+            state.put("vipMode", true);
+        }
+
+        // Spectator-specific data
+        state.put("spectatorData", Map.of(
+                "showAllHealth", true,
+                "showAllLoadouts", true,
+                "showDamageNumbers", true
+        ));
+
+        return state;
+    }
+
+
     // ========== Player States ==========
-    
+
     private List<Map<String, Object>> createPlayerStates() {
         List<Map<String, Object>> playerStates = new ArrayList<>();
         for (Player player : gameEntities.getAllPlayers()) {
@@ -165,7 +234,7 @@ public class GameStateSerializer {
             playerState.put("respawnTime", Math.max(0, ((double) player.getRespawnTime() - System.currentTimeMillis()) / 1000));
             playerState.put("livesRemaining", player.getLivesRemaining());
             playerState.put("eliminated", player.isEliminated());
-            
+
             // Include VIP status
             if (gameConfig.getRules().hasVip()) {
                 playerState.put("isVip", StatusEffectManager.isVip(player));
@@ -187,7 +256,7 @@ public class GameStateSerializer {
     }
 
     // ========== Projectile States ==========
-    
+
     private List<Map<String, Object>> createProjectileStates() {
         List<Map<String, Object>> projectileStates = new ArrayList<>();
         for (Projectile projectile : gameEntities.getAllProjectiles()) {
@@ -215,7 +284,7 @@ public class GameStateSerializer {
     }
 
     // ========== Obstacle States ==========
-    
+
     private List<Map<String, Object>> createObstacleStates() {
         List<Map<String, Object>> obstacleStates = new ArrayList<>();
         for (Obstacle obstacle : gameEntities.getAllObstacles()) {
@@ -269,7 +338,7 @@ public class GameStateSerializer {
     }
 
     // ========== Field Effect States ==========
-    
+
     private List<Map<String, Object>> createFieldEffectStates() {
         List<Map<String, Object>> fieldEffectStates = new ArrayList<>();
         for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
@@ -291,7 +360,7 @@ public class GameStateSerializer {
     }
 
     // ========== Utility Entity States ==========
-    
+
     private List<Map<String, Object>> createTurretStates() {
         List<Map<String, Object>> turretStates = new ArrayList<>();
         for (Turret turret : gameEntities.getAllTurrets()) {
@@ -441,7 +510,7 @@ public class GameStateSerializer {
     }
 
     // ========== Game Mode Specific States ==========
-    
+
     private List<Map<String, Object>> createKothZoneStates() {
         List<Map<String, Object>> zoneStates = new ArrayList<>();
         for (KothZone zone : gameEntities.getAllKothZones()) {
