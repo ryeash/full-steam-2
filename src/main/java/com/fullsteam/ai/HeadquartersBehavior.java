@@ -20,6 +20,18 @@ public class HeadquartersBehavior implements AIBehavior {
     private int targetHQId = -1;
     private double roleEvaluationTime = 0;
     private static final double ROLE_EVALUATION_INTERVAL = 8.0;
+    
+    // Per-AI randomization for patrol patterns to prevent clustering
+    private final double patrolSpeedVariation;
+    private final double patrolRadiusVariation;
+    private final double patrolAngleOffset;
+    
+    public HeadquartersBehavior() {
+        // Initialize random variations per AI instance
+        this.patrolSpeedVariation = 0.8 + Math.random() * 0.4; // 0.8 to 1.2
+        this.patrolRadiusVariation = 0.85 + Math.random() * 0.3; // 0.85 to 1.15
+        this.patrolAngleOffset = Math.random() * Math.PI * 2; // 0 to 2π
+    }
 
     @Override
     public PlayerInput generateInput(AIPlayer aiPlayer, GameEntities gameEntities, double deltaTime) {
@@ -156,6 +168,9 @@ public class HeadquartersBehavior implements AIBehavior {
             direction.add(perpendicular.multiply(evasion));
             direction.normalize();
 
+            // Apply hazard avoidance
+            direction = HazardAvoidance.calculateSafeMovement(myPos, direction, gameEntities, 100.0);
+
             double moveIntensity = 0.8;
             input.setMoveX(direction.x * moveIntensity);
             input.setMoveY(direction.y * moveIntensity);
@@ -239,21 +254,29 @@ public class HeadquartersBehavior implements AIBehavior {
             input.setMoveY(direction.y * 0.5);
         } else {
             // Good position, patrol around HQ
-            double patrolAngle = (System.currentTimeMillis() / 4000.0) % (Math.PI * 2);
+            double patrolAngle = (System.currentTimeMillis() / 4000.0) * patrolSpeedVariation + patrolAngleOffset;
+            patrolAngle = patrolAngle % (Math.PI * 2);
             
             // Add personality variation to patrol pattern
             double personalityOffset = aiPlayer.getPersonality().getMobility() * Math.PI * 0.5;
             patrolAngle += personalityOffset;
             
+            // Apply radius variation per AI
+            double adjustedRadius = optimalDefenseRadius * patrolRadiusVariation;
+            
             Vector2 patrolOffset = new Vector2(
-                Math.cos(patrolAngle) * optimalDefenseRadius,
-                Math.sin(patrolAngle) * optimalDefenseRadius
+                Math.cos(patrolAngle) * adjustedRadius,
+                Math.sin(patrolAngle) * adjustedRadius
             );
             Vector2 patrolTarget = hqPos.copy().add(patrolOffset);
             Vector2 direction = patrolTarget.copy().subtract(myPos);
             
             if (direction.getMagnitude() > 20) {
                 direction.normalize();
+                
+                // Apply hazard avoidance
+                direction = HazardAvoidance.calculateSafeMovement(myPos, direction, gameEntities, 80.0);
+                
                 input.setMoveX(direction.x * 0.6);
                 input.setMoveY(direction.y * 0.6);
             }

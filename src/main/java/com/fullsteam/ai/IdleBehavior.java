@@ -22,10 +22,31 @@ public class IdleBehavior implements AIBehavior {
     public PlayerInput generateInput(AIPlayer aiPlayer, GameEntities gameEntities, double deltaTime) {
         PlayerInput input = new PlayerInput();
 
+        // Check for environmental hazards first - high priority
+        double areaDanger = HazardAvoidance.getAreaDangerRating(aiPlayer.getPosition(), 150.0, gameEntities);
+        if (areaDanger > 0.5) {
+            // Dangerous area - flee to safety
+            Vector2 safePos = HazardAvoidance.findNearestSafePosition(aiPlayer.getPosition(), 200.0, gameEntities);
+            if (safePos != null) {
+                Vector2 fleeDirection = safePos.copy().subtract(aiPlayer.getPosition());
+                fleeDirection.normalize();
+                input.setMoveX(fleeDirection.x * 0.9);
+                input.setMoveY(fleeDirection.y * 0.9);
+                // Still look for enemies while fleeing
+                AITargetWrapper nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
+                if (nearestEnemy != null) {
+                    Vector2 enemyPos = nearestEnemy.getPosition();
+                    input.setWorldX(enemyPos.x);
+                    input.setWorldY(enemyPos.y);
+                }
+                return input;
+            }
+        }
+
         // Update wander behavior
         wanderChangeTime += deltaTime;
         if (wanderTarget == null || wanderChangeTime >= WANDER_CHANGE_INTERVAL) {
-            generateNewWanderTarget(aiPlayer);
+            generateNewWanderTarget(aiPlayer, gameEntities);
             wanderChangeTime = 0;
         }
 
@@ -36,6 +57,9 @@ public class IdleBehavior implements AIBehavior {
         // Always move towards target, but slow down as we approach
         double distance = direction.getMagnitude();
         direction.normalize();
+
+        // Apply hazard avoidance to movement
+        direction = HazardAvoidance.calculateSafeMovement(playerPos, direction, gameEntities, 100.0);
 
         // Speed scales with distance, but never goes to zero
         double moveSpeed = Math.max(0.3, Math.min(0.8, distance / 100.0));
@@ -112,29 +136,45 @@ public class IdleBehavior implements AIBehavior {
         return "Idle";
     }
 
-    private void generateNewWanderTarget(AIPlayer aiPlayer) {
+    private void generateNewWanderTarget(AIPlayer aiPlayer, GameEntities gameEntities) {
         Vector2 playerPos = aiPlayer.getPosition();
 
-        // Generate a random point within reasonable distance - ensure minimum distance to keep moving
-        double angle = ThreadLocalRandom.current().nextDouble() * 2 * Math.PI;
-        double distance = 150 + ThreadLocalRandom.current().nextDouble() * 250; // 150-400 units away (increased min)
+        // Try to find a safe wander target (avoid hazards)
+        int attempts = 0;
+        while (attempts < 5) {
+            // Generate a random point within reasonable distance - ensure minimum distance to keep moving
+            double angle = ThreadLocalRandom.current().nextDouble() * 2 * Math.PI;
+            double distance = 150 + ThreadLocalRandom.current().nextDouble() * 250; // 150-400 units away (increased min)
 
+            Vector2 candidateTarget = new Vector2(
+                    playerPos.x + Math.cos(angle) * distance,
+                    playerPos.y + Math.sin(angle) * distance
+            );
+
+            // Keep within world bounds (rough approximation)
+            candidateTarget.x = Math.max(-900, Math.min(900, candidateTarget.x));
+            candidateTarget.y = Math.max(-900, Math.min(900, candidateTarget.y));
+
+            // Check if this target is safe
+            if (HazardAvoidance.isPositionSafe(candidateTarget, 30.0, gameEntities) &&
+                !HazardAvoidance.pathCrossesHazards(playerPos, candidateTarget, gameEntities)) {
+                wanderTarget = candidateTarget;
+                return;
+            }
+            
+            attempts++;
+        }
+
+        // If we couldn't find a safe target after 5 attempts, just use the last candidate
+        // (better to move somewhere than stand still)
+        double angle = ThreadLocalRandom.current().nextDouble() * 2 * Math.PI;
+        double distance = 150 + ThreadLocalRandom.current().nextDouble() * 250;
         wanderTarget = new Vector2(
                 playerPos.x + Math.cos(angle) * distance,
                 playerPos.y + Math.sin(angle) * distance
         );
-
-        // Keep within world bounds (rough approximation)
         wanderTarget.x = Math.max(-900, Math.min(900, wanderTarget.x));
         wanderTarget.y = Math.max(-900, Math.min(900, wanderTarget.y));
-
-        // If target is too close to current position, extend it
-        double actualDistance = playerPos.distance(wanderTarget);
-        if (actualDistance < 100) {
-            Vector2 direction = wanderTarget.copy().subtract(playerPos);
-            direction.normalize();
-            wanderTarget = playerPos.copy().add(direction.multiply(150));
-        }
     }
 
     private AITargetWrapper findNearestEnemy(AIPlayer aiPlayer, GameEntities gameEntities) {
@@ -183,8 +223,13 @@ public class IdleBehavior implements AIBehavior {
     }
     
     private boolean isTeammate(AIPlayer aiPlayer, AITargetWrapper target) {
-        // In FFA mode (team 0), everyone is an enemy
-        if (aiPlayer.getTeam() == 0 || target.getTeam() == 0) {
+        // In FFA mode (team 0), check if it's the AI's own turret
+        if (aiPlayer.getTeam() == 0) {
+            // Don't attack your own turrets in FFA
+            if (target.isTurret() && target.getOwnerId() == aiPlayer.getId()) {
+                return true;
+            }
+            // Everyone else is an enemy in FFA
             return false;
         }
         

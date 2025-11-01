@@ -1,11 +1,11 @@
 package com.fullsteam.physics;
 
-import com.fullsteam.Config;
 import com.fullsteam.games.GameManager;
+import com.fullsteam.games.StatusEffectManager;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
-import com.fullsteam.model.StatusEffects;
+import com.fullsteam.util.IdGenerator;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
@@ -17,7 +17,8 @@ import org.dyn4j.world.listener.CollisionListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
@@ -95,6 +96,11 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             handlePlayerProjectileCollision(player, projectile);
             return false; // Prevent physics resolution for projectile hits
 
+        } else if ((entity1 instanceof Projectile || entity1 instanceof Beam) && entity2 instanceof Workshop) {
+            return false; // Projectiles and beams pass through workshops (they're sensors)
+        } else if (entity1 instanceof Workshop && (entity2 instanceof Projectile || entity2 instanceof Beam)) {
+            return false; // Projectiles and beams pass through workshops (they're sensors)
+
         } else if (entity1 instanceof Projectile projectile && entity2 instanceof Obstacle obstacle) {
             return handleProjectileObstacleCollision(projectile, obstacle);
         } else if (entity1 instanceof Obstacle obstacle && entity2 instanceof Projectile projectile) {
@@ -114,6 +120,12 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             return handleProjectileTurretCollision(projectile, turret);
         } else if (entity1 instanceof Turret turret && entity2 instanceof Projectile projectile) {
             return handleProjectileTurretCollision(projectile, turret);
+        } else if (entity1 instanceof Beam beam && entity2 instanceof Turret turret) {
+            handleBeamTurretCollision(beam, turret);
+            return true;
+        } else if (entity1 instanceof Turret turret && entity2 instanceof Beam beam) {
+            handleBeamTurretCollision(beam, turret);
+            return true;
         } else if (entity1 instanceof NetProjectile net) {
             return handleNetCollision(net, entity2);
         } else if (entity2 instanceof NetProjectile net) {
@@ -199,42 +211,42 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      */
     private void applyDirectBulletEffects(Player player, Projectile projectile) {
         Set<BulletEffect> effects = projectile.getBulletEffects();
-        
+
         // Incendiary bullets apply burn status directly
         if (effects.contains(BulletEffect.INCENDIARY)) {
             double burnDamage = projectile.getDamage() * 0.15; // 15% of projectile damage per second
             double burnDuration = 3.0; // 3 seconds of burning
-            StatusEffects.applyBurning(gameManager, player, burnDamage, burnDuration, projectile.getOwnerId());
+            StatusEffectManager.applyBurning(gameManager, player, burnDamage, burnDuration, projectile.getOwnerId());
             log.debug("Applied burn status to player {} from incendiary projectile ({}dps for {}s)",
                     player.getId(), burnDamage, burnDuration);
         }
-        
+
         // Freezing bullets apply slow status directly
         if (effects.contains(BulletEffect.FREEZING)) {
             double slowAmount = 0.5; // 50% speed reduction
             double slowDuration = 2.0; // 2 seconds
             Player shooter = gameEntities.getPlayer(projectile.getOwnerId());
             String source = shooter != null ? shooter.getPlayerName() : "Freezing Projectile";
-            StatusEffects.applySlowEffect(player, slowAmount, slowDuration, source);
+            StatusEffectManager.applySlowEffect(player, slowAmount, slowDuration, source);
             log.debug("Applied freeze slow to player {} from freezing projectile", player.getId());
         }
-        
+
         // Poison bullets apply poison status directly
         if (effects.contains(BulletEffect.POISON)) {
             double poisonDamage = projectile.getDamage() * 0.1; // 10% of projectile damage per second
             double poisonDuration = 4.0; // 4 seconds of poison
-            StatusEffects.applyPoison(gameManager, player, poisonDamage, poisonDuration, projectile.getOwnerId());
+            StatusEffectManager.applyPoison(gameManager, player, poisonDamage, poisonDuration, projectile.getOwnerId());
             log.debug("Applied poison status to player {} from poison projectile ({}dps for {}s)",
                     player.getId(), poisonDamage, poisonDuration);
         }
-        
+
         // Electric bullets apply brief slow from shock
         if (effects.contains(BulletEffect.ELECTRIC)) {
             double slowAmount = 0.3; // 30% speed reduction
             double slowDuration = 1.0; // 1 second shock
             Player shooter = gameEntities.getPlayer(projectile.getOwnerId());
             String source = shooter != null ? shooter.getPlayerName() : "Electric Projectile";
-            StatusEffects.applySlowEffect(player, slowAmount, slowDuration, source);
+            StatusEffectManager.applySlowEffect(player, slowAmount, slowDuration, source);
             log.debug("Applied electric shock slow to player {} from electric projectile", player.getId());
         }
     }
@@ -322,7 +334,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 if (player.takeDamage(effectValue * deltaTime)) {
                     gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
                 }
-                StatusEffects.applyBurning(gameManager, player, effectValue * 0.3, 1.0, fieldEffect.getOwnerId());
+                StatusEffectManager.applyBurning(gameManager, player, effectValue * 0.3, 1.0, fieldEffect.getOwnerId());
 
             }
             case ELECTRIC -> {
@@ -333,7 +345,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 if (player.takeDamage(effectValue * deltaTime)) {
                     gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
                 }
-                StatusEffects.applySlowEffect(player, 5, 0.5,
+                StatusEffectManager.applySlowEffect(player, 5, 0.5,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Electric Field"));
 
             }
@@ -345,7 +357,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 if (player.takeDamage(effectValue * deltaTime)) {
                     gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
                 }
-                StatusEffects.applySlowEffect(player, 5, 1.0,
+                StatusEffectManager.applySlowEffect(player, 5, 1.0,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Freeze Field"));
 
             }
@@ -357,7 +369,20 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 if (player.takeDamage(effectValue * deltaTime)) {
                     gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
                 }
-                StatusEffects.applyPoison(gameManager, player, effectValue * 0.2, 1.5, fieldEffect.getOwnerId());
+                StatusEffectManager.applyPoison(gameManager, player, effectValue * 0.2, 1.5, fieldEffect.getOwnerId());
+            }
+            case EARTHQUAKE -> {
+                double effectValue = fieldEffect.getDamageAtPosition(player.getPosition());
+                if (effectValue <= 0) {
+                    return;
+                }
+                // Apply damage over time
+                if (player.takeDamage(effectValue * deltaTime)) {
+                    gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                }
+                // Apply strong slowing effect (ground shaking makes movement difficult)
+                StatusEffectManager.applySlowEffect(player, 5, 0.7,
+                        "Earthquake");
             }
             case HEAL_ZONE -> {
                 double effectValue = fieldEffect.getDamageAtPosition(player.getPosition());
@@ -368,7 +393,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 player.setHealth(Math.min(gameManager.getGameConfig().getPlayerMaxHealth(), player.getHealth() + healAmount));
             }
             case SLOW_FIELD -> {
-                StatusEffects.applySlowEffect(player, 10, 1.0,
+                StatusEffectManager.applySlowEffect(player, 10, 1.0,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Slow Field"));
             }
             case SHIELD_BARRIER -> {
@@ -383,24 +408,22 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 }
             }
             case SPEED_BOOST -> {
-                StatusEffects.applySpeedBoost(player, 0, 2.0, String.valueOf(fieldEffect.getOwnerId()));
+                StatusEffectManager.applySpeedBoost(player, 0, 2.0, String.valueOf(fieldEffect.getOwnerId()));
             }
             case PROXIMITY_MINE -> {
+                fieldEffect.setActive(false);
+                FieldEffect explosion = new FieldEffect(
+                        IdGenerator.nextEntityId(), // Offset ID to avoid conflicts
+                        fieldEffect.getOwnerId(),
+                        FieldEffectType.EXPLOSION,
+                        fieldEffect.getPosition(),
+                        80.0,
+                        60.0,
+                        FieldEffectType.EXPLOSION.getDefaultDuration(),
+                        fieldEffect.getOwnerTeam()
+                );
+                gameEntities.addFieldEffect(explosion);
                 gameEntities.addPostUpdateHook(() -> {
-                    fieldEffect.setActive(false);
-                    gameEntities.removeFieldEffect(fieldEffect.getId());
-                    gameEntities.getWorld().removeBody(fieldEffect.getBody());
-                    FieldEffect explosion = new FieldEffect(
-                            Config.nextId(), // Offset ID to avoid conflicts
-                            fieldEffect.getOwnerId(),
-                            FieldEffectType.EXPLOSION,
-                            fieldEffect.getPosition(),
-                            80.0,
-                            60.0,
-                            FieldEffectType.EXPLOSION.getDefaultDuration(),
-                            fieldEffect.getOwnerTeam()
-                    );
-                    gameEntities.addFieldEffect(explosion);
                     gameEntities.getWorld().addBody(explosion.getBody());
                 });
             }
@@ -477,7 +500,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         if (turretDestroyed) {
             // Create zero-damage explosion field effect
             FieldEffect explosion = new FieldEffect(
-                    Config.nextId(),
+                    IdGenerator.nextEntityId(),
                     turret.getOwnerId(), // Use turret owner for attribution
                     FieldEffectType.EXPLOSION,
                     turret.getPosition(),
@@ -486,8 +509,10 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                     FieldEffectType.EXPLOSION.getDefaultDuration(),
                     turret.getOwnerTeam()
             );
-            gameEntities.getWorld().addBody(explosion.getBody());
             gameEntities.addFieldEffect(explosion);
+            gameEntities.addPostUpdateHook(() -> {
+                gameEntities.getWorld().addBody(explosion.getBody());
+            });
         }
 
         // Check if projectile should pierce through the turret
@@ -515,6 +540,59 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
         // In team mode, can only damage turrets on different teams
         return projectile.getOwnerTeam() != turret.getOwnerTeam();
+    }
+
+    /**
+     * Handle beam hitting a turret.
+     */
+    private void handleBeamTurretCollision(Beam beam, Turret turret) {
+        if (!beam.isActive() || !turret.isActive()) {
+            return;
+        }
+
+        // Check if beam can damage the turret (team rules)
+        if (!canBeamDamageTurret(beam, turret)) {
+            return; // Friendly fire protection
+        }
+
+        // Apply damage (beams deal damage continuously)
+        boolean turretDestroyed = turret.takeDamage(beam.getDamage());
+
+        if (turretDestroyed) {
+            // Create zero-damage explosion field effect
+            FieldEffect explosion = new FieldEffect(
+                    IdGenerator.nextEntityId(),
+                    turret.getOwnerId(), // Use turret owner for attribution
+                    FieldEffectType.EXPLOSION,
+                    turret.getPosition(),
+                    turret.getBody().getFixture(0).getShape().getRadius(), // Same size as turret
+                    0.0, // Zero damage - purely visual
+                    FieldEffectType.EXPLOSION.getDefaultDuration(),
+                    turret.getOwnerTeam()
+            );
+            gameEntities.addFieldEffect(explosion);
+            gameEntities.addPostUpdateHook(() -> {
+                gameEntities.getWorld().addBody(explosion.getBody());
+            });
+        }
+    }
+
+    /**
+     * Check if a beam can damage a turret (team protection).
+     */
+    private boolean canBeamDamageTurret(Beam beam, Turret turret) {
+        // Can't damage own turret
+        if (beam.getOwnerId() == turret.getOwnerId()) {
+            return false;
+        }
+
+        // In FFA mode (team 0), can damage any turret except own
+        if (beam.getOwnerTeam() == 0 || turret.getOwnerTeam() == 0) {
+            return true;
+        }
+
+        // In team mode, can only damage turrets on different teams
+        return beam.getOwnerTeam() != turret.getOwnerTeam();
     }
 
     private boolean handleNetCollision(NetProjectile net, GameEntity entity) {
@@ -554,6 +632,11 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 .anyMatch(f -> f.isCarried() && f.getCarriedByPlayerId() == player.getId());
 
         if (alreadyCarrying) {
+            // Oddball has no capture mechanic, players just hold it for points
+            if (flag.isOddball()) {
+                return;
+            }
+
             // Player is already carrying a flag, check if they're in their own base for capture
             if (playerTeam == flagTeam && flag.isAtHome()) {
                 // Player is in their own base with enemy flag - CAPTURE!
@@ -565,14 +648,15 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         // Try to pick up the flag
         if (flag.canBeCapturedBy(playerTeam)) {
             pickUpFlag(player, flag);
-        } else if (playerTeam == flagTeam && !flag.isAtHome()) {
+        } else if (!flag.isOddball() && playerTeam == flagTeam && !flag.isAtHome()) {
             // Player touched their own flag that's not at home - return it
+            // (doesn't apply to oddball)
             returnFlag(flag);
         }
     }
 
     /**
-     * Player picks up an enemy flag.
+     * Player picks up an enemy flag or oddball.
      */
     private void pickUpFlag(Player player, Flag flag) {
         flag.pickUp(player.getId());
@@ -580,14 +664,26 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         log.info("Player {} (team {}) picked up flag {} (team {})",
                 player.getId(), player.getTeam(), flag.getId(), flag.getOwnerTeam());
 
-        // Broadcast pickup event
-        gameManager.broadcastGameEvent(
-                String.format("%s picked up %s flag!",
-                        player.getPlayerName(),
-                        getTeamName(flag.getOwnerTeam())),
-                "FLAG_PICKUP",
-                "#ffaa00"
-        );
+        // Apply ball carrier status effect for oddball mode
+        if (flag.isOddball()) {
+            StatusEffectManager.applyBallCarrier(player);
+
+            // Broadcast oddball pickup event
+            gameManager.broadcastGameEvent(
+                    String.format("%s picked up the ODDBALL!", player.getPlayerName()),
+                    "ODDBALL_PICKUP",
+                    "#FFD700"
+            );
+        } else {
+            // Broadcast flag pickup event
+            gameManager.broadcastGameEvent(
+                    String.format("%s picked up %s flag!",
+                            player.getPlayerName(),
+                            getTeamName(flag.getOwnerTeam())),
+                    "FLAG_PICKUP",
+                    "#ffaa00"
+            );
+        }
     }
 
     /**
@@ -686,13 +782,8 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             // Apply the power-up effect
             PowerUp.PowerUpEffect effect = powerUp.getEffect();
             applyPowerUpEffect(player, effect);
-
-            // Remove the power-up from the game
             powerUp.setActive(false);
-            gameEntities.removePowerUp(powerUp.getId());
-            gameEntities.getWorld().removeBody(powerUp.getBody());
-
-            log.info("Player {} collected power-up {} (type: {})",
+            log.debug("Player {} collected power-up {} (type: {})",
                     player.getId(), powerUp.getId(), powerUp.getType());
         }
     }
@@ -799,6 +890,27 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         }
     }
 
+    /**
+     * Update oddball scoring - called once per physics step with proper deltaTime.
+     * Awards points to the player currently carrying the oddball.
+     */
+    public void updateOddball(double deltaTime) {
+        for (Flag flag : gameEntities.getAllFlags()) {
+            if (flag.isOddball() && flag.isCarried()) {
+                int carrierId = flag.getCarriedByPlayerId();
+                Player carrier = gameEntities.getPlayer(carrierId);
+
+                if (carrier != null && carrier.isActive()) {
+                    // Award points based on configured rate via RuleSystem
+                    double points = gameManager.getGameConfig().getRules().getOddballPointsPerSecond() * deltaTime;
+                    if (points > 0) {
+                        gameManager.getRuleSystem().awardOddballPoints(carrierId, points);
+                    }
+                }
+            }
+        }
+    }
+
     public void updateWorkshops(double deltaTime) {
         for (Workshop workshop : gameEntities.getAllWorkshops()) {
             if (!workshop.isActive()) {
@@ -857,7 +969,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
         // Create the power-up
         PowerUp powerUp = new PowerUp(
-                Config.nextId(),
+                IdGenerator.nextEntityId(),
                 spawnPos,
                 selectedType,
                 workshop.getId(),
@@ -867,7 +979,9 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
         // Add to game world
         gameEntities.addPowerUp(powerUp);
-        gameEntities.getWorld().addBody(powerUp.getBody());
+        gameEntities.addPostUpdateHook(() -> {
+            gameEntities.getWorld().addBody(powerUp.getBody());
+        });
     }
 
     /**
@@ -876,19 +990,19 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     private void applyPowerUpEffect(Player player, PowerUp.PowerUpEffect effect) {
         switch (effect.getType()) {
             case SPEED_BOOST:
-                StatusEffects.applySpeedBoost(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
+                StatusEffectManager.applySpeedBoost(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
                 break;
             case HEALTH_REGENERATION:
-                StatusEffects.applyHealthRegeneration(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
+                StatusEffectManager.applyHealthRegeneration(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
                 break;
             case DAMAGE_BOOST:
-                StatusEffects.applyDamageBoost(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
+                StatusEffectManager.applyDamageBoost(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
                 break;
             case DAMAGE_RESISTANCE:
-                StatusEffects.applyDamageResistance(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
+                StatusEffectManager.applyDamageResistance(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
                 break;
             case BERSERKER_MODE:
-                StatusEffects.applyBerserkerMode(player, effect.getDuration(), "Workshop Power-up");
+                StatusEffectManager.applyBerserkerMode(player, effect.getDuration(), "Workshop Power-up");
                 break;
         }
     }

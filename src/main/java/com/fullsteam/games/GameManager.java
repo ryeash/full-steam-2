@@ -6,24 +6,34 @@ import com.fullsteam.Config;
 import com.fullsteam.ai.AIGameHelper;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
-import com.fullsteam.model.*;
+import com.fullsteam.model.EntityWorldDensity;
+import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.FieldEffectType;
+import com.fullsteam.model.GameEvent;
+import com.fullsteam.model.GameInfo;
+import com.fullsteam.model.PlayerConfigRequest;
+import com.fullsteam.model.PlayerInput;
+import com.fullsteam.model.PlayerSession;
+import com.fullsteam.model.Rules;
+import com.fullsteam.model.UtilityWeapon;
+import com.fullsteam.model.VictoryCondition;
+import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.CollisionProcessor;
 import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Headquarters;
-import com.fullsteam.physics.KothZone;
-import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
+import com.fullsteam.physics.PowerUp;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.TeamSpawnArea;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.TeleportPad;
 import com.fullsteam.physics.Turret;
-import com.fullsteam.physics.Workshop;
-import com.fullsteam.physics.PowerUp;
+import com.fullsteam.util.IdGenerator;
+import com.fullsteam.util.WeaponFormatter;
 import io.micronaut.websocket.WebSocketSession;
 import io.micronaut.websocket.exceptions.WebSocketSessionException;
 import lombok.Getter;
@@ -31,9 +41,7 @@ import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.dynamics.Settings;
-import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Ray;
-import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.DetectFilter;
 import org.dyn4j.world.World;
@@ -43,13 +51,10 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -79,6 +84,12 @@ public class GameManager {
     protected final WeaponSystem weaponSystem;
     @Getter
     protected final UtilitySystem utilitySystem;
+    @Getter
+    protected final EntitySpawner entitySpawner;
+    @Getter
+    protected final SpawnPointManager spawnPointManager;
+    @Getter
+    protected final GameStateSerializer gameStateSerializer;
 
     protected final ObjectMapper objectMapper;
 
@@ -103,7 +114,16 @@ public class GameManager {
         // Initialize AI management settings from config
         this.aiCheckIntervalMs = gameConfig.getAiCheckIntervalMs();
         this.teamSpawnManager = new TeamSpawnManager(gameConfig.getWorldWidth(), gameConfig.getWorldHeight(), gameConfig.getTeamCount());
-        this.terrainGenerator = new TerrainGenerator(gameConfig.getWorldWidth(), gameConfig.getWorldHeight());
+
+        // Pass oddball info and obstacle density to terrain generator
+        boolean hasOddball = gameConfig.getRules().hasOddball();
+        EntityWorldDensity obstacleDensity = gameConfig.getRules().getObstacleDensity();
+        this.terrainGenerator = new TerrainGenerator(
+                gameConfig.getWorldWidth(),
+                gameConfig.getWorldHeight(),
+                hasOddball,
+                obstacleDensity
+        );
 
         this.world = new World<>();
 
@@ -142,12 +162,40 @@ public class GameManager {
                 pos -> isPositionClearOfObstacles(pos, 15.0)
         );
 
-        createWorldBoundaries();
-        createObstacles();
-        createFlags();
-        createKothZones();
-        createWorkshops();
-        createHeadquarters();
+        // Initialize entity spawner
+        this.entitySpawner = new EntitySpawner(
+                gameId,
+                gameConfig,
+                gameEntities,
+                world,
+                teamSpawnManager,
+                terrainGenerator
+        );
+
+        // Initialize spawn point manager
+        this.spawnPointManager = new SpawnPointManager(
+                gameConfig,
+                gameEntities,
+                teamSpawnManager,
+                terrainGenerator
+        );
+
+        // Initialize game state serializer
+        this.gameStateSerializer = new GameStateSerializer(
+                gameConfig,
+                gameEntities,
+                ruleSystem,
+                teamSpawnManager,
+                terrainGenerator
+        );
+
+        entitySpawner.createWorldBoundaries();
+        entitySpawner.createObstacles();
+        entitySpawner.createFlags();
+        entitySpawner.createOddball();
+        entitySpawner.createKothZones();
+        entitySpawner.createWorkshops();
+        entitySpawner.createHeadquarters();
 
         // Initialize event system if enabled (must be after terrain generation)
         ruleSystem.initializeEventSystem(
@@ -176,6 +224,13 @@ public class GameManager {
         if (gameEntities.getPlayerSessions().size() >= getMaxPlayers()) {
             return false;
         }
+
+        // Check if game is locked to new players
+        if (isGameLocked()) {
+            log.info("Player {} attempted to join locked game {}", playerSession.getPlayerId(), gameId);
+            return false;
+        }
+
         gameEntities.addPlayerSession(playerSession);
         onPlayerJoined(playerSession);
         return true;
@@ -232,12 +287,43 @@ public class GameManager {
                 gameEntities.getPlayerSessions().size(),
                 getMaxPlayers(),
                 gameStartTime,
-                gameRunning ? "running" : "waiting"
+                gameRunning ? "running" : "waiting",
+                gameConfig
         );
     }
 
     public int getPlayerCount() {
         return gameEntities.getPlayerSessions().size();
+    }
+
+    /**
+     * Get the number of spectators in the game.
+     */
+    public int getSpectatorCount() {
+        return (int) gameEntities.getPlayerSessions().values().stream()
+                .filter(PlayerSession::isSpectator)
+                .count();
+    }
+
+    /**
+     * Get list of all spectators.
+     */
+    public List<PlayerSession> getSpectators() {
+        return gameEntities.getPlayerSessions().values().stream()
+                .filter(PlayerSession::isSpectator)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Check if the game is locked to new players based on elapsed time.
+     */
+    public boolean isGameLocked() {
+        if (!gameConfig.getRules().shouldLockGame()) {
+            return false; // Game never locks
+        }
+
+        double elapsedSeconds = (System.currentTimeMillis() - gameStartTime) / 1000.0;
+        return elapsedSeconds >= gameConfig.getRules().getLockGameAfterSeconds();
     }
 
     public void shutdown() {
@@ -254,12 +340,15 @@ public class GameManager {
         }
 
         int assignedTeam = assignPlayerToTeam();
-        Vector2 spawnPoint = findVariedSpawnPointForTeam(assignedTeam);
-        AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithPersonality(Config.nextId(), spawnPoint.x, spawnPoint.y, personalityType, assignedTeam, gameConfig.getPlayerMaxHealth());
+        Vector2 spawnPoint = spawnPointManager.findVariedSpawnPointForTeam(assignedTeam);
+        AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithPersonality(IdGenerator.nextEntityId(), spawnPoint.x, spawnPoint.y, personalityType, assignedTeam, gameConfig.getPlayerMaxHealth());
         aiPlayer.setHealth(gameConfig.getPlayerMaxHealth());
 
         // Initialize lives based on respawn mode (delegated to RuleSystem)
         ruleSystem.initializePlayerLives(aiPlayer);
+
+        // Apply spawn invincibility to give AI player time to get their bearings
+        StatusEffectManager.applySpawnInvincibility(aiPlayer);
 
         // Add to game entities
         gameEntities.addPlayer(aiPlayer);
@@ -272,6 +361,11 @@ public class GameManager {
                 aiPlayer.getId(), aiPlayer.getPlayerName(), personalityType,
                 assignedTeam, spawnPoint.x, spawnPoint.y);
 
+        // Ensure VIP is assigned for this team if VIP mode is enabled
+        if (gameConfig.getRules().hasVip()) {
+            ruleSystem.ensureVipForTeam(assignedTeam);
+        }
+
         return true;
     }
 
@@ -281,12 +375,19 @@ public class GameManager {
     public void removeAIPlayer(int playerId) {
         if (aiPlayerManager.isAIPlayer(playerId)) {
             Player player = gameEntities.getPlayer(playerId);
+            int playerTeam = 0;
             if (player != null) {
+                playerTeam = player.getTeam();
                 world.removeBody(player.getBody());
                 gameEntities.removePlayer(playerId);
             }
             aiPlayerManager.removeAIPlayer(playerId);
             log.info("Removed AI player {}", playerId);
+            
+            // Ensure VIP is reassigned if this AI player was the VIP
+            if (gameConfig.getRules().hasVip() && playerTeam > 0) {
+                ruleSystem.ensureVipForTeam(playerTeam);
+            }
         }
     }
 
@@ -453,6 +554,7 @@ public class GameManager {
             gameEntities.updateAll(deltaTime);
             updateCarriedFlags(); // Update flag positions for carried flags
             collisionProcessor.updateKothZones(deltaTime); // Update KOTH zone control and award points (using proper deltaTime)
+            collisionProcessor.updateOddball(deltaTime); // Update oddball scoring (using proper deltaTime)
             collisionProcessor.updateWorkshops(deltaTime); // Update workshop crafting mechanics (using proper deltaTime)
             gameEntities.getProjectiles().entrySet().removeIf(entry -> {
                 Projectile projectile = entry.getValue();
@@ -581,8 +683,32 @@ public class GameManager {
     }
 
     protected void onPlayerJoined(PlayerSession playerSession) {
+        // Handle spectators differently - they don't get a Player entity
+        if (playerSession.isSpectator()) {
+            // Send spectator-specific initial game state
+            send(playerSession.getSession(), gameStateSerializer.createSpectatorInitialState());
+            
+            log.info("Spectator {} joined game {} successfully. Total spectators: {}",
+                    playerSession.getPlayerId(), gameId, getSpectatorCount());
+            
+            // Notify players that a spectator joined (subtle notification)
+            gameEventManager.broadcastEvent(
+                GameEvent.builder()
+                    .message("👁️ A spectator joined")
+                    .category(GameEvent.EventCategory.INFO)
+                    .color(GameEvent.EventCategory.INFO.getDefaultColor())
+                    .target(GameEvent.EventTarget.builder()
+                        .type(GameEvent.EventTarget.TargetType.ALL)
+                        .build())
+                    .displayDuration(2000L)
+                    .build()
+            );
+            return;
+        }
+        
+        // Normal player join logic
         int assignedTeam = assignPlayerToTeam();
-        Vector2 spawnPoint = findVariedSpawnPointForTeam(assignedTeam);
+        Vector2 spawnPoint = spawnPointManager.findVariedSpawnPointForTeam(assignedTeam);
         log.info("Player {} joining game {} at spawn point ({}, {}) on team {}",
                 playerSession.getPlayerId(), gameId, spawnPoint.x, spawnPoint.y, assignedTeam);
 
@@ -595,6 +721,9 @@ public class GameManager {
             log.info("Player {} initialized with {} lives", player.getId(), gameConfig.getRules().getMaxLives());
         }
 
+        // Apply spawn invincibility to give player time to get their bearings
+        StatusEffectManager.applySpawnInvincibility(player);
+
         gameEntities.addPlayer(player);
         world.addBody(player.getBody());
 
@@ -605,6 +734,11 @@ public class GameManager {
         // Broadcast player join event with team color
         gameEventManager.broadcastPlayerJoin(playerSession.getPlayerName(), assignedTeam);
 
+        // Ensure VIP is assigned for this team if VIP mode is enabled
+        if (gameConfig.getRules().hasVip()) {
+            ruleSystem.ensureVipForTeam(assignedTeam);
+        }
+
         // Adjust AI players when a human player joins
         adjustAIPlayers();
     }
@@ -613,12 +747,19 @@ public class GameManager {
         gameEntities.getPlayerInputs().remove(playerSession.getPlayerId());
         Player player = gameEntities.getPlayer(playerSession.getPlayerId());
         if (player != null) {
+            int playerTeam = player.getTeam();
+            
             world.removeBody(player.getBody());
             gameEntities.removePlayer(player.getId());
 
             // Remove from AI manager if it's an AI player
             if (aiPlayerManager.isAIPlayer(playerSession.getPlayerId())) {
                 aiPlayerManager.removeAIPlayer(playerSession.getPlayerId());
+            }
+            
+            // Ensure VIP is reassigned if this player was the VIP
+            if (gameConfig.getRules().hasVip() && playerTeam > 0) {
+                ruleSystem.ensureVipForTeam(playerTeam);
             }
         }
         log.info("Player {} left game {}", playerSession.getPlayerId(), gameId);
@@ -716,100 +857,10 @@ public class GameManager {
         return gameConfig.getMaxPlayers();
     }
 
-    private void createWorldBoundaries() {
-        double halfWidth = gameConfig.getWorldWidth() / 2.0;
-        double halfHeight = gameConfig.getWorldHeight() / 2.0;
-        double wallThickness = 50.0;
-
-        Body topWall = new Body();
-        topWall.addFixture(new Rectangle(gameConfig.getWorldWidth() + wallThickness * 2, wallThickness));
-        topWall.setMass(MassType.INFINITE);
-        topWall.getTransform().setTranslation(0, halfHeight + wallThickness / 2.0);
-        topWall.setUserData("boundary");
-        world.addBody(topWall);
-
-        Body bottomWall = new Body();
-        bottomWall.addFixture(new Rectangle(gameConfig.getWorldWidth() + wallThickness * 2, wallThickness));
-        bottomWall.setMass(MassType.INFINITE);
-        bottomWall.getTransform().setTranslation(0, -halfHeight - wallThickness / 2.0);
-        bottomWall.setUserData("boundary");
-        world.addBody(bottomWall);
-
-        Body leftWall = new Body();
-        leftWall.addFixture(new Rectangle(wallThickness, gameConfig.getWorldHeight()));
-        leftWall.setMass(MassType.INFINITE);
-        leftWall.getTransform().setTranslation(-halfWidth - wallThickness / 2.0, 0);
-        leftWall.setUserData("boundary");
-        world.addBody(leftWall);
-
-        Body rightWall = new Body();
-        rightWall.addFixture(new Rectangle(wallThickness, gameConfig.getWorldHeight()));
-        rightWall.setMass(MassType.INFINITE);
-        rightWall.getTransform().setTranslation(halfWidth + wallThickness / 2.0, 0);
-        rightWall.setUserData("boundary");
-        world.addBody(rightWall);
-    }
-
-
-    private void createObstacles() {
-        // Use procedurally generated simple obstacles from terrain generator
-        for (Obstacle obstacle : terrainGenerator.getGeneratedObstacles()) {
-            gameEntities.addObstacle(obstacle);
-            world.addBody(obstacle.getBody());
-        }
-    }
 
     /**
      * Create flags for capture-the-flag gameplay if configured.
      */
-    private void createFlags() {
-        if (!gameConfig.getRules().hasFlags()) {
-            return; // No flags configured
-        }
-
-        if (gameConfig.isFreeForAll()) {
-            log.warn("Flags are not supported in FFA mode");
-            return;
-        }
-
-        int flagsPerTeam = gameConfig.getRules().getFlagsPerTeam();
-        int teamCount = gameConfig.getTeamCount();
-
-        log.info("Creating {} flags per team for {} teams", flagsPerTeam, teamCount);
-
-        int flagId = 1;
-        for (int team = 1; team <= teamCount; team++) {
-            TeamSpawnArea teamArea = teamSpawnManager.getTeamArea(team);
-            if (teamArea == null) {
-                log.warn("No spawn area found for team {}, skipping flag creation", team);
-                continue;
-            }
-
-            // Create flags for this team
-            for (int i = 0; i < flagsPerTeam; i++) {
-                Vector2 flagPosition = calculateFlagPosition(teamArea, i, flagsPerTeam);
-
-                // Ensure flag position is clear of obstacles
-                if (!terrainGenerator.isPositionClear(flagPosition, 30.0)) {
-                    // Try alternative positions
-                    for (int attempt = 0; attempt < 5; attempt++) {
-                        flagPosition = teamArea.generateSpawnPoint();
-                        if (terrainGenerator.isPositionClear(flagPosition, 30.0)) {
-                            break;
-                        }
-                    }
-                }
-
-                Flag flag = new Flag(flagId++, team, flagPosition.x, flagPosition.y);
-                gameEntities.addFlag(flag);
-                world.addBody(flag.getBody());
-
-                log.info("Created flag {} for team {} at position ({}, {})",
-                        flag.getId(), team, flagPosition.x, flagPosition.y);
-            }
-        }
-    }
-
     /**
      * Calculate flag position within a team's area.
      * For multiple flags, distributes them around the team center.
@@ -834,49 +885,13 @@ public class GameManager {
     }
 
     /**
+     * Create the oddball if oddball mode is enabled.
+     * The oddball is a neutral flag (team 0) spawned at the world center.
+     */
+    /**
      * Create King of the Hill zones if enabled in rules.
      * Zones are placed strategically between team spawn areas for fair gameplay.
      */
-    private void createKothZones() {
-        Rules rules = gameConfig.getRules();
-        if (!rules.hasKothZones() || !gameConfig.isTeamMode()) {
-            return; // KOTH disabled
-        }
-
-        int zoneCount = rules.getKothZones();
-        int teamCount = gameConfig.getTeamCount();
-
-        log.info("Creating {} KOTH zones for game {}", zoneCount, gameId);
-
-        int zoneId = Config.nextId();
-
-        // Calculate zone positions based on number of zones and teams
-        for (int i = 0; i < zoneCount; i++) {
-            Vector2 zonePosition = calculateKothZonePosition(i, zoneCount, teamCount);
-
-            // Ensure zone position is clear of obstacles
-            if (!terrainGenerator.isPositionClear(zonePosition, 100.0)) {
-                // Try to find a nearby clear position
-                for (int attempt = 0; attempt < 10; attempt++) {
-                    double offsetX = (Math.random() - 0.5) * 200;
-                    double offsetY = (Math.random() - 0.5) * 200;
-                    Vector2 candidate = new Vector2(zonePosition.x + offsetX, zonePosition.y + offsetY);
-
-                    if (terrainGenerator.isPositionClear(candidate, 100.0)) {
-                        zonePosition = candidate;
-                        break;
-                    }
-                }
-            }
-
-            KothZone zone = new KothZone(zoneId++, i, zonePosition.x, zonePosition.y, gameConfig.getRules().getKothPointsPerSecond());
-            gameEntities.addKothZone(zone);
-            world.addBody(zone.getBody());
-
-            log.info("Created KOTH zone {} at position ({}, {})", i, zonePosition.x, zonePosition.y);
-        }
-    }
-
     /**
      * Calculate fair positioning for KOTH zones.
      * Zones are placed equidistant from team spawn areas to ensure no team has an advantage.
@@ -920,127 +935,10 @@ public class GameManager {
      * Create workshops if enabled in rules.
      * Each team gets one workshop placed in their spawn zone.
      */
-    private void createWorkshops() {
-        Rules rules = gameConfig.getRules();
-        if (!rules.hasWorkshops() || !gameConfig.isTeamMode()) {
-            return; // Workshops disabled or not in team mode
-        }
-        int teamCount = gameConfig.getTeamCount();
-        for (int teamNumber = 1; teamNumber <= teamCount; teamNumber++) {
-            TeamSpawnArea teamArea = teamSpawnManager.getTeamAreas().get(teamNumber);
-            if (teamArea == null) {
-                log.warn("No spawn area found for team {}, skipping workshop creation", teamNumber);
-                continue;
-            }
-            Vector2 workshopPosition = teamArea.getCenter().copy();
-            double offsetX = (Math.random() - 0.5) * 50; // ±25 units
-            double offsetY = (Math.random() - 0.5) * 50; // ±25 units
-            workshopPosition.add(offsetX, offsetY);
-
-            // Ensure workshop position is clear of obstacles
-            if (!terrainGenerator.isPositionClear(workshopPosition, 100.0)) {
-                // Try to find a nearby clear position within the team area
-                for (int attempt = 0; attempt < 10; attempt++) {
-                    double randomX = teamArea.getMinBounds().x + Math.random() *
-                            (teamArea.getMaxBounds().x - teamArea.getMinBounds().x);
-                    double randomY = teamArea.getMinBounds().y + Math.random() *
-                            (teamArea.getMaxBounds().y - teamArea.getMinBounds().y);
-                    Vector2 candidate = new Vector2(randomX, randomY);
-
-                    if (terrainGenerator.isPositionClear(candidate, 100.0)) {
-                        workshopPosition = candidate;
-                        break;
-                    }
-                }
-            }
-
-            Workshop workshop = new Workshop(
-                    Config.nextId(),
-                    workshopPosition,
-                    rules.getWorkshopCraftTime(),
-                    rules.getMaxPowerUpsPerWorkshop()
-            );
-            gameEntities.addWorkshop(workshop);
-            world.addBody(workshop.getBody());
-        }
-    }
-
     /**
      * Create headquarters if enabled in rules.
      * Each team gets one headquarters placed in their spawn zone (defensive position).
      */
-    private void createHeadquarters() {
-        Rules rules = gameConfig.getRules();
-        if (!rules.hasHeadquarters() || !gameConfig.isTeamMode()) {
-            return; // Headquarters disabled or not in team mode
-        }
-        int teamCount = gameConfig.getTeamCount();
-        // Create one headquarters per team in their spawn zone
-        for (int teamNumber = 1; teamNumber <= teamCount; teamNumber++) {
-            TeamSpawnArea teamArea = teamSpawnManager.getTeamAreas().get(teamNumber);
-            if (teamArea == null) {
-                log.warn("No spawn area found for team {}, skipping HQ creation", teamNumber);
-                continue;
-            }
-
-            // Place HQ at the back of team's spawn area (defensive position)
-            Vector2 hqPosition = teamArea.getCenter().copy();
-
-            // Offset towards the back of the spawn area (away from center of map)
-            Vector2 mapCenter = new Vector2(0, 0);
-            Vector2 awayFromCenter = hqPosition.copy().subtract(mapCenter);
-            if (awayFromCenter.getMagnitude() > 0) {
-                awayFromCenter.normalize();
-                // Move 150 units further back
-                hqPosition.add(awayFromCenter.multiply(150.0));
-            }
-
-            // Ensure HQ position is clear of obstacles (HQ needs more clearance due to size)
-            double hqClearanceRadius = 100.0; // HQ is 80x60, so need larger clearance
-            if (!terrainGenerator.isPositionClear(hqPosition, hqClearanceRadius)) {
-                // Try to find a nearby clear position within the team area
-                boolean foundClearPosition = false;
-                for (int attempt = 0; attempt < 20; attempt++) {
-                    double offsetX = (Math.random() - 0.5) * 300;
-                    double offsetY = (Math.random() - 0.5) * 300;
-                    Vector2 candidate = new Vector2(hqPosition.x + offsetX, hqPosition.y + offsetY);
-
-                    if (terrainGenerator.isPositionClear(candidate, hqClearanceRadius)) {
-                        hqPosition = candidate;
-                        foundClearPosition = true;
-                        break;
-                    }
-                }
-
-                // If still no clear position found, try anywhere in team area
-                if (!foundClearPosition) {
-                    for (int attempt = 0; attempt < 30; attempt++) {
-                        Vector2 candidate = teamArea.generateSpawnPoint();
-                        if (terrainGenerator.isPositionClear(candidate, hqClearanceRadius)) {
-                            hqPosition = candidate;
-                            foundClearPosition = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!foundClearPosition) {
-                    log.warn("Could not find clear position for team {} headquarters after many attempts. Placing anyway.", teamNumber);
-                }
-            }
-
-            Headquarters hq = new Headquarters(
-                    Config.nextId(),
-                    teamNumber,
-                    hqPosition.x,
-                    hqPosition.y,
-                    rules.getHeadquartersMaxHealth()
-            );
-            gameEntities.addHeadquarters(hq);
-            world.addBody(hq.getBody());
-        }
-    }
-
     /**
      * Update positions of flags that are being carried by players.
      */
@@ -1057,6 +955,12 @@ public class GameManager {
                 } else {
                     // Carrier is no longer active, drop the flag
                     flag.drop();
+
+                    // Remove ball carrier status effect if this was the oddball
+                    if (flag.isOddball() && carrier != null) {
+                        StatusEffectManager.removeBallCarrier(carrier);
+                    }
+
                     log.info("Flag {} dropped at ({}, {}) - carrier {} inactive",
                             flag.getId(), flag.getPosition().x, flag.getPosition().y, carrierId);
                 }
@@ -1085,350 +989,6 @@ public class GameManager {
             case 4 -> "#FF9800";  // Orange
             default -> "#FFFFFF"; // White
         };
-    }
-
-    private void sendGameState() {
-        Map<String, Object> gameState = new HashMap<>();
-        gameState.put("type", "gameState");
-        gameState.put("timestamp", System.currentTimeMillis());
-
-        // Include rule system state (rounds, victory, respawns)
-        gameState.putAll(ruleSystem.getStateData());
-
-        List<Map<String, Object>> playerStates = new ArrayList<>();
-        for (Player player : gameEntities.getAllPlayers()) {
-            Vector2 pos = player.getPosition();
-            Map<String, Object> playerState = new HashMap<>();
-            playerState.put("id", player.getId());
-            playerState.put("name", player.getPlayerName());
-            playerState.put("team", player.getTeam());
-            playerState.put("x", pos.x);
-            playerState.put("y", pos.y);
-            playerState.put("rotation", player.getRotation());
-            playerState.put("health", player.healthPercent());
-            playerState.put("active", player.isActive());
-            playerState.put("ammo", player.getCurrentWeapon().getCurrentAmmo());
-            playerState.put("maxAmmo", player.getCurrentWeapon().getMagazineSize());
-            playerState.put("reloading", player.isReloading());
-            playerState.put("weaponRange", player.getCurrentWeapon().getRange());
-            playerState.put("kills", player.getKills());
-            playerState.put("deaths", player.getDeaths());
-            playerState.put("captures", player.getCaptures());
-            playerState.put("respawnTime", Math.max(0, ((double) player.getRespawnTime() - System.currentTimeMillis()) / 1000));
-            playerState.put("livesRemaining", player.getLivesRemaining());
-            playerState.put("eliminated", player.isEliminated());
-
-            // Include active power-up effects
-            List<String> activePowerUps = new ArrayList<>();
-            for (AttributeModification mod : player.getAttributeModifications()) {
-                String hint = mod.renderHint();
-                if (hint != null && !hint.isEmpty()) {
-                    activePowerUps.add(hint);
-                }
-            }
-            playerState.put("activePowerUps", activePowerUps);
-
-            playerStates.add(playerState);
-        }
-        gameState.put("players", playerStates);
-
-        List<Map<String, Object>> projectileStates = new ArrayList<>();
-        for (Projectile projectile : gameEntities.getAllProjectiles()) {
-            Vector2 pos = projectile.getPosition();
-            Vector2 vel = projectile.getBody().getLinearVelocity();
-            Map<String, Object> projState = new HashMap<>();
-            projState.put("id", projectile.getId());
-            projState.put("x", pos.x);
-            projState.put("y", pos.y);
-            projState.put("vx", vel.x);
-            projState.put("vy", vel.y);
-            projState.put("ownerId", projectile.getOwnerId());
-            projState.put("ownerTeam", projectile.getOwnerTeam());
-            projState.put("ordinance", projectile.getOrdinance().name());
-
-            // Convert bullet effects to string list for JSON serialization
-            List<String> effectNames = projectile.getBulletEffects().stream()
-                    .map(Enum::name)
-                    .collect(Collectors.toList());
-            projState.put("bulletEffects", effectNames);
-
-            projectileStates.add(projState);
-        }
-        gameState.put("projectiles", projectileStates);
-
-        List<Map<String, Object>> obstacleStates = new ArrayList<>();
-        for (Obstacle obstacle : gameEntities.getAllObstacles()) {
-            Vector2 pos = obstacle.getPosition();
-            Map<String, Object> obsState = new HashMap<>();
-            obsState.put("id", obstacle.getId());
-            obsState.put("x", pos.x);
-            obsState.put("y", pos.y);
-            obsState.put("type", obstacle.getType().name());
-            obsState.put("shapeCategory", obstacle.getShapeCategory().name());
-            obsState.put("boundingRadius", obstacle.getBoundingRadius());
-            obsState.put("rotation", obstacle.getBody().getTransform().getRotation().toRadians());
-            if (obstacle.getType() == Obstacle.ObstacleType.PLAYER_BARRIER) {
-                obsState.put("health", obstacle.healthPercent());
-                obsState.put("active", obstacle.isActive());
-                obsState.put("ownerId", obstacle.getOwnerId());
-                obsState.put("ownerTeam", obstacle.getOwnerTeam());
-            }
-
-            // Add detailed shape data for client rendering
-            obsState.putAll(obstacle.getShapeData());
-
-            obstacleStates.add(obsState);
-        }
-        gameState.put("obstacles", obstacleStates);
-
-        // Add field effects to game state
-        List<Map<String, Object>> fieldEffectStates = new ArrayList<>();
-        for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
-            Vector2 pos = effect.getPosition();
-            Map<String, Object> effectState = new HashMap<>();
-            effectState.put("id", effect.getId());
-            effectState.put("type", effect.getType().name());
-            effectState.put("x", pos.x);
-            effectState.put("y", pos.y);
-            effectState.put("radius", effect.getRadius());
-            effectState.put("duration", effect.getDuration());
-            effectState.put("timeRemaining", effect.getTimeRemaining());
-            effectState.put("progress", effect.getProgress());
-            effectState.put("active", effect.isActive());
-            effectState.put("ownerTeam", effect.getOwnerTeam());
-            fieldEffectStates.add(effectState);
-        }
-        gameState.put("fieldEffects", fieldEffectStates);
-
-        // Add utility entities to game state
-        List<Map<String, Object>> turretStates = new ArrayList<>();
-        for (Turret turret : gameEntities.getAllTurrets()) {
-            Vector2 pos = turret.getPosition();
-            Map<String, Object> turretState = new HashMap<>();
-            turretState.put("id", turret.getId());
-            turretState.put("type", "TURRET");
-            turretState.put("x", pos.x);
-            turretState.put("y", pos.y);
-            turretState.put("rotation", turret.getBody().getTransform().getRotation().toRadians());
-            turretState.put("health", turret.healthPercent());
-            turretState.put("active", turret.isActive());
-            turretState.put("ownerId", turret.getOwnerId());
-            turretState.put("ownerTeam", turret.getOwnerTeam());
-            turretStates.add(turretState);
-        }
-        gameState.put("turrets", turretStates);
-
-        List<Map<String, Object>> netStates = new ArrayList<>();
-        for (NetProjectile net : gameEntities.getAllNetProjectiles()) {
-            Vector2 pos = net.getPosition();
-            Vector2 vel = net.getVelocity();
-            Map<String, Object> netState = new HashMap<>();
-            netState.put("id", net.getId());
-            netState.put("type", "NET");
-            netState.put("x", pos.x);
-            netState.put("y", pos.y);
-            netState.put("vx", vel.x);
-            netState.put("vy", vel.y);
-            netState.put("rotation", net.getBody().getTransform().getRotation().toRadians());
-            netState.put("active", net.isActive());
-            netState.put("ownerId", net.getOwnerId());
-            netState.put("ownerTeam", net.getOwnerTeam());
-            netStates.add(netState);
-        }
-        gameState.put("nets", netStates);
-
-        List<Map<String, Object>> mineStates = new ArrayList<>();
-        for (FieldEffect fieldEffect : gameEntities.getAllFieldEffects()) {
-            if (fieldEffect.getType() != FieldEffectType.PROXIMITY_MINE) {
-                continue;
-            }
-            Vector2 pos = fieldEffect.getPosition();
-            Map<String, Object> mineState = new HashMap<>();
-            mineState.put("id", fieldEffect.getId());
-            mineState.put("type", "MINE");
-            mineState.put("x", pos.x);
-            mineState.put("y", pos.y);
-            mineState.put("active", fieldEffect.isActive());
-            mineState.put("ownerId", fieldEffect.getOwnerId());
-            mineState.put("ownerTeam", fieldEffect.getOwnerTeam());
-            mineState.put("isArmed", fieldEffect.isArmed());
-            mineStates.add(mineState);
-        }
-        gameState.put("mines", mineStates);
-
-        List<Map<String, Object>> teleportPadStates = new ArrayList<>();
-        for (TeleportPad teleportPad : gameEntities.getAllTeleportPads()) {
-            Vector2 pos = teleportPad.getPosition();
-            Map<String, Object> padState = new HashMap<>();
-            padState.put("id", teleportPad.getId());
-            padState.put("type", "TELEPORT_PAD");
-            padState.put("x", pos.x);
-            padState.put("y", pos.y);
-            padState.put("active", teleportPad.isActive());
-            padState.put("ownerId", teleportPad.getOwnerId());
-            padState.put("ownerTeam", teleportPad.getOwnerTeam());
-            padState.put("isLinked", teleportPad.isLinked());
-            padState.put("isCharging", teleportPad.isCharging());
-            padState.put("chargingProgress", teleportPad.getChargingProgress());
-            padState.put("pulseValue", teleportPad.getPulseValue());
-            if (teleportPad.getLinkedPad() != null) {
-                padState.put("linkedPadId", teleportPad.getLinkedPad().getId());
-            }
-            teleportPadStates.add(padState);
-        }
-        gameState.put("teleportPads", teleportPadStates);
-
-        // Defense laser states
-        List<Map<String, Object>> defenseLaserStates = new ArrayList<>();
-        for (DefenseLaser defenseLaser : gameEntities.getAllDefenseLasers()) {
-            Vector2 pos = defenseLaser.getPosition();
-            Map<String, Object> laserState = new HashMap<>();
-            laserState.put("id", defenseLaser.getId());
-            laserState.put("type", "DEFENSE_LASER");
-            laserState.put("x", pos.x);
-            laserState.put("y", pos.y);
-            laserState.put("rotation", defenseLaser.getCurrentRotation());
-            laserState.put("health", defenseLaser.healthPercent());
-            laserState.put("active", defenseLaser.isActive());
-            laserState.put("ownerId", defenseLaser.getOwnerId());
-            laserState.put("ownerTeam", defenseLaser.getOwnerTeam());
-            defenseLaserStates.add(laserState);
-        }
-        gameState.put("defenseLasers", defenseLaserStates);
-
-        // Beam states
-        List<Map<String, Object>> beamStates = new ArrayList<>();
-        for (Beam beam : gameEntities.getAllBeams()) {
-            Vector2 startPos = beam.getStartPoint();
-            Vector2 effectiveEndPos = beam.getEffectiveEndPoint(); // Use effective end point for rendering
-            Map<String, Object> beamState = new HashMap<>();
-            beamState.put("id", beam.getId());
-            beamState.put("startX", startPos.x);
-            beamState.put("startY", startPos.y);
-            beamState.put("endX", effectiveEndPos.x);
-            beamState.put("endY", effectiveEndPos.y);
-            beamState.put("ownerId", beam.getOwnerId());
-            beamState.put("ownerTeam", beam.getOwnerTeam());
-            beamState.put("damage", beam.getDamage());
-            beamState.put("damageType", beam.getDamageApplicationType().name());
-            beamState.put("durationPercent", beam.getDurationPercent());
-            beamState.put("isHealingBeam", beam.isHealingBeam());
-            beamState.put("canPiercePlayers", beam.canPiercePlayers());
-            beamState.put("canPierceObstacles", beam.canPierceObstacles());
-            beamStates.add(beamState);
-        }
-        gameState.put("beams", beamStates);
-
-        // Include KOTH zone states if enabled
-        if (gameConfig.getRules().hasKothZones()) {
-            List<Map<String, Object>> zoneStates = new ArrayList<>();
-            for (KothZone zone : gameEntities.getAllKothZones()) {
-                Vector2 pos = zone.getPosition();
-                Map<String, Object> zoneState = new HashMap<>();
-                zoneState.put("id", zone.getId());
-                zoneState.put("zoneNumber", zone.getZoneNumber());
-                zoneState.put("x", pos.x);
-                zoneState.put("y", pos.y);
-                zoneState.put("radius", 80.0); // ZONE_RADIUS from KothZone
-                zoneState.put("controllingTeam", zone.getControllingTeam());
-                zoneState.put("state", zone.getState().name());
-                zoneState.put("captureProgress", zone.getCaptureProgress());
-                zoneState.put("playerCount", zone.getTotalPlayerCount());
-                zoneStates.add(zoneState);
-            }
-            gameState.put("kothZones", zoneStates);
-        }
-
-        // Include workshop states if workshops are enabled
-        if (gameConfig.getRules().hasWorkshops()) {
-            List<Map<String, Object>> workshopStates = new ArrayList<>();
-            for (Workshop workshop : gameEntities.getAllWorkshops()) {
-                Vector2 pos = workshop.getPosition();
-                Map<String, Object> workshopState = new HashMap<>();
-                workshopState.put("id", workshop.getId());
-                workshopState.put("type", "WORKSHOP");
-                workshopState.put("x", pos.x);
-                workshopState.put("y", pos.y);
-                workshopState.put("width", ((Rectangle) workshop.getBody().getFixture(0).getShape()).getWidth());
-                workshopState.put("height", ((Rectangle) workshop.getBody().getFixture(0).getShape()).getHeight());
-                workshopState.put("craftRadius", workshop.getBoundingRadius());
-                workshopState.put("craftTime", workshop.getCraftTime());
-                workshopState.put("maxPowerUps", workshop.getMaxPowerUps());
-                int activeCrafters = workshop.getActiveCrafters();
-                workshopState.put("activeCrafters", activeCrafters);
-                workshopState.put("craftingProgress", workshop.getAllCraftingProgress());
-
-                // Add detailed shape data for client rendering (inherited from Obstacle)
-                workshopState.putAll(workshop.getShapeData());
-
-                workshopStates.add(workshopState);
-            }
-            gameState.put("workshops", workshopStates);
-        }
-
-        // Include headquarters states if headquarters are enabled
-        if (gameConfig.getRules().hasHeadquarters()) {
-            List<Map<String, Object>> hqStates = new ArrayList<>();
-            for (Headquarters hq : gameEntities.getAllHeadquarters()) {
-                Vector2 pos = hq.getPosition();
-                Map<String, Object> hqState = new HashMap<>();
-                hqState.put("id", hq.getId());
-                hqState.put("type", "HEADQUARTERS");
-                hqState.put("team", hq.getTeamNumber());
-                hqState.put("x", pos.x);
-                hqState.put("y", pos.y);
-                hqState.put("health", hq.healthPercent());
-                hqState.put("active", hq.isActive());
-
-                // Add shape data for client rendering
-                hqState.putAll(hq.getShapeData());
-
-                hqStates.add(hqState);
-            }
-            gameState.put("headquarters", hqStates);
-        }
-
-        // Include power-up states
-        List<Map<String, Object>> powerUpStates = new ArrayList<>();
-        for (PowerUp powerUp : gameEntities.getAllPowerUps()) {
-            Vector2 pos = powerUp.getPosition();
-            Map<String, Object> powerUpState = new HashMap<>();
-            powerUpState.put("id", powerUp.getId());
-            powerUpState.put("type", "POWERUP"); // Frontend expects this to identify as utility entity
-            powerUpState.put("powerUpType", powerUp.getType().name()); // Store the actual power-up type
-            powerUpState.put("displayName", powerUp.getType().getDisplayName());
-            powerUpState.put("renderHint", powerUp.getType().getRenderHint());
-            powerUpState.put("x", pos.x);
-            powerUpState.put("y", pos.y);
-            powerUpState.put("workshopId", powerUp.getWorkshopId());
-            powerUpState.put("duration", powerUp.getDuration());
-            powerUpState.put("effectStrength", powerUp.getEffectStrength());
-            powerUpStates.add(powerUpState);
-        }
-        gameState.put("powerUps", powerUpStates);
-
-        // Include flag states if flags are enabled
-        if (gameConfig.getRules().hasFlags()) {
-            List<Map<String, Object>> flagStates = new ArrayList<>();
-            for (Flag flag : gameEntities.getAllFlags()) {
-                Vector2 pos = flag.getPosition();
-                Map<String, Object> flagState = new HashMap<>();
-                flagState.put("id", flag.getId());
-                flagState.put("x", pos.x);
-                flagState.put("y", pos.y);
-                flagState.put("ownerTeam", flag.getOwnerTeam());
-                flagState.put("state", flag.getState().name());
-                flagState.put("carriedBy", flag.getCarriedByPlayerId());
-                flagState.put("homeX", flag.getHomePosition().x);
-                flagState.put("homeY", flag.getHomePosition().y);
-                flagState.put("captureCount", flag.getCaptureCount());
-                flagStates.add(flagState);
-            }
-            gameState.put("flags", flagStates);
-            gameState.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
-        }
-
-        broadcast(gameState);
     }
 
     /**
@@ -1461,203 +1021,15 @@ public class GameManager {
                 && !(Math.abs(position.y) + checkRadius > halfHeight);
     }
 
-    /**
-     * Find a varied spawn point for a specific team that avoids clustering.
-     * Tries multiple locations to avoid spawning too close to other players.
-     *
-     * @param team Team number (0 for FFA)
-     * @return Spawn point for the team with good spacing
-     */
-    private Vector2 findVariedSpawnPointForTeam(int team) {
-        Vector2 bestSpawnPoint = null;
-        double bestMinDistance = 0;
-
-        // Try multiple spawn attempts to find the best one
-        for (int attempt = 0; attempt < 15; attempt++) {
-            Vector2 candidateSpawn = findSpawnPointForTeam(team);
-
-            // Calculate minimum distance to any active player
-            double minDistanceToPlayer = Double.MAX_VALUE;
-            for (Player player : gameEntities.getAllPlayers()) {
-                if (player.isActive()) {
-                    double distance = candidateSpawn.distance(player.getPosition());
-                    minDistanceToPlayer = Math.min(minDistanceToPlayer, distance);
-                }
-            }
-
-            // Keep the spawn point with the best (largest) minimum distance
-            if (minDistanceToPlayer > bestMinDistance) {
-                bestMinDistance = minDistanceToPlayer;
-                bestSpawnPoint = candidateSpawn;
-            }
-
-            // If we found a spawn point with good spacing, use it
-            if (bestMinDistance > 150.0) { // Minimum desired spacing
-                break;
-            }
-        }
-
-        return bestSpawnPoint != null ? bestSpawnPoint : findSpawnPointForTeam(team);
-    }
-
-    /**
-     * Find a spawn point for a specific team.
-     * Uses team-based spawn areas if team mode is enabled, otherwise FFA spawning.
-     *
-     * @param team Team number (0 for FFA)
-     * @return Spawn point for the team
-     */
-    private Vector2 findSpawnPointForTeam(int team) {
-        if (gameConfig.isFreeForAll() || team == 0) {
-            return findFFASpawnPoint();
-        }
-
-        if (teamSpawnManager.isTeamSpawningEnabled()) {
-            // Try to get a team spawn point that avoids obstacles
-            Vector2 teamSpawnPoint = teamSpawnManager.getSafeTeamSpawnPoint(team, gameEntities.getAllPlayers(), 100.0);
-
-            // Verify it's clear of terrain obstacles using TerrainGenerator
-            if (terrainGenerator.isPositionClear(teamSpawnPoint, 50.0)) {
-                return teamSpawnPoint;
-            }
-
-            // If team spawn point is blocked, try to find a safe position near the team area
-            TeamSpawnArea teamArea = teamSpawnManager.getTeamArea(team);
-            if (teamArea != null) {
-                for (int attempts = 0; attempts < 10; attempts++) {
-                    Vector2 candidate = teamArea.generateSpawnPoint();
-                    if (terrainGenerator.isPositionClear(candidate, 50.0)) {
-                        return candidate;
-                    }
-                }
-            }
-        }
-
-        // Fallback to FFA spawning
-        return findFFASpawnPoint();
-    }
-
-    /**
-     * Find a safe spawn point for Free For All mode.
-     *
-     * @return FFA spawn point
-     */
-    private Vector2 findFFASpawnPoint() {
-        if (teamSpawnManager != null) {
-            Vector2 ffaSpawnPoint = teamSpawnManager.getSafeFFASpawnPoint(gameEntities.getAllPlayers(), 100.0);
-
-            // Verify it's clear of terrain obstacles
-            if (terrainGenerator.isPositionClear(ffaSpawnPoint, 50.0)) {
-                return ffaSpawnPoint;
-            }
-        }
-
-        // Use terrain generator's safe spawn position method
-        Vector2 terrainSafeSpawn = terrainGenerator.getSafeSpawnPosition(50.0);
-
-        // Double-check it's not too close to existing players
-        for (Player player : gameEntities.getAllPlayers()) {
-            if (player.isActive() && terrainSafeSpawn.distance(player.getPosition()) < 100.0) {
-                // Try legacy spawn as final fallback
-                return findLegacySpawnPoint();
-            }
-        }
-
-        return terrainSafeSpawn;
-    }
-
-    /**
-     * Legacy spawn point logic for backward compatibility.
-     *
-     * @return Legacy spawn point
-     */
-    private Vector2 findLegacySpawnPoint() {
-        for (int attempts = 0; attempts < 10; attempts++) {
-            double x = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldWidth() - 100);
-            double y = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldHeight() - 100);
-            Vector2 candidate = new Vector2(x, y);
-
-            boolean tooClose = false;
-            for (Player other : gameEntities.getAllPlayers()) {
-                if (other.getPosition().distance(candidate) < 100) {
-                    tooClose = true;
-                    break;
-                }
-            }
-
-            if (!tooClose) {
-                return candidate;
-            }
-        }
-
-        return new Vector2(
-                (ThreadLocalRandom.current().nextDouble() - 0.5) * gameConfig.getWorldWidth() * 0.8,
-                (ThreadLocalRandom.current().nextDouble() - 0.5) * gameConfig.getWorldHeight() * 0.8);
+    private void sendGameState() {
+        Map<String, Object> gameState = gameStateSerializer.createGameState();
+        broadcast(gameState);
     }
 
     private Map<String, Object> createInitialGameState(Player player) {
-        Map<String, Object> state = new HashMap<>();
-        state.put("type", "initialState");
-        state.put("playerId", player.getId());
-        state.put("worldWidth", gameConfig.getWorldWidth());
-        state.put("worldHeight", gameConfig.getWorldHeight());
-        state.put("teamCount", gameConfig.getTeamCount());
-        state.put("teamMode", gameConfig.isTeamMode());
-
-        // Add team spawn area information
-        if (teamSpawnManager.isTeamSpawningEnabled()) {
-            state.put("teamAreas", teamSpawnManager.getTeamAreaInfo());
-        }
-
-        // Add procedural terrain data
-        state.put("terrain", terrainGenerator.getTerrainData());
-
-        List<Map<String, Object>> obstacles = new ArrayList<>();
-        for (Obstacle obstacle : gameEntities.getAllObstacles()) {
-            Vector2 pos = obstacle.getPosition();
-            Map<String, Object> obsData = new HashMap<>();
-            obsData.put("id", obstacle.getId());
-            obsData.put("x", pos.x);
-            obsData.put("y", pos.y);
-            obsData.put("type", obstacle.getType().name());
-            obsData.put("shapeCategory", obstacle.getShapeCategory().name());
-            obsData.put("boundingRadius", obstacle.getBoundingRadius());
-            obsData.put("rotation", obstacle.getBody().getTransform().getRotation().toRadians());
-            obsData.put("health", obstacle.getHealth());
-            obsData.put("active", obstacle.isActive());
-            obsData.put("ownerId", obstacle.getOwnerId());
-            obsData.put("ownerTeam", obstacle.getOwnerTeam());
-
-            // Add detailed shape data for client rendering
-            obsData.putAll(obstacle.getShapeData());
-
-            obstacles.add(obsData);
-        }
-        state.put("obstacles", obstacles);
-
-        // Add flag information if flags are enabled
-        if (gameConfig.getRules().hasFlags()) {
-            List<Map<String, Object>> flagsData = new ArrayList<>();
-            for (Flag flag : gameEntities.getAllFlags()) {
-                Map<String, Object> flagData = new HashMap<>();
-                flagData.put("id", flag.getId());
-                flagData.put("ownerTeam", flag.getOwnerTeam());
-                flagData.put("homeX", flag.getHomePosition().x);
-                flagData.put("homeY", flag.getHomePosition().y);
-                flagsData.add(flagData);
-            }
-            state.put("flags", flagsData);
-            state.put("flagsPerTeam", gameConfig.getRules().getFlagsPerTeam());
-            state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
-        }
-
-        return state;
+        return gameStateSerializer.createInitialGameState(player);
     }
 
-    /**
-     * Process individual player respawns based on respawn rules.
-     * This centralizes respawn logic in GameManager where RuleSystem is accessible.
-     */
     private void processPlayerRespawns() {
         for (Player player : gameEntities.getAllPlayers()) {
             if (ruleSystem.shouldPlayerRespawn(player)) {
@@ -1672,17 +1044,54 @@ public class GameManager {
         player.setRespawnTime(0);
 
         // Move to spawn point
-        Vector2 spawnPoint = findVariedSpawnPointForTeam(player.getTeam());
+        Vector2 spawnPoint = spawnPointManager.findVariedSpawnPointForTeam(player.getTeam());
         player.getBody().getTransform().setTranslation(spawnPoint.x, spawnPoint.y);
         player.getBody().setLinearVelocity(0, 0);
         player.getBody().setAngularVelocity(0);
+        
+        // Apply spawn invincibility to give player time to get their bearings
+        StatusEffectManager.applySpawnInvincibility(player);
+        
+        // Ensure VIP is assigned for this team if VIP mode is enabled
+        if (gameConfig.getRules().hasVip()) {
+            ruleSystem.ensureVipForTeam(player.getTeam());
+        }
     }
 
     public void killPlayer(Player victim, Player shooter) {
+        // Check if this was a VIP kill BEFORE calling die() (which clears status effects)
+        boolean wasVip = gameConfig.getRules().hasVip() && StatusEffectManager.isVip(victim);
+        
         if (shooter != null) {
             shooter.addKill();
         }
         victim.die();
+
+        if (gameConfig.getRules().getVictoryCondition() == VictoryCondition.ELIMINATION) {
+            victim.setEliminated(true);
+            victim.setEliminationTime(System.currentTimeMillis());
+            
+            // Calculate placement based on how many players are still alive
+            int remainingPlayers = (int) gameEntities.getAllPlayers().stream()
+                    .filter(p -> !p.isEliminated())
+                    .count();
+            victim.setPlacement(remainingPlayers + 1); // +1 because this player just got eliminated
+        }
+
+        // Award points if this was a VIP kill
+        if (wasVip) {
+            if (shooter != null && shooter.getTeam() != victim.getTeam()) {
+                ruleSystem.awardVipKill(shooter.getTeam());
+                
+                // Broadcast VIP kill event
+                gameEventManager.broadcastSystemMessage(
+                        String.format("💀 %s eliminated the VIP %s! +1 OBJECTIVE", 
+                                shooter.getPlayerName(), victim.getPlayerName()));
+            }
+            
+            // VIP died, need to select a new VIP for their team after respawn
+            // This will be handled in ensureVipForTeam during respawn
+        }
 
         // Check if player lost their last life
         if (victim.loseLife()) {
@@ -1697,6 +1106,12 @@ public class GameManager {
         for (Flag flag : gameEntities.getAllFlags()) {
             if (flag.isCarried() && flag.getCarriedByPlayerId() == victim.getId()) {
                 flag.drop();
+
+                // Remove ball carrier status effect if they were carrying the oddball
+                if (flag.isOddball()) {
+                    StatusEffectManager.removeBallCarrier(victim);
+                }
+
                 log.info("Player {} died, dropped flag {}", victim.getId(), flag.getId());
             }
         }
@@ -1706,7 +1121,7 @@ public class GameManager {
         // Broadcast kill event with team colors
         String killerName = shooter != null ? shooter.getPlayerName() : "Unknown";
         String victimName = victim.getPlayerName();
-        String weaponName = shooter != null ? generateWeaponDisplayName(shooter.getCurrentWeapon()) : "Unknown weapon";
+        String weaponName = shooter != null ? WeaponFormatter.getDisplayName(shooter.getCurrentWeapon()) : "Unknown weapon";
         Integer killerTeam = shooter != null ? shooter.getTeam() : null;
         Integer victimTeam = victim.getTeam();
 
@@ -1774,7 +1189,7 @@ public class GameManager {
 
         // Create large explosion effect at HQ location
         FieldEffect explosion = new FieldEffect(
-                Config.nextId(),
+                IdGenerator.nextEntityId(),
                 -1, // No owner
                 FieldEffectType.EXPLOSION,
                 pos,
@@ -1833,46 +1248,4 @@ public class GameManager {
         player.addCapture();
     }
 
-    /**
-     * Generate a meaningful display name for a weapon based on its ordinance and effects.
-     * For custom weapons, shows the ordinance type and primary effects instead of "Custom Weapon".
-     */
-    private String generateWeaponDisplayName(Weapon weapon) {
-        String weaponName = weapon.getName();
-
-        // If it's a preset weapon (not "Custom Weapon"), use the original name
-        if (!"Custom Weapon".equals(weaponName)) {
-            return weaponName;
-        }
-
-        // For custom weapons, generate a name based on ordinance and effects
-        StringBuilder displayName = new StringBuilder();
-
-        // Add ordinance name
-        String ordinanceName = weapon.getOrdinance().name();
-        switch (weapon.getOrdinance()) {
-            case BULLET -> displayName.append("Bullet");
-            case ROCKET -> displayName.append("Rocket");
-            case GRENADE -> displayName.append("Grenade");
-            case PLASMA -> displayName.append("Plasma");
-            case DART -> displayName.append("Dart");
-            case FLAMETHROWER -> displayName.append("Flamethrower");
-            case LASER -> displayName.append("Laser");
-            case PLASMA_BEAM -> displayName.append("Plasma Beam");
-            case HEAL_BEAM -> displayName.append("Heal Beam");
-            case RAILGUN -> displayName.append("Railgun");
-            default -> displayName.append(ordinanceName);
-        }
-
-        // Add primary bullet effects
-        Set<BulletEffect> effects = weapon.getBulletEffects();
-        if (!effects.isEmpty()) {
-            displayName.append(" ");
-            effects.stream()
-                    .min(Comparator.comparing(BulletEffect::ordinal))
-                    .map(e -> "(" + e.toString().toLowerCase() + ")")
-                    .ifPresent(displayName::append);
-        }
-        return displayName.toString();
-    }
 }

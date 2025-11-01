@@ -37,6 +37,20 @@ public class CombatBehavior implements AIBehavior {
         lastShotTime += deltaTime;
         targetPursuitTime += deltaTime;
 
+        // Check for environmental hazards - high priority
+        double areaDanger = HazardAvoidance.getAreaDangerRating(aiPlayer.getPosition(), 150.0, gameEntities);
+        if (areaDanger > 0.7) {
+            // Very dangerous area - flee to safety immediately
+            Vector2 safePos = HazardAvoidance.findNearestSafePosition(aiPlayer.getPosition(), 200.0, gameEntities);
+            if (safePos != null) {
+                Vector2 fleeDirection = safePos.copy().subtract(aiPlayer.getPosition());
+                fleeDirection.normalize();
+                input.setMoveX(fleeDirection.x);
+                input.setMoveY(fleeDirection.y);
+                return input; // Skip combat, just flee
+            }
+        }
+
         // Check for retreat conditions
         evaluateRetreatConditions(aiPlayer, deltaTime);
 
@@ -48,7 +62,7 @@ public class CombatBehavior implements AIBehavior {
             lastTargetPosition = target.getPosition().copy();
 
             // Generate tactical movement and combat
-            generateTacticalMovement(aiPlayer, target, input, deltaTime);
+            generateTacticalMovement(aiPlayer, target, input, deltaTime, gameEntities);
             generateCombatActions(aiPlayer, target, input, deltaTime);
 
         } else if (timeSinceLastTarget < combatTimeout) {
@@ -68,7 +82,7 @@ public class CombatBehavior implements AIBehavior {
     /**
      * Enhanced tactical movement based on weapon range, health, and tactical situation.
      */
-    private void generateTacticalMovement(AIPlayer aiPlayer, AITargetWrapper target, PlayerInput input, double deltaTime) {
+    private void generateTacticalMovement(AIPlayer aiPlayer, AITargetWrapper target, PlayerInput input, double deltaTime, GameEntities gameEntities) {
         Vector2 playerPos = aiPlayer.getPosition();
         Vector2 targetPos = target.getPosition();
         Vector2 direction = targetPos.copy().subtract(playerPos);
@@ -142,6 +156,10 @@ public class CombatBehavior implements AIBehavior {
         }
 
         moveDirection.normalize();
+        
+        // Apply hazard avoidance to final movement direction
+        moveDirection = HazardAvoidance.calculateSafeMovement(playerPos, moveDirection, gameEntities, 100.0);
+        
         input.setMoveX(moveDirection.x * moveIntensity);
         input.setMoveY(moveDirection.y * moveIntensity);
     }
@@ -442,8 +460,13 @@ public class CombatBehavior implements AIBehavior {
     }
     
     private boolean isTeammate(AIPlayer aiPlayer, AITargetWrapper target) {
-        // In FFA mode (team 0), everyone is an enemy
-        if (aiPlayer.getTeam() == 0 || target.getTeam() == 0) {
+        // In FFA mode (team 0), check if it's the AI's own turret
+        if (aiPlayer.getTeam() == 0) {
+            // Don't attack your own turrets in FFA
+            if (target.isTurret() && target.getOwnerId() == aiPlayer.getId()) {
+                return true;
+            }
+            // Everyone else is an enemy in FFA
             return false;
         }
         

@@ -4,7 +4,6 @@ class GameEngine {
         this.gameContainer = null;
         this.uiContainer = null;
         this.players = new Map();
-        this.playerInterpolators = new Map();
         this.projectiles = new Map();
         this.projectileInterpolators = new Map();
         this.obstacles = new Map();
@@ -27,6 +26,10 @@ class GameEngine {
         this.minZoom = 0.5;
         this.maxZoom = 2.0;
         this.zoomSmoothingFactor = 0.05; // Smooth zoom transitions
+        
+        // Spectator mode
+        this.isSpectator = false;
+        this.spectatorMode = null; // Will be SpectatorMode instance if spectating
         
         // Store references to event handlers and timeouts for cleanup
         this.eventHandlers = {
@@ -314,7 +317,16 @@ class GameEngine {
         // Clear old team score containers
         for (let [teamId, container] of this.teamScoreContainers) {
             if (!teams.includes(teamId)) {
+                // Properly destroy the container and its children to prevent memory leak
+                if (container.colorBar) {
+                    container.colorBar.clear();
+                    container.colorBar.destroy();
+                }
+                if (container.scoreText) {
+                    container.scoreText.destroy();
+                }
                 this.roundTimerContainer.removeChild(container);
+                container.destroy({ children: true, texture: false, baseTexture: false });
                 this.teamScoreContainers.delete(teamId);
             }
         }
@@ -711,9 +723,13 @@ class GameEngine {
         window.gameEngine = this;
         
         this.inputManager = new InputManager();
-        this.inputManager.onInputChange = (input) => {
-            this.sendPlayerInput(input);
-        };
+        
+        // Spectators don't send input to server
+        if (!this.isSpectator) {
+            this.inputManager.onInputChange = (input) => {
+                this.sendPlayerInput(input);
+            };
+        }
         
         // Store reference for HUD updates
         this.inputManager.gameEngine = this;
@@ -753,6 +769,9 @@ class GameEngine {
         // Create clean 2D top-down assets
         
         // Player sprite - clean circular design
+        // Use a container to ensure the texture is centered on the circle, not the overall bounds
+        const playerContainer = new PIXI.Container();
+        
         const playerGraphics = new PIXI.Graphics();
         playerGraphics.beginFill(0x8c8c8c);
         playerGraphics.drawCircle(0, 0, 20);
@@ -763,7 +782,16 @@ class GameEngine {
         playerGraphics.drawPolygon([15, 0, 25, -5, 25, 5]);
         playerGraphics.endFill();
         
-        this.playerTexture = this.app.renderer.generateTexture(playerGraphics);
+        playerContainer.addChild(playerGraphics);
+        
+        // Generate texture with explicit bounds centered on the circle (not the triangle)
+        // This ensures rotation happens around the circle's center
+        const bounds = new PIXI.Rectangle(-25, -25, 50, 50);
+        this.playerTexture = this.app.renderer.generateTexture(playerContainer, {
+            region: bounds,
+            resolution: 1
+        });
+        playerContainer.destroy({ children: true }); // Clean up after generating texture
         
         // Projectile - simple bullet
         const projectileGraphics = new PIXI.Graphics();
@@ -771,6 +799,7 @@ class GameEngine {
         projectileGraphics.drawCircle(0, 0, 3);
         projectileGraphics.endFill();
         this.projectileTexture = this.app.renderer.generateTexture(projectileGraphics);
+        projectileGraphics.destroy(); // Clean up graphics after generating texture
 
         // Obstacle - boulder
         const boulderGraphics = new PIXI.Graphics();
@@ -778,6 +807,7 @@ class GameEngine {
         boulderGraphics.drawCircle(0, 0, 20);
         boulderGraphics.endFill();
         this.boulderTexture = this.app.renderer.generateTexture(boulderGraphics);
+        boulderGraphics.destroy(); // Clean up graphics after generating texture
         
         // Death marker - tombstone/X
         const deathGraphics = new PIXI.Graphics();
@@ -793,21 +823,28 @@ class GameEngine {
         deathGraphics.drawCircle(0, 0, 18);
         deathGraphics.endFill();
         this.deathTexture = this.app.renderer.generateTexture(deathGraphics);
+        deathGraphics.destroy(); // Clean up graphics after generating texture
     }
-    
     
     async connectToServer() {
         const params = new URLSearchParams(window.location.search);
         const gameId = params.get('gameId') || 'default';
+        const spectate = params.get('spectate') === 'true';
+        
+        // Set spectator flag
+        this.isSpectator = spectate;
         
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/game/${gameId}`;
+        const wsUrl = `${protocol}//${window.location.host}/game/${gameId}?spectate=${spectate}`;
         
         return new Promise((resolve, reject) => {
             this.websocket = new WebSocket(wsUrl);
             
             this.websocket.onopen = () => {
-                this.sendPlayerConfiguration();
+                // Spectators don't need to send configuration
+                if (!this.isSpectator) {
+                    this.sendPlayerConfiguration();
+                }
                 resolve();
             };
             
@@ -839,27 +876,34 @@ class GameEngine {
     gameLoop() {
         this.gameLoopCounter = (this.gameLoopCounter || 0) + 1;
         
-        if (this.myPlayerId && this.players.has(this.myPlayerId)) {
-            const myPlayer = this.players.get(this.myPlayerId);
-            if (myPlayer && myPlayer.playerData) {
-                this.camera.targetX = myPlayer.playerData.x;
-                this.camera.targetY = myPlayer.playerData.y; // No inversion needed - coordinates match now!
-                
-                // Update target zoom based on weapon range
-                this.updateZoomForWeaponRange(myPlayer.playerData);
-            }
-            } else {
-            // Default camera position if no player yet
-            this.camera.targetX = 0;
-            this.camera.targetY = 0;
-        }
+        const deltaTime = this.app.ticker.deltaMS / 1000;
         
-        this.camera.x += (this.camera.targetX - this.camera.x) * this.camera.smoothing;
-        this.camera.y += (this.camera.targetY - this.camera.y) * this.camera.smoothing;
+        // Update spectator mode if active (spectator handles its own camera)
+        if (this.spectatorMode) {
+            this.spectatorMode.update(deltaTime);
+        } else {
+            // Normal player camera logic
+            if (this.myPlayerId && this.players.has(this.myPlayerId)) {
+                const myPlayer = this.players.get(this.myPlayerId);
+                if (myPlayer && myPlayer.playerData) {
+                    this.camera.targetX = myPlayer.playerData.x;
+                    this.camera.targetY = myPlayer.playerData.y; // No inversion needed - coordinates match now!
+                    
+                    // Update target zoom based on weapon range
+                    this.updateZoomForWeaponRange(myPlayer.playerData);
+                }
+            } else {
+                // Default camera position if no player yet
+                this.camera.targetX = 0;
+                this.camera.targetY = 0;
+            }
+            
+            this.camera.x += (this.camera.targetX - this.camera.x) * this.camera.smoothing;
+            this.camera.y += (this.camera.targetY - this.camera.y) * this.camera.smoothing;
+        }
         
         // Smoothly interpolate zoom level
         this.zoomLevel += (this.targetZoomLevel - this.zoomLevel) * this.zoomSmoothingFactor;
-        
         this.updateCameraTransform();
         this.updateMinimap();
     }
@@ -938,6 +982,17 @@ class GameEngine {
     }
     
     handleServerMessage(data) {
+        // Handle spectator-specific messages
+        if (data.type === 'spectatorInit') {
+            this.handleSpectatorInit(data);
+            return;
+        }
+        
+        // Delegate to spectator mode if active
+        if (this.spectatorMode) {
+            this.spectatorMode.handleServerMessage(data);
+        }
+        
         switch (data.type) {
             case 'initialState':
                 this.handleInitialState(data);
@@ -961,6 +1016,41 @@ class GameEngine {
                 this.showGameOverScreen(data);
                 break;
         }
+    }
+    
+    handleSpectatorInit(data) {
+        // Set world bounds (server sends worldWidth/worldHeight directly)
+        this.worldBounds.width = data.worldWidth || 2000;
+        this.worldBounds.height = data.worldHeight || 2000;
+        
+        // Store team information (for rendering)
+        this.teamMode = data.teamMode || false;
+        this.teamCount = data.teamCount || 0;
+        
+        // Store terrain information
+        this.terrainData = data.terrain || null;
+        
+        // Create background and grid (same as normal players)
+        if (this.terrainData) {
+            this.createProceduralTerrain();
+        }
+        
+        if (this.teamMode && data.teamAreas) {
+            this.teamAreas = data.teamAreas;
+            this.createTeamSpawnAreas();
+        }
+        
+        this.createCrosshatchGrid();
+        
+        // Don't create minimap for spectators (they have full view)
+        // Spectators don't need player HUD either
+        
+        // Create spectator mode instance
+        this.spectatorMode = new SpectatorMode(this);
+        this.spectatorMode.init(data);
+        
+        // Show game UI
+        document.getElementById('game-ui').style.display = 'block';
     }
     
     handleInitialState(data) {
@@ -1025,6 +1115,9 @@ class GameEngine {
                     this.removePlayer(playerId);
                 }
             }
+            
+            // Update scoreboard for all clients (including spectators)
+            this.updateScoreboard(data.players);
         }
         
         if (data.projectiles) {
@@ -1505,7 +1598,6 @@ class GameEngine {
      * Handle round end event - display scores
      */
     handleRoundEnd(data) {
-        console.log('Round ended:', data);
         this.showRoundEndScreen(data);
     }
     
@@ -1513,7 +1605,6 @@ class GameEngine {
      * Handle round start event - clear round end screen
      */
     handleRoundStart(data) {
-        console.log('Round started:', data);
         this.hideRoundEndScreen();
     }
     
@@ -1893,11 +1984,27 @@ class GameEngine {
                 margin: 20px 0;
             `;
             
-            // Sort scores by score value
-            const sortedScores = [...data.finalScores].sort((a, b) => b.score - a.score);
+            // Sort scores - in ELIMINATION mode, use placement; otherwise use score
+            const isEliminationMode = data.victoryCondition === 'ELIMINATION';
+            const sortedScores = [...data.finalScores].sort((a, b) => {
+                if (isEliminationMode && a.placement && b.placement) {
+                    // Sort by placement (lower is better: 1st < 2nd < 3rd)
+                    if (a.placement !== b.placement) {
+                        return a.placement - b.placement;
+                    }
+                    // If placement is same, sort by kills
+                    if (b.kills !== a.kills) {
+                        return b.kills - a.kills;
+                    }
+                    // If kills are same, sort by elimination time (later is better)
+                    return b.eliminationTime - a.eliminationTime;
+                }
+                // Default: sort by score
+                return b.score - a.score;
+            });
             
             sortedScores.forEach((score, index) => {
-                const scoreRow = this.createFinalScoreRow(score, index + 1, data);
+                const scoreRow = this.createFinalScoreRow(score, index + 1, data, isEliminationMode);
                 scoresContainer.appendChild(scoreRow);
             });
             
@@ -1939,7 +2046,7 @@ class GameEngine {
     /**
      * Create a score row for the game over screen
      */
-    createFinalScoreRow(score, rank, gameOverData) {
+    createFinalScoreRow(score, rank, gameOverData, isEliminationMode = false) {
         const isLocalPlayer = score.playerId === this.myPlayerId;
         
         const row = document.createElement('div');
@@ -1965,7 +2072,9 @@ class GameEngine {
         `;
         
         const rankBadge = document.createElement('span');
-        rankBadge.textContent = this.getRankBadge(rank);
+        // In elimination mode, use actual placement if available
+        const displayRank = isEliminationMode && score.placement ? score.placement : rank;
+        rankBadge.textContent = this.getRankBadge(displayRank);
         rankBadge.style.cssText = `
             font-size: 24px;
             min-width: 40px;
@@ -1997,12 +2106,22 @@ class GameEngine {
             font-size: 16px;
         `;
         
-        const scoreSpan = document.createElement('span');
-        scoreSpan.style.color = '#FFD700';
-        scoreSpan.style.fontWeight = 'bold';
-        scoreSpan.style.fontSize = '20px';
-        scoreSpan.textContent = `${score.score} pts`;
-        stats.appendChild(scoreSpan);
+        // In elimination mode, show placement more prominently
+        if (isEliminationMode && score.placement) {
+            const placementSpan = document.createElement('span');
+            placementSpan.style.color = displayRank <= 3 ? '#FFD700' : '#cccccc';
+            placementSpan.style.fontWeight = 'bold';
+            placementSpan.style.fontSize = '18px';
+            placementSpan.textContent = `#${score.placement}`;
+            stats.appendChild(placementSpan);
+        } else {
+            const scoreSpan = document.createElement('span');
+            scoreSpan.style.color = '#FFD700';
+            scoreSpan.style.fontWeight = 'bold';
+            scoreSpan.style.fontSize = '20px';
+            scoreSpan.textContent = `${score.score} pts`;
+            stats.appendChild(scoreSpan);
+        }
         
         const killsSpan = document.createElement('span');
         killsSpan.style.color = '#4ade80';
@@ -2124,11 +2243,6 @@ class GameEngine {
         this.players.set(playerData.id, sprite);
         this.gameContainer.addChild(sprite);
         
-        // Create player interpolator
-        const isLocalPlayer = playerData.id === this.myPlayerId;
-        const interpolator = new PlayerInterpolator(sprite, playerData.id, isLocalPlayer);
-        this.playerInterpolators.set(playerData.id, interpolator);
-        
         // Enable sorting for this container
         this.gameContainer.sortableChildren = true;
     }
@@ -2137,25 +2251,9 @@ class GameEngine {
         const sprite = this.players.get(playerData.id);
         if (!sprite) return;
 
-        // Enable interpolation for smoothness, but keep prediction disabled
-        const USE_INTERPOLATION = false;
-        
-        if (USE_INTERPOLATION) {
-            // Use interpolator for smooth movement
-            const interpolator = this.playerInterpolators.get(playerData.id);
-            if (interpolator) {
-                // Update interpolator with server position
-                interpolator.updateFromServer(playerData.x, playerData.y, playerData.rotation || 0);
-            } else {
-                // Fallback to direct position update if no interpolator
-                sprite.position.set(playerData.x, playerData.y);
-                sprite.rotation = playerData.rotation || 0;
-            }
-        } else {
-            // Direct position update - no interpolation
-            sprite.position.set(playerData.x, playerData.y);
-            sprite.rotation = playerData.rotation || 0;
-        }
+        // Direct position update - no interpolation
+        sprite.position.set(playerData.x, playerData.y);
+        sprite.rotation = playerData.rotation || 0;
         
         // Handle death marker logic
         const isDead = !playerData.active && playerData.respawnTime > 0;
@@ -2204,13 +2302,6 @@ class GameEngine {
             // Remove sprite from game container
             this.gameContainer.removeChild(sprite);
             this.players.delete(playerId);
-        }
-        
-        // Clean up player interpolator
-        const interpolator = this.playerInterpolators.get(playerId);
-        if (interpolator) {
-            interpolator.destroy();
-            this.playerInterpolators.delete(playerId);
         }
     }
     
@@ -2515,28 +2606,78 @@ class GameEngine {
         if (activePowerUps.length > 0) {
             this.updatePowerUpVisuals(sprite.powerUpContainer, activePowerUps, sprite);
         } else {
-            // Clear all power-up effects if no active power-ups
+            // Clear all power-up effects if no active power-ups - properly destroy to prevent memory leak
+            const childrenToDestroy = [...sprite.powerUpContainer.children];
+            childrenToDestroy.forEach(child => {
+                if (child.clear && typeof child.clear === 'function') {
+                    child.clear();
+                }
+                child.destroy({ children: true, texture: false, baseTexture: false });
+            });
             sprite.powerUpContainer.removeChildren();
         }
     }
     
     /**
      * Create/update power-up visual effects based on render hints.
+     * 
+     * RenderHint Format: "effect_name:#COLOR:animation_type:show_icon:Display Name:params"
+     * 
+     * Animation Types:
+     * - pulse/sparkle: Pulsing ring with rotating particles
+     *   Params: {particles, radius, particleDistance, particleSize}
+     * - shield: Polygonal shield pattern
+     *   Params: {sides, size}
+     * - slow: Dripping effect for debuffs
+     *   Params: {drops, radius, dropSize, dripAmount}
+     * - cloud: Billowing cloud effect (poison)
+     *   Params: {radius, puffs, wisps}
+     * - flame: Flickering fire particles (burning)
+     *   Params: {count, radius, height}
+     * - star: Orbiting stars (special status)
+     *   Params: {count, radius, size}
+     * - crown: VIP crown with sparkles
+     * 
+     * Examples:
+     * "poison:#8BC34A:cloud:true:Poison"
+     * "fire:#FF4500:flame:true:Burning:{\"count\":12,\"radius\":22,\"height\":10}"
      */
     updatePowerUpVisuals(container, activePowerUps, sprite) {
-        // Parse render hints: "effect_name:#COLOR:animation_type:show_icon:Display Name"
+        // Parse render hints: "effect_name:#COLOR:animation_type:show_icon:Display Name:params"
+        // params is optional JSON object for animation customization
         const effects = activePowerUps.map(hint => {
             const parts = hint.split(':');
+            
+            // Try to parse optional params (6th field onwards, rejoined in case of colons in JSON)
+            let params = {};
+            if (parts.length > 5) {
+                try {
+                    const paramsString = parts.slice(5).join(':');
+                    params = JSON.parse(paramsString);
+                } catch (e) {
+                    // If JSON parsing fails, treat as legacy format without params
+                    console.warn('Failed to parse renderHint params:', e);
+                }
+            }
+            
             return {
                 name: parts[0] || 'unknown',
                 color: parseInt(parts[1]?.replace('#', '') || 'FFFFFF', 16),
                 animation: parts[2] || 'pulse',
                 showIcon: parts[3] === 'true',
-                displayName: parts[4] || ''
+                displayName: parts[4] || '',
+                params: params
             };
         });
         
-        // Clear existing visuals
+        // Clear existing visuals - properly destroy to prevent memory leak
+        const childrenToDestroy = [...container.children];
+        childrenToDestroy.forEach(child => {
+            if (child.clear && typeof child.clear === 'function') {
+                child.clear();
+            }
+            child.destroy({ children: true, texture: false, baseTexture: false });
+        });
         container.removeChildren();
         
         // Create visual effect for each active power-up
@@ -2546,32 +2687,41 @@ class GameEngine {
             
             // Draw aura based on effect type
             if (effect.animation === 'sparkle' || effect.animation === 'pulse') {
-                // Pulsing glow ring
+                // Pulsing glow ring with rotating particles
                 const time = Date.now() * 0.003;
-                const pulseSize = 20 + Math.sin(time + index) * 5;
+                const params = effect.params || {};
+                const baseRadius = params.radius || 20;
+                const particleCount = params.particles || 8;
+                const particleDistance = params.particleDistance || 25;
+                const particleSize = params.particleSize || 2;
+                
+                const pulseSize = baseRadius + Math.sin(time + index) * 5;
                 
                 aura.lineStyle(3, effect.color, 0.6);
                 aura.drawCircle(0, 0, pulseSize);
                 
                 // Add inner particles/sparkles
-                for (let i = 0; i < 8; i++) {
-                    const angle = (i / 8) * Math.PI * 2 + time;
-                    const distance = 25;
-                    const x = Math.cos(angle) * distance;
-                    const y = Math.sin(angle) * distance;
+                for (let i = 0; i < particleCount; i++) {
+                    const angle = (i / particleCount) * Math.PI * 2 + time;
+                    const x = Math.cos(angle) * particleDistance;
+                    const y = Math.sin(angle) * particleDistance;
                     
                     aura.beginFill(effect.color, 0.8);
-                    aura.drawCircle(x, y, 2);
+                    aura.drawCircle(x, y, particleSize);
                     aura.endFill();
                 }
             } else if (effect.animation === 'shield') {
                 // Hexagonal shield pattern
                 const time = Date.now() * 0.002;
-                const size = 22 + Math.sin(time) * 2;
+                const params = effect.params || {};
+                const baseSize = params.size || 22;
+                const sides = params.sides || 6;
+                
+                const size = baseSize + Math.sin(time) * 2;
                 
                 aura.lineStyle(2, effect.color, 0.7);
-                for (let i = 0; i < 6; i++) {
-                    const angle = (i / 6) * Math.PI * 2;
+                for (let i = 0; i < sides; i++) {
+                    const angle = (i / sides) * Math.PI * 2;
                     const x = Math.cos(angle) * size;
                     const y = Math.sin(angle) * size;
                     if (i === 0) {
@@ -2584,13 +2734,214 @@ class GameEngine {
             } else if (effect.animation === 'slow') {
                 // Slow debuff - dripping effect
                 const time = Date.now() * 0.002;
+                const params = effect.params || {};
+                const dropCount = params.drops || 6;
+                const radius = params.radius || 18;
+                const dropSize = params.dropSize || 3;
+                const dripAmount = params.dripAmount || 3;
+                
                 aura.beginFill(effect.color, 0.5);
-                for (let i = 0; i < 6; i++) {
-                    const angle = (i / 6) * Math.PI * 2 + time;
-                    const x = Math.cos(angle) * 18;
-                    const y = Math.sin(angle) * 18 + Math.sin(time * 2 + i) * 3;
-                    aura.drawCircle(x, y, 3);
+                for (let i = 0; i < dropCount; i++) {
+                    const angle = (i / dropCount) * Math.PI * 2 + time;
+                    const x = Math.cos(angle) * radius;
+                    const y = Math.sin(angle) * radius + Math.sin(time * 2 + i) * dripAmount;
+                    aura.drawCircle(x, y, dropSize);
                 }
+                aura.endFill();
+            } else if (effect.animation === 'cloud') {
+                // Cloud effect - for poison (green pallor cloud)
+                const time = Date.now() * 0.001;
+                const params = effect.params || {};
+                const baseRadius = params.radius || 22;
+                const puffCount = params.puffs || 6;
+                const wispCount = params.wisps || 8;
+                
+                // Create multiple overlapping cloud puffs for organic shape
+                for (let i = 0; i < puffCount; i++) {
+                    const angle = (i / puffCount) * Math.PI * 2 + time * 0.5;
+                    const puffDistance = baseRadius * 0.6;
+                    const x = Math.cos(angle) * puffDistance;
+                    const y = Math.sin(angle) * puffDistance;
+                    const puffSize = baseRadius * (0.5 + Math.sin(time * 2 + i) * 0.1);
+                    
+                    aura.beginFill(effect.color, 0.25 + Math.sin(time * 3 + i) * 0.1);
+                    aura.drawCircle(x, y, puffSize);
+                    aura.endFill();
+                }
+                
+                // Central cloud mass
+                const centralSize = baseRadius * (0.7 + Math.sin(time * 1.5) * 0.1);
+                aura.beginFill(effect.color, 0.3);
+                aura.drawCircle(0, 0, centralSize);
+                aura.endFill();
+                
+                // Add smaller wispy details
+                for (let i = 0; i < wispCount; i++) {
+                    const angle = (i / wispCount) * Math.PI * 2 + time * 1.5;
+                    const distance = baseRadius * 0.8;
+                    const x = Math.cos(angle) * distance;
+                    const y = Math.sin(angle) * distance;
+                    const wispSize = 3 + Math.sin(time * 4 + i) * 1;
+                    
+                    aura.beginFill(effect.color, 0.35 + Math.sin(time * 5 + i) * 0.15);
+                    aura.drawCircle(x, y, wispSize);
+                    aura.endFill();
+                }
+            } else if (effect.animation === 'flame') {
+                // Flame effect - for burning (flickering fire particles)
+                const time = Date.now() * 0.004;
+                const params = effect.params || {};
+                const particleCount = params.count || 10;
+                const baseRadius = params.radius || 20;
+                const flameHeight = params.height || 8;
+                
+                // Create flickering flame particles
+                for (let i = 0; i < particleCount; i++) {
+                    const angle = (i / particleCount) * Math.PI * 2 + time * 2;
+                    const distance = baseRadius + Math.sin(time * 3 + i) * 5;
+                    const x = Math.cos(angle) * distance;
+                    const y = Math.sin(angle) * distance - Math.abs(Math.sin(time * 4 + i)) * flameHeight;
+                    const size = 2 + Math.sin(time * 5 + i) * 1.5;
+                    const alpha = 0.4 + Math.sin(time * 6 + i) * 0.3;
+                    
+                    aura.beginFill(effect.color, alpha);
+                    aura.drawCircle(x, y, size);
+                    aura.endFill();
+                }
+                
+                // Add inner glow
+                const glowSize = baseRadius * (0.6 + Math.sin(time * 3) * 0.15);
+                aura.beginFill(effect.color, 0.2);
+                aura.drawCircle(0, 0, glowSize);
+                aura.endFill();
+                
+                // Add bright center
+                aura.beginFill(effect.color, 0.5 + Math.sin(time * 4) * 0.2);
+                aura.drawCircle(0, 0, baseRadius * 0.3);
+                aura.endFill();
+            } else if (effect.animation === 'star') {
+                // Star effect - orbiting stars for special status (ball carrier)
+                const time = Date.now() * 0.003;
+                const params = effect.params || {};
+                const starCount = params.count || 8;
+                const orbitRadius = params.radius || 30;
+                const starSize = params.size || 3;
+                
+                // Outer pulsing ring
+                const pulseSize = 25 + Math.sin(time) * 3;
+                aura.lineStyle(2, effect.color, 0.6);
+                aura.drawCircle(0, 0, pulseSize);
+                
+                // Orbiting stars
+                for (let i = 0; i < starCount; i++) {
+                    const angle = (i / starCount) * Math.PI * 2 + time * 2;
+                    const cx = Math.cos(angle) * orbitRadius;
+                    const cy = Math.sin(angle) * orbitRadius;
+                    
+                    // Draw a 5-point star
+                    aura.beginFill(effect.color, 0.9);
+                    const starPoints = 5;
+                    const outerR = starSize;
+                    const innerR = starSize * 0.4;
+                    for (let j = 0; j < starPoints * 2; j++) {
+                        const starAngle = (j / (starPoints * 2)) * Math.PI * 2 - Math.PI / 2;
+                        const radius = j % 2 === 0 ? outerR : innerR;
+                        const sx = cx + Math.cos(starAngle) * radius;
+                        const sy = cy + Math.sin(starAngle) * radius;
+                        if (j === 0) {
+                            aura.moveTo(sx, sy);
+                        } else {
+                            aura.lineTo(sx, sy);
+                        }
+                    }
+                    aura.closePath();
+                    aura.endFill();
+                }
+                
+                // Central star
+                aura.beginFill(effect.color, 0.8);
+                const centerStarPoints = 5;
+                const centerOuterR = 8;
+                const centerInnerR = 3;
+                for (let j = 0; j < centerStarPoints * 2; j++) {
+                    const starAngle = (j / (centerStarPoints * 2)) * Math.PI * 2 - Math.PI / 2 + time;
+                    const radius = j % 2 === 0 ? centerOuterR : centerInnerR;
+                    const sx = Math.cos(starAngle) * radius;
+                    const sy = Math.sin(starAngle) * radius;
+                    if (j === 0) {
+                        aura.moveTo(sx, sy);
+                    } else {
+                        aura.lineTo(sx, sy);
+                    }
+                }
+                aura.closePath();
+                aura.endFill();
+            } else if (effect.animation === 'crown') {
+                // VIP crown - special prominent indicator
+                const time = Date.now() * 0.003;
+                const pulseSize = 25 + Math.sin(time) * 3;
+                
+                // Outer golden ring
+                aura.lineStyle(3, effect.color, 0.8);
+                aura.drawCircle(0, 0, pulseSize);
+                
+                // Inner star pattern
+                aura.lineStyle(2, effect.color, 0.9);
+                for (let i = 0; i < 5; i++) {
+                    const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
+                    const outerRadius = 30;
+                    const innerRadius = 15;
+                    
+                    const x1 = Math.cos(angle) * outerRadius;
+                    const y1 = Math.sin(angle) * outerRadius;
+                    const x2 = Math.cos(angle + Math.PI / 5) * innerRadius;
+                    const y2 = Math.sin(angle + Math.PI / 5) * innerRadius;
+                    
+                    if (i === 0) {
+                        aura.moveTo(x1, y1);
+                    } else {
+                        aura.lineTo(x1, y1);
+                    }
+                    aura.lineTo(x2, y2);
+                }
+                aura.closePath();
+                
+                // Rotating sparkles (small stars)
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i / 8) * Math.PI * 2 + time * 2;
+                    const distance = 35;
+                    const cx = Math.cos(angle) * distance;
+                    const cy = Math.sin(angle) * distance;
+                    
+                    // Draw a small star manually
+                    aura.beginFill(effect.color, 0.9);
+                    const starPoints = 4;
+                    const outerR = 3;
+                    const innerR = 1.5;
+                    for (let j = 0; j < starPoints * 2; j++) {
+                        const starAngle = (j / (starPoints * 2)) * Math.PI * 2 - Math.PI / 2;
+                        const radius = j % 2 === 0 ? outerR : innerR;
+                        const sx = cx + Math.cos(starAngle) * radius;
+                        const sy = cy + Math.sin(starAngle) * radius;
+                        if (j === 0) {
+                            aura.moveTo(sx, sy);
+                        } else {
+                            aura.lineTo(sx, sy);
+                        }
+                    }
+                    aura.closePath();
+                    aura.endFill();
+                }
+            } else {
+                // Fallback for unknown animation types - simple pulsing circle
+                const time = Date.now() * 0.003;
+                const pulseSize = 20 + Math.sin(time) * 4;
+                
+                aura.lineStyle(2, effect.color, 0.6);
+                aura.drawCircle(0, 0, pulseSize);
+                
+                aura.beginFill(effect.color, 0.3);
+                aura.drawCircle(0, 0, pulseSize * 0.7);
                 aura.endFill();
             }
             
@@ -3524,73 +3875,164 @@ class GameEngine {
     // ===== Flag Management (CTF Mode) =====
     
     /**
-     * Create a flag for capture-the-flag mode
+     * Create a flag for capture-the-flag mode or oddball
      */
     createFlag(flagData) {
         const flagContainer = new PIXI.Container();
         
         flagContainer.position.set(flagData.x, flagData.y);
         
-        // Create flag pole
-        const pole = new PIXI.Graphics();
-        pole.beginFill(0x333333);
-        pole.drawRect(-2, -30, 4, 30);
-        pole.endFill();
-        flagContainer.addChild(pole);
+        // Check if this is an oddball (ownerTeam === 0)
+        const isOddball = flagData.ownerTeam === 0 || flagData.isOddball;
         
-        // Create flag sprite (triangle)
-        const flag = new PIXI.Graphics();
-        const teamColor = this.getTeamColor(flagData.ownerTeam);
-        flag.beginFill(teamColor);
-        flag.moveTo(0, -30);
-        flag.lineTo(20, -20);
-        flag.lineTo(0, -10);
-        flag.lineTo(0, -30);
-        flag.endFill();
-        
-        // Add black outline
-        flag.lineStyle(1, 0x000000, 1);
-        flag.moveTo(0, -30);
-        flag.lineTo(20, -20);
-        flag.lineTo(0, -10);
-        
-        flagContainer.addChild(flag);
-        flagContainer.flagSprite = flag;
-        
-        // Add team number text on flag
-        const teamText = new PIXI.Text(`${flagData.ownerTeam}`, {
-            fontSize: 12,
-            fill: 0xffffff,
-            fontWeight: 'bold',
-            stroke: 0x000000,
-            strokeThickness: 2
-        });
-        teamText.anchor.set(0.5);
-        teamText.scale.y = -1; // Flip Y-axis back so text is readable
-        teamText.position.set(10, -20);
-        flagContainer.addChild(teamText);
-        
-        // Add glow effect for visibility
-        const glow = new PIXI.Graphics();
-        glow.beginFill(teamColor, 0.3);
-        glow.drawCircle(0, -15, 25);
-        glow.endFill();
-        flagContainer.addChildAt(glow, 0); // Behind everything else
-        flagContainer.glow = glow;
-        
-        // Animate glow
-        flagContainer.glowPhase = 0;
+        if (isOddball) {
+            // Create ODDBALL - basketball style
+            this.createOddballGraphics(flagContainer, flagData);
+        } else {
+            // Create regular CTF flag
+            this.createCTFFlagGraphics(flagContainer, flagData);
+        }
         
         // Set z-index (above players for visibility when carried)
         flagContainer.zIndex = 11;
         
         // Store flag data
         flagContainer.flagData = flagData;
+        flagContainer.isOddball = isOddball;
         this.flags.set(flagData.id, flagContainer);
         this.gameContainer.addChild(flagContainer);
         
         // Enable sorting for proper z-index handling
         this.gameContainer.sortableChildren = true;
+    }
+    
+    /**
+     * Create oddball graphics (yellow ball with star design)
+     */
+    createOddballGraphics(flagContainer, flagData) {
+        // Create yellow sphere
+        const ball = new PIXI.Graphics();
+        
+        // Draw main yellow ball
+        const ballColor = 0xFFFF00; // Bright yellow
+        ball.beginFill(ballColor);
+        ball.drawCircle(0, 0, 20);
+        ball.endFill();
+        
+        // Add darker yellow/gold outline
+        ball.lineStyle(2, 0xFFAA00, 1);
+        ball.drawCircle(0, 0, 20);
+        
+        // Draw star pattern in the center
+        ball.lineStyle(0); // No outline for star
+        ball.beginFill(0xFFFFFF, 0.9); // White star
+        
+        // Draw a 5-pointed star
+        const starPoints = 5;
+        const outerRadius = 12;
+        const innerRadius = 5;
+        
+        for (let i = 0; i < starPoints * 2; i++) {
+            const radius = i % 2 === 0 ? outerRadius : innerRadius;
+            const angle = (i * Math.PI) / starPoints - Math.PI / 2;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+            
+            if (i === 0) {
+                ball.moveTo(x, y);
+            } else {
+                ball.lineTo(x, y);
+            }
+        }
+        ball.closePath();
+        ball.endFill();
+        
+        // Add star outline
+        ball.lineStyle(1.5, 0xFFAA00, 1);
+        for (let i = 0; i < starPoints * 2; i++) {
+            const radius = i % 2 === 0 ? outerRadius : innerRadius;
+            const angle = (i * Math.PI) / starPoints - Math.PI / 2;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+            
+            if (i === 0) {
+                ball.moveTo(x, y);
+            } else {
+                ball.lineTo(x, y);
+            }
+        }
+        ball.closePath();
+        
+        flagContainer.addChild(ball);
+        flagContainer.ballSprite = ball;
+        
+        // Add golden glow for oddball
+        const glow = new PIXI.Graphics();
+        glow.beginFill(0xFFFF00, 0.4); // Yellow glow
+        glow.drawCircle(0, 0, 30);
+        glow.endFill();
+        flagContainer.addChildAt(glow, 0); // Behind ball
+        flagContainer.glow = glow;
+        
+        // Add "ODDBALL" label
+        const label = new PIXI.Text('⭐ ODDBALL', {
+            fontSize: 10,
+            fill: 0xFFFFFF,
+            fontWeight: 'bold',
+            stroke: 0x000000,
+            strokeThickness: 3
+        });
+        label.anchor.set(0.5);
+        label.scale.y = -1; // Flip Y-axis back
+        label.position.set(0, 35);
+        flagContainer.addChild(label);
+        flagContainer.label = label;
+        
+        // Animate glow pulsing
+        flagContainer.glowPhase = 0;
+    }
+    
+    /**
+     * Create CTF flag graphics (traditional flag)
+     */
+    createCTFFlagGraphics(flagContainer, flagData) {
+        // Create flag pole (extends upward from base)
+        const pole = new PIXI.Graphics();
+        pole.beginFill(0xEEEEEE); // Very bright silver/chrome
+        pole.lineStyle(1, 0xFFFFFF, 0.8); // White outline for extra visibility
+        pole.drawRect(-2, 0, 4, 30);
+        pole.endFill();
+        flagContainer.addChild(pole);
+        
+        // Create flag sprite (triangle) - flag at top of pole
+        const flag = new PIXI.Graphics();
+        const teamColor = this.getTeamColor(flagData.ownerTeam);
+        flag.beginFill(teamColor);
+        flag.moveTo(0, 30);
+        flag.lineTo(20, 20);
+        flag.lineTo(0, 10);
+        flag.lineTo(0, 30);
+        flag.endFill();
+        
+        // Add black outline
+        flag.lineStyle(1, 0x000000, 1);
+        flag.moveTo(0, 30);
+        flag.lineTo(20, 20);
+        flag.lineTo(0, 10);
+        
+        flagContainer.addChild(flag);
+        flagContainer.flagSprite = flag;
+        
+        // Add glow effect for visibility
+        const glow = new PIXI.Graphics();
+        glow.beginFill(teamColor, 0.3);
+        glow.drawCircle(0, 15, 25);
+        glow.endFill();
+        flagContainer.addChildAt(glow, 0); // Behind everything else
+        flagContainer.glow = glow;
+        
+        // Animate glow
+        flagContainer.glowPhase = 0;
     }
     
     /**
@@ -3605,25 +4047,49 @@ class GameEngine {
         
         // Update visual state based on flag state
         const state = flagData.state;
+        const isOddball = flagContainer.isOddball;
         
         if (state === 'CARRIED') {
-            // Flag is being carried - make it bob and pulse
+            // Flag/ball is being carried - make it bob and pulse
             flagContainer.alpha = 0.9;
             flagContainer.scale.set(0.8);
+            
+            // Extra spin animation for oddball
+            if (isOddball && flagContainer.ballSprite) {
+                flagContainer.ballSprite.rotation += 0.05;
+            }
         } else if (state === 'DROPPED') {
-            // Flag is dropped - pulse slowly
+            // Flag/ball is dropped - pulse slowly
             flagContainer.alpha = 0.8 + Math.sin(Date.now() / 500) * 0.2;
             flagContainer.scale.set(1.0);
+            
+            // Bounce animation for oddball
+            if (isOddball && flagContainer.ballSprite) {
+                const bounce = Math.abs(Math.sin(Date.now() / 300)) * 5;
+                flagContainer.ballSprite.position.y = -bounce;
+            }
         } else {
-            // Flag is at home - full opacity
+            // Flag/ball is at home - full opacity
             flagContainer.alpha = 1.0;
             flagContainer.scale.set(1.0);
+            
+            // Gentle float for oddball at home
+            if (isOddball && flagContainer.ballSprite) {
+                const float = Math.sin(Date.now() / 800) * 3;
+                flagContainer.ballSprite.position.y = float;
+            }
         }
         
         // Animate glow
         flagContainer.glowPhase += 0.05;
         if (flagContainer.glow) {
-            flagContainer.glow.alpha = 0.2 + Math.sin(flagContainer.glowPhase) * 0.1;
+            if (isOddball) {
+                // Oddball has more intense golden glow pulse
+                flagContainer.glow.alpha = 0.3 + Math.sin(flagContainer.glowPhase) * 0.2;
+            } else {
+                // CTF flag has subtle glow
+                flagContainer.glow.alpha = 0.2 + Math.sin(flagContainer.glowPhase) * 0.1;
+            }
         }
         
         flagContainer.flagData = flagData;
@@ -4698,9 +5164,11 @@ class GameEngine {
         const graphics = container.getChildAt(0);
         if (graphics) {
             graphics.clear();
-            // Remove old text children
+            // Remove and destroy old text children to prevent memory leak
             while (graphics.children.length > 0) {
-                graphics.removeChildAt(0);
+                const child = graphics.children[0];
+                graphics.removeChild(child);
+                child.destroy({ children: true, texture: false, baseTexture: false });
             }
             this.createHeadquartersGraphics(graphics, entityData);
         }
@@ -4822,6 +5290,7 @@ class GameEngine {
             case 'FRAGMENTATION':
             case 'FIRE':
             case 'ELECTRIC':
+            case 'FREEZE':
             case 'POISON':
             case 'ERUPTION':
                 return 20; // Above players
@@ -4903,13 +5372,23 @@ class GameEngine {
      * Update teleport pad visual effects
      */
     updateTeleportPadVisual(container, entityData) {
+        // Only recreate graphics if state changed (cooldown, active, etc)
+        // This prevents memory leak from recreating graphics every frame
+        const stateKey = `${entityData.active}_${entityData.cooldownRemaining || 0}`;
+        if (container.lastStateKey === stateKey) {
+            return; // No change, skip recreation
+        }
+        
         // Recreate graphics for dynamic effects
-        container.removeChild(container.entityGraphics);
-        container.entityGraphics.destroy();
+        if (container.entityGraphics) {
+            container.removeChild(container.entityGraphics);
+            container.entityGraphics.destroy({ children: true, texture: false, baseTexture: false });
+        }
         
         const newGraphics = this.createTeleportPadGraphics(new PIXI.Graphics(), entityData);
         container.addChild(newGraphics);
         container.entityGraphics = newGraphics;
+        container.lastStateKey = stateKey;
         
         // Update connection lines if this pad is linked
         this.updateTeleportPadConnections(entityData);
@@ -4925,11 +5404,31 @@ class GameEngine {
         // Remove existing connection for this pad
         if (this.teleportConnections.has(padId)) {
             const connection = this.teleportConnections.get(padId);
+            if (connection.animationFunction) {
+                this.app.ticker.remove(connection.animationFunction);
+                connection.animationFunction = null;
+            }
             if (connection.parent) {
                 connection.parent.removeChild(connection);
             }
             connection.destroy();
             this.teleportConnections.delete(padId);
+        }
+        
+        // Remove any connections pointing TO this pad from other pads
+        // This handles the case where another pad was linked to this one but is now being re-linked
+        for (let [otherPadId, connection] of this.teleportConnections) {
+            if (connection.linkedPadId === padId) {
+                if (connection.animationFunction) {
+                    this.app.ticker.remove(connection.animationFunction);
+                    connection.animationFunction = null;
+                }
+                if (connection.parent) {
+                    connection.parent.removeChild(connection);
+                }
+                connection.destroy();
+                this.teleportConnections.delete(otherPadId);
+            }
         }
         
         // Create new connection if this pad is linked
@@ -4956,6 +5455,9 @@ class GameEngine {
         // Add to game container (behind other entities)
         connectionGraphics.zIndex = 1;
         this.gameContainer.addChild(connectionGraphics);
+        
+        // Store metadata about the connection for cleanup
+        connectionGraphics.linkedPadId = padId2;
         
         // Store connection for cleanup
         this.teleportConnections.set(padId1, connectionGraphics);
@@ -5282,7 +5784,7 @@ class GameEngine {
             
             // Remove any connections TO this pad
             for (let [otherPadId, connection] of this.teleportConnections) {
-                if (connection.entityData && connection.entityData.linkedPadId === padId) {
+                if (connection.linkedPadId === padId) {
                     if (connection.animationFunction) {
                         this.app.ticker.remove(connection.animationFunction);
                     }
@@ -5571,6 +6073,9 @@ class GameEngine {
             );
         }
         
+        // Reset line style before drawing filled center
+        graphics.lineStyle(0);
+        
         // Frozen center
         graphics.beginFill(0xffffff, 0.7);
         graphics.drawCircle(0, 0, radius * 0.2);
@@ -5611,63 +6116,67 @@ class GameEngine {
      * Create poison effect graphics
      */
     createPoisonGraphics(graphics, radius, effectData) {
-        // Outer poison cloud - darker green
-        graphics.beginFill(0x2e7d32, 0.3);
+        // Create a pallor-like green cloud effect with multiple overlapping soft circles
+        // to simulate a misty, toxic gas cloud
+        
+        // Outer diffuse cloud - very pale sickly green
+        graphics.beginFill(0x9ccc65, 0.15);
         graphics.drawCircle(0, 0, radius);
         graphics.endFill();
         
-        // Middle poison cloud - medium green
-        graphics.beginFill(0x388e3c, 0.5);
-        graphics.drawCircle(0, 0, radius * 0.7);
-        graphics.endFill();
-        
-        // Inner poison cloud - brighter green
-        graphics.beginFill(0x4caf50, 0.6);
-        graphics.drawCircle(0, 0, radius * 0.4);
-        graphics.endFill();
-        
-        // Toxic bubbles scattered throughout
-        for (let i = 0; i < 15; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * radius * 0.9;
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const size = 1.5 + Math.random() * 3;
+        // Create multiple overlapping cloud puffs for organic cloud shape
+        const numPuffs = 8;
+        for (let i = 0; i < numPuffs; i++) {
+            const angle = (i / numPuffs) * Math.PI * 2;
+            const puffDistance = radius * 0.4;
+            const x = Math.cos(angle) * puffDistance;
+            const y = Math.sin(angle) * puffDistance;
+            const puffSize = radius * (0.5 + Math.random() * 0.2);
             
-            // Vary bubble colors for more realistic poison effect
-            const bubbleColors = [0x66bb6a, 0x81c784, 0x9ccc65, 0x8bc34a];
-            const bubbleColor = bubbleColors[Math.floor(Math.random() * bubbleColors.length)];
-            
-            graphics.beginFill(bubbleColor, 0.7);
-            graphics.drawCircle(x, y, size);
+            // Sickly pale green with varying opacity
+            graphics.beginFill(0x8bc34a, 0.2 + Math.random() * 0.15);
+            graphics.drawCircle(x, y, puffSize);
             graphics.endFill();
         }
         
-        // Poison center - most concentrated
-        graphics.beginFill(0x76ff03, 0.8);
-        graphics.drawCircle(0, 0, radius * 0.2);
+        // Middle layer - more concentrated pallor
+        graphics.beginFill(0x7cb342, 0.25);
+        graphics.drawCircle(0, 0, radius * 0.65);
         graphics.endFill();
         
-        // Add some swirling lines for gas effect
-        graphics.lineStyle(1, 0x689f38, 0.4);
+        // Add smaller wispy cloud details
+        for (let i = 0; i < 12; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.random() * radius * 0.7;
+            const x = Math.cos(angle) * distance;
+            const y = Math.sin(angle) * distance;
+            const wispSize = radius * (0.15 + Math.random() * 0.15);
+            
+            // Varying shades of sickly green
+            const wispColors = [0x9ccc65, 0x8bc34a, 0x7cb342, 0x689f38];
+            const wispColor = wispColors[Math.floor(Math.random() * wispColors.length)];
+            
+            graphics.beginFill(wispColor, 0.2 + Math.random() * 0.15);
+            graphics.drawCircle(x, y, wispSize);
+            graphics.endFill();
+        }
+        
+        // Central denser cloud
+        graphics.beginFill(0x689f38, 0.3);
+        graphics.drawCircle(0, 0, radius * 0.35);
+        graphics.endFill();
+        
+        // Add a few darker spots for depth
         for (let i = 0; i < 5; i++) {
-            const startAngle = (i / 5) * Math.PI * 2;
-            const spiralRadius = radius * 0.6;
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.random() * radius * 0.4;
+            const x = Math.cos(angle) * distance;
+            const y = Math.sin(angle) * distance;
+            const spotSize = radius * (0.08 + Math.random() * 0.1);
             
-            graphics.moveTo(
-                Math.cos(startAngle) * spiralRadius * 0.3,
-                Math.sin(startAngle) * spiralRadius * 0.3
-            );
-            
-            // Create spiral effect
-            for (let j = 1; j <= 8; j++) {
-                const angle = startAngle + (j / 8) * Math.PI * 0.5;
-                const currentRadius = spiralRadius * (0.3 + (j / 8) * 0.7);
-                graphics.lineTo(
-                    Math.cos(angle) * currentRadius,
-                    Math.sin(angle) * currentRadius
-                );
-            }
+            graphics.beginFill(0x558b2f, 0.25);
+            graphics.drawCircle(x, y, spotSize);
+            graphics.endFill();
         }
         
         return graphics;
@@ -6291,32 +6800,30 @@ class GameEngine {
     animatePoison(container) {
         const time = container.animationTime;
         
-        // Slow bubbling effect with multiple frequencies for organic feel
-        const bubble1 = Math.sin(time * 4) * 0.05;
-        const bubble2 = Math.sin(time * 6.5) * 0.03;
-        const bubble3 = Math.sin(time * 8.2) * 0.02;
-        const totalBubble = 0.95 + bubble1 + bubble2 + bubble3;
-        container.scale.set(totalBubble);
+        // Slow billowing cloud effect - gentle expansion and contraction
+        const billow1 = Math.sin(time * 1.2) * 0.04;
+        const billow2 = Math.sin(time * 1.8) * 0.03;
+        const billow3 = Math.sin(time * 2.3) * 0.02;
+        const totalBillow = 1.0 + billow1 + billow2 + billow3;
+        container.scale.set(totalBillow);
         
-        // Gentle swaying with multiple wave components for more natural movement
-        const sway1 = Math.sin(time * 1.8) * 0.03;
-        const sway2 = Math.sin(time * 2.7) * 0.02;
-        container.rotation = sway1 + sway2;
+        // Very slow rotation to simulate cloud swirling
+        container.rotation = time * 0.15;
         
-        // Pulsing alpha to simulate gas density changes
-        const pulse1 = Math.sin(time * 3) * 0.08;
-        const pulse2 = Math.sin(time * 5.3) * 0.05;
-        container.alpha = 0.75 + pulse1 + pulse2;
+        // Pulsing alpha to simulate cloud density changes - more subtle for pallor effect
+        const pulse1 = Math.sin(time * 1.5) * 0.06;
+        const pulse2 = Math.sin(time * 2.2) * 0.04;
+        container.alpha = 0.7 + pulse1 + pulse2;
         
-        // Add subtle position drift to simulate gas movement
+        // Add subtle position drift to simulate gas spreading and movement
         if (!container.originalX) {
             container.originalX = container.x;
             container.originalY = container.y;
         }
         
-        const drift = time * 0.3;
-        container.x = container.originalX + Math.sin(drift) * 2;
-        container.y = container.originalY + Math.cos(drift * 1.3) * 1.5;
+        const drift = time * 0.2;
+        container.x = container.originalX + Math.sin(drift) * 3;
+        container.y = container.originalY + Math.cos(drift * 0.8) * 2.5;
     }
     
     /**
@@ -6682,15 +7189,17 @@ class GameEngine {
                     </tr>
                 </thead>
                 <tbody>
-                    ${sortedPlayers.map(player => `
+                    ${sortedPlayers.map(player => {
+                        const vipIndicator = player.isVip ? ' 👑' : '';
+                        return `
                         <tr style="${player.id === this.myPlayerId ? 'background: rgba(46, 204, 113, 0.2);' : ''}">
-                            <td><span style="color: ${this.getTeamColorCSS(player.team || 0)}">●</span> ${player.name || `Player ${player.id}`}</td>
+                            <td><span style="color: ${this.getTeamColorCSS(player.team || 0)}">●</span> ${player.name || `Player ${player.id}`}${vipIndicator}</td>
                             <td>${player.kills || 0}</td>
                             <td>${player.deaths || 0}</td>
                             ${hasCaptures ? `<td style="color: #FFD700;">${player.captures || 0} 🚩</td>` : ''}
                             <td>${player.active ? 'Alive' : 'Dead'}</td>
                         </tr>
-                    `).join('')}
+                    `}).join('')}
                 </tbody>
             </table>
         `;
@@ -6752,15 +7261,17 @@ class GameEngine {
                     <table style="width: 100%; font-size: 12px;">
                         ${teamPlayers
                             .sort((a, b) => (b.kills || 0) - (a.kills || 0))
-                            .map(player => `
+                            .map(player => {
+                                const vipIndicator = player.isVip ? ' 👑' : '';
+                                return `
                                 <tr style="${player.id === this.myPlayerId ? 'background: rgba(46, 204, 113, 0.2);' : ''}">
-                                    <td style="padding: 2px;">${player.name || `Player ${player.id}`}</td>
+                                    <td style="padding: 2px;">${player.name || `Player ${player.id}`}${vipIndicator}</td>
                                     <td style="padding: 2px; text-align: center;">${player.kills || 0}K</td>
                                     <td style="padding: 2px; text-align: center;">${player.deaths || 0}D</td>
                                     ${hasCaptures ? `<td style="padding: 2px; text-align: center; color: #FFD700;">${player.captures || 0}🚩</td>` : ''}
                                     <td style="padding: 2px; text-align: center;">${player.active ? '✓' : '✗'}</td>
                                 </tr>
-                            `).join('')}
+                            `}).join('')}
                     </table>
                 </div>
             `;
@@ -6785,7 +7296,17 @@ class GameEngine {
         
         // Clear previous minimap content (keep background and title)
         if (this.minimapContent) {
+            // Properly destroy all Graphics objects to prevent memory leak
+            const childrenToDestroy = [...this.minimapContent.children];
+            childrenToDestroy.forEach(child => {
+                if (child.clear && typeof child.clear === 'function') {
+                    child.clear(); // Clear graphics content first
+                }
+                child.destroy({ children: true, texture: false, baseTexture: false });
+            });
+            
             this.hudMinimap.removeChild(this.minimapContent);
+            this.minimapContent.destroy({ children: true, texture: false, baseTexture: false });
         }
         
         // Create new minimap content container
@@ -6830,6 +7351,12 @@ class GameEngine {
             if (data.id === this.myPlayerId) {
                 playerDot.lineStyle(1, 0xffffff);
                 playerDot.drawCircle(x, y, radius);
+            }
+            
+            // Add golden ring for VIP players
+            if (data.isVip) {
+                playerDot.lineStyle(1, 0xFFD700, 1.0);
+                playerDot.drawCircle(x, y, radius + 1.5);
             }
             
             this.minimapContent.addChild(playerDot);
@@ -6946,8 +7473,6 @@ class GameEngine {
             weaponConfig: weaponConfig,
             utilityWeapon: utilityWeapon
         };
-
-        console.log('Sending player configuration:', message);
         this.websocket.send(JSON.stringify(message));
     }
     
@@ -7063,6 +7588,14 @@ class GameEngine {
      * Create simple dark background for better visibility.
      */
     createSimpleDarkBackground() {
+        // Properly destroy existing background children to prevent memory leak
+        const childrenToDestroy = [...this.backgroundContainer.children];
+        childrenToDestroy.forEach(child => {
+            if (child.clear && typeof child.clear === 'function') {
+                child.clear();
+            }
+            child.destroy({ children: true, texture: false, baseTexture: false });
+        });
         this.backgroundContainer.removeChildren();
         const graphics = new PIXI.Graphics();
         graphics.beginFill(0x1a1a1a); // Dark grey
@@ -7089,7 +7622,6 @@ class GameEngine {
      */
     handleWebGLContextLost() {
         console.warn('WebGL context lost - stopping game engine');
-        
         // Clear the memory cleanup interval to prevent errors
         if (this.memoryCleanupInterval) {
             clearInterval(this.memoryCleanupInterval);
@@ -7140,8 +7672,6 @@ class GameEngine {
                           this.fieldEffects.size + this.beams.size + this.utilityEntities.size + 
                           this.flags.size + this.kothZones.size
         };
-        
-        console.log('Entity Management Stats:', stats);
         return stats;
     }
 
@@ -7167,14 +7697,7 @@ class GameEngine {
                 this.projectileInterpolators.delete(id);
             }
         });
-        
-        this.playerInterpolators.forEach((interpolator, id) => {
-            if (!this.players.has(id)) {
-                interpolator.destroy();
-                this.playerInterpolators.delete(id);
-            }
-        });
-        
+
         // Clean up any field effects with orphaned animation functions
         this.fieldEffects.forEach((effect, id) => {
             if (effect.animationFunction && (!effect.parent || !effect.effectData)) {
@@ -7276,9 +7799,6 @@ class GameEngine {
         // Clean up all interpolators
         this.projectileInterpolators.forEach(interpolator => interpolator.destroy());
         this.projectileInterpolators.clear();
-        
-        this.playerInterpolators.forEach(interpolator => interpolator.destroy());
-        this.playerInterpolators.clear();
         
         // Clean up all game objects
         this.projectiles.forEach(projectile => this.cleanupProjectileContainer(projectile));

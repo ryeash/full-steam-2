@@ -104,6 +104,19 @@ public class AIWeaponSelector {
     public static WeaponConfig selectRandomWeapon() {
         return ALL_WEAPONS.get(ThreadLocalRandom.current().nextInt(ALL_WEAPONS.size()));
     }
+    
+    /**
+     * Select a random weapon preset excluding healing weapons.
+     * Used for random weapon rotation mode where healing weapons should not be assigned.
+     *
+     * @return Random non-healing weapon preset
+     */
+    public static WeaponConfig selectRandomNonHealingWeapon() {
+        List<WeaponConfig> nonHealing = ALL_WEAPONS.stream()
+                .filter(w -> w != WeaponConfig.MEDIC_BEAM_PRESET)
+                .toList();
+        return nonHealing.get(ThreadLocalRandom.current().nextInt(nonHealing.size()));
+    }
 
     /**
      * Select a random weapon preset based on AI personality.

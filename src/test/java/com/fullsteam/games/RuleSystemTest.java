@@ -4,6 +4,7 @@ import com.fullsteam.BaseTestClass;
 import com.fullsteam.model.*;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
+import com.fullsteam.games.StatusEffectManager;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.world.World;
 import org.junit.jupiter.api.BeforeEach;
@@ -152,12 +153,12 @@ class RuleSystemTest extends BaseTestClass {
 
     @Test
     @DisplayName("Should declare victory when time limit reached")
-    void testTimeLimitVictory() {
+    void testTimeLimitVictory() throws InterruptedException {
         // Arrange
         GameConfig timeLimitConfig = GameConfig.builder()
                 .rules(Rules.builder()
                         .victoryCondition(VictoryCondition.TIME_LIMIT)
-                        .timeLimit(10.0)
+                        .timeLimit(1.0)
                         .build())
                 .teamCount(2)
                 .playerMaxHealth(100.0)
@@ -180,7 +181,8 @@ class RuleSystemTest extends BaseTestClass {
         gameEntities.addPlayer(player2);
 
         // Act - Fast forward past time limit
-        timeLimitRuleSystem.update(11.0);
+        Thread.sleep(1500);
+        timeLimitRuleSystem.update(1.51);
 
         // Assert
         assertTrue(timeLimitRuleSystem.isGameOver(), "Game should be over");
@@ -355,6 +357,159 @@ class RuleSystemTest extends BaseTestClass {
         // Assert
         assertEquals(-1, player.getLivesRemaining(), "Should have unlimited lives by default");
         assertFalse(player.isEliminated(), "Should not be eliminated initially");
+    }
+
+    // ============================================================================
+    // VIP Mode Tests
+    // ============================================================================
+
+    @Test
+    @DisplayName("Should assign VIP to each team when VIP mode is enabled")
+    void testVipModeInitialization() {
+        // Arrange
+        GameConfig vipConfig = GameConfig.builder()
+                .rules(Rules.builder()
+                        .enableVip(true)
+                        .scoreStyle(ScoreStyle.OBJECTIVE)
+                        .victoryCondition(VictoryCondition.SCORE_LIMIT)
+                        .scoreLimit(5)
+                        .build())
+                .teamCount(2)
+                .playerMaxHealth(100.0)
+                .build();
+
+        GameEntities vipEntities = new GameEntities(vipConfig, world);
+
+        // Add players to both teams
+        Player team1Player1 = createTestPlayer(1, 1);
+        Player team1Player2 = createTestPlayer(2, 1);
+        Player team2Player1 = createTestPlayer(3, 2);
+        Player team2Player2 = createTestPlayer(4, 2);
+
+        vipEntities.addPlayer(team1Player1);
+        vipEntities.addPlayer(team1Player2);
+        vipEntities.addPlayer(team2Player1);
+        vipEntities.addPlayer(team2Player2);
+
+        // Act - Create rule system with VIP mode enabled
+        RuleSystem vipRuleSystem = new RuleSystem(
+                "vip-test-game",
+                vipConfig.getRules(),
+                vipEntities,
+                gameEventManager,
+                broadcaster,
+                vipConfig.getTeamCount()
+        );
+
+        // Assert - Each team should have exactly one VIP
+        Integer team1Vip = vipEntities.getTeamVip(1);
+        Integer team2Vip = vipEntities.getTeamVip(2);
+
+        assertNotNull(team1Vip, "Team 1 should have a VIP");
+        assertNotNull(team2Vip, "Team 2 should have a VIP");
+        assertTrue(team1Vip == 1 || team1Vip == 2, "Team 1 VIP should be one of the team 1 players");
+        assertTrue(team2Vip == 3 || team2Vip == 4, "Team 2 VIP should be one of the team 2 players");
+
+        // Verify VIP status is applied
+        Player vip1 = vipEntities.getPlayer(team1Vip);
+        Player vip2 = vipEntities.getPlayer(team2Vip);
+        assertTrue(StatusEffectManager.isVip(vip1), "Team 1 VIP should have VIP status");
+        assertTrue(StatusEffectManager.isVip(vip2), "Team 2 VIP should have VIP status");
+    }
+
+    @Test
+    @DisplayName("Should award points for VIP kills")
+    void testVipKillScoring() {
+        // Arrange
+        GameConfig vipConfig = GameConfig.builder()
+                .rules(Rules.builder()
+                        .enableVip(true)
+                        .scoreStyle(ScoreStyle.OBJECTIVE)
+                        .victoryCondition(VictoryCondition.SCORE_LIMIT)
+                        .scoreLimit(5)
+                        .build())
+                .teamCount(2)
+                .playerMaxHealth(100.0)
+                .build();
+
+        GameEntities vipEntities = new GameEntities(vipConfig, world);
+
+        Player team1Player = createTestPlayer(1, 1);
+        Player team2Player = createTestPlayer(2, 2);
+
+        vipEntities.addPlayer(team1Player);
+        vipEntities.addPlayer(team2Player);
+
+        RuleSystem vipRuleSystem = new RuleSystem(
+                "vip-test-game",
+                vipConfig.getRules(),
+                vipEntities,
+                gameEventManager,
+                broadcaster,
+                vipConfig.getTeamCount()
+        );
+
+        // Act - Award VIP kill to team 1
+        vipRuleSystem.awardVipKill(1);
+        vipRuleSystem.awardVipKill(1);
+        vipRuleSystem.awardVipKill(2);
+
+        // Assert - Check team scores include VIP kills
+        Map<String, Object> stateData = vipRuleSystem.getStateData();
+        @SuppressWarnings("unchecked")
+        Map<Integer, Integer> teamScores = (Map<Integer, Integer>) stateData.get("teamScores");
+
+        assertEquals(2, teamScores.get(1), "Team 1 should have 2 points from VIP kills");
+        assertEquals(1, teamScores.get(2), "Team 2 should have 1 point from VIP kill");
+    }
+
+    @Test
+    @DisplayName("Should reassign VIP when current VIP becomes inactive")
+    void testVipReassignment() {
+        // Arrange
+        GameConfig vipConfig = GameConfig.builder()
+                .rules(Rules.builder()
+                        .enableVip(true)
+                        .scoreStyle(ScoreStyle.OBJECTIVE)
+                        .build())
+                .teamCount(2)
+                .playerMaxHealth(100.0)
+                .build();
+
+        GameEntities vipEntities = new GameEntities(vipConfig, world);
+
+        Player team1Player1 = createTestPlayer(1, 1);
+        Player team1Player2 = createTestPlayer(2, 1);
+
+        vipEntities.addPlayer(team1Player1);
+        vipEntities.addPlayer(team1Player2);
+
+        RuleSystem vipRuleSystem = new RuleSystem(
+                "vip-test-game",
+                vipConfig.getRules(),
+                vipEntities,
+                gameEventManager,
+                broadcaster,
+                vipConfig.getTeamCount()
+        );
+
+        Integer initialVip = vipEntities.getTeamVip(1);
+        assertNotNull(initialVip, "Team 1 should have initial VIP");
+
+        // Act - Make the VIP inactive
+        Player vipPlayer = vipEntities.getPlayer(initialVip);
+        vipPlayer.setActive(false);
+
+        // Ensure VIP for team (should reassign)
+        vipRuleSystem.ensureVipForTeam(1);
+
+        // Assert - VIP should be reassigned to the other player
+        Integer newVip = vipEntities.getTeamVip(1);
+        assertNotNull(newVip, "Team 1 should have a new VIP");
+        assertNotEquals(initialVip, newVip, "VIP should be reassigned to different player");
+
+        Player newVipPlayer = vipEntities.getPlayer(newVip);
+        assertTrue(StatusEffectManager.isVip(newVipPlayer), "New VIP should have VIP status");
     }
 
     // ============================================================================

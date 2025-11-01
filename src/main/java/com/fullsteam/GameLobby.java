@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.games.GameManager;
 import com.fullsteam.model.GameInfo;
+import com.fullsteam.util.GameConstants;
+import com.fullsteam.util.IdGenerator;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.slf4j.Logger;
@@ -22,7 +24,6 @@ public class GameLobby {
 
     private final Map<String, GameManager> activeGames = new ConcurrentSkipListMap<>();
     private final AtomicLong globalPlayerCount = new AtomicLong(0);
-    private final AtomicLong gameIdCounter = new AtomicLong(1);
 
     // Game cleanup settings
     private static final long CLEANUP_CHECK_INTERVAL_MS = 30 * 1000; // 30 seconds
@@ -47,21 +48,19 @@ public class GameLobby {
     }
 
     public GameManager createGame() {
-        // Use default config
-        GameConfig defaultConfig = GameConfig.builder()
+        return createGameWithConfig(GameConfig.builder()
                 .maxPlayers(18)
                 .teamCount(4)
-                .worldHeight(2000)
+                .worldHeight(3000)
                 .worldWidth(3000)
-                .build();
-        return createGameWithConfig(defaultConfig);
+                .build());
     }
 
     public GameManager createGameWithConfig(GameConfig gameConfig) {
-        if (activeGames.size() >= Config.MAX_GLOBAL_GAMES) {
+        if (activeGames.size() >= GameConstants.MAX_GLOBAL_GAMES) {
             throw new IllegalStateException("Maximum number of games reached");
         }
-        String gameId = "game_" + gameIdCounter.getAndIncrement();
+        String gameId = IdGenerator.nextGameId();
         GameManager game = new GameManager(gameId, gameConfig, objectMapper);
         activeGames.put(gameId, game);
         log.info("Created new game: {} with config: maxPlayers={}, teamCount={}, world={}x{}",

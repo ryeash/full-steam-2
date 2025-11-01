@@ -1,5 +1,6 @@
 package com.fullsteam.games;
 
+import com.fullsteam.model.EntityWorldDensity;
 import com.fullsteam.physics.Obstacle;
 import lombok.Getter;
 import org.dyn4j.geometry.Vector2;
@@ -19,13 +20,19 @@ public class TerrainGenerator {
 
     private final double worldWidth;
     private final double worldHeight;
-
-    // Generated terrain data
+    private final boolean reserveCenterForOddball;
+    private final EntityWorldDensity configuredDensity;
     private final List<Obstacle> generatedObstacles = new ArrayList<>();
 
     public TerrainGenerator(double worldWidth, double worldHeight) {
+        this(worldWidth, worldHeight, false, EntityWorldDensity.RANDOM);
+    }
+
+    public TerrainGenerator(double worldWidth, double worldHeight, boolean reserveCenterForOddball, EntityWorldDensity configuredDensity) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
+        this.reserveCenterForOddball = reserveCenterForOddball;
+        this.configuredDensity = configuredDensity;
         generateTerrain();
     }
 
@@ -40,8 +47,7 @@ public class TerrainGenerator {
      * Generate obstacles appropriate for the terrain type.
      */
     private void generateObstacles() {
-        ObstacleDensity density = getRandomObstacleDensity();
-        int targetObstacleCount = calculateObstacleCountForWorldSize(density);
+        int targetObstacleCount = calculateObstacleCountForWorldSize(configuredDensity);
         int attemptsPerObstacle = 50;
         int successfulPlacements = 0;
         for (int i = 0; i < targetObstacleCount && successfulPlacements < targetObstacleCount; i++) {
@@ -53,28 +59,14 @@ public class TerrainGenerator {
         }
     }
 
-    public enum ObstacleDensity {
-        SPARSE,   // Fewer obstacles, more open space
-        DENSE,    // Normal obstacle density
-        CHOKED    // Many obstacles, cramped battlefield
-    }
-
-    private ObstacleDensity getRandomObstacleDensity() {
-        ObstacleDensity[] densities = ObstacleDensity.values();
-        return densities[ThreadLocalRandom.current().nextInt(densities.length)];
-    }
-
-    private int calculateObstacleCountForWorldSize(ObstacleDensity density) {
+    private int calculateObstacleCountForWorldSize(EntityWorldDensity density) {
         // Calculate base count based on world area
         double worldArea = worldWidth * worldHeight;
         double baseObstaclesPerUnit = 0.000005; // Base density per square unit
 
         // Adjust density multiplier based on selected density
-        double densityMultiplier = switch (density) {
-            case SPARSE -> 0.6 + ThreadLocalRandom.current().nextDouble() * 0.3;  // 0.6-0.9x
-            case DENSE -> 1.2 + ThreadLocalRandom.current().nextDouble() * 0.6;   // 1.2-1.8x
-            case CHOKED -> 2.0 + ThreadLocalRandom.current().nextDouble();  // 2.0-3.0x
-        };
+        // Note: RANDOM should be resolved by getEffectiveDensity() before reaching here
+        double densityMultiplier = density.getMultiplier();
 
         int baseCount = (int) (worldArea * baseObstaclesPerUnit * densityMultiplier);
 
@@ -114,6 +106,15 @@ public class TerrainGenerator {
     private boolean isObstaclePositionClear(Obstacle obstacle) {
         Vector2 position = obstacle.getPosition();
         double radius = obstacle.getBoundingRadius();
+
+        // If oddball is enabled, exclude center area (100 unit radius to be safe)
+        if (reserveCenterForOddball) {
+            double distanceFromCenter = position.distance(new Vector2(0, 0));
+            double oddballClearZone = 100.0; // Clear 100 units around center for oddball
+            if (distanceFromCenter < oddballClearZone + radius) {
+                return false; // Too close to oddball spawn
+            }
+        }
 
         // Add minimum spacing buffer to prevent tight packing
         double spacing = Math.max(10.0, radius * 0.2); // At least 10 units or 20% of radius

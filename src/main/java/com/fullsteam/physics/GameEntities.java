@@ -57,6 +57,9 @@ public class GameEntities {
     // Headquarters entities
     private final Map<Integer, Headquarters> headquarters = new ConcurrentSkipListMap<>();
 
+    // VIP tracking (team number -> VIP player ID)
+    private final Map<Integer, Integer> teamVips = new ConcurrentSkipListMap<>();
+
     private final Deque<Runnable> postWorldUpdateHooks = new ConcurrentLinkedDeque<>();
 
     public GameEntities(GameConfig config, World<Body> world) {
@@ -216,6 +219,15 @@ public class GameEntities {
 
         beams.entrySet().removeIf(entry -> {
             Beam o = entry.getValue();
+            if (o.isExpired()) {
+                world.removeBody(o.getBody());
+                return true;
+            }
+            return false;
+        });
+
+        powerUps.entrySet().removeIf(entry -> {
+            PowerUp o = entry.getValue();
             if (o.isExpired()) {
                 world.removeBody(o.getBody());
                 return true;
@@ -474,6 +486,49 @@ public class GameEntities {
                 .filter(hq -> hq.getTeamNumber() == teamNumber)
                 .findFirst()
                 .orElse(null);
+    }
+
+    // ===== VIP Management =====
+
+    /**
+     * Set the VIP for a specific team.
+     */
+    public void setTeamVip(int teamNumber, int playerId) {
+        teamVips.put(teamNumber, playerId);
+    }
+
+    /**
+     * Get the VIP player ID for a specific team.
+     * Returns null if no VIP is set for that team.
+     */
+    public Integer getTeamVip(int teamNumber) {
+        return teamVips.get(teamNumber);
+    }
+
+    /**
+     * Remove VIP tracking for a specific team.
+     */
+    public void removeTeamVip(int teamNumber) {
+        teamVips.remove(teamNumber);
+    }
+
+    /**
+     * Clear all VIP assignments.
+     */
+    public void clearAllVips() {
+        teamVips.clear();
+    }
+
+    /**
+     * Check if a player is the VIP for their team.
+     */
+    public boolean isPlayerVip(int playerId) {
+        Player player = getPlayer(playerId);
+        if (player == null) {
+            return false;
+        }
+        Integer vipId = teamVips.get(player.getTeam());
+        return vipId != null && vipId == playerId;
     }
 
 }

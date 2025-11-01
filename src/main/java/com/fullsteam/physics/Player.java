@@ -1,6 +1,7 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.Config;
+import com.fullsteam.util.IdGenerator;
 import com.fullsteam.model.AttributeModification;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerInput;
@@ -39,14 +40,11 @@ public class Player extends GameEntity {
     private Vector2 respawnPoint;
     private double maxSpeed = Config.PLAYER_SPEED;
     private final Set<AttributeModification> attributeModifications = new HashSet<>();
-    
-    // Respawn rules tracking
+
     private int livesRemaining = -1; // -1 = unlimited, 0 = eliminated
-    /**
-     * -- GETTER --
-     *  Check if player is permanently eliminated.
-     */
     private boolean eliminated = false; // Permanently eliminated (no more respawns)
+    private long eliminationTime = 0; // Timestamp when player was eliminated (for Battle Royale ranking)
+    private int placement = 0; // Final placement in elimination modes (1 = winner, 2 = 2nd place, etc.)
 
     public Player(int id, String playerName, double x, double y, int team, double maxHealth) {
         super(id, createPlayerBody(x, y), maxHealth);
@@ -169,10 +167,10 @@ public class Player extends GameEntity {
         double fireInterval = 1000.0 / weapon.getFireRate();
         // Check if we have enough ammo for at least one bullet (partial bursts are allowed)
         return isActive()
-               && health > 0
-               && !isReloading
-               && weapon.getCurrentAmmo() > 0
-               && (now - lastShotTime) >= fireInterval;
+                && health > 0
+                && !isReloading
+                && weapon.getCurrentAmmo() > 0
+                && (now - lastShotTime) >= fireInterval;
     }
 
     public boolean canUseUtility() {
@@ -184,7 +182,7 @@ public class Player extends GameEntity {
         double cooldownMs = utilityWeapon.getCooldown() * 1000.0;
         return (now - lastUtilityUseTime) >= cooldownMs;
     }
-    
+
     /**
      * Refund the utility cooldown (e.g. when placement fails).
      * Resets the cooldown timer to allow immediate reuse.
@@ -277,7 +275,7 @@ public class Player extends GameEntity {
      */
     private Beam createBeamFromOrdinance(Ordinance ordinance, Vector2 startPoint, Vector2 direction,
                                          double range, double damage) {
-        int beamId = Config.nextId();
+        int beamId = IdGenerator.nextEntityId();
 
         // Single Beam class handles all beam types via ordinance
         return new Beam(beamId, startPoint, direction, range, damage, getId(), getTeam(), ordinance, weapon.getBulletEffects());
@@ -336,16 +334,20 @@ public class Player extends GameEntity {
         active = false;
         deaths++;
         health = 0;
+        attributeModifications.removeIf(am -> {
+            am.revert(this);
+            return true;
+        });
     }
 
     public void addKill() {
         kills++;
     }
-    
+
     public void addCapture() {
         captures++;
     }
-    
+
     /**
      * Initialize lives for LIMITED respawn mode.
      */
@@ -353,12 +355,14 @@ public class Player extends GameEntity {
         this.livesRemaining = maxLives;
         this.eliminated = false;
     }
-    
+
     /**
      * Consume one life. Returns true if player is now eliminated.
+     * In ELIMINATION mode (livesRemaining = -1), first death eliminates the player.
      */
     public boolean loseLife() {
         if (livesRemaining > 0) {
+            // LIMITED mode: consume a life
             livesRemaining--;
             if (livesRemaining == 0) {
                 eliminated = true;
@@ -367,7 +371,7 @@ public class Player extends GameEntity {
         }
         return false;
     }
-    
+
     /**
      * Check if player has lives remaining.
      */
@@ -414,17 +418,4 @@ public class Player extends GameEntity {
         return super.takeDamage(modifiedDamage);
     }
 
-    /**
-     * Respawn the player with proper health and state reset.
-     * Note: This method is now deprecated - respawn logic is handled by GameManager.
-     */
-    @Deprecated
-    public void respawn() {
-        active = true;
-        health = 100;
-        setPosition(respawnPoint.x, respawnPoint.y);
-        setVelocity(0, 0);
-        weapon.reload();
-        isReloading = false;
-    }
 }

@@ -23,7 +23,7 @@ public class Application {
     }
 
     @Singleton
-    static class ObjectMapperBeanEventListener implements BeanCreatedEventListener<ObjectMapper> {
+    public static final class ObjectMapperBeanEventListener implements BeanCreatedEventListener<ObjectMapper> {
 
         @Override
         public ObjectMapper onCreated(BeanCreatedEvent<ObjectMapper> event) {
@@ -34,7 +34,7 @@ public class Application {
                     .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
                     .configure(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY, true)
                     .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS)
-                    .setSerializationInclusion(JsonInclude.Include.ALWAYS)
+                    .setSerializationInclusion(JsonInclude.Include.NON_NULL)
                     .setDefaultPropertyInclusion(JsonInclude.Include.ALWAYS)
                     .registerModule(new SimpleModule()
                             .addSerializer(Double.class, new SerializerDouble())
@@ -44,7 +44,7 @@ public class Application {
         }
     }
 
-    public static class SerializerBigDecimal extends JsonSerializer<BigDecimal> {
+    public static final class SerializerBigDecimal extends JsonSerializer<BigDecimal> {
         @Override
         public void serialize(BigDecimal value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
             if (value != null) {
@@ -55,7 +55,7 @@ public class Application {
         }
     }
 
-    public static class SerializerDouble extends JsonSerializer<Double> {
+    public static final class SerializerDouble extends JsonSerializer<Double> {
         @Override
         public void serialize(Double value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
             if (value != null) {

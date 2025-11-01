@@ -1,6 +1,6 @@
 package com.fullsteam.controller;
 
-import com.fullsteam.Config;
+import com.fullsteam.util.GameConstants;
 import com.fullsteam.GameLobby;
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.games.GameManager;
@@ -25,6 +25,7 @@ import io.micronaut.http.exceptions.HttpStatusException;
 import io.micronaut.http.server.types.files.StreamedFile;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.validation.Valid;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,7 +60,7 @@ public class GameController {
     public LobbyInfo getGames() {
         return new LobbyInfo(
                 gameLobby.getGlobalPlayerCount(),
-                Config.MAX_GLOBAL_PLAYERS,
+                GameConstants.MAX_GLOBAL_PLAYERS,
                 gameLobby.getActiveGames()
         );
     }
@@ -73,7 +74,7 @@ public class GameController {
     @Post("/api/games")
     @Produces(MediaType.APPLICATION_JSON)
     @Consumes(MediaType.APPLICATION_JSON)
-    public Map<String, String> createGame(@Body GameConfig gameConfig) {
+    public Map<String, String> createGame(@Valid @Body GameConfig gameConfig) {
         try {
             GameManager game;
             if (gameConfig != null) {
@@ -82,12 +83,12 @@ public class GameController {
                 game = gameLobby.createGame();
             }
             return Map.of(
-                "gameId", game.getGameId(),
-                "status", "created"
+                    "gameId", game.getGameId(),
+                    "status", "created"
             );
         } catch (IllegalStateException e) {
-            throw new HttpStatusException(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE, 
-                "Failed to create game: " + e.getMessage());
+            throw new HttpStatusException(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE,
+                    "Failed to create game: " + e.getMessage());
         }
     }
 
@@ -253,8 +254,8 @@ public class GameController {
             "/lobby.html",
             "/game.html",
             "/config.html",
-            "/color-palette.js",
             "/js/{file}",
+            "/js/spectator/{file}",
             "/unified.css",
             "/favicon.ico",
             "/robots.txt"

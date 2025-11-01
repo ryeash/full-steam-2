@@ -35,12 +35,24 @@ public class GameWebSocketEndpoint {
 
     @OnOpen
     public void onOpen(WebSocketSession session, String gameId) {
-        log.info("WebSocket connection opened for gameId: {}", gameId);
-        if (!connectionService.connectPlayer(session, gameId)) {
-            log.warn("Failed to connect player to game {}, closing session", gameId);
+        // Check if this is a spectator connection by parsing the request URI
+        boolean asSpectator = false;
+        try {
+            String requestUri = session.getRequestURI().toString();
+            asSpectator = requestUri.contains("spectate=true");
+        } catch (Exception e) {
+            log.debug("Could not parse spectate parameter from URI: {}", e.getMessage());
+        }
+        
+        log.info("WebSocket connection opened for gameId: {} (spectator: {})", gameId, asSpectator);
+        
+        if (!connectionService.connectPlayer(session, gameId, asSpectator)) {
+            log.warn("Failed to connect {} to game {}, closing session", 
+                asSpectator ? "spectator" : "player", gameId);
             session.close();
         } else {
-            log.info("Player successfully connected to game {}", gameId);
+            log.info("{} successfully connected to game {}", 
+                asSpectator ? "Spectator" : "Player", gameId);
         }
     }
 
@@ -70,12 +82,18 @@ public class GameWebSocketEndpoint {
                     game.send(session, Map.of("type", "pong"));
                     break;
                 case "configChange":
-                    PlayerConfigRequest request = objectMapper.treeToValue(rootNode, PlayerConfigRequest.class);
-                    game.handlePlayerConfigChange(playerId, request);
+                    // Spectators can't change config
+                    if (!playerSession.isSpectator()) {
+                        PlayerConfigRequest request = objectMapper.treeToValue(rootNode, PlayerConfigRequest.class);
+                        game.handlePlayerConfigChange(playerId, request);
+                    }
                     break;
                 case "playerInput":
-                    PlayerInput input = objectMapper.treeToValue(rootNode, PlayerInput.class);
-                    game.acceptPlayerInput(playerId, input);
+                    // Spectators can't send player input
+                    if (!playerSession.isSpectator()) {
+                        PlayerInput input = objectMapper.treeToValue(rootNode, PlayerInput.class);
+                        game.acceptPlayerInput(playerId, input);
+                    }
                     break;
                 default:
                     log.warn("Received unknown message type '{}' from player {}", type, playerId);
