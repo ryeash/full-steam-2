@@ -23,6 +23,18 @@ public class FlagBehavior implements AIBehavior {
     private int targetFlagId = -1;
     private double roleChangeTime = 0;
     private static final double ROLE_CHANGE_INTERVAL = 10.0; // Re-evaluate role every 10 seconds
+    
+    // Per-AI randomization for patrol patterns to prevent clustering
+    private final double patrolSpeedVariation;
+    private final double patrolRadiusVariation;
+    private final double patrolAngleOffset;
+    
+    public FlagBehavior() {
+        // Initialize random variations per AI instance
+        this.patrolSpeedVariation = 0.75 + Math.random() * 0.5; // 0.75 to 1.25
+        this.patrolRadiusVariation = 0.8 + Math.random() * 0.4; // 0.8 to 1.2
+        this.patrolAngleOffset = Math.random() * Math.PI * 2; // 0 to 2π
+    }
 
     @Override
     public PlayerInput generateInput(AIPlayer aiPlayer, GameEntities gameEntities, double deltaTime) {
@@ -205,10 +217,15 @@ public class FlagBehavior implements AIBehavior {
             input.setMoveY(direction.y * 0.4);
         } else {
             // Good position, patrol around flag
-            double patrolAngle = (System.currentTimeMillis() / 3000.0) % (Math.PI * 2);
+            double patrolAngle = (System.currentTimeMillis() / 3000.0) * patrolSpeedVariation + patrolAngleOffset;
+            patrolAngle = patrolAngle % (Math.PI * 2);
+            
+            // Apply radius variation per AI
+            double adjustedRadius = optimalDefenseRadius * patrolRadiusVariation;
+            
             Vector2 patrolOffset = new Vector2(
-                Math.cos(patrolAngle) * optimalDefenseRadius,
-                Math.sin(patrolAngle) * optimalDefenseRadius
+                Math.cos(patrolAngle) * adjustedRadius,
+                Math.sin(patrolAngle) * adjustedRadius
             );
             Vector2 patrolTarget = flagPos.copy().add(patrolOffset);
             Vector2 direction = patrolTarget.copy().subtract(myPos);
@@ -305,9 +322,30 @@ public class FlagBehavior implements AIBehavior {
     /**
      * Return carried flag to home base.
      */
-    private void returnFlagToBase(AIPlayer aiPlayer, Flag flag, PlayerInput input, GameEntities gameEntities) {
+    private void returnFlagToBase(AIPlayer aiPlayer, Flag carriedFlag, PlayerInput input, GameEntities gameEntities) {
         Vector2 myPos = aiPlayer.getPosition();
-        Vector2 homePos = flag.getHomePosition();
+        int myTeam = aiPlayer.getTeam();
+        
+        // Find our team's flag to capture at
+        Flag myTeamFlag = gameEntities.getAllFlags().stream()
+                .filter(flag -> flag.getOwnerTeam() == myTeam)
+                .filter(flag -> !flag.isOddball())
+                .filter(flag -> flag.isAtHome()) // Must be at home to capture
+                .findFirst()
+                .orElse(null);
+        
+        if (myTeamFlag == null) {
+            // Can't find our flag to capture at, just move toward center for now
+            // This shouldn't happen in normal gameplay but handles edge cases
+            Vector2 homePos = new Vector2(0, 0); // World center as fallback
+            Vector2 direction = homePos.copy().subtract(myPos);
+            direction.normalize();
+            input.setMoveX(direction.x * 0.8);
+            input.setMoveY(direction.y * 0.8);
+            return;
+        }
+        
+        Vector2 homePos = myTeamFlag.getPosition();
         double distance = myPos.distance(homePos);
 
         // Sprint home

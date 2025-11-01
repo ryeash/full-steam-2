@@ -78,7 +78,7 @@ public class Weapon {
         this.projectileSpeed = other.projectileSpeed;
         this.bulletsPerShot = other.bulletsPerShot;
         this.linearDamping = other.linearDamping;
-        this.currentAmmo = this.magazineSize;
+        this.currentAmmo = other.currentAmmo; // Preserve actual current ammo, not magazine size
         this.bulletEffects = new HashSet<>(other.bulletEffects);
         this.ordinance = other.ordinance;
         this.attributePoints = other.attributePoints;

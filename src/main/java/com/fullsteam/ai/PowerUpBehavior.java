@@ -18,6 +18,18 @@ public class PowerUpBehavior implements AIBehavior {
     private double evaluationTime = 0;
     private static final double EVALUATION_INTERVAL = 3.0; // Re-evaluate every 3 seconds
     
+    // Per-AI randomization for circling patterns to prevent clustering
+    private final double circleSpeedVariation;
+    private final double circleRadiusVariation;
+    private final double circleAngleOffset;
+    
+    public PowerUpBehavior() {
+        // Initialize random variations per AI instance
+        this.circleSpeedVariation = 0.7 + Math.random() * 0.6; // 0.7 to 1.3
+        this.circleRadiusVariation = 0.6 + Math.random() * 0.5; // 0.6 to 1.1
+        this.circleAngleOffset = Math.random() * Math.PI * 2; // 0 to 2π
+    }
+    
     @Override
     public PlayerInput generateInput(AIPlayer aiPlayer, GameEntities gameEntities, double deltaTime) {
         PlayerInput input = new PlayerInput();
@@ -244,10 +256,15 @@ public class PowerUpBehavior implements AIBehavior {
         } else {
             // Within craft radius - stay here and let workshop craft
             // Move slowly around workshop to avoid being stationary
-            double circleAngle = (System.currentTimeMillis() / 4000.0) % (Math.PI * 2);
+            double circleAngle = (System.currentTimeMillis() / 4000.0) * circleSpeedVariation + circleAngleOffset;
+            circleAngle = circleAngle % (Math.PI * 2);
+            
+            // Apply radius variation per AI
+            double adjustedRadius = craftRadius * 0.7 * circleRadiusVariation;
+            
             Vector2 circleOffset = new Vector2(
-                Math.cos(circleAngle) * (craftRadius * 0.7),
-                Math.sin(circleAngle) * (craftRadius * 0.7)
+                Math.cos(circleAngle) * adjustedRadius,
+                Math.sin(circleAngle) * adjustedRadius
             );
             Vector2 targetPos = workshopPos.copy().add(circleOffset);
             Vector2 direction = targetPos.copy().subtract(myPos);
