@@ -20,15 +20,12 @@ import java.util.concurrent.atomic.AtomicLong;
 
 @Singleton
 public class GameLobby {
+    private static final long CLEANUP_CHECK_INTERVAL_MS = 30 * 1000; // 30 seconds
+    private static final long AI_ONLY_GRACE_PERIOD_MS = 2 * 60 * 1000; // 2 minutes grace period for players to join
     private static final Logger log = LoggerFactory.getLogger(GameLobby.class);
 
     private final Map<String, GameManager> activeGames = new ConcurrentSkipListMap<>();
     private final AtomicLong globalPlayerCount = new AtomicLong(0);
-
-    // Game cleanup settings
-    private static final long CLEANUP_CHECK_INTERVAL_MS = 30 * 1000; // 30 seconds
-    private static final long AI_ONLY_GRACE_PERIOD_MS = 2 * 60 * 1000; // 2 minutes grace period for players to join
-
     private final ObjectMapper objectMapper;
 
     @Inject

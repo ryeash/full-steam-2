@@ -78,7 +78,9 @@ class GameEngine {
     }
     
     async initPixiApp() {
-        this.app = new PIXI.Application({
+        this.app = new PIXI.Application();
+        
+        await this.app.init({
             width: window.innerWidth,
             height: window.innerHeight,
             backgroundColor: 0x1a1a1a, // Dark grey for better ordinance visibility
@@ -87,7 +89,7 @@ class GameEngine {
             autoDensity: true
         });
 
-        document.getElementById('pixi-container').appendChild(this.app.view);
+        document.getElementById('pixi-container').appendChild(this.app.canvas);
 
         // Handle WebGL context loss - store handlers for cleanup
         this.eventHandlers.webglContextLost = (event) => {
@@ -95,16 +97,18 @@ class GameEngine {
             event.preventDefault();
             this.handleWebGLContextLost();
         };
-        this.app.renderer.gl.canvas.addEventListener('webglcontextlost', this.eventHandlers.webglContextLost);
+        // Access canvas directly - v8 compatible with both WebGL and WebGPU
+        this.app.canvas.addEventListener('webglcontextlost', this.eventHandlers.webglContextLost);
 
         this.eventHandlers.webglContextRestored = () => {
             console.log('WebGL context restored');
             this.handleWebGLContextRestored();
         };
-        this.app.renderer.gl.canvas.addEventListener('webglcontextrestored', this.eventHandlers.webglContextRestored);
+        this.app.canvas.addEventListener('webglcontextrestored', this.eventHandlers.webglContextRestored);
 
         // Set up interpolation ticker for smooth movement - store reference for cleanup
-        const interpolationCallback = (deltaTime) => {
+        const interpolationCallback = (ticker) => {
+            const deltaTime = ticker.deltaTime;
             const dt = deltaTime / 60.0; // Convert to seconds
             
             // Update all projectile interpolators every frame
@@ -174,11 +178,8 @@ class GameEngine {
         
         // HUD background (smaller without health section)
         const hudBg = new PIXI.Graphics();
-        hudBg.beginFill(0x000000, 0.7);
-        hudBg.drawRoundedRect(10, 10, 280, 170, 8);
-        hudBg.endFill();
-        hudBg.lineStyle(2, 0x444444, 0.8);
-        hudBg.drawRoundedRect(10, 10, 280, 170, 8);
+        hudBg.roundRect(10, 10, 280, 170, 8).fill({ color: 0x000000, alpha: 0.7 });
+        hudBg.roundRect(10, 10, 280, 170, 8).stroke({ width: 2, color: 0x444444, alpha: 0.8 });
         this.hudContainer.addChild(hudBg);
         
         // Player info (bottom portion) - minimap will be created after world bounds are received
@@ -197,11 +198,8 @@ class GameEngine {
         
         // Wider background to accommodate team scores
         const bg = new PIXI.Graphics();
-        bg.beginFill(0x000000, 0.8);
-        bg.drawRoundedRect(0, 0, 400, 60, 8);
-        bg.endFill();
-        bg.lineStyle(2, 0xffaa00, 0.9);
-        bg.drawRoundedRect(0, 0, 400, 60, 8);
+        bg.roundRect(0, 0, 400, 60, 8).fill({ color: 0x000000, alpha: 0.8 });
+        bg.roundRect(0, 0, 400, 60, 8).stroke({ width: 2, color: 0xffaa00, alpha: 0.9 });
         this.roundTimerContainer.addChild(bg);
         this.roundTimerBackground = bg;
         
@@ -353,9 +351,7 @@ class GameEngine {
                 
                 // Team color indicator
                 const colorBar = new PIXI.Graphics();
-                colorBar.beginFill(this.getTeamColor(teamId));
-                colorBar.drawRoundedRect(0, 0, 6, 48, 3);
-                colorBar.endFill();
+                colorBar.roundRect(0, 0, 6, 48, 3).fill(this.getTeamColor(teamId));
                 colorBar.position.set(0, 2);
                 container.addChild(colorBar);
                 container.colorBar = colorBar;
@@ -440,11 +436,8 @@ class GameEngine {
         
         // Minimap background
         const minimapBg = new PIXI.Graphics();
-        minimapBg.beginFill(0x1a3d1f, 0.8);
-        minimapBg.drawRoundedRect(0, 0, minimapWidth, minimapHeight, 4);
-        minimapBg.endFill();
-        minimapBg.lineStyle(1, 0x2ecc71, 0.6);
-        minimapBg.drawRoundedRect(0, 0, minimapWidth, minimapHeight, 4);
+        minimapBg.roundRect(0, 0, minimapWidth, minimapHeight, 4).fill({ color: 0x1a3d1f, alpha: 0.8 });
+        minimapBg.roundRect(0, 0, minimapWidth, minimapHeight, 4).stroke({ width: 1, color: 0x2ecc71, alpha: 0.6 });
         minimapContainer.addChild(minimapBg);
         
         // Minimap title
@@ -478,11 +471,8 @@ class GameEngine {
             const totalHeight = this.minimapHeight + 90; // Minimap + title + player info section
             
             hudBg.clear();
-            hudBg.beginFill(0x000000, 0.7);
-            hudBg.drawRoundedRect(10, 10, totalWidth, totalHeight, 8);
-            hudBg.endFill();
-            hudBg.lineStyle(2, 0x444444, 0.8);
-            hudBg.drawRoundedRect(10, 10, totalWidth, totalHeight, 8);
+            hudBg.roundRect(10, 10, totalWidth, totalHeight, 8).fill({ color: 0x000000, alpha: 0.7 });
+            hudBg.roundRect(10, 10, totalWidth, totalHeight, 8).stroke({ width: 2, color: 0x444444, alpha: 0.8 });
         }
         
         // Adjust player info position to be below the minimap
@@ -773,20 +763,19 @@ class GameEngine {
         const playerContainer = new PIXI.Container();
         
         const playerGraphics = new PIXI.Graphics();
-        playerGraphics.beginFill(0x8c8c8c);
-        playerGraphics.drawCircle(0, 0, 20);
-        playerGraphics.endFill();
+        playerGraphics.circle(0, 0, 20).fill(0x8c8c8c);
         
         // Direction indicator (weapon/facing)
-        playerGraphics.beginFill(0xffffff);
-        playerGraphics.drawPolygon([15, 0, 25, -5, 25, 5]);
-        playerGraphics.endFill();
+        playerGraphics.poly([15, 0, 25, -5, 25, 5]).fill(0xffffff);
         
         playerContainer.addChild(playerGraphics);
         
         // Generate texture with explicit bounds centered on the circle (not the triangle)
-        // This ensures rotation happens around the circle's center
-        const bounds = new PIXI.Rectangle(-25, -25, 50, 50);
+        // The circle is at (0,0) but extends to radius 20, and the triangle extends to x=25
+        // To center rotation on the circle's center, we need the texture bounds to be symmetric around (0,0)
+        // Total visual extends from x=-20 to x=25 (45 wide), y=-20 to y=20 (40 tall)
+        // But we want rotation center at the circle center (0,0), so use symmetric bounds
+        const bounds = new PIXI.Rectangle(-30, -30, 60, 60); // Symmetric bounds around circle center
         this.playerTexture = this.app.renderer.generateTexture(playerContainer, {
             region: bounds,
             resolution: 1
@@ -795,33 +784,27 @@ class GameEngine {
         
         // Projectile - simple bullet
         const projectileGraphics = new PIXI.Graphics();
-        projectileGraphics.beginFill(0xf39c12);
-        projectileGraphics.drawCircle(0, 0, 3);
-        projectileGraphics.endFill();
+        projectileGraphics.circle(0, 0, 3).fill(0xf39c12);
         this.projectileTexture = this.app.renderer.generateTexture(projectileGraphics);
         projectileGraphics.destroy(); // Clean up graphics after generating texture
 
         // Obstacle - boulder
         const boulderGraphics = new PIXI.Graphics();
-        boulderGraphics.beginFill(0x808080);
-        boulderGraphics.drawCircle(0, 0, 20);
-        boulderGraphics.endFill();
+        boulderGraphics.circle(0, 0, 20).fill(0x808080);
         this.boulderTexture = this.app.renderer.generateTexture(boulderGraphics);
         boulderGraphics.destroy(); // Clean up graphics after generating texture
         
         // Death marker - tombstone/X
         const deathGraphics = new PIXI.Graphics();
+        // Add a circle background first
+        deathGraphics.circle(0, 0, 18).fill({ color: 0x000000, alpha: 0.3 });
+        deathGraphics.circle(0, 0, 18).stroke({ width: 2, color: 0x444444, alpha: 0.8 });
         // Draw a red X
-        deathGraphics.lineStyle(4, 0xff4444, 1);
         deathGraphics.moveTo(-15, -15);
         deathGraphics.lineTo(15, 15);
         deathGraphics.moveTo(15, -15);
         deathGraphics.lineTo(-15, 15);
-        // Add a circle background
-        deathGraphics.lineStyle(2, 0x444444, 0.8);
-        deathGraphics.beginFill(0x000000, 0.3);
-        deathGraphics.drawCircle(0, 0, 18);
-        deathGraphics.endFill();
+        deathGraphics.stroke({ width: 4, color: 0xff4444 });
         this.deathTexture = this.app.renderer.generateTexture(deathGraphics);
         deathGraphics.destroy(); // Clean up graphics after generating texture
     }
@@ -2396,16 +2379,12 @@ class GameEngine {
         
         // Health bar background
         const healthBg = new PIXI.Graphics();
-        healthBg.beginFill(config.bgColor);
-        healthBg.drawRoundedRect(-config.width/2, 0, config.width, config.height, config.cornerRadius);
-        healthBg.endFill();
+        healthBg.roundRect(-config.width/2, 0, config.width, config.height, config.cornerRadius).fill(config.bgColor);
         healthBarContainer.addChild(healthBg);
         
         // Health bar fill
         const healthFill = new PIXI.Graphics();
-        healthFill.beginFill(config.fillColor);
-        healthFill.drawRoundedRect(-config.width/2, 0, config.width, config.height, config.cornerRadius);
-        healthFill.endFill();
+        healthFill.roundRect(-config.width/2, 0, config.width, config.height, config.cornerRadius).fill(config.fillColor);
         healthBarContainer.addChild(healthFill);
         
         // Store references for updates
@@ -2458,14 +2437,12 @@ class GameEngine {
             healthColor = 0xf39c12; // Orange
         }
         
-        healthBarContainer.healthFill.beginFill(healthColor);
-        healthBarContainer.healthFill.drawRoundedRect(
+        healthBarContainer.healthFill.roundRect(
             -config.width/2, 0, 
             config.width * healthPercent, 
             config.height, 
             config.cornerRadius
-        );
-        healthBarContainer.healthFill.endFill();
+        ).fill(healthColor);
     }
     
     /**
@@ -2524,11 +2501,8 @@ class GameEngine {
         
         // Create background circle for the "R"
         const background = new PIXI.Graphics();
-        background.beginFill(0x000000, 0.7); // Semi-transparent black background
-        background.drawCircle(0, 0, 12); // 12 pixel radius
-        background.endFill();
-        background.lineStyle(2, 0xff4444, 1.0); // Red border
-        background.drawCircle(0, 0, 12);
+        background.circle(0, 0, 12).fill({ color: 0x000000, alpha: 0.7 }); // Semi-transparent black background
+        background.circle(0, 0, 12).stroke({ width: 2, color: 0xff4444 }); // Red border
         reloadContainer.addChild(background);
         
         // Create the "R" text
@@ -2697,8 +2671,7 @@ class GameEngine {
                 
                 const pulseSize = baseRadius + Math.sin(time + index) * 5;
                 
-                aura.lineStyle(3, effect.color, 0.6);
-                aura.drawCircle(0, 0, pulseSize);
+                aura.circle(0, 0, pulseSize).stroke({ width: 3, color: effect.color, alpha: 0.6 });
                 
                 // Add inner particles/sparkles
                 for (let i = 0; i < particleCount; i++) {
@@ -2706,9 +2679,7 @@ class GameEngine {
                     const x = Math.cos(angle) * particleDistance;
                     const y = Math.sin(angle) * particleDistance;
                     
-                    aura.beginFill(effect.color, 0.8);
-                    aura.drawCircle(x, y, particleSize);
-                    aura.endFill();
+                    aura.circle(x, y, particleSize).fill({ color: effect.color, alpha: 0.8 });
                 }
             } else if (effect.animation === 'shield') {
                 // Hexagonal shield pattern
@@ -2719,7 +2690,6 @@ class GameEngine {
                 
                 const size = baseSize + Math.sin(time) * 2;
                 
-                aura.lineStyle(2, effect.color, 0.7);
                 for (let i = 0; i < sides; i++) {
                     const angle = (i / sides) * Math.PI * 2;
                     const x = Math.cos(angle) * size;
@@ -2731,6 +2701,7 @@ class GameEngine {
                     }
                 }
                 aura.closePath();
+                aura.stroke({ width: 2, color: effect.color, alpha: 0.7 });
             } else if (effect.animation === 'slow') {
                 // Slow debuff - dripping effect
                 const time = Date.now() * 0.002;
@@ -2740,14 +2711,12 @@ class GameEngine {
                 const dropSize = params.dropSize || 3;
                 const dripAmount = params.dripAmount || 3;
                 
-                aura.beginFill(effect.color, 0.5);
                 for (let i = 0; i < dropCount; i++) {
                     const angle = (i / dropCount) * Math.PI * 2 + time;
                     const x = Math.cos(angle) * radius;
                     const y = Math.sin(angle) * radius + Math.sin(time * 2 + i) * dripAmount;
-                    aura.drawCircle(x, y, dropSize);
+                    aura.circle(x, y, dropSize).fill({ color: effect.color, alpha: 0.5 });
                 }
-                aura.endFill();
             } else if (effect.animation === 'cloud') {
                 // Cloud effect - for poison (green pallor cloud)
                 const time = Date.now() * 0.001;
@@ -2764,16 +2733,12 @@ class GameEngine {
                     const y = Math.sin(angle) * puffDistance;
                     const puffSize = baseRadius * (0.5 + Math.sin(time * 2 + i) * 0.1);
                     
-                    aura.beginFill(effect.color, 0.25 + Math.sin(time * 3 + i) * 0.1);
-                    aura.drawCircle(x, y, puffSize);
-                    aura.endFill();
+                    aura.circle(x, y, puffSize).fill({ color: effect.color, alpha: 0.25 + Math.sin(time * 3 + i) * 0.1 });
                 }
                 
                 // Central cloud mass
                 const centralSize = baseRadius * (0.7 + Math.sin(time * 1.5) * 0.1);
-                aura.beginFill(effect.color, 0.3);
-                aura.drawCircle(0, 0, centralSize);
-                aura.endFill();
+                aura.circle(0, 0, centralSize).fill({ color: effect.color, alpha: 0.3 });
                 
                 // Add smaller wispy details
                 for (let i = 0; i < wispCount; i++) {
@@ -2783,9 +2748,7 @@ class GameEngine {
                     const y = Math.sin(angle) * distance;
                     const wispSize = 3 + Math.sin(time * 4 + i) * 1;
                     
-                    aura.beginFill(effect.color, 0.35 + Math.sin(time * 5 + i) * 0.15);
-                    aura.drawCircle(x, y, wispSize);
-                    aura.endFill();
+                    aura.circle(x, y, wispSize).fill({ color: effect.color, alpha: 0.35 + Math.sin(time * 5 + i) * 0.15 });
                 }
             } else if (effect.animation === 'flame') {
                 // Flame effect - for burning (flickering fire particles)
@@ -2804,21 +2767,15 @@ class GameEngine {
                     const size = 2 + Math.sin(time * 5 + i) * 1.5;
                     const alpha = 0.4 + Math.sin(time * 6 + i) * 0.3;
                     
-                    aura.beginFill(effect.color, alpha);
-                    aura.drawCircle(x, y, size);
-                    aura.endFill();
+                    aura.circle(x, y, size).fill({ color: effect.color, alpha });
                 }
                 
                 // Add inner glow
                 const glowSize = baseRadius * (0.6 + Math.sin(time * 3) * 0.15);
-                aura.beginFill(effect.color, 0.2);
-                aura.drawCircle(0, 0, glowSize);
-                aura.endFill();
+                aura.circle(0, 0, glowSize).fill({ color: effect.color, alpha: 0.2 });
                 
                 // Add bright center
-                aura.beginFill(effect.color, 0.5 + Math.sin(time * 4) * 0.2);
-                aura.drawCircle(0, 0, baseRadius * 0.3);
-                aura.endFill();
+                aura.circle(0, 0, baseRadius * 0.3).fill({ color: effect.color, alpha: 0.5 + Math.sin(time * 4) * 0.2 });
             } else if (effect.animation === 'star') {
                 // Star effect - orbiting stars for special status (ball carrier)
                 const time = Date.now() * 0.003;
@@ -2829,8 +2786,7 @@ class GameEngine {
                 
                 // Outer pulsing ring
                 const pulseSize = 25 + Math.sin(time) * 3;
-                aura.lineStyle(2, effect.color, 0.6);
-                aura.drawCircle(0, 0, pulseSize);
+                aura.circle(0, 0, pulseSize).stroke({ width: 2, color: effect.color, alpha: 0.6 });
                 
                 // Orbiting stars
                 for (let i = 0; i < starCount; i++) {
@@ -2839,7 +2795,6 @@ class GameEngine {
                     const cy = Math.sin(angle) * orbitRadius;
                     
                     // Draw a 5-point star
-                    aura.beginFill(effect.color, 0.9);
                     const starPoints = 5;
                     const outerR = starSize;
                     const innerR = starSize * 0.4;
@@ -2855,11 +2810,10 @@ class GameEngine {
                         }
                     }
                     aura.closePath();
-                    aura.endFill();
+                    aura.fill({ color: effect.color, alpha: 0.9 });
                 }
                 
                 // Central star
-                aura.beginFill(effect.color, 0.8);
                 const centerStarPoints = 5;
                 const centerOuterR = 8;
                 const centerInnerR = 3;
@@ -2875,18 +2829,16 @@ class GameEngine {
                     }
                 }
                 aura.closePath();
-                aura.endFill();
+                aura.fill({ color: effect.color, alpha: 0.8 });
             } else if (effect.animation === 'crown') {
                 // VIP crown - special prominent indicator
                 const time = Date.now() * 0.003;
                 const pulseSize = 25 + Math.sin(time) * 3;
                 
                 // Outer golden ring
-                aura.lineStyle(3, effect.color, 0.8);
-                aura.drawCircle(0, 0, pulseSize);
+                aura.circle(0, 0, pulseSize).stroke({ width: 3, color: effect.color, alpha: 0.8 });
                 
                 // Inner star pattern
-                aura.lineStyle(2, effect.color, 0.9);
                 for (let i = 0; i < 5; i++) {
                     const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
                     const outerRadius = 30;
@@ -2905,6 +2857,7 @@ class GameEngine {
                     aura.lineTo(x2, y2);
                 }
                 aura.closePath();
+                aura.stroke({ width: 2, color: effect.color, alpha: 0.9 });
                 
                 // Rotating sparkles (small stars)
                 for (let i = 0; i < 8; i++) {
@@ -2914,7 +2867,6 @@ class GameEngine {
                     const cy = Math.sin(angle) * distance;
                     
                     // Draw a small star manually
-                    aura.beginFill(effect.color, 0.9);
                     const starPoints = 4;
                     const outerR = 3;
                     const innerR = 1.5;
@@ -2930,19 +2882,15 @@ class GameEngine {
                         }
                     }
                     aura.closePath();
-                    aura.endFill();
+                    aura.fill({ color: effect.color, alpha: 0.9 });
                 }
             } else {
                 // Fallback for unknown animation types - simple pulsing circle
                 const time = Date.now() * 0.003;
                 const pulseSize = 20 + Math.sin(time) * 4;
                 
-                aura.lineStyle(2, effect.color, 0.6);
-                aura.drawCircle(0, 0, pulseSize);
-                
-                aura.beginFill(effect.color, 0.3);
-                aura.drawCircle(0, 0, pulseSize * 0.7);
-                aura.endFill();
+                aura.circle(0, 0, pulseSize).stroke({ width: 2, color: effect.color, alpha: 0.6 });
+                aura.circle(0, 0, pulseSize * 0.7).fill({ color: effect.color, alpha: 0.3 });
             }
             
             // Store animation type for update loop
@@ -2972,11 +2920,8 @@ class GameEngine {
         
         // Background circle
         const bg = new PIXI.Graphics();
-        bg.beginFill(0x000000, 0.7);
-        bg.drawCircle(0, 0, 10);
-        bg.endFill();
-        bg.lineStyle(2, effect.color, 1.0);
-        bg.drawCircle(0, 0, 10);
+        bg.circle(0, 0, 10).fill({ color: 0x000000, alpha: 0.7 });
+        bg.circle(0, 0, 10).stroke({ width: 2, color: effect.color });
         badge.addChild(bg);
         
         // Icon letter (first letter of effect name)
@@ -3116,25 +3061,19 @@ class GameEngine {
         
         // Outer electric field
         const outerGlow = new PIXI.Graphics();
-        outerGlow.beginFill(0x4444ff, 0.3);
-        outerGlow.drawCircle(0, 0, 8);
-        outerGlow.endFill();
+        outerGlow.circle(0, 0, 8).fill({ color: 0x4444ff, alpha: 0.3 });
         outerGlow.zIndex = -2;
         projectileContainer.addChild(outerGlow);
         
         // Middle energy field with pulsing
         const middleGlow = new PIXI.Graphics();
-        middleGlow.beginFill(0x6666ff, 0.5);
-        middleGlow.drawCircle(0, 0, 5);
-        middleGlow.endFill();
+        middleGlow.circle(0, 0, 5).fill({ color: 0x6666ff, alpha: 0.5 });
         middleGlow.zIndex = -1;
         projectileContainer.addChild(middleGlow);
         
         // Inner core glow
         const innerGlow = new PIXI.Graphics();
-        innerGlow.beginFill(0xaaaaff, 0.7);
-        innerGlow.drawCircle(0, 0, 3);
-        innerGlow.endFill();
+        innerGlow.circle(0, 0, 3).fill({ color: 0xaaaaff, alpha: 0.7 });
         innerGlow.zIndex = 0;
         projectileContainer.addChild(innerGlow);
         
@@ -3204,7 +3143,6 @@ class GameEngine {
      */
     updatePlasmaArcs(electricArcs) {
         electricArcs.clear();
-        electricArcs.lineStyle(1, 0xaaaaff, 0.8);
         
         // Draw 3-5 random electric arcs
         const numArcs = 3 + Math.floor(Math.random() * 3);
@@ -3239,6 +3177,7 @@ class GameEngine {
                 lastY = y;
             }
         }
+        electricArcs.stroke({ width: 1, color: 0xaaaaff, alpha: 0.8 });
     }
     
     /**
@@ -3266,15 +3205,15 @@ class GameEngine {
             const alpha = trail.trailAlpha * progress; // More opaque at front
             
             // Use gradient effect by drawing multiple lines
-            trail.lineStyle(width, trail.trailColor, alpha);
             trail.moveTo(prevPoint.x, prevPoint.y);
             trail.lineTo(currentPoint.x, currentPoint.y);
+            trail.stroke({ width, color: trail.trailColor, alpha });
             
             // Add inner bright core for rocket trails
             if (projectileContainer.projectileData.ordinance === 'ROCKET' && progress > 0.7) {
-                trail.lineStyle(width * 0.4, trail.trailSecondaryColor, alpha * 0.8);
                 trail.moveTo(prevPoint.x, prevPoint.y);
                 trail.lineTo(currentPoint.x, currentPoint.y);
+                trail.stroke({ width: width * 0.4, color: trail.trailSecondaryColor, alpha: alpha * 0.8 });
             }
         }
     }
@@ -3324,9 +3263,7 @@ class GameEngine {
         if (effects.includes('HOMING')) {
             // Add a subtle glow for homing projectiles
             const glow = new PIXI.Graphics();
-            glow.beginFill(0xffffff, 0.3);
-            glow.drawCircle(0, 0, 8);
-            glow.endFill();
+            glow.circle(0, 0, 8).fill({ color: 0xffffff, alpha: 0.3 });
             sprite.addChild(glow);
         }
         
@@ -3499,9 +3436,6 @@ class GameEngine {
         const color = this.getObstacleColor(obstacleType);
         const outlineColor = this.darkenColor(color);
         
-        graphics.beginFill(color, 0.8);
-        graphics.lineStyle(2, outlineColor, 1);
-        
         switch (shapeCategory) {
             case 'CIRCULAR':
                 this.drawCircularObstacle(graphics, obstacleData);
@@ -3520,11 +3454,12 @@ class GameEngine {
                 break;
             default:
                 // Fallback to circle
-                graphics.drawCircle(0, 0, obstacleData.boundingRadius || 20);
+                graphics.circle(0, 0, obstacleData.boundingRadius || 20);
                 break;
         }
         
-        graphics.endFill();
+        graphics.fill({ color, alpha: 0.8 });
+        graphics.stroke({ width: 2, color: outlineColor });
         return graphics;
     }
     
@@ -3549,13 +3484,13 @@ class GameEngine {
     
     drawCircularObstacle(graphics, obstacleData) {
         const radius = obstacleData.radius || obstacleData.boundingRadius || 20;
-        graphics.drawCircle(0, 0, radius);
+        graphics.circle(0, 0, radius);
     }
     
     drawRectangularObstacle(graphics, obstacleData) {
         const width = obstacleData.width || obstacleData.boundingRadius * 1.5 || 30;
         const height = obstacleData.height || obstacleData.boundingRadius * 1.2 || 25;
-        graphics.drawRect(-width/2, -height/2, width, height);
+        graphics.rect(-width/2, -height/2, width, height);
     }
     
     drawTriangularObstacle(graphics, obstacleData) {
@@ -3564,7 +3499,7 @@ class GameEngine {
         } else {
             // Fallback equilateral triangle
             const size = obstacleData.boundingRadius || 25;
-            graphics.drawPolygon([
+            graphics.poly([
                 0, -size * 0.577,          // Top (inverted Y)
                 -size * 0.5, size * 0.289, // Bottom left (inverted Y)
                 size * 0.5, size * 0.289   // Bottom right (inverted Y)
@@ -3585,7 +3520,7 @@ class GameEngine {
                 points.push(Math.cos(angle) * radius);
                 points.push(-Math.sin(angle) * radius);  // Invert Y for PIXI coordinate system
             }
-            graphics.drawPolygon(points);
+            graphics.poly(points);
         }
     }
     
@@ -3603,7 +3538,7 @@ class GameEngine {
             points.push(vertex.x);
             points.push(vertex.y);
         });
-        graphics.drawPolygon(points);
+        graphics.poly(points);
     }
 
     updateObstacle(obstacleData) {
@@ -3656,16 +3591,12 @@ class GameEngine {
         
         // Smaller health bar background (half the size of player health bars)
         const healthBg = new PIXI.Graphics();
-        healthBg.beginFill(0x222222, 0.8); // Darker, more subtle background
-        healthBg.drawRoundedRect(-15, 0, 30, 4, 1); // Smaller dimensions
-        healthBg.endFill();
+        healthBg.roundRect(-15, 0, 30, 4, 1).fill({ color: 0x222222, alpha: 0.8 }); // Darker, more subtle background
         healthBarContainer.addChild(healthBg);
         
         // Health bar fill
         const healthFill = new PIXI.Graphics();
-        healthFill.beginFill(0x4a90e2); // Blue color to distinguish from player health
-        healthFill.drawRoundedRect(-15, 0, 30, 4, 1);
-        healthFill.endFill();
+        healthFill.roundRect(-15, 0, 30, 4, 1).fill(0x4a90e2); // Blue color to distinguish from player health
         healthBarContainer.addChild(healthFill);
         
         // Store references for updates
@@ -3915,18 +3846,12 @@ class GameEngine {
         
         // Draw main yellow ball
         const ballColor = 0xFFFF00; // Bright yellow
-        ball.beginFill(ballColor);
-        ball.drawCircle(0, 0, 20);
-        ball.endFill();
+        ball.circle(0, 0, 20).fill(ballColor);
         
         // Add darker yellow/gold outline
-        ball.lineStyle(2, 0xFFAA00, 1);
-        ball.drawCircle(0, 0, 20);
+        ball.circle(0, 0, 20).stroke({ width: 2, color: 0xFFAA00 });
         
         // Draw star pattern in the center
-        ball.lineStyle(0); // No outline for star
-        ball.beginFill(0xFFFFFF, 0.9); // White star
-        
         // Draw a 5-pointed star
         const starPoints = 5;
         const outerRadius = 12;
@@ -3945,10 +3870,9 @@ class GameEngine {
             }
         }
         ball.closePath();
-        ball.endFill();
+        ball.fill({ color: 0xFFFFFF, alpha: 0.9 }); // White star
         
         // Add star outline
-        ball.lineStyle(1.5, 0xFFAA00, 1);
         for (let i = 0; i < starPoints * 2; i++) {
             const radius = i % 2 === 0 ? outerRadius : innerRadius;
             const angle = (i * Math.PI) / starPoints - Math.PI / 2;
@@ -3962,15 +3886,14 @@ class GameEngine {
             }
         }
         ball.closePath();
+        ball.stroke({ width: 1.5, color: 0xFFAA00 });
         
         flagContainer.addChild(ball);
         flagContainer.ballSprite = ball;
         
         // Add golden glow for oddball
         const glow = new PIXI.Graphics();
-        glow.beginFill(0xFFFF00, 0.4); // Yellow glow
-        glow.drawCircle(0, 0, 30);
-        glow.endFill();
+        glow.circle(0, 0, 30).fill({ color: 0xFFFF00, alpha: 0.4 }); // Yellow glow
         flagContainer.addChildAt(glow, 0); // Behind ball
         flagContainer.glow = glow;
         
@@ -3998,36 +3921,31 @@ class GameEngine {
     createCTFFlagGraphics(flagContainer, flagData) {
         // Create flag pole (extends upward from base)
         const pole = new PIXI.Graphics();
-        pole.beginFill(0xEEEEEE); // Very bright silver/chrome
-        pole.lineStyle(1, 0xFFFFFF, 0.8); // White outline for extra visibility
-        pole.drawRect(-2, 0, 4, 30);
-        pole.endFill();
+        pole.rect(-2, 0, 4, 30).fill(0xEEEEEE); // Very bright silver/chrome
+        pole.rect(-2, 0, 4, 30).stroke({ width: 1, color: 0xFFFFFF, alpha: 0.8 }); // White outline for extra visibility
         flagContainer.addChild(pole);
         
         // Create flag sprite (triangle) - flag at top of pole
         const flag = new PIXI.Graphics();
         const teamColor = this.getTeamColor(flagData.ownerTeam);
-        flag.beginFill(teamColor);
         flag.moveTo(0, 30);
         flag.lineTo(20, 20);
         flag.lineTo(0, 10);
         flag.lineTo(0, 30);
-        flag.endFill();
+        flag.fill(teamColor);
         
         // Add black outline
-        flag.lineStyle(1, 0x000000, 1);
         flag.moveTo(0, 30);
         flag.lineTo(20, 20);
         flag.lineTo(0, 10);
+        flag.stroke({ width: 1, color: 0x000000 });
         
         flagContainer.addChild(flag);
         flagContainer.flagSprite = flag;
         
         // Add glow effect for visibility
         const glow = new PIXI.Graphics();
-        glow.beginFill(teamColor, 0.3);
-        glow.drawCircle(0, 15, 25);
-        glow.endFill();
+        glow.circle(0, 15, 25).fill({ color: teamColor, alpha: 0.3 });
         flagContainer.addChildAt(glow, 0); // Behind everything else
         flagContainer.glow = glow;
         
@@ -4207,10 +4125,8 @@ class GameEngine {
         // Redraw base circle
         const baseCircle = zoneContainer.baseCircle;
         baseCircle.clear();
-        baseCircle.lineStyle(3, colors.border, 1);
-        baseCircle.beginFill(colors.fill, 0.2);
-        baseCircle.drawCircle(0, 0, radius);
-        baseCircle.endFill();
+        baseCircle.circle(0, 0, radius).fill({ color: colors.fill, alpha: 0.2 });
+        baseCircle.circle(0, 0, radius).stroke({ width: 3, color: colors.border });
         
         // Draw capture progress ring (no longer needed - removed capture time)
         const progressRing = zoneContainer.progressRing;
@@ -4220,9 +4136,7 @@ class GameEngine {
         // Draw inner glow
         const glow = zoneContainer.glow;
         glow.clear();
-        glow.beginFill(colors.glow, 0.3);
-        glow.drawCircle(0, 0, radius * 0.7);
-        glow.endFill();
+        glow.circle(0, 0, radius * 0.7).fill({ color: colors.glow, alpha: 0.3 });
         
         // Update zone number color
         zoneContainer.zoneText.style.fill = colors.text;
@@ -4345,19 +4259,19 @@ class GameEngine {
      */
     createLaserGraphics(graphics, length, beamData) {
         // Main laser beam - bright magenta/red
-        graphics.lineStyle(4, 0xff44ff, 0.9);
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
+        graphics.stroke({ width: 4, color: 0xff44ff, alpha: 0.9 });
         
         // Inner core - white hot
-        graphics.lineStyle(2, 0xffffff, 1.0);
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
+        graphics.stroke({ width: 2, color: 0xffffff });
         
         // Outer glow effect
-        graphics.lineStyle(8, 0xff44ff, 0.3);
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
+        graphics.stroke({ width: 8, color: 0xff44ff, alpha: 0.3 });
         
         return graphics;
     }
@@ -4367,28 +4281,28 @@ class GameEngine {
      */
     createPlasmaBeamGraphics(graphics, length, beamData) {
         // Main plasma beam - electric blue
-        graphics.lineStyle(6, 0x4488ff, 0.8);
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
+        graphics.stroke({ width: 6, color: 0x4488ff, alpha: 0.8 });
         
         // Plasma core - bright white
-        graphics.lineStyle(3, 0xaaffff, 1.0);
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
+        graphics.stroke({ width: 3, color: 0xaaffff });
         
         // Crackling energy effect
-        graphics.lineStyle(10, 0x4488ff, 0.2);
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
+        graphics.stroke({ width: 10, color: 0x4488ff, alpha: 0.2 });
         
         // Add plasma instability (random segments)
         for (let i = 0; i < length; i += 20) {
             const segmentEnd = Math.min(i + 15 + Math.random() * 10, length);
             const offset = (Math.random() - 0.5) * 4;
             
-            graphics.lineStyle(2, 0x88aaff, 0.6);
             graphics.moveTo(i, 0);
             graphics.lineTo(segmentEnd, offset);
+            graphics.stroke({ width: 2, color: 0x88aaff, alpha: 0.6 });
         }
         
         return graphics;
@@ -4399,26 +4313,24 @@ class GameEngine {
      */
     createHealBeamGraphics(graphics, length, beamData) {
         // Main healing beam - soft green
-        graphics.lineStyle(5, 0x2ecc71, 0.7);
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
+        graphics.stroke({ width: 5, color: 0x2ecc71, alpha: 0.7 });
         
         // Healing core - bright green
-        graphics.lineStyle(2, 0x58d68d, 1.0);
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
+        graphics.stroke({ width: 2, color: 0x58d68d });
         
         // Healing aura
-        graphics.lineStyle(12, 0x2ecc71, 0.2);
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
+        graphics.stroke({ width: 12, color: 0x2ecc71, alpha: 0.2 });
         
         // Add healing particles along the beam
         for (let i = 10; i < length; i += 15) {
             const offset = (Math.random() - 0.5) * 6;
-            graphics.beginFill(0x58d68d, 0.8);
-            graphics.drawCircle(i, offset, 1.5);
-            graphics.endFill();
+            graphics.circle(i, offset, 1.5).fill({ color: 0x58d68d, alpha: 0.8 });
         }
         
         return graphics;
@@ -4429,27 +4341,27 @@ class GameEngine {
      */
     createRailgunGraphics(graphics, length, beamData) {
         // Main railgun beam - bright white/blue
-        graphics.lineStyle(3, 0xaaffff, 1.0);
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
+        graphics.stroke({ width: 3, color: 0xaaffff });
         
         // Railgun core - pure white
-        graphics.lineStyle(1, 0xffffff, 1.0);
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
+        graphics.stroke({ width: 1, color: 0xffffff });
         
         // Electromagnetic field
-        graphics.lineStyle(8, 0x88ccff, 0.4);
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
+        graphics.stroke({ width: 8, color: 0x88ccff, alpha: 0.4 });
         
         // Add electromagnetic distortion lines
         for (let i = 0; i < length; i += 25) {
             const distortionLength = 8 + Math.random() * 6;
-            graphics.lineStyle(1, 0xaaffff, 0.5);
             graphics.moveTo(i, -distortionLength/2);
             graphics.lineTo(i, distortionLength/2);
         }
+        graphics.stroke({ width: 1, color: 0xaaffff, alpha: 0.5 });
         
         return graphics;
     }
@@ -4459,14 +4371,14 @@ class GameEngine {
      */
     createGenericBeamGraphics(graphics, length, beamData) {
         // Generic beam - white
-        graphics.lineStyle(3, 0xffffff, 0.8);
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
+        graphics.stroke({ width: 3, color: 0xffffff, alpha: 0.8 });
         
         // Core
-        graphics.lineStyle(1, 0xffffff, 1.0);
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
+        graphics.stroke({ width: 1, color: 0xffffff });
         
         return graphics;
     }
@@ -4479,9 +4391,9 @@ class GameEngine {
         if (beamData.damageType === 'DAMAGE_OVER_TIME') {
             // Add continuous energy effect
             const energyEffect = new PIXI.Graphics();
-            energyEffect.lineStyle(8, 0x4488ff, 0.1);
             energyEffect.moveTo(0, 0);
             energyEffect.lineTo(length, 0);
+            energyEffect.stroke({ width: 8, color: 0x4488ff, alpha: 0.1 });
             energyEffect.rotation = angle;
             beamContainer.addChild(energyEffect);
             
@@ -4523,35 +4435,27 @@ class GameEngine {
      */
     createTurretGraphics(graphics, entityData) {
         // Turret base - dark gray circle
-        graphics.beginFill(0x444444, 0.9);
-        graphics.drawCircle(0, 0, 18);
-        graphics.endFill();
+        graphics.circle(0, 0, 18).fill({ color: 0x444444, alpha: 0.9 });
         
         // Turret base outline
-        graphics.lineStyle(2, 0x666666, 1.0);
-        graphics.drawCircle(0, 0, 18);
+        graphics.circle(0, 0, 18).stroke({ width: 2, color: 0x666666 });
         
         // Turret barrel - pointing in direction
-        graphics.lineStyle(4, 0x333333, 1.0);
         graphics.moveTo(0, 0);
         graphics.lineTo(25, 0); // Barrel length
+        graphics.stroke({ width: 4, color: 0x333333 });
         
         // Turret barrel tip
-        graphics.beginFill(0x222222, 1.0);
-        graphics.drawCircle(25, 0, 3);
-        graphics.endFill();
+        graphics.circle(25, 0, 3).fill(0x222222);
         
         // Team color indicator
         const teamColor = this.getTeamColor(entityData.ownerTeam || 0);
-        graphics.beginFill(teamColor, 0.8);
-        graphics.drawCircle(0, 0, 8);
-        graphics.endFill();
+        graphics.circle(0, 0, 8).fill({ color: teamColor, alpha: 0.8 });
         
         // Health indicator (if available)
         if (entityData.health !== undefined) {
             const healthPercent = Math.max(0, entityData.health / 100);
-            graphics.lineStyle(2, 0x2ecc71, healthPercent);
-            graphics.drawCircle(0, 0, 20);
+            graphics.circle(0, 0, 20).stroke({ width: 2, color: 0x2ecc71, alpha: healthPercent });
         }
         
         return graphics;
@@ -4581,11 +4485,9 @@ class GameEngine {
         const meshSize = 3; // Size of each mesh cell
         
         // Draw the main net frame (rectangle outline)
-        graphics.lineStyle(2, 0x8B4513, 0.9); // Brown rope color
-        graphics.drawRect(-netWidth/2, -netHeight/2, netWidth, netHeight);
+        graphics.rect(-netWidth/2, -netHeight/2, netWidth, netHeight).stroke({ width: 2, color: 0x8B4513, alpha: 0.9 }); // Brown rope color
         
         // Draw horizontal mesh lines
-        graphics.lineStyle(1, 0x654321, 0.8); // Slightly darker brown
         const horizontalLines = Math.floor(netHeight / meshSize);
         for (let i = 1; i < horizontalLines; i++) {
             const y = -netHeight/2 + (i * meshSize);
@@ -4600,6 +4502,7 @@ class GameEngine {
             graphics.moveTo(x, -netHeight/2);
             graphics.lineTo(x, netHeight/2);
         }
+        graphics.stroke({ width: 1, color: 0x654321, alpha: 0.8 }); // Slightly darker brown
         
         // Add corner weights for realistic net behavior
         const cornerRadius = 3;
@@ -4612,19 +4515,14 @@ class GameEngine {
         
         corners.forEach(corner => {
             // Corner weight
-            graphics.beginFill(0x4A4A4A, 0.9); // Dark gray metal
-            graphics.lineStyle(1, 0x2A2A2A, 1.0); // Darker outline
-            graphics.drawCircle(corner.x, corner.y, cornerRadius);
-            graphics.endFill();
+            graphics.circle(corner.x, corner.y, cornerRadius).fill({ color: 0x4A4A4A, alpha: 0.9 }); // Dark gray metal
+            graphics.circle(corner.x, corner.y, cornerRadius).stroke({ width: 1, color: 0x2A2A2A }); // Darker outline
             
             // Add metallic shine
-            graphics.beginFill(0x6A6A6A, 0.6);
-            graphics.drawCircle(corner.x - 1, corner.y - 1, cornerRadius * 0.4);
-            graphics.endFill();
+            graphics.circle(corner.x - 1, corner.y - 1, cornerRadius * 0.4).fill({ color: 0x6A6A6A, alpha: 0.6 });
         });
         
         // Add subtle net texture with small cross-hatches
-        graphics.lineStyle(0.5, 0x654321, 0.4);
         for (let x = -netWidth/2 + meshSize/2; x < netWidth/2; x += meshSize) {
             for (let y = -netHeight/2 + meshSize/2; y < netHeight/2; y += meshSize) {
                 // Small cross pattern in each mesh cell
@@ -4634,6 +4532,7 @@ class GameEngine {
                 graphics.lineTo(x - 0.5, y + 0.5);
             }
         }
+        graphics.stroke({ width: 0.5, color: 0x654321, alpha: 0.4 });
         
         return graphics;
     }
@@ -4655,15 +4554,14 @@ class GameEngine {
         }
         
         // Draw pentagon outline
-        graphics.lineStyle(2, 0x8B4513, 0.9); // Brown rope color
         graphics.moveTo(vertices[0].x, vertices[0].y);
         for (let i = 1; i < vertices.length; i++) {
             graphics.lineTo(vertices[i].x, vertices[i].y);
         }
         graphics.lineTo(vertices[0].x, vertices[0].y); // Close the pentagon
+        graphics.stroke({ width: 2, color: 0x8B4513, alpha: 0.9 }); // Brown rope color
         
         // Draw mesh lines from center to each vertex
-        graphics.lineStyle(1, 0x654321, 0.8); // Slightly darker brown
         vertices.forEach(vertex => {
             graphics.moveTo(0, 0); // Center
             graphics.lineTo(vertex.x, vertex.y);
@@ -4689,24 +4587,20 @@ class GameEngine {
             }
             graphics.lineTo(levelVertices[0].x, levelVertices[0].y);
         }
+        graphics.stroke({ width: 1, color: 0x654321, alpha: 0.8 }); // Slightly darker brown
         
         // Add corner weights at each vertex
         const cornerRadius = 2.5;
         vertices.forEach(vertex => {
             // Corner weight
-            graphics.beginFill(0x4A4A4A, 0.9); // Dark gray metal
-            graphics.lineStyle(1, 0x2A2A2A, 1.0); // Darker outline
-            graphics.drawCircle(vertex.x, vertex.y, cornerRadius);
-            graphics.endFill();
+            graphics.circle(vertex.x, vertex.y, cornerRadius).fill({ color: 0x4A4A4A, alpha: 0.9 }); // Dark gray metal
+            graphics.circle(vertex.x, vertex.y, cornerRadius).stroke({ width: 1, color: 0x2A2A2A }); // Darker outline
             
             // Add metallic shine
-            graphics.beginFill(0x6A6A6A, 0.6);
-            graphics.drawCircle(vertex.x - 0.8, vertex.y - 0.8, cornerRadius * 0.4);
-            graphics.endFill();
+            graphics.circle(vertex.x - 0.8, vertex.y - 0.8, cornerRadius * 0.4).fill({ color: 0x6A6A6A, alpha: 0.6 });
         });
         
         // Add subtle net texture with small cross-hatches in mesh cells
-        graphics.lineStyle(0.5, 0x654321, 0.3);
         for (let level = 1; level < meshLevels; level++) {
             const levelRadius = (level * radius) / meshLevels;
             const nextLevelRadius = ((level + 1) * radius) / meshLevels;
@@ -4725,6 +4619,7 @@ class GameEngine {
                 graphics.lineTo(centerX - 0.5, centerY + 0.5);
             }
         }
+        graphics.stroke({ width: 0.5, color: 0x654321, alpha: 0.3 });
         
         return graphics;
     }
@@ -4737,32 +4632,25 @@ class GameEngine {
         const ownerTeam = entityData.ownerTeam || 0;
         
         // Outer trigger zone - very subtle danger area
-        graphics.beginFill(0xff4444, 0.06);
-        graphics.drawCircle(0, 0, 18);
-        graphics.endFill();
+        graphics.circle(0, 0, 18).fill({ color: 0xff4444, alpha: 0.06 });
         
         // Trigger zone outline - dashed circle (more subtle)
-        graphics.lineStyle(1, 0xff6666, 0.25);
         const dashCount = 16;
         for (let i = 0; i < dashCount; i++) {
             const startAngle = (i / dashCount) * Math.PI * 2;
             const endAngle = ((i + 0.5) / dashCount) * Math.PI * 2;
             graphics.arc(0, 0, 18, startAngle, endAngle);
         }
+        graphics.stroke({ width: 1, color: 0xff6666, alpha: 0.25 });
         
         // Mine center body - darker, more blended
-        graphics.beginFill(0x252f3a, 0.85);
-        graphics.drawCircle(0, 0, 8);
-        graphics.endFill();
+        graphics.circle(0, 0, 8).fill({ color: 0x252f3a, alpha: 0.85 });
 
         // Center body outline - much more subtle
-        graphics.lineStyle(1, 0x1e2329, 0.7);
-        graphics.drawCircle(0, 0, 8);
+        graphics.circle(0, 0, 8).stroke({ width: 1, color: 0x1e2329, alpha: 0.7 });
  
         // Core highlight - metallic shine (more prominent without inner ring)
-        graphics.beginFill(0x3a4a5a, 0.4);
-        graphics.drawCircle(-1, -1, 2);
-        graphics.endFill();
+        graphics.circle(-1, -1, 2).fill({ color: 0x3a4a5a, alpha: 0.4 });
         
         // Sensor spikes - 6 directional sensors (more subtle)
         for (let i = 0; i < 6; i++) {
@@ -4772,7 +4660,6 @@ class GameEngine {
             const spikeWidth = 1.2;
             
             // Sensor spike body - darker and more transparent
-            graphics.lineStyle(spikeWidth, 0x2a3441, 0.8);
             graphics.moveTo(
                 Math.cos(angle) * innerRadius,
                 Math.sin(angle) * innerRadius
@@ -4781,15 +4668,14 @@ class GameEngine {
                 Math.cos(angle) * outerRadius,
                 Math.sin(angle) * outerRadius
             );
+            graphics.stroke({ width: spikeWidth, color: 0x2a3441, alpha: 0.8 });
             
             // Sensor tip - small detection node (more subtle)
-            graphics.beginFill(0x3a4a5a, 0.7);
-            graphics.drawCircle(
+            graphics.circle(
                 Math.cos(angle) * outerRadius,
                 Math.sin(angle) * outerRadius,
                 1.2
-            );
-            graphics.endFill();
+            ).fill({ color: 0x3a4a5a, alpha: 0.7 });
         }
         
         // Status indicator
@@ -4797,14 +4683,11 @@ class GameEngine {
             // Armed - team color pulsing ring around center
             const pulse = 0.6 + 0.4 * Math.sin(Date.now() * 0.01);
             const teamColor = this.getTeamColor(ownerTeam);
-            graphics.lineStyle(2, teamColor, pulse);
-            graphics.drawCircle(0, 0, 10);
+            graphics.circle(0, 0, 10).stroke({ width: 2, color: teamColor, alpha: pulse });
             
             // Armed indicator - small pulsing center light
             const centerPulse = 0.3 + 0.7 * Math.sin(Date.now() * 0.015);
-            graphics.beginFill(teamColor, centerPulse);
-            graphics.drawCircle(0, 0, 1.5);
-            graphics.endFill();
+            graphics.circle(0, 0, 1.5).fill({ color: teamColor, alpha: centerPulse });
         }
         
         return graphics;
@@ -4821,32 +4704,26 @@ class GameEngine {
         
         // Teleport pad base - large circle
         const baseColor = isLinked ? 0x9b59b6 : 0x6c5ce7; // Purple when linked, blue when not
-        graphics.beginFill(baseColor, 0.3);
-        graphics.drawCircle(0, 0, 20);
-        graphics.endFill();
+        graphics.circle(0, 0, 20).fill({ color: baseColor, alpha: 0.3 });
         
         // Outer ring
-        graphics.lineStyle(3, baseColor, 0.8);
-        graphics.drawCircle(0, 0, 20);
+        graphics.circle(0, 0, 20).stroke({ width: 3, color: baseColor, alpha: 0.8 });
         
         // Inner energy core
         const coreAlpha = isCharging ? chargingProgress : 1.0;
-        graphics.beginFill(0xffffff, coreAlpha * 0.6);
-        graphics.drawCircle(0, 0, 8);
-        graphics.endFill();
+        graphics.circle(0, 0, 8).fill({ color: 0xffffff, alpha: coreAlpha * 0.6 });
         
         // Pulsing energy rings
         if (!isCharging || chargingProgress > 0.5) {
             const pulseAlpha = pulseValue * 0.5;
-            graphics.lineStyle(2, 0xffffff, pulseAlpha);
-            graphics.drawCircle(0, 0, 12);
-            graphics.drawCircle(0, 0, 16);
+            graphics.circle(0, 0, 12).stroke({ width: 2, color: 0xffffff, alpha: pulseAlpha });
+            graphics.circle(0, 0, 16).stroke({ width: 2, color: 0xffffff, alpha: pulseAlpha });
         }
         
         // Charging progress indicator
         if (isCharging) {
-            graphics.lineStyle(4, 0xf39c12, 0.8);
             graphics.arc(0, 0, 24, 0, Math.PI * 2 * chargingProgress);
+            graphics.stroke({ width: 4, color: 0xf39c12, alpha: 0.8 });
         }
         
         // Link indicator
@@ -4858,27 +4735,22 @@ class GameEngine {
                 const y = Math.sin(angle) * 16;
                 
                 // Outer glow effect
-                graphics.beginFill(0x9b59b6, 0.3);
-                graphics.drawCircle(x, y, 6);
-                graphics.endFill();
+                graphics.circle(x, y, 6).fill({ color: 0x9b59b6, alpha: 0.3 });
                 
                 // Arrow pointing outward
-                graphics.beginFill(0x9b59b6, 0.9);
-                graphics.drawPolygon([
+                graphics.poly([
                     x - 2, y - 2,
                     x + 2, y - 2,
                     x + 4, y,
                     x + 2, y + 2,
                     x - 2, y + 2,
                     x - 4, y
-                ]);
-                graphics.endFill();
+                ]).fill({ color: 0x9b59b6, alpha: 0.9 });
             }
             
             // Add pulsing connection ring
             const connectionRingAlpha = pulseValue * 0.6;
-            graphics.lineStyle(2, 0x9b59b6, connectionRingAlpha);
-            graphics.drawCircle(0, 0, 25);
+            graphics.circle(0, 0, 25).stroke({ width: 2, color: 0x9b59b6, alpha: connectionRingAlpha });
         }
         
         return graphics;
@@ -4889,23 +4761,16 @@ class GameEngine {
      */
     createDefenseLaserGraphics(graphics, entityData) {
         // Base structure - blue-gray circle
-        graphics.beginFill(0x4444AA, 0.9);
-        graphics.drawCircle(0, 0, 15);
-        graphics.endFill();
+        graphics.circle(0, 0, 15).fill({ color: 0x4444AA, alpha: 0.9 });
         
         // Central core - brighter blue
-        graphics.beginFill(0x6666CC, 0.8);
-        graphics.drawCircle(0, 0, 8);
-        graphics.endFill();
+        graphics.circle(0, 0, 8).fill({ color: 0x6666CC, alpha: 0.8 });
         
         // Rotating indicator - shows current beam direction
-        graphics.beginFill(0x8888FF, 0.9);
-        graphics.drawRect(-2, -12, 4, 6);
-        graphics.endFill();
+        graphics.rect(-2, -12, 4, 6).fill({ color: 0x8888FF, alpha: 0.9 });
         
         // Outer ring to show it's active
-        graphics.lineStyle(2, 0xAAAAFF, 0.8);
-        graphics.drawCircle(0, 0, 18);
+        graphics.circle(0, 0, 18).stroke({ width: 2, color: 0xAAAAFF, alpha: 0.8 });
         
         return graphics;
     }
@@ -4926,28 +4791,23 @@ class GameEngine {
         const halfHeight = height / 2;
         
         // Workshop base - industrial gray rectangle
-        graphics.beginFill(0x555555, 0.9);
-        graphics.drawRect(-halfWidth, -halfHeight, width, height);
-        graphics.endFill();
+        graphics.rect(-halfWidth, -halfHeight, width, height).fill({ color: 0x555555, alpha: 0.9 });
         
         // Workshop outline
-        graphics.lineStyle(3, 0x777777, 1.0);
-        graphics.drawRect(-halfWidth, -halfHeight, width, height);
+        graphics.rect(-halfWidth, -halfHeight, width, height).stroke({ width: 3, color: 0x777777 });
         
         // Crafting radius indicator (subtle)
-        graphics.lineStyle(1, 0x888888, 0.3);
-        graphics.drawCircle(0, 0, entityData.craftRadius || 80);
+        graphics.circle(0, 0, entityData.craftRadius || 80).stroke({ width: 1, color: 0x888888, alpha: 0.3 });
         
         // Workshop center - gear-like design
-        graphics.lineStyle(2, 0x999999, 1.0);
         graphics.moveTo(-8, -8);
         graphics.lineTo(8, 8);
         graphics.moveTo(8, -8);
         graphics.lineTo(-8, 8);
-        graphics.drawCircle(0, 0, 6);
+        graphics.circle(0, 0, 6);
+        graphics.stroke({ width: 2, color: 0x999999 });
         
         // Add some workshop details to make it look more industrial
-        graphics.lineStyle(1, 0x666666, 0.8);
         // Horizontal lines for workshop floor (scaled to actual dimensions)
         const floorY1 = -halfHeight * 0.3;
         const floorY2 = halfHeight * 0.3;
@@ -4962,6 +4822,7 @@ class GameEngine {
         graphics.lineTo(wallX1, halfHeight * 0.8);
         graphics.moveTo(wallX2, -halfHeight * 0.8);
         graphics.lineTo(wallX2, halfHeight * 0.8);
+        graphics.stroke({ width: 1, color: 0x666666, alpha: 0.8 });
         
         // Add crafting progress indicators for active players
         if (entityData.craftingProgress) {
@@ -4974,23 +4835,17 @@ class GameEngine {
                     const y = Math.sin(angle) * radius;
                     
                     // Progress indicator dot (larger and more visible)
-                    graphics.beginFill(0x00AAFF, 1.0);
-                    graphics.drawCircle(x, y, 8);
-                    graphics.endFill();
+                    graphics.circle(x, y, 8).fill({ color: 0x00AAFF });
                     
                     // Progress ring (outer) - thicker and more visible
-                    graphics.lineStyle(4, 0x00AAFF, progress);
-                    graphics.drawCircle(x, y, 12);
+                    graphics.circle(x, y, 12).stroke({ width: 4, color: 0x00AAFF, alpha: progress });
                     
                     // Inner progress circle
-                    graphics.lineStyle(2, 0xFFFFFF, 0.8);
-                    graphics.drawCircle(x, y, 6);
+                    graphics.circle(x, y, 6).stroke({ width: 2, color: 0xFFFFFF, alpha: 0.8 });
                     
                     // Progress percentage indicator (pulsing dot)
                     const pulseSize = 4 + (progress * 4);
-                    graphics.beginFill(0xFFFFFF, 0.9);
-                    graphics.drawCircle(x, y, pulseSize);
-                    graphics.endFill();
+                    graphics.circle(x, y, pulseSize).fill({ color: 0xFFFFFF, alpha: 0.9 });
                 }
             });
         }
@@ -4998,8 +4853,7 @@ class GameEngine {
         // Add workshop activity indicator (pulsing center when active)
         if (entityData.activeCrafters > 0) {
             // Pulsing center circle to show workshop is active
-            graphics.lineStyle(3, 0x00FF00, 1.0); // Green for active - thicker and brighter
-            graphics.drawCircle(0, 0, 10);
+            graphics.circle(0, 0, 10).stroke({ width: 3, color: 0x00FF00 }); // Green for active - thicker and brighter
         }
         
         return graphics;
@@ -5035,21 +4889,16 @@ class GameEngine {
         
         // HQ base - large fortified rectangle with team color
         const baseAlpha = 0.9;
-        graphics.beginFill(teamColor, baseAlpha);
-        graphics.drawRect(-halfWidth, -halfHeight, width, height);
-        graphics.endFill();
+        graphics.rect(-halfWidth, -halfHeight, width, height).fill({ color: teamColor, alpha: baseAlpha });
         
         // Damage overlay (darker as health decreases)
         if (healthPct < 1.0) {
             const damageAlpha = (1.0 - healthPct) * 0.6;
-            graphics.beginFill(0x000000, damageAlpha);
-            graphics.drawRect(-halfWidth, -halfHeight, width, height);
-            graphics.endFill();
+            graphics.rect(-halfWidth, -halfHeight, width, height).fill({ color: 0x000000, alpha: damageAlpha });
         }
         
         // HQ fortified outline (thicker than normal obstacles)
-        graphics.lineStyle(4, 0xFFFFFF, 0.9);
-        graphics.drawRect(-halfWidth, -halfHeight, width, height);
+        graphics.rect(-halfWidth, -halfHeight, width, height).stroke({ width: 4, color: 0xFFFFFF, alpha: 0.9 });
         
         // Castle turrets at each corner
         const turretRadius = 12;
@@ -5063,38 +4912,28 @@ class GameEngine {
         turretPositions.forEach(pos => {
             // Turret base (darker shade of team color)
             const darkerTeamColor = this.darkenColor(teamColor);
-            graphics.beginFill(darkerTeamColor, 0.95);
-            graphics.drawCircle(pos.x, pos.y, turretRadius);
-            graphics.endFill();
+            graphics.circle(pos.x, pos.y, turretRadius).fill({ color: darkerTeamColor, alpha: 0.95 });
             
             // Damage overlay on turrets
             if (healthPct < 1.0) {
                 const damageAlpha = (1.0 - healthPct) * 0.6;
-                graphics.beginFill(0x000000, damageAlpha);
-                graphics.drawCircle(pos.x, pos.y, turretRadius);
-                graphics.endFill();
+                graphics.circle(pos.x, pos.y, turretRadius).fill({ color: 0x000000, alpha: damageAlpha });
             }
             
             // Turret outline
-            graphics.lineStyle(3, 0xFFFFFF, 0.95);
-            graphics.drawCircle(pos.x, pos.y, turretRadius);
+            graphics.circle(pos.x, pos.y, turretRadius).stroke({ width: 3, color: 0xFFFFFF, alpha: 0.95 });
             
             // Inner turret detail (smaller circle)
-            graphics.lineStyle(2, 0xFFFFFF, 0.7);
-            graphics.drawCircle(pos.x, pos.y, turretRadius * 0.6);
+            graphics.circle(pos.x, pos.y, turretRadius * 0.6).stroke({ width: 2, color: 0xFFFFFF, alpha: 0.7 });
             
             // Turret top accent
-            graphics.beginFill(0xFFFFFF, 0.4);
-            graphics.drawCircle(pos.x, pos.y, turretRadius * 0.3);
-            graphics.endFill();
+            graphics.circle(pos.x, pos.y, turretRadius * 0.3).fill({ color: 0xFFFFFF, alpha: 0.4 });
         });
         
         // Central command center design
         const centerSize = Math.min(halfWidth, halfHeight) * 0.5;
-        graphics.lineStyle(2, 0xFFFFFF, 0.8);
-        graphics.beginFill(teamColor, 0.5);
-        graphics.drawCircle(0, 0, centerSize);
-        graphics.endFill();
+        graphics.circle(0, 0, centerSize).fill({ color: teamColor, alpha: 0.5 });
+        graphics.circle(0, 0, centerSize).stroke({ width: 2, color: 0xFFFFFF, alpha: 0.8 });
         
         // Team indicator - large team number in center
         const teamText = new PIXI.Text(`HQ\n${team}`, {
@@ -5115,10 +4954,8 @@ class GameEngine {
         const barY = -halfHeight - 15;
         
         // Health bar background
-        graphics.lineStyle(2, 0x000000, 0.8);
-        graphics.beginFill(0x333333, 0.8);
-        graphics.drawRect(-barWidth/2, barY, barWidth, barHeight);
-        graphics.endFill();
+        graphics.rect(-barWidth/2, barY, barWidth, barHeight).fill({ color: 0x333333, alpha: 0.8 });
+        graphics.rect(-barWidth/2, barY, barWidth, barHeight).stroke({ width: 2, color: 0x000000, alpha: 0.8 });
         
         // Health bar fill (color changes based on health)
         let healthBarColor = 0x00FF00; // Green
@@ -5128,9 +4965,7 @@ class GameEngine {
             healthBarColor = 0xFFAA00; // Orange
         }
         
-        graphics.beginFill(healthBarColor, 0.9);
-        graphics.drawRect(-barWidth/2, barY, barWidth * healthPct, barHeight);
-        graphics.endFill();
+        graphics.rect(-barWidth/2, barY, barWidth * healthPct, barHeight).fill({ color: healthBarColor, alpha: 0.9 });
         
         // Health text (show as percentage)
         const healthPercentage = (healthPct * 100).toFixed(0);
@@ -5149,8 +4984,7 @@ class GameEngine {
         // Warning pulse effect when heavily damaged
         if (healthPct < 0.3) {
             const pulse = Math.sin(Date.now() * 0.005) * 0.5 + 0.5;
-            graphics.lineStyle(3, 0xFF0000, pulse);
-            graphics.drawRect(-halfWidth - 5, -halfHeight - 5, width + 10, height + 10);
+            graphics.rect(-halfWidth - 5, -halfHeight - 5, width + 10, height + 10).stroke({ width: 3, color: 0xFF0000, alpha: pulse });
         }
         
         return graphics;
@@ -5181,53 +5015,36 @@ class GameEngine {
         const powerUpType = entityData.powerUpType || entityData.type || 'SPEED_BOOST';
         
         // Power-up base - larger circle for better visibility
-        graphics.beginFill(0xFFFFFF, 0.9);
-        graphics.drawCircle(0, 0, 14);
-        graphics.endFill();
+        graphics.circle(0, 0, 14).fill({ color: 0xFFFFFF, alpha: 0.9 });
         
         // Power-up outline (thicker for better visibility)
-        graphics.lineStyle(3, 0xCCCCCC, 1.0);
-        graphics.drawCircle(0, 0, 14);
+        graphics.circle(0, 0, 14).stroke({ width: 3, color: 0xCCCCCC });
         
         // Type-specific visual indicators (larger inner circle)
         switch (powerUpType) {
             case 'SPEED_BOOST':
-                graphics.beginFill(0x00FFFF, 0.8);
-                graphics.drawCircle(0, 0, 9);
-                graphics.endFill();
+                graphics.circle(0, 0, 9).fill({ color: 0x00FFFF, alpha: 0.8 });
                 break;
             case 'HEALTH_REGENERATION':
-                graphics.beginFill(0x00FF00, 0.8);
-                graphics.drawCircle(0, 0, 9);
-                graphics.endFill();
+                graphics.circle(0, 0, 9).fill({ color: 0x00FF00, alpha: 0.8 });
                 break;
             case 'DAMAGE_BOOST':
-                graphics.beginFill(0xFF0000, 0.8);
-                graphics.drawCircle(0, 0, 9);
-                graphics.endFill();
+                graphics.circle(0, 0, 9).fill({ color: 0xFF0000, alpha: 0.8 });
                 break;
             case 'DAMAGE_RESISTANCE':
-                graphics.beginFill(0xFFD700, 0.8);
-                graphics.drawCircle(0, 0, 9);
-                graphics.endFill();
+                graphics.circle(0, 0, 9).fill({ color: 0xFFD700, alpha: 0.8 });
                 break;
             case 'BERSERKER_MODE':
-                graphics.beginFill(0xFF4500, 0.8);
-                graphics.drawCircle(0, 0, 9);
-                graphics.endFill();
+                graphics.circle(0, 0, 9).fill({ color: 0xFF4500, alpha: 0.8 });
                 break;
             case 'SLOW_EFFECT':
-                graphics.beginFill(0x0066CC, 0.8);
-                graphics.drawCircle(0, 0, 9);
-                graphics.endFill();
+                graphics.circle(0, 0, 9).fill({ color: 0x0066CC, alpha: 0.8 });
                 break;
         }
         
         // Add larger sparkle effect for better visibility
-        graphics.beginFill(0xFFFFFF, 0.7);
-        graphics.drawCircle(-5, -5, 3);
-        graphics.drawCircle(5, 5, 3);
-        graphics.endFill();
+        graphics.circle(-5, -5, 3).fill({ color: 0xFFFFFF, alpha: 0.7 });
+        graphics.circle(5, 5, 3).fill({ color: 0xFFFFFF, alpha: 0.7 });
         
         return graphics;
     }
@@ -5236,12 +5053,9 @@ class GameEngine {
      * Create generic utility graphics
      */
     createGenericUtilityGraphics(graphics, entityData) {
-        graphics.beginFill(0x888888, 0.7);
-        graphics.drawCircle(0, 0, 15);
-        graphics.endFill();
+        graphics.circle(0, 0, 15).fill({ color: 0x888888, alpha: 0.7 });
         
-        graphics.lineStyle(2, 0xcccccc, 1.0);
-        graphics.drawCircle(0, 0, 15);
+        graphics.circle(0, 0, 15).stroke({ width: 2, color: 0xcccccc });
         
         return graphics;
     }
@@ -5513,9 +5327,9 @@ class GameEngine {
             const endY = pos1.y + dy * segmentEnd;
             
             // Draw segment with gradient effect
-            graphics.lineStyle(3, 0x9b59b6, alpha);
             graphics.moveTo(startX, startY);
             graphics.lineTo(endX, endY);
+            graphics.stroke({ width: 3, color: 0x9b59b6, alpha });
             
             // Add energy particles along the line
             if (i % 2 === 0) {
@@ -5523,17 +5337,13 @@ class GameEngine {
                 const particleX = pos1.x + dx * particleProgress * distance;
                 const particleY = pos1.y + dy * particleProgress * distance;
                 
-                graphics.beginFill(0xffffff, alpha * 0.8);
-                graphics.drawCircle(particleX, particleY, 2);
-                graphics.endFill();
+                graphics.circle(particleX, particleY, 2).fill({ color: 0xffffff, alpha: alpha * 0.8 });
             }
         }
         
         // Add connection indicators at both ends
-        graphics.beginFill(0x9b59b6, 0.6);
-        graphics.drawCircle(pos1.x, pos1.y, 3);
-        graphics.drawCircle(pos2.x, pos2.y, 3);
-        graphics.endFill();
+        graphics.circle(pos1.x, pos1.y, 3).fill({ color: 0x9b59b6, alpha: 0.6 });
+        graphics.circle(pos2.x, pos2.y, 3).fill({ color: 0x9b59b6, alpha: 0.6 });
         
         // Add directional arrows
         const midX = (pos1.x + pos2.x) / 2;
@@ -5544,13 +5354,11 @@ class GameEngine {
         const perpX = -dy * arrowSize;
         const perpY = dx * arrowSize;
         
-        graphics.beginFill(0x9b59b6, 0.8);
-        graphics.drawPolygon([
+        graphics.poly([
             midX + dx * arrowSize, midY + dy * arrowSize,
             midX - dx * arrowSize + perpX, midY - dy * arrowSize + perpY,
             midX - dx * arrowSize - perpX, midY - dy * arrowSize - perpY
-        ]);
-        graphics.endFill();
+        ]).fill({ color: 0x9b59b6, alpha: 0.8 });
     }
     
     /**
@@ -5648,13 +5456,10 @@ class GameEngine {
         
         // Background (dark gray)
         const background = new PIXI.Graphics();
-        background.beginFill(0x222222, 0.8);
-        background.drawRoundedRect(-barWidth/2, 0, barWidth, barHeight, 3);
-        background.endFill();
+        background.roundRect(-barWidth/2, 0, barWidth, barHeight, 3).fill({ color: 0x222222, alpha: 0.8 });
         
         // Border
-        background.lineStyle(1, 0x444444, 0.8);
-        background.drawRoundedRect(-barWidth/2, 0, barWidth, barHeight, 3);
+        background.roundRect(-barWidth/2, 0, barWidth, barHeight, 3).stroke({ width: 1, color: 0x444444, alpha: 0.8 });
         barContainer.addChild(background);
         
         // Progress fill (starts empty)
@@ -5706,14 +5511,10 @@ class GameEngine {
                 }
                 
                 // Draw the fill
-                fill.beginFill(fillColor, 0.9);
-                fill.drawRoundedRect(-progressBar.barWidth/2 + 2, 2, fillWidth, progressBar.barHeight - 4, 2);
-                fill.endFill();
+                fill.roundRect(-progressBar.barWidth/2 + 2, 2, fillWidth, progressBar.barHeight - 4, 2).fill({ color: fillColor, alpha: 0.9 });
                 
                 // Add a subtle shine effect
-                fill.beginFill(0xffffff, 0.3);
-                fill.drawRoundedRect(-progressBar.barWidth/2 + 2, 2, fillWidth, 2, 2);
-                fill.endFill();
+                fill.roundRect(-progressBar.barWidth/2 + 2, 2, fillWidth, 2, 2).fill({ color: 0xffffff, alpha: 0.3 });
             }
         }
     }
@@ -5726,16 +5527,12 @@ class GameEngine {
         
         // Health bar background
         const healthBg = new PIXI.Graphics();
-        healthBg.beginFill(0x333333);
-        healthBg.drawRoundedRect(-20, 0, 40, 5, 2);
-        healthBg.endFill();
+        healthBg.roundRect(-20, 0, 40, 5, 2).fill(0x333333);
         healthBarContainer.addChild(healthBg);
         
         // Health bar fill
         const healthFill = new PIXI.Graphics();
-        healthFill.beginFill(0x2ecc71);
-        healthFill.drawRoundedRect(-20, 0, 40, 5, 2);
-        healthFill.endFill();
+        healthFill.roundRect(-20, 0, 40, 5, 2).fill(0x2ecc71);
         healthBarContainer.addChild(healthFill);
         
         // Store references for updates
@@ -5942,19 +5739,13 @@ class GameEngine {
      */
     createExplosionGraphics(graphics, radius, effectData) {
         // Outer blast ring
-        graphics.beginFill(0xff4444, 0.6);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
+        graphics.circle(0, 0, radius).fill({ color: 0xff4444, alpha: 0.6 });
         
         // Inner core
-        graphics.beginFill(0xffaa44, 0.8);
-        graphics.drawCircle(0, 0, radius * 0.6);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.6).fill({ color: 0xffaa44, alpha: 0.8 });
         
         // Bright center
-        graphics.beginFill(0xffffff, 0.9);
-        graphics.drawCircle(0, 0, radius * 0.3);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.3).fill({ color: 0xffffff, alpha: 0.9 });
         
         return graphics;
     }
@@ -5964,19 +5755,13 @@ class GameEngine {
      */
     createFireGraphics(graphics, radius, effectData) {
         // Base fire area
-        graphics.beginFill(0xff4444, 0.4);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
+        graphics.circle(0, 0, radius).fill({ color: 0xff4444, alpha: 0.4 });
         
         // Inner flames
-        graphics.beginFill(0xff8844, 0.6);
-        graphics.drawCircle(0, 0, radius * 0.7);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.7).fill({ color: 0xff8844, alpha: 0.6 });
         
         // Hot center
-        graphics.beginFill(0xffaa44, 0.8);
-        graphics.drawCircle(0, 0, radius * 0.4);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.4).fill({ color: 0xffaa44, alpha: 0.8 });
         
         // Add flame particles
         for (let i = 0; i < 8; i++) {
@@ -5986,9 +5771,7 @@ class GameEngine {
             const y = Math.sin(angle) * distance;
             const size = 3 + Math.random() * 5;
             
-            graphics.beginFill(0xff6644, 0.7);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
+            graphics.circle(x, y, size).fill({ color: 0xff6644, alpha: 0.7 });
         }
         
         return graphics;
@@ -5999,13 +5782,9 @@ class GameEngine {
      */
     createElectricGraphics(graphics, radius, effectData) {
         // Electric field base
-        graphics.beginFill(0x4444ff, 0.3);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
+        graphics.circle(0, 0, radius).fill({ color: 0x4444ff, alpha: 0.3 });
         
         // Electric arcs
-        graphics.lineStyle(2, 0x88aaff, 0.8);
-        
         for (let i = 0; i < 6; i++) {
             const startAngle = (i / 6) * Math.PI * 2;
             const endAngle = startAngle + (Math.random() - 0.5) * Math.PI;
@@ -6026,11 +5805,10 @@ class GameEngine {
                 graphics.lineTo(x, y);
             }
         }
+        graphics.stroke({ width: 2, color: 0x88aaff, alpha: 0.8 });
         
         // Bright electric center
-        graphics.beginFill(0xaaffff, 0.9);
-        graphics.drawCircle(0, 0, radius * 0.2);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.2).fill({ color: 0xaaffff, alpha: 0.9 });
         
         return graphics;
     }
@@ -6040,13 +5818,9 @@ class GameEngine {
      */
     createFreezeGraphics(graphics, radius, effectData) {
         // Freeze field base
-        graphics.beginFill(0x88ccff, 0.4);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
+        graphics.circle(0, 0, radius).fill({ color: 0x88ccff, alpha: 0.4 });
         
         // Ice crystals
-        graphics.lineStyle(2, 0xaaffff, 0.8);
-        
         for (let i = 0; i < 8; i++) {
             const angle = (i / 8) * Math.PI * 2;
             const length = radius * (0.6 + Math.random() * 0.3);
@@ -6072,14 +5846,10 @@ class GameEngine {
                 branchY + Math.sin(angle - Math.PI/4) * branchLength
             );
         }
-        
-        // Reset line style before drawing filled center
-        graphics.lineStyle(0);
+        graphics.stroke({ width: 2, color: 0xaaffff, alpha: 0.8 });
         
         // Frozen center
-        graphics.beginFill(0xffffff, 0.7);
-        graphics.drawCircle(0, 0, radius * 0.2);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.2).fill({ color: 0xffffff, alpha: 0.7 });
         
         return graphics;
     }
@@ -6089,24 +5859,23 @@ class GameEngine {
      */
     createFragmentationGraphics(graphics, radius, effectData) {
         // Fragmentation burst
-        graphics.beginFill(0xffaa44, 0.5);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
+        graphics.circle(0, 0, radius).fill({ color: 0xffaa44, alpha: 0.5 });
         
         // Fragment trails
-        graphics.lineStyle(2, 0xff8844, 0.7);
-        
         for (let i = 0; i < 12; i++) {
             const angle = (i / 12) * Math.PI * 2 + Math.random() * 0.2;
             const length = radius * (0.8 + Math.random() * 0.4);
             
             graphics.moveTo(0, 0);
             graphics.lineTo(Math.cos(angle) * length, Math.sin(angle) * length);
-            
-            // Fragment at end of trail
-            graphics.beginFill(0xffcc44, 0.8);
-            graphics.drawCircle(Math.cos(angle) * length, Math.sin(angle) * length, 2);
-            graphics.endFill();
+        }
+        graphics.stroke({ width: 2, color: 0xff8844, alpha: 0.7 });
+        
+        // Fragments at end of trails
+        for (let i = 0; i < 12; i++) {
+            const angle = (i / 12) * Math.PI * 2 + Math.random() * 0.2;
+            const length = radius * (0.8 + Math.random() * 0.4);
+            graphics.circle(Math.cos(angle) * length, Math.sin(angle) * length, 2).fill({ color: 0xffcc44, alpha: 0.8 });
         }
         
         return graphics;
@@ -6120,9 +5889,7 @@ class GameEngine {
         // to simulate a misty, toxic gas cloud
         
         // Outer diffuse cloud - very pale sickly green
-        graphics.beginFill(0x9ccc65, 0.15);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
+        graphics.circle(0, 0, radius).fill({ color: 0x9ccc65, alpha: 0.15 });
         
         // Create multiple overlapping cloud puffs for organic cloud shape
         const numPuffs = 8;
@@ -6134,15 +5901,11 @@ class GameEngine {
             const puffSize = radius * (0.5 + Math.random() * 0.2);
             
             // Sickly pale green with varying opacity
-            graphics.beginFill(0x8bc34a, 0.2 + Math.random() * 0.15);
-            graphics.drawCircle(x, y, puffSize);
-            graphics.endFill();
+            graphics.circle(x, y, puffSize).fill({ color: 0x8bc34a, alpha: 0.2 + Math.random() * 0.15 });
         }
         
         // Middle layer - more concentrated pallor
-        graphics.beginFill(0x7cb342, 0.25);
-        graphics.drawCircle(0, 0, radius * 0.65);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.65).fill({ color: 0x7cb342, alpha: 0.25 });
         
         // Add smaller wispy cloud details
         for (let i = 0; i < 12; i++) {
@@ -6156,15 +5919,11 @@ class GameEngine {
             const wispColors = [0x9ccc65, 0x8bc34a, 0x7cb342, 0x689f38];
             const wispColor = wispColors[Math.floor(Math.random() * wispColors.length)];
             
-            graphics.beginFill(wispColor, 0.2 + Math.random() * 0.15);
-            graphics.drawCircle(x, y, wispSize);
-            graphics.endFill();
+            graphics.circle(x, y, wispSize).fill({ color: wispColor, alpha: 0.2 + Math.random() * 0.15 });
         }
         
         // Central denser cloud
-        graphics.beginFill(0x689f38, 0.3);
-        graphics.drawCircle(0, 0, radius * 0.35);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.35).fill({ color: 0x689f38, alpha: 0.3 });
         
         // Add a few darker spots for depth
         for (let i = 0; i < 5; i++) {
@@ -6174,9 +5933,7 @@ class GameEngine {
             const y = Math.sin(angle) * distance;
             const spotSize = radius * (0.08 + Math.random() * 0.1);
             
-            graphics.beginFill(0x558b2f, 0.25);
-            graphics.drawCircle(x, y, spotSize);
-            graphics.endFill();
+            graphics.circle(x, y, spotSize).fill({ color: 0x558b2f, alpha: 0.25 });
         }
         
         return graphics;
@@ -6187,19 +5944,13 @@ class GameEngine {
      */
     createHealZoneGraphics(graphics, radius, effectData) {
         // Outer soft glow - subtle white aura
-        graphics.beginFill(0xf0f0f0, 0.15);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
+        graphics.circle(0, 0, radius).fill({ color: 0xf0f0f0, alpha: 0.15 });
         
         // Main background - greyish white circle
-        graphics.beginFill(0xe8e8e8, 0.7);
-        graphics.drawCircle(0, 0, radius * 0.75);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.75).fill({ color: 0xe8e8e8, alpha: 0.7 });
         
         // Inner background - lighter center
-        graphics.beginFill(0xf5f5f5, 0.8);
-        graphics.drawCircle(0, 0, radius * 0.65);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.65).fill({ color: 0xf5f5f5, alpha: 0.8 });
         
         // Create the classic red cross symbol
         const crossSize = radius * 0.45;
@@ -6209,18 +5960,13 @@ class GameEngine {
         const redCross = 0xdc143c; // Crimson red
         
         // Vertical bar of the cross
-        graphics.beginFill(redCross, 0.9);
-        graphics.drawRect(-crossThickness / 2, -crossSize, crossThickness, crossSize * 2);
-        graphics.endFill();
+        graphics.rect(-crossThickness / 2, -crossSize, crossThickness, crossSize * 2).fill({ color: redCross, alpha: 0.9 });
         
         // Horizontal bar of the cross
-        graphics.beginFill(redCross, 0.9);
-        graphics.drawRect(-crossSize, -crossThickness / 2, crossSize * 2, crossThickness);
-        graphics.endFill();
+        graphics.rect(-crossSize, -crossThickness / 2, crossSize * 2, crossThickness).fill({ color: redCross, alpha: 0.9 });
         
         // Add subtle border to the main circle
-        graphics.lineStyle(2, 0xcccccc, 0.5);
-        graphics.drawCircle(0, 0, radius * 0.75);
+        graphics.circle(0, 0, radius * 0.75).stroke({ width: 2, color: 0xcccccc, alpha: 0.5 });
         
         // Add small healing sparkles around the edge
         for (let i = 0; i < 12; i++) {
@@ -6230,9 +5976,7 @@ class GameEngine {
             const y = Math.sin(angle) * distance;
             const size = 2;
             
-            graphics.beginFill(0xffffff, 0.6);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
+            graphics.circle(x, y, size).fill({ color: 0xffffff, alpha: 0.6 });
         }
         
         return graphics;
@@ -6244,25 +5988,18 @@ class GameEngine {
      */
     createSlowFieldGraphics(graphics, radius, effectData) {
         // Outer slow field - purple/blue
-        graphics.beginFill(0x8e44ad, 0.3);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
+        graphics.circle(0, 0, radius).fill({ color: 0x8e44ad, alpha: 0.3 });
         
         // Middle field - darker purple
-        graphics.beginFill(0x663399, 0.4);
-        graphics.drawCircle(0, 0, radius * 0.7);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.7).fill({ color: 0x663399, alpha: 0.4 });
         
         // Inner core - deep purple
-        graphics.beginFill(0x4a235a, 0.5);
-        graphics.drawCircle(0, 0, radius * 0.4);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.4).fill({ color: 0x4a235a, alpha: 0.5 });
         
         // Add slow effect ripples
-        graphics.lineStyle(2, 0x9b59b6, 0.6);
         for (let i = 1; i <= 4; i++) {
             const rippleRadius = radius * (i / 5);
-            graphics.drawCircle(0, 0, rippleRadius);
+            graphics.circle(0, 0, rippleRadius).stroke({ width: 2, color: 0x9b59b6, alpha: 0.6 });
         }
         
         // Add slow particles (moving inward)
@@ -6273,15 +6010,13 @@ class GameEngine {
             const y = Math.sin(angle) * distance;
             const size = 1.5 + Math.random() * 2;
             
-            graphics.beginFill(0xbb8fce, 0.8);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
+            graphics.circle(x, y, size).fill({ color: 0xbb8fce, alpha: 0.8 });
             
             // Add inward-pointing arrows
             const arrowSize = 4;
-            graphics.lineStyle(1, 0xbb8fce, 0.7);
             graphics.moveTo(x + Math.cos(angle) * arrowSize, y + Math.sin(angle) * arrowSize);
             graphics.lineTo(x - Math.cos(angle) * arrowSize, y - Math.sin(angle) * arrowSize);
+            graphics.stroke({ width: 1, color: 0xbb8fce, alpha: 0.7 });
         }
         
         return graphics;
@@ -6292,21 +6027,15 @@ class GameEngine {
      */
     createShieldBarrierGraphics(graphics, radius, effectData) {
         // Outer shield energy field - cyan/blue
-        graphics.beginFill(0x3498db, 0.2);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
+        graphics.circle(0, 0, radius).fill({ color: 0x3498db, alpha: 0.2 });
         
         // Shield barrier ring
-        graphics.lineStyle(4, 0x2980b9, 0.8);
-        graphics.drawCircle(0, 0, radius * 0.8);
+        graphics.circle(0, 0, radius * 0.8).stroke({ width: 4, color: 0x2980b9, alpha: 0.8 });
         
         // Inner shield core
-        graphics.beginFill(0x5dade2, 0.4);
-        graphics.drawCircle(0, 0, radius * 0.3);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.3).fill({ color: 0x5dade2, alpha: 0.4 });
         
         // Add hexagonal shield pattern
-        graphics.lineStyle(2, 0x85c1e9, 0.6);
         const hexRadius = radius * 0.6;
         const hexPoints = [];
         for (let i = 0; i < 6; i++) {
@@ -6314,7 +6043,7 @@ class GameEngine {
             hexPoints.push(Math.cos(angle) * hexRadius);
             hexPoints.push(Math.sin(angle) * hexRadius);
         }
-        graphics.drawPolygon(hexPoints);
+        graphics.poly(hexPoints).stroke({ width: 2, color: 0x85c1e9, alpha: 0.6 });
         
         // Add shield energy sparks
         for (let i = 0; i < 16; i++) {
@@ -6324,9 +6053,7 @@ class GameEngine {
             const y = Math.sin(angle) * distance;
             const sparkSize = 1 + Math.random() * 2;
             
-            graphics.beginFill(0xaed6f1, 0.9);
-            graphics.drawCircle(x, y, sparkSize);
-            graphics.endFill();
+            graphics.circle(x, y, sparkSize).fill({ color: 0xaed6f1, alpha: 0.9 });
         }
         
         return graphics;
@@ -6337,26 +6064,19 @@ class GameEngine {
      */
     createGravityWellGraphics(graphics, radius, effectData) {
         // Outer gravity field - dark purple/black
-        graphics.beginFill(0x1a1a2e, 0.4);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
+        graphics.circle(0, 0, radius).fill({ color: 0x1a1a2e, alpha: 0.4 });
         
         // Gravity distortion rings
-        graphics.lineStyle(2, 0x6c5ce7, 0.5);
         for (let i = 1; i <= 6; i++) {
             const ringRadius = radius * (i / 7);
-            graphics.drawCircle(0, 0, ringRadius);
+            graphics.circle(0, 0, ringRadius).stroke({ width: 2, color: 0x6c5ce7, alpha: 0.5 });
         }
         
         // Central singularity
-        graphics.beginFill(0x0f0f23, 0.9);
-        graphics.drawCircle(0, 0, radius * 0.15);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.15).fill({ color: 0x0f0f23, alpha: 0.9 });
         
         // Event horizon glow
-        graphics.beginFill(0x6c5ce7, 0.6);
-        graphics.drawCircle(0, 0, radius * 0.25);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.25).fill({ color: 0x6c5ce7, alpha: 0.6 });
         
         // Add gravitational particles (spiraling inward)
         for (let i = 0; i < 20; i++) {
@@ -6367,9 +6087,7 @@ class GameEngine {
             const y = Math.sin(angle + spiralOffset) * distance;
             const size = 1 + Math.random() * 1.5;
             
-            graphics.beginFill(0xa29bfe, 0.7);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
+            graphics.circle(x, y, size).fill({ color: 0xa29bfe, alpha: 0.7 });
         }
         
         return graphics;
@@ -6380,33 +6098,26 @@ class GameEngine {
      */
     createVisionRevealGraphics(graphics, radius, effectData) {
         // Outer reveal field - bright yellow/gold
-        graphics.beginFill(0xf1c40f, 0.2);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
+        graphics.circle(0, 0, radius).fill({ color: 0xf1c40f, alpha: 0.2 });
         
         // Middle scanning ring
-        graphics.beginFill(0xe67e22, 0.3);
-        graphics.drawCircle(0, 0, radius * 0.7);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.7).fill({ color: 0xe67e22, alpha: 0.3 });
         
         // Inner radar core
-        graphics.beginFill(0xf39c12, 0.5);
-        graphics.drawCircle(0, 0, radius * 0.2);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.2).fill({ color: 0xf39c12, alpha: 0.5 });
         
         // Add radar sweep lines
-        graphics.lineStyle(2, 0xf1c40f, 0.7);
         for (let i = 0; i < 8; i++) {
             const angle = (i / 8) * Math.PI * 2;
             graphics.moveTo(0, 0);
             graphics.lineTo(Math.cos(angle) * radius * 0.9, Math.sin(angle) * radius * 0.9);
         }
+        graphics.stroke({ width: 2, color: 0xf1c40f, alpha: 0.7 });
         
         // Add scanning pulses
-        graphics.lineStyle(3, 0xf39c12, 0.8);
         for (let i = 1; i <= 3; i++) {
             const pulseRadius = radius * (i / 4);
-            graphics.drawCircle(0, 0, pulseRadius);
+            graphics.circle(0, 0, pulseRadius).stroke({ width: 3, color: 0xf39c12, alpha: 0.8 });
         }
         
         // Add vision enhancement particles
@@ -6417,9 +6128,7 @@ class GameEngine {
             const y = Math.sin(angle) * distance;
             const size = 1.5 + Math.random() * 2;
             
-            graphics.beginFill(0xffd700, 0.8);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
+            graphics.circle(x, y, size).fill({ color: 0xffd700, alpha: 0.8 });
         }
         
         return graphics;
@@ -6430,22 +6139,15 @@ class GameEngine {
      */
     createSpeedBoostGraphics(graphics, radius, effectData) {
         // Outer speed field - bright green/lime
-        graphics.beginFill(0x2ecc71, 0.2);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
+        graphics.circle(0, 0, radius).fill({ color: 0x2ecc71, alpha: 0.2 });
         
         // Middle boost ring
-        graphics.beginFill(0x27ae60, 0.3);
-        graphics.drawCircle(0, 0, radius * 0.7);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.7).fill({ color: 0x27ae60, alpha: 0.3 });
         
         // Inner speed core
-        graphics.beginFill(0x00ff88, 0.5);
-        graphics.drawCircle(0, 0, radius * 0.3);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.3).fill({ color: 0x00ff88, alpha: 0.5 });
         
         // Add speed boost arrows pointing outward
-        graphics.lineStyle(3, 0x00ff88, 0.8);
         for (let i = 0; i < 8; i++) {
             const angle = (i / 8) * Math.PI * 2;
             const innerRadius = radius * 0.4;
@@ -6477,6 +6179,7 @@ class GameEngine {
                 endY + Math.sin(headAngle2) * arrowSize
             );
         }
+        graphics.stroke({ width: 3, color: 0x00ff88, alpha: 0.8 });
         
         // Add speed particles (moving outward)
         for (let i = 0; i < 16; i++) {
@@ -6486,9 +6189,7 @@ class GameEngine {
             const y = Math.sin(angle) * distance;
             const size = 1 + Math.random() * 2;
             
-            graphics.beginFill(0x58d68d, 0.9);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
+            graphics.circle(x, y, size).fill({ color: 0x58d68d, alpha: 0.9 });
         }
         
         return graphics;
@@ -6499,17 +6200,13 @@ class GameEngine {
      */
     createWarningZoneGraphics(graphics, radius, effectData) {
         // Outer warning ring (red)
-        graphics.lineStyle(4, 0xff4444, 0.8);
-        graphics.drawCircle(0, 0, radius);
+        graphics.circle(0, 0, radius).stroke({ width: 4, color: 0xff4444, alpha: 0.8 });
         
         // Middle warning ring (yellow)
-        graphics.lineStyle(3, 0xffaa00, 0.6);
-        graphics.drawCircle(0, 0, radius * 0.85);
+        graphics.circle(0, 0, radius * 0.85).stroke({ width: 3, color: 0xffaa00, alpha: 0.6 });
         
         // Inner warning area (semi-transparent red)
-        graphics.beginFill(0xff4444, 0.15);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
+        graphics.circle(0, 0, radius).fill({ color: 0xff4444, alpha: 0.15 });
         
         // Add warning stripes
         const stripeCount = 12;
@@ -6520,19 +6217,16 @@ class GameEngine {
             const x2 = Math.cos(angle) * radius * 0.95;
             const y2 = Math.sin(angle) * radius * 0.95;
             
-            graphics.lineStyle(2, 0xffaa00, 0.7);
             graphics.moveTo(x1, y1);
             graphics.lineTo(x2, y2);
         }
+        graphics.stroke({ width: 2, color: 0xffaa00, alpha: 0.7 });
         
         // Center warning symbol (exclamation mark)
-        graphics.lineStyle(0);
-        graphics.beginFill(0xff4444, 0.9);
         // Exclamation body
-        graphics.drawRect(-3, -15, 6, 20);
+        graphics.rect(-3, -15, 6, 20).fill({ color: 0xff4444, alpha: 0.9 });
         // Exclamation dot
-        graphics.drawCircle(0, 10, 4);
-        graphics.endFill();
+        graphics.circle(0, 10, 4).fill({ color: 0xff4444, alpha: 0.9 });
         
         return graphics;
     }
@@ -6542,14 +6236,10 @@ class GameEngine {
      */
     createEarthquakeGraphics(graphics, radius, effectData) {
         // Base ground disturbance (brown/gray)
-        graphics.beginFill(0x8b7355, 0.4);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
+        graphics.circle(0, 0, radius).fill({ color: 0x8b7355, alpha: 0.4 });
         
         // Inner shake zone (darker)
-        graphics.beginFill(0x654321, 0.5);
-        graphics.drawCircle(0, 0, radius * 0.7);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.7).fill({ color: 0x654321, alpha: 0.5 });
         
         // Add crack lines radiating from center
         const crackCount = 8;
@@ -6558,7 +6248,6 @@ class GameEngine {
             const length = radius * (0.6 + Math.random() * 0.4);
             
             // Main crack
-            graphics.lineStyle(3, 0x3d2817, 0.8);
             graphics.moveTo(0, 0);
             
             // Jagged crack path
@@ -6570,6 +6259,7 @@ class GameEngine {
                 graphics.lineTo(x, y);
             }
         }
+        graphics.stroke({ width: 3, color: 0x3d2817, alpha: 0.8 });
         
         // Add dust/debris particles
         for (let i = 0; i < 15; i++) {
@@ -6579,16 +6269,12 @@ class GameEngine {
             const y = Math.sin(angle) * distance;
             const size = 2 + Math.random() * 4;
             
-            graphics.beginFill(0xa0826d, 0.6);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
+            graphics.circle(x, y, size).fill({ color: 0xa0826d, alpha: 0.6 });
         }
         
         // Add shockwave rings
-        graphics.lineStyle(2, 0x8b7355, 0.5);
-        graphics.drawCircle(0, 0, radius * 0.4);
-        graphics.lineStyle(2, 0x8b7355, 0.3);
-        graphics.drawCircle(0, 0, radius * 0.6);
+        graphics.circle(0, 0, radius * 0.4).stroke({ width: 2, color: 0x8b7355, alpha: 0.5 });
+        graphics.circle(0, 0, radius * 0.6).stroke({ width: 2, color: 0x8b7355, alpha: 0.3 });
         
         return graphics;
     }
@@ -6597,13 +6283,9 @@ class GameEngine {
      * Create generic effect graphics
      */
     createGenericEffectGraphics(graphics, radius, effectData) {
-        graphics.beginFill(0x888888, 0.5);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
+        graphics.circle(0, 0, radius).fill({ color: 0x888888, alpha: 0.5 });
         
-        graphics.beginFill(0xcccccc, 0.7);
-        graphics.drawCircle(0, 0, radius * 0.5);
-        graphics.endFill();
+        graphics.circle(0, 0, radius * 0.5).fill({ color: 0xcccccc, alpha: 0.7 });
         
         return graphics;
     }
@@ -7340,23 +7022,19 @@ class GameEngine {
             
             // Use team colors
             const teamColor = this.getTeamColor(data.team || 0);
-            playerDot.beginFill(teamColor);
             
             // Make current player slightly larger
             const radius = data.id === this.myPlayerId ? 2.5 : 1.5;
-            playerDot.drawCircle(x, y, radius);
-            playerDot.endFill();
+            playerDot.circle(x, y, radius).fill(teamColor);
             
             // Add white border for current player
             if (data.id === this.myPlayerId) {
-                playerDot.lineStyle(1, 0xffffff);
-                playerDot.drawCircle(x, y, radius);
+                playerDot.circle(x, y, radius).stroke({ width: 1, color: 0xffffff });
             }
             
             // Add golden ring for VIP players
             if (data.isVip) {
-                playerDot.lineStyle(1, 0xFFD700, 1.0);
-                playerDot.drawCircle(x, y, radius + 1.5);
+                playerDot.circle(x, y, radius + 1.5).stroke({ width: 1, color: 0xFFD700 });
             }
             
             this.minimapContent.addChild(playerDot);
@@ -7499,9 +7177,6 @@ class GameEngine {
         // Create a graphics object for the grid
         const grid = new PIXI.Graphics();
         
-        // Set line style for the grid
-        grid.lineStyle(1, 0x3a5f3f, 0.4); // Semi-transparent green lines
-        
         // Draw vertical lines
         for (let x = -worldWidth/2; x <= worldWidth/2; x += gridSize) {
             grid.moveTo(x, -worldHeight/2);
@@ -7514,9 +7189,10 @@ class GameEngine {
             grid.lineTo(worldWidth/2, y);
         }
         
-        // Add crosshatch pattern (diagonal lines every 4th grid line)
-        grid.lineStyle(1, 0x4a6f4f, 0.2); // Even more subtle diagonal lines
+        // Apply stroke for grid lines
+        grid.stroke({ width: 1, color: 0x3a5f3f, alpha: 0.4 }); // Semi-transparent green lines
         
+        // Add crosshatch pattern (diagonal lines every 4th grid line)
         for (let x = -worldWidth/2; x <= worldWidth/2; x += gridSize * 4) {
             for (let y = -worldHeight/2; y <= worldHeight/2; y += gridSize * 4) {
                 // Draw small diagonal crosses
@@ -7532,9 +7208,11 @@ class GameEngine {
             }
         }
         
+        // Apply stroke for crosshatch lines
+        grid.stroke({ width: 1, color: 0x4a6f4f, alpha: 0.2 }); // Even more subtle diagonal lines
+        
         // Add world boundary
-        grid.lineStyle(3, 0x5a8f5f, 0.8); // Thicker, more visible boundary
-        grid.drawRect(-worldWidth/2, -worldHeight/2, worldWidth, worldHeight);
+        grid.rect(-worldWidth/2, -worldHeight/2, worldWidth, worldHeight).stroke({ width: 3, color: 0x5a8f5f, alpha: 0.8 }); // Thicker, more visible boundary
         
         this.backgroundContainer.addChild(grid);
         
@@ -7551,15 +7229,20 @@ class GameEngine {
             const teamColor = this.getTeamColor(parseInt(teamNum));
             
             // Draw semi-transparent team area
-            graphics.beginFill(teamColor, 0.1);
-            graphics.lineStyle(2, teamColor, 0.5);
-            graphics.drawRect(
+            graphics.rect(
                 areaData.minX, 
                 areaData.minY, // No inversion needed - coordinates match now!
                 areaData.maxX - areaData.minX,
                 areaData.maxY - areaData.minY
-            );
-            graphics.endFill();
+            ).fill({ color: teamColor, alpha: 0.1 });
+            
+            graphics.rect(
+                areaData.minX, 
+                areaData.minY,
+                areaData.maxX - areaData.minX,
+                areaData.maxY - areaData.minY
+            ).stroke({ width: 2, color: teamColor, alpha: 0.5 });
+            
             graphics.zIndex = -1; // Behind everything else
             
             this.backgroundContainer.addChild(graphics);
@@ -7598,14 +7281,12 @@ class GameEngine {
         });
         this.backgroundContainer.removeChildren();
         const graphics = new PIXI.Graphics();
-        graphics.beginFill(0x1a1a1a); // Dark grey
-        graphics.drawRect(
+        graphics.rect(
             -this.worldBounds.width / 2, 
             -this.worldBounds.height / 2, 
             this.worldBounds.width, 
             this.worldBounds.height
-        );
-        graphics.endFill();
+        ).fill(0x1a1a1a); // Dark grey
         graphics.zIndex = -10; // Far background
         this.backgroundContainer.addChild(graphics);
     }
