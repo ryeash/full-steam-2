@@ -126,6 +126,12 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         } else if (entity1 instanceof Turret turret && entity2 instanceof Beam beam) {
             handleBeamTurretCollision(beam, turret);
             return true;
+        } else if (entity1 instanceof Turret turret && entity2 instanceof FieldEffect fieldEffect) {
+            handleTurretFieldEffectCollision(turret, fieldEffect);
+            return true; // Allow physics to handle overlaps (sensors should not resolve anyway)
+        } else if (entity1 instanceof FieldEffect fieldEffect && entity2 instanceof Turret turret) {
+            handleTurretFieldEffectCollision(turret, fieldEffect);
+            return true; // Allow physics to handle overlaps (sensors should not resolve anyway)
         } else if (entity1 instanceof NetProjectile net) {
             return handleNetCollision(net, entity2);
         } else if (entity2 instanceof NetProjectile net) {
@@ -593,6 +599,94 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
         // In team mode, can only damage turrets on different teams
         return beam.getOwnerTeam() != turret.getOwnerTeam();
+    }
+
+    /**
+     * Handle field effect hitting a turret.
+     */
+    private void handleTurretFieldEffectCollision(Turret turret, FieldEffect fieldEffect) {
+        if (!turret.isActive() 
+                || !fieldEffect.isActive() 
+                || !fieldEffect.canAffect(turret)) {
+            return;
+        }
+
+        // Check if field effect can damage the turret (team rules)
+        if (!canFieldEffectDamageTurret(fieldEffect, turret)) {
+            return; // Friendly fire protection
+        }
+
+        double deltaTime = gameEntities.getWorld().getTimeStep().getDeltaTime();
+
+        switch (fieldEffect.getType()) {
+            // Instant damage effects
+            case EXPLOSION, FRAGMENTATION -> {
+                double damage = fieldEffect.getDamageAtPosition(turret.getPosition());
+                if (damage > 0) {
+                    // Instant damage - only apply once per effect
+                    if (!fieldEffect.getAffectedEntities().contains(turret.getId())) {
+                        boolean turretDestroyed = turret.takeDamage(damage);
+                        fieldEffect.markAsAffected(turret);
+
+                        if (turretDestroyed) {
+                            createTurretDestructionExplosion(turret);
+                        }
+                    }
+                }
+            }
+            // Damage over time effects
+            case FIRE, ELECTRIC, FREEZE, POISON, EARTHQUAKE -> {
+                double effectValue = fieldEffect.getDamageAtPosition(turret.getPosition());
+                if (effectValue > 0) {
+                    boolean turretDestroyed = turret.takeDamage(effectValue * deltaTime);
+                    if (turretDestroyed) {
+                        createTurretDestructionExplosion(turret);
+                    }
+                }
+            }
+            // Non-damaging effects that turrets should ignore
+            case HEAL_ZONE, SLOW_FIELD, SHIELD_BARRIER, GRAVITY_WELL, SPEED_BOOST, WARNING_ZONE, PROXIMITY_MINE -> {
+                // Turrets are not affected by these
+            }
+        }
+    }
+
+    /**
+     * Check if a field effect can damage a turret (team protection).
+     */
+    private boolean canFieldEffectDamageTurret(FieldEffect fieldEffect, Turret turret) {
+        // Can't damage own turret
+        if (fieldEffect.getOwnerId() == turret.getOwnerId()) {
+            return false;
+        }
+
+        // In FFA mode (team 0), can damage any turret except own
+        if (fieldEffect.getOwnerTeam() == 0 || turret.getOwnerTeam() == 0) {
+            return true;
+        }
+
+        // In team mode, can only damage turrets on different teams
+        return fieldEffect.getOwnerTeam() != turret.getOwnerTeam();
+    }
+
+    /**
+     * Create a visual explosion effect when a turret is destroyed.
+     */
+    private void createTurretDestructionExplosion(Turret turret) {
+        FieldEffect explosion = new FieldEffect(
+                IdGenerator.nextEntityId(),
+                turret.getOwnerId(),
+                FieldEffectType.EXPLOSION,
+                turret.getPosition(),
+                turret.getBody().getFixture(0).getShape().getRadius(),
+                0.0, // Zero damage - purely visual
+                FieldEffectType.EXPLOSION.getDefaultDuration(),
+                turret.getOwnerTeam()
+        );
+        gameEntities.addFieldEffect(explosion);
+        gameEntities.addPostUpdateHook(() -> {
+            gameEntities.getWorld().addBody(explosion.getBody());
+        });
     }
 
     private boolean handleNetCollision(NetProjectile net, GameEntity entity) {

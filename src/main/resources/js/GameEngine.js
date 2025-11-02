@@ -759,28 +759,16 @@ class GameEngine {
         // Create clean 2D top-down assets
         
         // Player sprite - clean circular design
-        // Use a container to ensure the texture is centered on the circle, not the overall bounds
-        const playerContainer = new PIXI.Container();
-        
         const playerGraphics = new PIXI.Graphics();
         playerGraphics.circle(0, 0, 20).fill(0x8c8c8c);
         
         // Direction indicator (weapon/facing)
         playerGraphics.poly([15, 0, 25, -5, 25, 5]).fill(0xffffff);
         
-        playerContainer.addChild(playerGraphics);
-        
-        // Generate texture with explicit bounds centered on the circle (not the triangle)
-        // The circle is at (0,0) but extends to radius 20, and the triangle extends to x=25
-        // To center rotation on the circle's center, we need the texture bounds to be symmetric around (0,0)
-        // Total visual extends from x=-20 to x=25 (45 wide), y=-20 to y=20 (40 tall)
-        // But we want rotation center at the circle center (0,0), so use symmetric bounds
-        const bounds = new PIXI.Rectangle(-30, -30, 60, 60); // Symmetric bounds around circle center
-        this.playerTexture = this.app.renderer.generateTexture(playerContainer, {
-            region: bounds,
-            resolution: 1
-        });
-        playerContainer.destroy({ children: true }); // Clean up after generating texture
+        // Generate texture - PIXI will auto-calculate bounds
+        // The texture will include the full visual (circle + triangle)
+        this.playerTexture = this.app.renderer.generateTexture(playerGraphics);
+        playerGraphics.destroy(); // Clean up after generating texture
         
         // Projectile - simple bullet
         const projectileGraphics = new PIXI.Graphics();
@@ -2165,7 +2153,10 @@ class GameEngine {
     createPlayer(playerData) {
         
         const sprite = new PIXI.Sprite(this.playerTexture);
-        sprite.anchor.set(0.5);
+        // The texture bounds are from (-20, -20) to (25, 20) - width 45, height 40
+        // Circle center is at (0, 0) which is (20, 20) in texture pixel coordinates
+        // Set anchor to rotate around the circle center, not the texture center
+        sprite.anchor.set(20/45, 0.5); // x: 20/45 ≈ 0.444, y: 0.5
         
         sprite.position.set(playerData.x, playerData.y);
         sprite.rotation = playerData.rotation || 0;
@@ -4720,12 +4711,6 @@ class GameEngine {
             graphics.circle(0, 0, 16).stroke({ width: 2, color: 0xffffff, alpha: pulseAlpha });
         }
         
-        // Charging progress indicator
-        if (isCharging) {
-            graphics.arc(0, 0, 24, 0, Math.PI * 2 * chargingProgress);
-            graphics.stroke({ width: 4, color: 0xf39c12, alpha: 0.8 });
-        }
-        
         // Link indicator
         if (isLinked) {
             // Draw connection symbols - more prominent
@@ -5121,7 +5106,6 @@ class GameEngine {
             // Environmental effects
             case 'WARNING_ZONE':
             case 'EARTHQUAKE':
-            case 'VISION_REVEAL':
                 return 20; // Above players
             
             default:
@@ -5720,8 +5704,6 @@ class GameEngine {
                 return this.createShieldBarrierGraphics(graphics, radius, effectData);
             case 'GRAVITY_WELL':
                 return this.createGravityWellGraphics(graphics, radius, effectData);
-            case 'VISION_REVEAL':
-                return this.createVisionRevealGraphics(graphics, radius, effectData);
             case 'SPEED_BOOST':
                 return this.createSpeedBoostGraphics(graphics, radius, effectData);
             // Environmental event effects
@@ -6094,47 +6076,6 @@ class GameEngine {
     }
     
     /**
-     * Create vision reveal effect graphics
-     */
-    createVisionRevealGraphics(graphics, radius, effectData) {
-        // Outer reveal field - bright yellow/gold
-        graphics.circle(0, 0, radius).fill({ color: 0xf1c40f, alpha: 0.2 });
-        
-        // Middle scanning ring
-        graphics.circle(0, 0, radius * 0.7).fill({ color: 0xe67e22, alpha: 0.3 });
-        
-        // Inner radar core
-        graphics.circle(0, 0, radius * 0.2).fill({ color: 0xf39c12, alpha: 0.5 });
-        
-        // Add radar sweep lines
-        for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2;
-            graphics.moveTo(0, 0);
-            graphics.lineTo(Math.cos(angle) * radius * 0.9, Math.sin(angle) * radius * 0.9);
-        }
-        graphics.stroke({ width: 2, color: 0xf1c40f, alpha: 0.7 });
-        
-        // Add scanning pulses
-        for (let i = 1; i <= 3; i++) {
-            const pulseRadius = radius * (i / 4);
-            graphics.circle(0, 0, pulseRadius).stroke({ width: 3, color: 0xf39c12, alpha: 0.8 });
-        }
-        
-        // Add vision enhancement particles
-        for (let i = 0; i < 12; i++) {
-            const angle = (i / 12) * Math.PI * 2;
-            const distance = radius * (0.5 + Math.random() * 0.4);
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const size = 1.5 + Math.random() * 2;
-            
-            graphics.circle(x, y, size).fill({ color: 0xffd700, alpha: 0.8 });
-        }
-        
-        return graphics;
-    }
-    
-    /**
      * Create speed boost effect graphics
      */
     createSpeedBoostGraphics(graphics, radius, effectData) {
@@ -6355,9 +6296,6 @@ class GameEngine {
                 break;
             case 'GRAVITY_WELL':
                 this.animateGravityWell(container);
-                break;
-            case 'VISION_REVEAL':
-                this.animateVisionReveal(container);
                 break;
             case 'SPEED_BOOST':
                 this.animateSpeedBoost(container);
@@ -6581,24 +6519,6 @@ class GameEngine {
     }
     
     /**
-     * Animate vision reveal effects
-     */
-    animateVisionReveal(container) {
-        const time = container.animationTime;
-        
-        // Radar sweep effect
-        const sweep = 0.9 + Math.sin(time * 8) * 0.1;
-        container.scale.set(sweep);
-        
-        // Scanning pulse alpha
-        const scan = 0.7 + Math.sin(time * 12) * 0.2;
-        container.alpha = scan;
-        
-        // Fast rotation for radar sweep
-        container.rotation = time * 3.0;
-    }
-    
-    /**
      * Animate speed boost effects
      */
     animateSpeedBoost(container) {
@@ -6685,8 +6605,6 @@ class GameEngine {
                 return 0.12; // Medium-fast, energetic
             case 'GRAVITY_WELL':
                 return 0.06; // Slow, ominous
-            case 'VISION_REVEAL':
-                return 0.15; // Fast, active scanning
             // Environmental event speeds
             case 'WARNING_ZONE':
                 return 0.2; // Fast, urgent pulsing
