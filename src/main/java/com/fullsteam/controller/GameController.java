@@ -147,6 +147,7 @@ public class GameController {
         presets.put("SNIPER_RIFLE", createPresetData(WeaponConfig.SNIPER_RIFLE_PRESET));
         presets.put("PLASMA_RIFLE", createPresetData(WeaponConfig.PLASMA_RIFLE_PRESET));
         presets.put("TWIN_SIXES", createPresetData(WeaponConfig.TWIN_SIXES_PRESET));
+        presets.put("MINIGUN", createPresetData(WeaponConfig.MINIGUN_PRESET));
 
         // New ordinance showcases
         presets.put("PRECISION_DART_GUN", createPresetData(WeaponConfig.PRECISION_DART_GUN_PRESET));

@@ -18,7 +18,8 @@ public class AIWeaponSelector {
             WeaponConfig.HAND_CANNON_PRESET,
             WeaponConfig.SNIPER_RIFLE_PRESET,
             WeaponConfig.PLASMA_RIFLE_PRESET,
-            WeaponConfig.TWIN_SIXES_PRESET
+            WeaponConfig.TWIN_SIXES_PRESET,
+            WeaponConfig.MINIGUN_PRESET
     );
 
     private static final List<WeaponConfig> ORDINANCE_WEAPONS = List.of(
@@ -50,6 +51,7 @@ public class AIWeaponSelector {
             WeaponConfig.SNIPER_RIFLE_PRESET,
             WeaponConfig.PLASMA_RIFLE_PRESET,
             WeaponConfig.TWIN_SIXES_PRESET,
+            WeaponConfig.MINIGUN_PRESET,
 
             // Ordinance weapons
             WeaponConfig.PRECISION_DART_GUN_PRESET,
@@ -139,6 +141,7 @@ public class AIWeaponSelector {
                 } else {
                     // 20% chance for aggressive combo weapons
                     List<WeaponConfig> berserkerCombos = List.of(
+                            WeaponConfig.MINIGUN_PRESET,
                             WeaponConfig.NAPALM_LAUNCHER_PRESET,
                             WeaponConfig.THUNDERBOLT_CANNON_PRESET,
                             WeaponConfig.SHRAPNEL_CANNON_PRESET,
@@ -166,6 +169,7 @@ public class AIWeaponSelector {
             case "Rusher":
                 // Rushers prefer close-range, high-mobility weapons
                 List<WeaponConfig> rusherWeapons = List.of(
+                        WeaponConfig.MINIGUN_PRESET,
                         WeaponConfig.BOUNCY_SMG_PRESET,
                         WeaponConfig.INCENDIARY_SHOTGUN_PRESET,
                         WeaponConfig.FLAME_PROJECTOR_PRESET,
@@ -380,6 +384,7 @@ public class AIWeaponSelector {
                || weapon == WeaponConfig.TOXIC_SPRAYER_PRESET
                || weapon == WeaponConfig.TWIN_SIXES_PRESET
                || weapon == WeaponConfig.CRYO_SHOTGUN_PRESET
+               || weapon == WeaponConfig.MINIGUN_PRESET
                || weapon == WeaponConfig.WILDFIRE_SPRAYER_PRESET;
     }
 

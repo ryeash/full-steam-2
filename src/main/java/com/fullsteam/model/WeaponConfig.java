@@ -87,6 +87,24 @@ public class WeaponConfig {
             Ordinance.BULLET  // Total: 100 points
     );
 
+    // Minigun - Maximum suppressive fire with extreme fire rate and magazine
+    // Focus: Overwhelming volume of fire, area suppression
+    // Trade-offs: Low damage per bullet, terrible accuracy, slow projectiles
+    public static final WeaponConfig MINIGUN_PRESET = new WeaponConfig(
+            "Minigun",
+            10,     // Very low damage per bullet (compensated by volume)
+            30,     // Maximum fire rate (insane rate of fire)
+            10,     // Short-medium range
+            -10,    // Terrible accuracy (massive spread)
+            40,     // Maximum magazine size (never stop shooting)
+            10,     // Long reload (takes time to reload the belt)
+            15,     // Medium projectile speed
+            0,      // 5 bullets per shot (multi-barrel spin-up)
+            -5,      // No damping
+            Set.of(),
+            Ordinance.BULLET  // Total: 100 points
+    );
+
     // Example: Explosive Sniper Rifle (75 points + 25 for explosive effect = 100 total)
     public static final WeaponConfig EXPLOSIVE_SNIPER_PRESET = new WeaponConfig(
             "Explosive Sniper Rifle",
