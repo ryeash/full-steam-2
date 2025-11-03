@@ -14,9 +14,9 @@ import com.fullsteam.model.GameInfo;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
+import com.fullsteam.model.RespawnMode;
 import com.fullsteam.model.Rules;
 import com.fullsteam.model.UtilityWeapon;
-import com.fullsteam.model.VictoryCondition;
 import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.CollisionProcessor;
@@ -383,7 +383,7 @@ public class GameManager {
             }
             aiPlayerManager.removeAIPlayer(playerId);
             log.info("Removed AI player {}", playerId);
-            
+
             // Ensure VIP is reassigned if this AI player was the VIP
             if (gameConfig.getRules().hasVip() && playerTeam > 0) {
                 ruleSystem.ensureVipForTeam(playerTeam);
@@ -687,25 +687,25 @@ public class GameManager {
         if (playerSession.isSpectator()) {
             // Send spectator-specific initial game state
             send(playerSession.getSession(), gameStateSerializer.createSpectatorInitialState());
-            
+
             log.info("Spectator {} joined game {} successfully. Total spectators: {}",
                     playerSession.getPlayerId(), gameId, getSpectatorCount());
-            
+
             // Notify players that a spectator joined (subtle notification)
             gameEventManager.broadcastEvent(
-                GameEvent.builder()
-                    .message("👁️ A spectator joined")
-                    .category(GameEvent.EventCategory.INFO)
-                    .color(GameEvent.EventCategory.INFO.getDefaultColor())
-                    .target(GameEvent.EventTarget.builder()
-                        .type(GameEvent.EventTarget.TargetType.ALL)
-                        .build())
-                    .displayDuration(2000L)
-                    .build()
+                    GameEvent.builder()
+                            .message("👁️ A spectator joined")
+                            .category(GameEvent.EventCategory.INFO)
+                            .color(GameEvent.EventCategory.INFO.getDefaultColor())
+                            .target(GameEvent.EventTarget.builder()
+                                    .type(GameEvent.EventTarget.TargetType.ALL)
+                                    .build())
+                            .displayDuration(2000L)
+                            .build()
             );
             return;
         }
-        
+
         // Normal player join logic
         int assignedTeam = assignPlayerToTeam();
         Vector2 spawnPoint = spawnPointManager.findVariedSpawnPointForTeam(assignedTeam);
@@ -748,7 +748,7 @@ public class GameManager {
         Player player = gameEntities.getPlayer(playerSession.getPlayerId());
         if (player != null) {
             int playerTeam = player.getTeam();
-            
+
             world.removeBody(player.getBody());
             gameEntities.removePlayer(player.getId());
 
@@ -756,7 +756,7 @@ public class GameManager {
             if (aiPlayerManager.isAIPlayer(playerSession.getPlayerId())) {
                 aiPlayerManager.removeAIPlayer(playerSession.getPlayerId());
             }
-            
+
             // Ensure VIP is reassigned if this player was the VIP
             if (gameConfig.getRules().hasVip() && playerTeam > 0) {
                 ruleSystem.ensureVipForTeam(playerTeam);
@@ -1048,10 +1048,10 @@ public class GameManager {
         player.getBody().getTransform().setTranslation(spawnPoint.x, spawnPoint.y);
         player.getBody().setLinearVelocity(0, 0);
         player.getBody().setAngularVelocity(0);
-        
+
         // Apply spawn invincibility to give player time to get their bearings
         StatusEffectManager.applySpawnInvincibility(player);
-        
+
         // Ensure VIP is assigned for this team if VIP mode is enabled
         if (gameConfig.getRules().hasVip()) {
             ruleSystem.ensureVipForTeam(player.getTeam());
@@ -1061,16 +1061,16 @@ public class GameManager {
     public void killPlayer(Player victim, Player shooter) {
         // Check if this was a VIP kill BEFORE calling die() (which clears status effects)
         boolean wasVip = gameConfig.getRules().hasVip() && StatusEffectManager.isVip(victim);
-        
+
         if (shooter != null) {
             shooter.addKill();
         }
         victim.die();
 
-        if (gameConfig.getRules().getVictoryCondition() == VictoryCondition.ELIMINATION) {
+        if (gameConfig.getRules().getRespawnMode() == RespawnMode.ELIMINATION) {
             victim.setEliminated(true);
             victim.setEliminationTime(System.currentTimeMillis());
-            
+
             // Calculate placement based on how many players are still alive
             int remainingPlayers = (int) gameEntities.getAllPlayers().stream()
                     .filter(p -> !p.isEliminated())
@@ -1082,19 +1082,23 @@ public class GameManager {
         if (wasVip) {
             if (shooter != null && shooter.getTeam() != victim.getTeam()) {
                 ruleSystem.awardVipKill(shooter.getTeam());
-                
+
                 // Broadcast VIP kill event
                 gameEventManager.broadcastSystemMessage(
-                        String.format("💀 %s eliminated the VIP %s! +1 OBJECTIVE", 
+                        String.format("💀 %s eliminated the VIP %s! +1 OBJECTIVE",
                                 shooter.getPlayerName(), victim.getPlayerName()));
             }
-            
+
             // VIP died, need to select a new VIP for their team after respawn
             // This will be handled in ensureVipForTeam during respawn
         }
 
         // Check if player lost their last life
-        if (victim.loseLife()) {
+        boolean wasEliminated = victim.loseLife();
+        log.info("Player {} died. Lives remaining: {}, Eliminated: {}",
+                victim.getId(), victim.getLivesRemaining(), victim.isEliminated());
+
+        if (wasEliminated) {
             gameEventManager.broadcastElimination(
                     victim.getPlayerName(),
                     victim.getTeam(),

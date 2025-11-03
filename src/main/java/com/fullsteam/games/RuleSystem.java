@@ -420,9 +420,10 @@ public class RuleSystem {
         if (player.isActive()) {
             return false; // Player is already active
         }
-        return player.hasLivesRemaining()
-                && player.getRespawnTime() > 0
-                && System.currentTimeMillis() > player.getRespawnTime();
+        boolean hasLives = player.hasLivesRemaining();
+        boolean hasRespawnTime = player.getRespawnTime() > 0;
+        boolean timeElapsed = System.currentTimeMillis() > player.getRespawnTime();
+        return hasLives && hasRespawnTime && timeElapsed;
     }
 
     public void setRespawnTime(Player player) {
@@ -444,9 +445,13 @@ public class RuleSystem {
                 break;
             case LIMITED:
                 if (player.isEliminated()) {
+                    log.info("Player {} eliminated, no respawn", player.getId());
                     player.setRespawnTime(0);
                 } else {
-                    player.setRespawnTime((long) (System.currentTimeMillis() + (rules.getRespawnDelay() * 1000)));
+                    long respawnTime = (long) (System.currentTimeMillis() + (rules.getRespawnDelay() * 1000));
+                    player.setRespawnTime(respawnTime);
+                    log.info("Player {} will respawn in {} seconds (lives: {})",
+                            player.getId(), rules.getRespawnDelay(), player.getLivesRemaining());
                 }
                 break;
             default:
