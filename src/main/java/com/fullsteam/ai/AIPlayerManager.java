@@ -80,6 +80,7 @@ public class AIPlayerManager {
         // Update all AI players
         for (AIPlayer aiPlayer : aiPlayers.values()) {
             if (!aiPlayer.isActive()) {
+                // Dead players are inactive - this is normal
                 continue;
             }
 

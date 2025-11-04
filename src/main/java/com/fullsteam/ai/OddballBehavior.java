@@ -136,15 +136,18 @@ public class OddballBehavior implements AIBehavior {
     private void executeHunterBehavior(AIPlayer aiPlayer, GameEntities gameEntities, PlayerInput input, double deltaTime) {
         Flag oddball = findOddball(gameEntities);
         if (oddball == null || !oddball.isCarried()) {
-            // Ball is free now, switch to grabber
+            // Ball is free now, switch to grabber but still execute grabber behavior this frame
             currentRole = OddballRole.GRABBER;
+            executeGrabberBehavior(aiPlayer, gameEntities, input, deltaTime);
             return;
         }
 
         // Find the ball carrier
         Player carrier = gameEntities.getPlayer(oddball.getCarriedByPlayerId());
         if (carrier == null || !carrier.isActive()) {
+            // Carrier not found, switch to grabber but still execute grabber behavior this frame
             currentRole = OddballRole.GRABBER;
+            executeGrabberBehavior(aiPlayer, gameEntities, input, deltaTime);
             return;
         }
 
@@ -184,6 +187,27 @@ public class OddballBehavior implements AIBehavior {
     private void executeGrabberBehavior(AIPlayer aiPlayer, GameEntities gameEntities, PlayerInput input, double deltaTime) {
         Flag oddball = findOddball(gameEntities);
         if (oddball == null) {
+            // No oddball found - move toward center and look for enemies
+            Vector2 myPos = aiPlayer.getPosition();
+            Vector2 centerPos = new Vector2(0, 0);
+            Vector2 toCenter = centerPos.difference(myPos);
+            
+            if (toCenter.getMagnitude() > 50) {
+                toCenter.normalize();
+                input.setMoveX(toCenter.x * 0.5);
+                input.setMoveY(toCenter.y * 0.5);
+            }
+            
+            // Look for enemies
+            Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
+            if (nearestEnemy != null && nearestEnemy.isActive()) {
+                Vector2 enemyPos = nearestEnemy.getPosition();
+                input.setWorldX(enemyPos.x);
+                input.setWorldY(enemyPos.y);
+            } else {
+                input.setWorldX(centerPos.x);
+                input.setWorldY(centerPos.y);
+            }
             return;
         }
 

@@ -254,7 +254,9 @@ public class FlagBehavior implements AIBehavior {
 
         Flag targetFlag = gameEntities.getFlag(targetFlagId);
         if (targetFlag == null || targetFlag.getOwnerTeam() != myTeam) {
+            // Flag not found or wrong team, switch to attacker but still execute attacker behavior this frame
             currentRole = FlagRole.ATTACKER;
+            executeAttackerBehavior(aiPlayer, gameEntities, input, deltaTime);
             return;
         }
 
@@ -443,6 +445,21 @@ public class FlagBehavior implements AIBehavior {
     public int getPriority(AIPlayer aiPlayer, GameEntities gameEntities) {
         // No flags in game = no priority
         if (gameEntities.getAllFlags().isEmpty()) {
+            return 0;
+        }
+
+        // Check if this is actually a CTF game (flags have team owners)
+        // Oddball flags have ownerTeam == 0, CTF flags have ownerTeam > 0
+        boolean isCTFGame = false;
+        for (Flag flag : gameEntities.getAllFlags()) {
+            if (flag.getOwnerTeam() > 0) {
+                isCTFGame = true;
+                break;
+            }
+        }
+        
+        // If not a CTF game (e.g., Oddball), don't use this behavior
+        if (!isCTFGame) {
             return 0;
         }
 

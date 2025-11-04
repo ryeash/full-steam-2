@@ -146,8 +146,14 @@ public class HeadquartersBehavior implements AIBehavior {
         }
 
         if (targetHQ == null) {
-            // No enemy HQ to attack, switch to defense
+            // No enemy HQ to attack, just look for enemies
             currentRole = HQRole.DEFENDER;
+            Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities, 500.0);
+            if (nearestEnemy != null && nearestEnemy.isActive()) {
+                Vector2 enemyPos = nearestEnemy.getPosition();
+                input.setWorldX(enemyPos.x);
+                input.setWorldY(enemyPos.y);
+            }
             return;
         }
 
@@ -228,8 +234,14 @@ public class HeadquartersBehavior implements AIBehavior {
         }
 
         if (myHQ == null) {
-            // No HQ to defend, switch to attack
+            // No HQ to defend, just look for enemies
             currentRole = HQRole.ATTACKER;
+            Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities, 500.0);
+            if (nearestEnemy != null && nearestEnemy.isActive()) {
+                Vector2 enemyPos = nearestEnemy.getPosition();
+                input.setWorldX(enemyPos.x);
+                input.setWorldY(enemyPos.y);
+            }
             return;
         }
 
