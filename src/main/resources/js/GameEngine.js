@@ -42,6 +42,7 @@ class GameEngine {
         };
         this.pendingTimeouts = [];
         this.tickerCallbacks = [];
+        this.memoryCleanupInterval = null;
         
         this.init();
     }
@@ -70,6 +71,11 @@ class GameEngine {
             
             this.updateLoadingProgress(100, "Ready!");
             this.hideLoadingScreen();
+            
+            // Set up periodic memory cleanup (every 60 seconds)
+            this.memoryCleanupInterval = setInterval(() => {
+                this.performMemoryCleanup();
+            }, 60000);
             
         } catch (error) {
             console.error('Game initialization failed:', error);
@@ -132,8 +138,7 @@ class GameEngine {
                 }
             });
         };
-        this.tickerCallbacks.push(interpolationCallback);
-        this.app.ticker.add(interpolationCallback);
+        this.addTickerCallback(interpolationCallback);
 
         // Create main containers
         this.backgroundContainer = new PIXI.Container();
@@ -166,6 +171,25 @@ class GameEngine {
             this.updateRoundTimerPosition();
         };
         window.addEventListener('resize', this.eventHandlers.resize);
+    }
+    
+    /**
+     * Add a ticker callback with proper tracking for cleanup
+     */
+    addTickerCallback(callback) {
+        this.tickerCallbacks.push(callback);
+        this.app.ticker.add(callback);
+    }
+    
+    /**
+     * Remove a ticker callback and stop tracking it
+     */
+    removeTickerCallback(callback) {
+        const index = this.tickerCallbacks.indexOf(callback);
+        if (index > -1) {
+            this.tickerCallbacks.splice(index, 1);
+        }
+        this.app.ticker.remove(callback);
     }
     
     /**
@@ -316,12 +340,10 @@ class GameEngine {
         for (let [teamId, container] of this.teamScoreContainers) {
             if (!teams.includes(teamId)) {
                 // Properly destroy the container and its children to prevent memory leak
-                if (container.colorBar) {
+                // Note: colorBar and scoreText are children of container, so they will be
+                // destroyed automatically with { children: true }. No need to destroy them separately.
+                if (container.colorBar && container.colorBar.clear) {
                     container.colorBar.clear();
-                    container.colorBar.destroy();
-                }
-                if (container.scoreText) {
-                    container.scoreText.destroy();
                 }
                 this.roundTimerContainer.removeChild(container);
                 container.destroy({ children: true, texture: false, baseTexture: false });
@@ -704,8 +726,7 @@ class GameEngine {
         
         // Start game loop - store reference for cleanup
         const gameLoopCallback = () => this.gameLoop();
-        this.tickerCallbacks.push(gameLoopCallback);
-        this.app.ticker.add(gameLoopCallback);
+        this.addTickerCallback(gameLoopCallback);
     }
     
     setupInput() {
@@ -3332,28 +3353,24 @@ class GameEngine {
                 if (effects.outerGlow.parent) {
                     effects.outerGlow.parent.removeChild(effects.outerGlow);
                 }
-                if (effects.outerGlow.clear) effects.outerGlow.clear();
                 effects.outerGlow.destroy();
             }
             if (effects.middleGlow) {
                 if (effects.middleGlow.parent) {
                     effects.middleGlow.parent.removeChild(effects.middleGlow);
                 }
-                if (effects.middleGlow.clear) effects.middleGlow.clear();
                 effects.middleGlow.destroy();
             }
             if (effects.innerGlow) {
                 if (effects.innerGlow.parent) {
                     effects.innerGlow.parent.removeChild(effects.innerGlow);
                 }
-                if (effects.innerGlow.clear) effects.innerGlow.clear();
                 effects.innerGlow.destroy();
             }
             if (effects.electricArcs) {
                 if (effects.electricArcs.parent) {
                     effects.electricArcs.parent.removeChild(effects.electricArcs);
                 }
-                if (effects.electricArcs.clear) effects.electricArcs.clear();
                 effects.electricArcs.destroy();
             }
             
@@ -3365,10 +3382,6 @@ class GameEngine {
         if (projectileContainer.trail) {
             if (projectileContainer.trail.parent) {
                 projectileContainer.trail.parent.removeChild(projectileContainer.trail);
-            }
-            // Clear graphics content before destroying
-            if (projectileContainer.trail.clear) {
-                projectileContainer.trail.clear();
             }
             projectileContainer.trail.destroy();
             projectileContainer.trail = null;
@@ -3686,7 +3699,7 @@ class GameEngine {
         if (effectContainer) {
             // Clean up animation ticker first
             if (effectContainer.animationFunction) {
-                this.app.ticker.remove(effectContainer.animationFunction);
+                this.removeTickerCallback(effectContainer.animationFunction);
                 effectContainer.animationFunction = null;
             }
             
@@ -5265,7 +5278,7 @@ class GameEngine {
             if (!connectionGraphics.parent) {
                 // Connection was removed - cleanup ticker
                 if (connectionGraphics.animationFunction) {
-                    this.app.ticker.remove(connectionGraphics.animationFunction);
+                    this.removeTickerCallback(connectionGraphics.animationFunction);
                     connectionGraphics.animationFunction = null;
                 }
                 return;
@@ -5276,7 +5289,7 @@ class GameEngine {
         };
         
         connectionGraphics.animationFunction = animateConnection;
-        this.app.ticker.add(animateConnection);
+        this.addTickerCallback(animateConnection);
     }
     
     /**
@@ -5554,7 +5567,7 @@ class GameEngine {
             if (this.teleportConnections.has(padId)) {
                 const connection = this.teleportConnections.get(padId);
                 if (connection.animationFunction) {
-                    this.app.ticker.remove(connection.animationFunction);
+                    this.removeTickerCallback(connection.animationFunction);
                 }
                 if (connection.parent) {
                     connection.parent.removeChild(connection);
@@ -5567,7 +5580,7 @@ class GameEngine {
             for (let [otherPadId, connection] of this.teleportConnections) {
                 if (connection.linkedPadId === padId) {
                     if (connection.animationFunction) {
-                        this.app.ticker.remove(connection.animationFunction);
+                        this.removeTickerCallback(connection.animationFunction);
                     }
                     if (connection.parent) {
                         connection.parent.removeChild(connection);
@@ -5580,7 +5593,6 @@ class GameEngine {
         
         // Clean up graphics
         if (container.entityGraphics) {
-            container.entityGraphics.clear();
             container.entityGraphics.destroy();
             container.entityGraphics = null;
         }
@@ -5604,14 +5616,12 @@ class GameEngine {
     cleanupBeamContainer(beamContainer) {
         // Clean up beam graphics
         if (beamContainer.beamGraphics) {
-            beamContainer.beamGraphics.clear();
             beamContainer.beamGraphics.destroy();
             beamContainer.beamGraphics = null;
         }
         
         // Clean up energy effects
         if (beamContainer.energyEffect) {
-            beamContainer.energyEffect.clear();
             beamContainer.energyEffect.destroy();
             beamContainer.energyEffect = null;
         }
@@ -5631,19 +5641,18 @@ class GameEngine {
     cleanupFieldEffectContainer(effectContainer) {
         // Remove animation ticker first (if not already removed)
         if (effectContainer.animationFunction) {
-            this.app.ticker.remove(effectContainer.animationFunction);
+            this.removeTickerCallback(effectContainer.animationFunction);
             effectContainer.animationFunction = null;
         }
         
         // Remove fade-out ticker if it exists
         if (effectContainer.fadeOutFunction) {
-            this.app.ticker.remove(effectContainer.fadeOutFunction);
+            this.removeTickerCallback(effectContainer.fadeOutFunction);
             effectContainer.fadeOutFunction = null;
         }
         
         // Clean up graphics objects explicitly
         if (effectContainer.effectGraphics) {
-            effectContainer.effectGraphics.clear();
             if (effectContainer.effectGraphics.parent) {
                 effectContainer.effectGraphics.parent.removeChild(effectContainer.effectGraphics);
             }
@@ -5654,9 +5663,6 @@ class GameEngine {
         // Clean up all child graphics objects
         const childrenToDestroy = [...effectContainer.children];
         childrenToDestroy.forEach(child => {
-            if (child.clear && typeof child.clear === 'function') {
-                child.clear(); // Clear graphics content
-            }
             if (child.parent) {
                 child.parent.removeChild(child);
             }
@@ -6246,7 +6252,7 @@ class GameEngine {
         container.animationFunction = () => this.animateEffect(container);
         
         // Add to ticker for animation updates
-        this.app.ticker.add(container.animationFunction);
+        this.addTickerCallback(container.animationFunction);
     }
     
     /**
@@ -6256,7 +6262,7 @@ class GameEngine {
         if (!container.effectData || !container.parent || !container.effectGraphics) {
             // Effect has been removed, stop animating
             if (container.animationFunction) {
-                this.app.ticker.remove(container.animationFunction);
+                this.removeTickerCallback(container.animationFunction);
                 container.animationFunction = null;
             }
             return;
@@ -6642,26 +6648,26 @@ class GameEngine {
         const fadeOut = () => {
             if (!container || container.alpha === undefined) {
                 // Container was already destroyed, clean up ticker
-                this.app.ticker.remove(fadeOut);
+                this.removeTickerCallback(fadeOut);
                 if (callback) callback();
                 return;
             }
             
             container.alpha -= fadeSpeed;
             if (container.alpha <= 0) {
-                this.app.ticker.remove(fadeOut);
+                this.removeTickerCallback(fadeOut);
                 if (callback) callback();
             }
         };
         
         // Store reference on container for emergency cleanup
         container.fadeOutFunction = fadeOut;
-        this.app.ticker.add(fadeOut);
+        this.addTickerCallback(fadeOut);
         
         // Safety timeout to prevent infinite fade
         this.safeSetTimeout(() => {
             if (container && container.fadeOutFunction) {
-                this.app.ticker.remove(container.fadeOutFunction);
+                this.removeTickerCallback(container.fadeOutFunction);
                 container.fadeOutFunction = null;
                 if (callback) callback();
             }
@@ -6899,19 +6905,17 @@ class GameEngine {
             // Properly destroy all Graphics objects to prevent memory leak
             const childrenToDestroy = [...this.minimapContent.children];
             childrenToDestroy.forEach(child => {
-                if (child.clear && typeof child.clear === 'function') {
-                    child.clear(); // Clear graphics content first
-                }
                 child.destroy({ children: true, texture: false, baseTexture: false });
             });
             
-            this.hudMinimap.removeChild(this.minimapContent);
-            this.minimapContent.destroy({ children: true, texture: false, baseTexture: false });
+            // Remove all children from the container
+            this.minimapContent.removeChildren();
+        } else {
+            // Create new minimap content container if it doesn't exist
+            this.minimapContent = new PIXI.Container();
+            this.minimapContent.position.set(2, 16); // Below title, within border
+            this.hudMinimap.addChild(this.minimapContent);
         }
-        
-        // Create new minimap content container
-        this.minimapContent = new PIXI.Container();
-        this.minimapContent.position.set(2, 16); // Below title, within border
         
         // Use actual minimap dimensions minus borders and title space
         const mapWidth = this.minimapWidth - 4; // Account for 2px border on each side
@@ -6957,8 +6961,6 @@ class GameEngine {
             
             this.minimapContent.addChild(playerDot);
         });
-        
-        this.hudMinimap.addChild(this.minimapContent);
     }
     
     showDeathScreen(data) {
@@ -7300,11 +7302,11 @@ class GameEngine {
         // Clean up any field effects with orphaned animation functions
         this.fieldEffects.forEach((effect, id) => {
             if (effect.animationFunction && (!effect.parent || !effect.effectData)) {
-                this.app.ticker.remove(effect.animationFunction);
+                this.removeTickerCallback(effect.animationFunction);
                 effect.animationFunction = null;
             }
             if (effect.fadeOutFunction && (!effect.parent || effect.alpha <= 0)) {
-                this.app.ticker.remove(effect.fadeOutFunction);
+                this.removeTickerCallback(effect.fadeOutFunction);
                 effect.fadeOutFunction = null;
             }
         });
@@ -7351,21 +7353,21 @@ class GameEngine {
         // Remove all ticker callbacks
         if (this.app && this.app.ticker) {
             this.tickerCallbacks.forEach(callback => {
-                this.app.ticker.remove(callback);
+                this.removeTickerCallback(callback);
             });
-            this.tickerCallbacks = [];
             
             // Stop ticker
             this.app.ticker.stop();
         }
         
         // Remove all event listeners
-        if (this.app && this.app.renderer && this.app.renderer.gl && this.app.renderer.gl.canvas) {
+        // In PixiJS v8, access canvas directly from app.canvas instead of renderer.gl.canvas
+        if (this.app && this.app.canvas) {
             if (this.eventHandlers.webglContextLost) {
-                this.app.renderer.gl.canvas.removeEventListener('webglcontextlost', this.eventHandlers.webglContextLost);
+                this.app.canvas.removeEventListener('webglcontextlost', this.eventHandlers.webglContextLost);
             }
             if (this.eventHandlers.webglContextRestored) {
-                this.app.renderer.gl.canvas.removeEventListener('webglcontextrestored', this.eventHandlers.webglContextRestored);
+                this.app.canvas.removeEventListener('webglcontextrestored', this.eventHandlers.webglContextRestored);
             }
         }
         
@@ -7417,9 +7419,6 @@ class GameEngine {
 
         // Clean up obstacles
         this.obstacles.forEach(obstacle => {
-            if (obstacle.clear && typeof obstacle.clear === 'function') {
-                obstacle.clear();
-            }
             obstacle.obstacleData = null;
             obstacle.destroy();
         });
@@ -7451,7 +7450,7 @@ class GameEngine {
         // Clean up teleport pad connections
         this.teleportConnections.forEach(connection => {
             if (connection.animationFunction) {
-                this.app.ticker.remove(connection.animationFunction);
+                this.removeTickerCallback(connection.animationFunction);
             }
             if (connection.parent) {
                 connection.parent.removeChild(connection);
