@@ -5021,22 +5021,30 @@ class GameEngine {
         // Type-specific visual indicators (larger inner circle)
         switch (powerUpType) {
             case 'SPEED_BOOST':
-                graphics.circle(0, 0, 9).fill({ color: 0x00FFFF, alpha: 0.8 });
+                graphics.circle(0, 0, entityData.radius).fill({ color: 0x00FFFF, alpha: 0.8 });
                 break;
             case 'HEALTH_REGENERATION':
-                graphics.circle(0, 0, 9).fill({ color: 0x00FF00, alpha: 0.8 });
+                graphics.circle(0, 0, entityData.radius).fill({ color: 0x00FF00, alpha: 0.8 });
                 break;
             case 'DAMAGE_BOOST':
-                graphics.circle(0, 0, 9).fill({ color: 0xFF0000, alpha: 0.8 });
+                graphics.circle(0, 0, entityData.radius).fill({ color: 0xFF0000, alpha: 0.8 });
                 break;
             case 'DAMAGE_RESISTANCE':
-                graphics.circle(0, 0, 9).fill({ color: 0xFFD700, alpha: 0.8 });
+                graphics.circle(0, 0, entityData.radius).fill({ color: 0xFFD700, alpha: 0.8 });
                 break;
             case 'BERSERKER_MODE':
-                graphics.circle(0, 0, 9).fill({ color: 0xFF4500, alpha: 0.8 });
+                graphics.circle(0, 0, entityData.radius).fill({ color: 0xFF4500, alpha: 0.8 });
+                break;
+            case 'INFINITE_AMMO':
+                // Orange background circle
+                graphics.circle(0, 0, entityData.radius).fill({ color: 0xFFA500, alpha: 0.8 });
+                // Draw infinity symbol (∞) - two connected loops
+                graphics.circle(-3, 0, 3.5).stroke({ width: 1.5, color: 0xFFFFFF, alpha: 0.9 });
+                graphics.circle(3, 0, 3.5).stroke({ width: 1.5, color: 0xFFFFFF, alpha: 0.9 });
+                graphics.rect(-1, -1.5, 2, 3).fill({ color: 0xFFA500, alpha: 0.8 });
                 break;
             case 'SLOW_EFFECT':
-                graphics.circle(0, 0, 9).fill({ color: 0x0066CC, alpha: 0.8 });
+                graphics.circle(0, 0, entityData.radius).fill({ color: 0x0066CC, alpha: 0.8 });
                 break;
         }
         

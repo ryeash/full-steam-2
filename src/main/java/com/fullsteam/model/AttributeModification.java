@@ -7,9 +7,6 @@ import com.fullsteam.physics.Player;
  * This is the foundation for status effects, buffs, debuffs, and temporary enhancements.
  */
 public interface AttributeModification {
-    // stackable?
-    // source?
-    // uniqueness key?
 
     String uniqueKey();
 

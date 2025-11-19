@@ -18,6 +18,7 @@ import org.dyn4j.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /**
@@ -29,11 +30,11 @@ public class UtilitySystem {
 
     private final GameEntities gameEntities;
     private final World<Body> world;
-    private final Function<Vector2, Boolean> isPositionClearCheck;
+    private final BiFunction<Vector2, Double, Boolean> isPositionClearCheck;
 
     public UtilitySystem(GameEntities gameEntities,
                          World<Body> world,
-                         Function<Vector2, Boolean> isPositionClearCheck) {
+                         BiFunction<Vector2, Double, Boolean> isPositionClearCheck) {
         this.gameEntities = gameEntities;
         this.world = world;
         this.isPositionClearCheck = isPositionClearCheck;
@@ -116,7 +117,7 @@ public class UtilitySystem {
         offset.multiply(50.0); // Place 50 units in front
         placement.add(offset);
         double turretRadius = 15.0;
-        if (!isPositionClear(placement, turretRadius)) {
+        if (!isPositionClearCheck.apply(placement, turretRadius)) {
             Player player = gameEntities.getPlayer(activation.playerId);
             if (player != null) {
                 player.refundUtilityCooldown();
@@ -227,7 +228,7 @@ public class UtilitySystem {
         placement.add(offset);
 
         double laserRadius = 20.0;
-        if (!isPositionClear(placement, laserRadius)) {
+        if (!isPositionClearCheck.apply(placement, laserRadius)) {
             Player player = gameEntities.getPlayer(activation.playerId);
             if (player != null) {
                 player.refundUtilityCooldown();
@@ -263,12 +264,5 @@ public class UtilitySystem {
                 break;
             }
         }
-    }
-
-    /**
-     * Check if a position is clear of obstacles.
-     */
-    private boolean isPositionClear(Vector2 position, double radius) {
-        return isPositionClearCheck.apply(position);
     }
 }

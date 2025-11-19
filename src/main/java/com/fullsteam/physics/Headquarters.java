@@ -20,29 +20,28 @@ import java.util.Map;
 public class Headquarters extends GameEntity {
     private static final double HQ_WIDTH = 80.0;
     private static final double HQ_HEIGHT = 60.0;
-    
+
     private final int teamNumber;
     private final Vector2 homePosition;
     private final double maxHealth;
     private double totalDamageTaken = 0.0; // Track for scoring
-    
+
     public Headquarters(int id, int teamNumber, double x, double y, double maxHealth) {
         super(id, createHeadquartersBody(x, y), maxHealth);
         this.teamNumber = teamNumber;
         this.homePosition = new Vector2(x, y);
         this.maxHealth = maxHealth;
     }
-    
+
     private static Body createHeadquartersBody(double x, double y) {
         Body body = new Body();
         Rectangle rect = new Rectangle(HQ_WIDTH, HQ_HEIGHT);
         body.addFixture(rect);
         body.setMass(MassType.INFINITE); // Static structure
         body.getTransform().setTranslation(x, y);
-        body.setUserData("headquarters");
         return body;
     }
-    
+
     @Override
     public void update(double deltaTime) {
         if (!active) {
@@ -50,7 +49,7 @@ public class Headquarters extends GameEntity {
         }
         lastUpdateTime = System.currentTimeMillis();
     }
-    
+
     /**
      * Apply damage to headquarters and track total damage for scoring.
      */
@@ -59,19 +58,19 @@ public class Headquarters extends GameEntity {
         if (!active) {
             return false;
         }
-        
+
         health -= damage;
         totalDamageTaken += damage;
-        
+
         if (health <= 0) {
             health = 0;
             active = false;
             return true; // Headquarters destroyed!
         }
-        
+
         return false;
     }
-    
+
     /**
      * Get shape data for client rendering.
      */

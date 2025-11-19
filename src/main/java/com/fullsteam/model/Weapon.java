@@ -44,7 +44,7 @@ public class Weapon {
 
         if (totalPoints > 100) {
             throw new IllegalArgumentException("Total points cannot exceed 100. Current total: " + totalPoints +
-                                               " (Attributes: " + attributePoints + ", Effects: " + effectPoints + ", Ordinance: " + ordinancePoints + ")");
+                    " (Attributes: " + attributePoints + ", Effects: " + effectPoints + ", Ordinance: " + ordinancePoints + ")");
         }
 
         this.name = name;
@@ -79,7 +79,7 @@ public class Weapon {
         this.bulletsPerShot = other.bulletsPerShot;
         this.linearDamping = other.linearDamping;
         this.currentAmmo = other.currentAmmo; // Preserve actual current ammo, not magazine size
-        this.bulletEffects = new HashSet<>(other.bulletEffects);
+        this.bulletEffects = other.bulletEffects;
         this.ordinance = other.ordinance;
         this.attributePoints = other.attributePoints;
     }

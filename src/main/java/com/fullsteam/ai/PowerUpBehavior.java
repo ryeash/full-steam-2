@@ -139,6 +139,11 @@ public class PowerUpBehavior implements AIBehavior {
                 }
                 yield 0.3;
             }
+            case INFINITE_AMMO -> {
+                // Valuable for aggressive AIs who want to maintain pressure
+                // More valuable for weapons with small magazines
+                yield 0.7 + (aiPlayer.getPersonality().getAggressiveness() * 0.2);
+            }
         };
     }
     

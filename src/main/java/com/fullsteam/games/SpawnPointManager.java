@@ -19,8 +19,8 @@ public class SpawnPointManager {
     private final TeamSpawnManager teamSpawnManager;
     private final TerrainGenerator terrainGenerator;
 
-    public SpawnPointManager(GameConfig gameConfig, GameEntities gameEntities, 
-                            TeamSpawnManager teamSpawnManager, TerrainGenerator terrainGenerator) {
+    public SpawnPointManager(GameConfig gameConfig, GameEntities gameEntities,
+                             TeamSpawnManager teamSpawnManager, TerrainGenerator terrainGenerator) {
         this.gameConfig = gameConfig;
         this.gameEntities = gameEntities;
         this.teamSpawnManager = teamSpawnManager;
@@ -154,35 +154,6 @@ public class SpawnPointManager {
         return new Vector2(
                 (ThreadLocalRandom.current().nextDouble() - 0.5) * gameConfig.getWorldWidth() * 0.8,
                 (ThreadLocalRandom.current().nextDouble() - 0.5) * gameConfig.getWorldHeight() * 0.8);
-    }
-
-    /**
-     * Check if a position is clear of obstacles and within world boundaries.
-     *
-     * @param position Position to check
-     * @param radius Radius to check around the position
-     * @return True if position is clear, false otherwise
-     */
-    public boolean isPositionClearOfObstacles(Vector2 position, double radius) {
-        // Add a small buffer to prevent entities from being placed too close to obstacles
-        double checkRadius = radius + 5.0;
-
-        // Check against all obstacles
-        for (Obstacle obstacle : gameEntities.getAllObstacles()) {
-            double distance = position.distance(obstacle.getPosition());
-            double minDistance = checkRadius + obstacle.getBoundingRadius();
-
-            if (distance < minDistance) {
-                return false; // Position is blocked
-            }
-        }
-
-        // Also check against world boundaries
-        double halfWidth = gameConfig.getWorldWidth() / 2.0;
-        double halfHeight = gameConfig.getWorldHeight() / 2.0;
-
-        return !(Math.abs(position.x) + checkRadius > halfWidth)
-                && !(Math.abs(position.y) + checkRadius > halfHeight);
     }
 }
 

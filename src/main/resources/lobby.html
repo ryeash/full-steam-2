@@ -512,8 +512,8 @@
 
                 <div class="config-section">
                     <h3>🌋 Event Configuration</h3>
+                    <small style="color: #888; font-size: 0.9em; display: block; margin-bottom: 10px;">Configure event timing and density (enable in World Settings)</small>
                     <div id="eventConfigFields" style="display: none;">
-                        <small style="color: #888; font-size: 0.9em; display: block; margin-bottom: 10px;">Configure event timing and density (enable in World Settings)</small>
                         <div class="config-item">
                             <label for="randomEventInterval">Event Interval (seconds):</label>
                             <input type="number" id="randomEventInterval" min="20" max="300" step="10" value="40">
@@ -684,7 +684,7 @@
         createButtons.appendChild(stockBattleButton);
         
         const headquartersButton = document.createElement('button');
-        headquartersButton.textContent = '🏛️ Headquarters Assault';
+        headquartersButton.textContent = '🏛️ Headquarters';
         headquartersButton.onclick = () => createPresetGame('headquarters-assault');
         createButtons.appendChild(headquartersButton);
         

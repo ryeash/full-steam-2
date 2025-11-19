@@ -62,7 +62,6 @@ import com.fullsteam.util.GameConstants;
 public final class StatusEffectManager {
 
     private StatusEffectManager() {
-        // Prevent instantiation
     }
 
     /**
@@ -72,8 +71,6 @@ public final class StatusEffectManager {
         player.getAttributeModifications().removeIf(am -> am.uniqueKey().equals(attributeModification.uniqueKey()));
         player.getAttributeModifications().add(attributeModification);
     }
-
-    // ========== BUFF EFFECTS ==========
 
     /**
      * Apply a speed boost effect to a player.
@@ -87,7 +84,6 @@ public final class StatusEffectManager {
 
             @Override
             public String renderHint() {
-                // Enhanced format with parameters: more particles for speed effect
                 return "speed_sparks:#00FFFF:sparkle:true:Speed Boost:{\"particles\":12,\"particleDistance\":28}";
             }
 
@@ -138,7 +134,6 @@ public final class StatusEffectManager {
 
             @Override
             public String renderHint() {
-                // Enhanced format: octagonal shield for stronger protection feel
                 return "shield_shimmer:#FFD700:shield:true:Protected!:{\"sides\":8,\"size\":24}";
             }
 
@@ -257,13 +252,39 @@ public final class StatusEffectManager {
         });
     }
 
-    // ========== DEBUFF EFFECTS ==========
+    /**
+     * Apply infinite ammo effect to a player.
+     * During this effect, the player's magazine never depletes when firing.
+     */
+    public static void applyInfiniteAmmo(Player player, double durationSeconds, String source) {
+        applyEffect(player, new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
+            @Override
+            public String uniqueKey() {
+                return "infiniteAmmo";
+            }
+
+            @Override
+            public String renderHint() {
+                return "infinite_ammo:#FFA500:star:true:Infinite Ammo:{\"count\":8,\"radius\":26,\"size\":4}";
+            }
+
+            @Override
+            public Weapon update(Weapon weapon) {
+                return new Weapon(weapon) {
+                    @Override
+                    public int getCurrentAmmo() {
+                        // Always return full magazine
+                        return getMagazineSize();
+                    }
+                };
+            }
+        });
+    }
 
     /**
      * Apply burning effect to a player.
      */
     public static void applyBurning(GameManager gameManager, Player player, double damagePerSecond, double durationSeconds, int effectOwner) {
-        // Enhanced format: customizable flame parameters
         applyHealthDegeneration(gameManager, "fire:#FF4500:flame:true:Burning:{\"count\":12,\"radius\":22,\"height\":10}", player, damagePerSecond, durationSeconds, effectOwner);
     }
 
@@ -325,8 +346,6 @@ public final class StatusEffectManager {
             }
         });
     }
-
-    // ========== GAME MODE EFFECTS ==========
 
     /**
      * Apply ball carrier effect to a player (for Oddball mode).

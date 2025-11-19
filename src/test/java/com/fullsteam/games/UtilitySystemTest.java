@@ -36,18 +36,18 @@ class UtilitySystemTest extends BaseTestClass {
                 .enableAIFilling(false)  // Disable AI filling for predictable test environment
                 .build();
         gameEntities = new GameEntities(testConfig, world);
-        
+
         // Create weapon system
         weaponSystem = new WeaponSystem(gameEntities, world);
-        
+
         // Create broadcaster
         broadcaster = new TestBroadcaster();
-        
+
         // Create utility system
         utilitySystem = new UtilitySystem(
                 gameEntities,
                 world,
-                pos -> true // Always allow placement for tests
+                (pos, radius) -> true // Always allow placement for tests
         );
     }
 
@@ -92,7 +92,7 @@ class UtilitySystemTest extends BaseTestClass {
         Player player = createTestPlayer(1, 1);
         player.setPosition(100, 100);
         player.setAimDirection(new Vector2(1, 0)); // Aim right
-        
+
         Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.HEAL_ZONE);
 
         // Act

@@ -268,7 +268,7 @@ public class WeaponSystem {
             } else if (userData instanceof Obstacle obstacle) {
                 // Apply damage to player-created obstacles if beam can damage them
                 if (obstacle.getType() == Obstacle.ObstacleType.PLAYER_BARRIER &&
-                    canBeamDamageObstacle(beam, obstacle)) {
+                        canBeamDamageObstacle(beam, obstacle)) {
                     obstacle.takeDamage(beam.getDamage());
                 }
 
@@ -284,7 +284,6 @@ public class WeaponSystem {
             }
         }
     }
-
 
     /**
      * Apply beam damage to a player
@@ -322,24 +321,5 @@ public class WeaponSystem {
 
         // In team mode, can only damage obstacles created by different teams
         return beam.getOwnerTeam() != obstacle.getOwnerTeam();
-    }
-
-    /**
-     * Get statistics about active weapons.
-     */
-    public WeaponStats getStats() {
-        int totalProjectiles = gameEntities.getProjectiles().size();
-        int totalBeams = gameEntities.getBeams().size();
-
-        return new WeaponStats(totalProjectiles, totalBeams);
-    }
-
-    /**
-     * Statistics about active weapons in the game.
-     */
-    public record WeaponStats(
-            int totalProjectiles,
-            int totalBeams
-    ) {
     }
 }

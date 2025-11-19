@@ -159,7 +159,7 @@ public class GameManager {
         this.utilitySystem = new UtilitySystem(
                 gameEntities,
                 world,
-                pos -> isPositionClearOfObstacles(pos, 15.0)
+                this::isPositionClearOfObstacles
         );
 
         // Initialize entity spawner
@@ -260,7 +260,7 @@ public class GameManager {
         try {
             if (session.isWritable() && session.isOpen()) {
                 String json = objectMapper.writeValueAsString(message);
-                session.sendSync(json);
+                session.sendAsync(json);
             }
         } catch (JsonProcessingException e) {
             log.error("Error serializing message", e);
@@ -857,88 +857,6 @@ public class GameManager {
         return gameConfig.getMaxPlayers();
     }
 
-
-    /**
-     * Create flags for capture-the-flag gameplay if configured.
-     */
-    /**
-     * Calculate flag position within a team's area.
-     * For multiple flags, distributes them around the team center.
-     */
-    private Vector2 calculateFlagPosition(TeamSpawnArea teamArea, int flagIndex, int totalFlags) {
-        Vector2 center = teamArea.getCenter();
-
-        if (totalFlags == 1) {
-            // Single flag: place at team center
-            return center.copy();
-        }
-
-        // Multiple flags: distribute in a circle around center
-        double radius = Math.min(teamArea.getWidth(), teamArea.getHeight()) * 0.3;
-        double angleStep = (2 * Math.PI) / totalFlags;
-        double angle = flagIndex * angleStep;
-
-        double x = center.x + radius * Math.cos(angle);
-        double y = center.y + radius * Math.sin(angle);
-
-        return new Vector2(x, y);
-    }
-
-    /**
-     * Create the oddball if oddball mode is enabled.
-     * The oddball is a neutral flag (team 0) spawned at the world center.
-     */
-    /**
-     * Create King of the Hill zones if enabled in rules.
-     * Zones are placed strategically between team spawn areas for fair gameplay.
-     */
-    /**
-     * Calculate fair positioning for KOTH zones.
-     * Zones are placed equidistant from team spawn areas to ensure no team has an advantage.
-     */
-    private Vector2 calculateKothZonePosition(int zoneIndex, int totalZones, int teamCount) {
-        double worldWidth = gameConfig.getWorldWidth();
-        double worldHeight = gameConfig.getWorldHeight();
-
-        if (totalZones == 1) {
-            // Single zone: place at world center
-            return new Vector2(0, 0);
-        }
-        // Team mode: place zones in neutral space between team spawn areas
-        if (teamCount == 2) {
-            // aligned on the y-axis to avoid all team zones
-            double increment = worldHeight / (totalZones + 1);
-            double y = increment * (zoneIndex + 1) - (worldHeight / 2);
-            return new Vector2(0, y);
-        } else if (teamCount == 3) {
-            // aligned on the x-axis to avoid all team zones
-            double increment = worldWidth / (totalZones + 1);
-            double x = increment * (zoneIndex + 1) - (worldWidth / 2);
-            return new Vector2(x, 0);
-        } else { // 4 teams
-            // align on the longer axis
-            if (worldHeight > worldWidth) {
-                // aligned on the y-axis to avoid all team zones
-                double increment = worldHeight / (totalZones + 1);
-                double y = increment * (zoneIndex + 1) - (worldHeight / 2);
-                return new Vector2(0, y);
-            } else {
-                // aligned on the x-axis to avoid all team zones
-                double increment = worldWidth / (totalZones + 1);
-                double x = increment * (zoneIndex + 1) - (worldWidth / 2);
-                return new Vector2(x, 0);
-            }
-        }
-    }
-
-    /**
-     * Create workshops if enabled in rules.
-     * Each team gets one workshop placed in their spawn zone.
-     */
-    /**
-     * Create headquarters if enabled in rules.
-     * Each team gets one headquarters placed in their spawn zone (defensive position).
-     */
     /**
      * Update positions of flags that are being carried by players.
      */
@@ -966,29 +884,6 @@ public class GameManager {
                 }
             }
         }
-    }
-
-    /**
-     * Get team name for display.
-     */
-    private String getTeamName(int team) {
-        if (gameConfig.isFreeForAll()) {
-            return "Player";
-        }
-        return "Team " + (team + 1);
-    }
-
-    /**
-     * Get team color hex code for events.
-     */
-    private String getTeamColorHex(int team) {
-        return switch (team) {
-            case 1 -> "#4CAF50";  // Green
-            case 2 -> "#F44336";  // Red
-            case 3 -> "#2196F3";  // Blue
-            case 4 -> "#FF9800";  // Orange
-            default -> "#FFFFFF"; // White
-        };
     }
 
     /**

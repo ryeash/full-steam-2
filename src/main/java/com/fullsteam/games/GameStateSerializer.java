@@ -504,6 +504,7 @@ public class GameStateSerializer {
             powerUpState.put("workshopId", powerUp.getWorkshopId());
             powerUpState.put("duration", powerUp.getDuration());
             powerUpState.put("effectStrength", powerUp.getEffectStrength());
+            powerUpState.put("radius", powerUp.getBody().getFixture(0).getShape().getRadius());
             powerUpStates.add(powerUpState);
         }
         return powerUpStates;

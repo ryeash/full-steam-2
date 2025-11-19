@@ -62,10 +62,6 @@ public class ActiveGameEvent {
         return active && !completed;
     }
 
-    public boolean isCompleted() {
-        return completed;
-    }
-
     public double getWarningTimeRemaining() {
         if (!warningPhase) {
             return 0.0;

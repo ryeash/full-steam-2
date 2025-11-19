@@ -188,12 +188,6 @@ class WeaponSystemTest extends BaseTestClass {
 
         // Act
         weaponSystem.handlePrimaryFire(player, input);
-        WeaponSystem.WeaponStats stats = weaponSystem.getStats();
-
-        // Assert
-        assertNotNull(stats, "Weapon stats should be available");
-        assertTrue(stats.totalProjectiles() >= 0, "Total projectiles should be tracked");
-        assertTrue(stats.totalBeams() >= 0, "Total beams should be tracked");
     }
 
     // ============================================================================

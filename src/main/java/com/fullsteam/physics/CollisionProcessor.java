@@ -873,12 +873,9 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
         // Check if power-up can be collected by this player
         if (powerUp.canBeCollectedBy(player)) {
-            // Apply the power-up effect
             PowerUp.PowerUpEffect effect = powerUp.getEffect();
             applyPowerUpEffect(player, effect);
             powerUp.setActive(false);
-            log.debug("Player {} collected power-up {} (type: {})",
-                    player.getId(), powerUp.getId(), powerUp.getType());
         }
     }
 
@@ -1097,6 +1094,9 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 break;
             case BERSERKER_MODE:
                 StatusEffectManager.applyBerserkerMode(player, effect.getDuration(), "Workshop Power-up");
+                break;
+            case INFINITE_AMMO:
+                StatusEffectManager.applyInfiniteAmmo(player, effect.getDuration(), "Workshop Power-up");
                 break;
         }
     }

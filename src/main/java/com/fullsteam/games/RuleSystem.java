@@ -109,8 +109,6 @@ public class RuleSystem {
         }
     }
 
-    // ===== UPDATE METHODS =====
-
     /**
      * Initialize the event system if enabled.
      * Must be called after construction with the required dependencies.
@@ -194,8 +192,7 @@ public class RuleSystem {
 
         // Broadcast VIP selection event
         gameEventManager.broadcastSystemMessage(
-                String.format("👑 %s is now the VIP for Team %d!",
-                        player.getPlayerName(), teamNumber));
+                String.format("👑 %s is now the VIP for Team %d!", player.getPlayerName(), teamNumber));
     }
 
     /**

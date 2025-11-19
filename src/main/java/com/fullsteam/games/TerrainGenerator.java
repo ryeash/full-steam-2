@@ -33,13 +33,6 @@ public class TerrainGenerator {
         this.worldHeight = worldHeight;
         this.reserveCenterForOddball = reserveCenterForOddball;
         this.configuredDensity = configuredDensity;
-        generateTerrain();
-    }
-
-    /**
-     * Main terrain generation method.
-     */
-    private void generateTerrain() {
         generateObstacles();
     }
 
@@ -60,21 +53,12 @@ public class TerrainGenerator {
     }
 
     private int calculateObstacleCountForWorldSize(EntityWorldDensity density) {
-        // Calculate base count based on world area
         double worldArea = worldWidth * worldHeight;
         double baseObstaclesPerUnit = 0.000005; // Base density per square unit
-
-        // Adjust density multiplier based on selected density
-        // Note: RANDOM should be resolved by getEffectiveDensity() before reaching here
         double densityMultiplier = density.getMultiplier();
-
         int baseCount = (int) (worldArea * baseObstaclesPerUnit * densityMultiplier);
-
-        // Add some randomness (±20%)
         int variation = (int) (baseCount * 0.2);
         int finalCount = baseCount + ThreadLocalRandom.current().nextInt(variation * 2 + 1) - variation;
-
-        // Ensure minimum and maximum bounds
         return Math.max(3, Math.min(finalCount, (int) (worldArea * 0.0001))); // Max 1 obstacle per 10,000 square units
     }
 
@@ -83,20 +67,13 @@ public class TerrainGenerator {
      */
     private Obstacle generateObstacleWithCollisionCheck(int maxAttempts) {
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
-            // Allow obstacles to spawn closer to edges for more dramatic placement
             double x = (ThreadLocalRandom.current().nextDouble() - 0.5) * (worldWidth - 100);
             double y = (ThreadLocalRandom.current().nextDouble() - 0.5) * (worldHeight - 100);
-
-            // Create obstacle at this position
             Obstacle candidate = Obstacle.createChaoticObstacle(x, y);
-
-            // Check if this position is clear
             if (isObstaclePositionClear(candidate)) {
                 return candidate;
             }
         }
-
-        // Could not find a clear position after maxAttempts
         return null;
     }
 
@@ -138,7 +115,6 @@ public class TerrainGenerator {
      * Check if a position is suitable for placing objects (avoids terrain features).
      */
     public boolean isPositionClear(Vector2 position, double radius) {
-        // Add minimum spacing buffer
         double spacing = Math.max(5.0, radius * 0.1); // At least 5 units or 10% of radius
         double totalRadius = radius + spacing;
         for (Obstacle obstacle : generatedObstacles) {
@@ -165,7 +141,6 @@ public class TerrainGenerator {
                 return candidate;
             }
         }
-
         // Fallback to center if no clear position found
         return new Vector2(0, 0);
     }
@@ -182,7 +157,7 @@ public class TerrainGenerator {
             obstacleData.put("x", obstacle.getPosition().x);
             obstacleData.put("y", obstacle.getPosition().y);
             obstacleData.put("radius", obstacle.getBoundingRadius());
-            obstacleData.put("type", "Boulder");
+            obstacleData.put("type", obstacle.getType());
             obstacles.add(obstacleData);
         }
         data.put("obstacles", obstacles);

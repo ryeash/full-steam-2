@@ -162,7 +162,7 @@ public class Player extends GameEntity {
     }
 
     public boolean canShoot() {
-        Weapon weapon = this.weapon;
+        Weapon weapon = this.getCurrentWeapon();
         long now = System.currentTimeMillis();
         double fireInterval = 1000.0 / weapon.getFireRate();
         // Check if we have enough ammo for at least one bullet (partial bursts are allowed)
@@ -192,7 +192,7 @@ public class Player extends GameEntity {
     }
 
     public List<Projectile> shoot() {
-        Weapon weapon = this.weapon; // Always use primary weapon
+        Weapon weapon = this.getCurrentWeapon(); // Always use primary weapon
         if (!canShoot()) {
             if (!isReloading && weapon.getCurrentAmmo() <= 0) {
                 startReload();
@@ -247,7 +247,7 @@ public class Player extends GameEntity {
      * @return Beam object if weapon can fire beams and conditions are met, null otherwise
      */
     public Beam shootBeam() {
-        Weapon weapon = this.weapon; // Always use primary weapon
+        Weapon weapon = this.getCurrentWeapon(); // Always use primary weapon
         if (!canShoot() || !weapon.getOrdinance().isBeamType()) {
             if (!isReloading && weapon.getCurrentAmmo() <= 0) {
                 startReload();
@@ -278,7 +278,7 @@ public class Player extends GameEntity {
         int beamId = IdGenerator.nextEntityId();
 
         // Single Beam class handles all beam types via ordinance
-        return new Beam(beamId, startPoint, direction, range, damage, getId(), getTeam(), ordinance, weapon.getBulletEffects());
+        return new Beam(beamId, startPoint, direction, range, damage, getId(), getTeam(), ordinance, getCurrentWeapon().getBulletEffects());
     }
 
     /**
@@ -323,7 +323,7 @@ public class Player extends GameEntity {
     }
 
     private void startReload() {
-        Weapon weapon = this.weapon; // Always reload primary weapon
+        Weapon weapon = this.getCurrentWeapon();
         if (weapon.needsReload()) {
             isReloading = true;
             reloadTimeRemaining = weapon.getReloadTime();
