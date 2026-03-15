@@ -7,6 +7,7 @@ import com.fullsteam.physics.TeamSpawnArea;
 import com.fullsteam.physics.TeamSpawnManager;
 import org.dyn4j.geometry.Vector2;
 
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -28,30 +29,28 @@ public class SpawnPointManager {
     }
 
     /**
-     * Find a varied spawn point for a team, trying to avoid clustering.
-     * Attempts to find a spawn point that is far from other team members.
+     * Find a varied spawn point for a team, trying to avoid clustering with
+     * other active teammates. Only considers same-team players so that the
+     * anti-clustering logic doesn't push spawns away from the team zone.
      *
      * @param team Team number
      * @return Spawn point for the team
      */
     public Vector2 findVariedSpawnPointForTeam(int team) {
         Vector2 bestSpawnPoint = null;
-        double maxMinDistance = 0;
+        double maxMinDistance = -1;
 
-        // Try multiple spawn candidates and pick the one farthest from teammates
         for (int attempt = 0; attempt < 5; attempt++) {
             Vector2 candidate = findSpawnPointForTeam(team);
 
-            // Calculate minimum distance to any teammate
             double minDistanceToTeammate = Double.MAX_VALUE;
             for (Player player : gameEntities.getAllPlayers()) {
-                if (player.getTeam() == team && player.isActive()) {
+                if (player.getId() != -1 && player.getTeam() == team && player.isActive()) {
                     double distance = candidate.distance(player.getPosition());
                     minDistanceToTeammate = Math.min(minDistanceToTeammate, distance);
                 }
             }
 
-            // Keep the candidate with the maximum minimum distance (most spread out)
             if (minDistanceToTeammate > maxMinDistance) {
                 maxMinDistance = minDistanceToTeammate;
                 bestSpawnPoint = candidate;
@@ -64,6 +63,8 @@ public class SpawnPointManager {
     /**
      * Find a spawn point for a specific team.
      * Uses team-based spawn areas if team mode is enabled, otherwise FFA spawning.
+     * Always keeps team players within their own team zone — never falls back to
+     * FFA spawning for team-mode players.
      *
      * @param team Team number (0 for FFA)
      * @return Spawn point for the team
@@ -74,27 +75,45 @@ public class SpawnPointManager {
         }
 
         if (teamSpawnManager.isTeamSpawningEnabled()) {
-            // Try to get a team spawn point that avoids obstacles
-            Vector2 teamSpawnPoint = teamSpawnManager.getSafeTeamSpawnPoint(team, gameEntities.getAllPlayers(), 100.0);
+            // Only avoid same-team players so that enemies in a different zone
+            // don't cause unnecessary spawn failures in ours.
+            List<Player> teammates = gameEntities.getAllPlayers().stream()
+                    .filter(p -> p.getTeam() == team)
+                    .toList();
+            Vector2 teamSpawnPoint = teamSpawnManager.getSafeTeamSpawnPoint(team, teammates, 100.0);
 
-            // Verify it's clear of terrain obstacles using TerrainGenerator
             if (terrainGenerator.isPositionClear(teamSpawnPoint, 50.0)) {
                 return teamSpawnPoint;
             }
 
-            // If team spawn point is blocked, try to find a safe position near the team area
+            // If that's blocked, try more candidates within the team area
             TeamSpawnArea teamArea = teamSpawnManager.getTeamArea(team);
             if (teamArea != null) {
-                for (int attempts = 0; attempts < 10; attempts++) {
+                // First pass: full terrain clearance
+                for (int attempts = 0; attempts < 15; attempts++) {
                     Vector2 candidate = teamArea.generateSpawnPoint();
                     if (terrainGenerator.isPositionClear(candidate, 50.0)) {
                         return candidate;
                     }
                 }
+
+                // Second pass: relaxed clearance radius so we still stay in the
+                // correct team zone rather than falling back to FFA
+                for (int attempts = 0; attempts < 10; attempts++) {
+                    Vector2 candidate = teamArea.generateSpawnPoint();
+                    if (terrainGenerator.isPositionClear(candidate, 20.0)) {
+                        return candidate;
+                    }
+                }
+
+                // Final fallback: stay in team area regardless of obstacles.
+                // Being near an obstacle in your own zone is always better than
+                // spawning in the enemy's zone.
+                return teamArea.generateSpawnPoint();
             }
         }
 
-        // Fallback to FFA spawning
+        // Only reached if team spawning is not enabled — true FFA fallback
         return findFFASpawnPoint();
     }
 

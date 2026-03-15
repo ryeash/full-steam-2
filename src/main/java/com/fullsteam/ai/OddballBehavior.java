@@ -9,11 +9,13 @@ import org.dyn4j.geometry.Vector2;
 /**
  * Behavior for Oddball gameplay.
  * AI will try to grab the oddball, hold it to score points, and hunt down the ball carrier.
+ * In team mode, AI will defend teammates carrying the ball instead of attacking them.
  */
 public class OddballBehavior implements AIBehavior {
     private enum OddballRole {
         CARRIER,    // Currently holding the ball - evade and survive
-        HUNTER,     // Chase the ball carrier
+        DEFENDER,   // Teammate has the ball - protect them
+        HUNTER,     // Enemy has the ball - chase and kill them
         GRABBER     // Go get the free ball
     }
 
@@ -39,6 +41,9 @@ public class OddballBehavior implements AIBehavior {
         switch (currentRole) {
             case CARRIER:
                 executeCarrierBehavior(aiPlayer, gameEntities, input, deltaTime);
+                break;
+            case DEFENDER:
+                executeDefenderBehavior(aiPlayer, gameEntities, input, deltaTime);
                 break;
             case HUNTER:
                 executeHunterBehavior(aiPlayer, gameEntities, input, deltaTime);
@@ -73,8 +78,13 @@ public class OddballBehavior implements AIBehavior {
             return;
         }
 
-        // Someone else has the ball - hunt them
-        currentRole = OddballRole.HUNTER;
+        // Someone else has the ball — check if they're a teammate
+        Player carrier = gameEntities.getPlayer(oddball.getCarriedByPlayerId());
+        if (carrier != null && isTeammate(aiPlayer, carrier)) {
+            currentRole = OddballRole.DEFENDER;
+        } else {
+            currentRole = OddballRole.HUNTER;
+        }
     }
 
     /**
@@ -131,6 +141,76 @@ public class OddballBehavior implements AIBehavior {
     }
 
     /**
+     * Defender behavior - stay near the teammate ball carrier and fight off enemies.
+     */
+    private void executeDefenderBehavior(AIPlayer aiPlayer, GameEntities gameEntities, PlayerInput input, double deltaTime) {
+        Flag oddball = findOddball(gameEntities);
+        if (oddball == null || !oddball.isCarried()) {
+            currentRole = OddballRole.GRABBER;
+            executeGrabberBehavior(aiPlayer, gameEntities, input, deltaTime);
+            return;
+        }
+
+        Player carrier = gameEntities.getPlayer(oddball.getCarriedByPlayerId());
+        if (carrier == null || !carrier.isActive()) {
+            currentRole = OddballRole.GRABBER;
+            executeGrabberBehavior(aiPlayer, gameEntities, input, deltaTime);
+            return;
+        }
+
+        Vector2 myPos = aiPlayer.getPosition();
+        Vector2 carrierPos = carrier.getPosition();
+        double distanceToCarrier = myPos.distance(carrierPos);
+
+        Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
+
+        if (nearestEnemy != null && nearestEnemy.isActive()) {
+            Vector2 enemyPos = nearestEnemy.getPosition();
+            double distanceToEnemy = myPos.distance(enemyPos);
+
+            // Position between the carrier and the nearest threat
+            Vector2 guardPos = carrierPos.copy().add(
+                    enemyPos.copy().subtract(carrierPos).getNormalized().multiply(60.0)
+            );
+            Vector2 toGuard = guardPos.subtract(myPos);
+            if (toGuard.getMagnitude() > 10) {
+                toGuard.normalize();
+                toGuard = HazardAvoidance.calculateSafeMovement(myPos, toGuard, gameEntities, 100.0);
+                input.setMoveX(toGuard.x);
+                input.setMoveY(toGuard.y);
+            }
+
+            // Aim at and shoot the enemy
+            input.setWorldX(enemyPos.x);
+            input.setWorldY(enemyPos.y);
+
+            double weaponRange = aiPlayer.getCurrentWeapon().getRange();
+            if (distanceToEnemy < weaponRange * 0.9) {
+                input.setLeft(true);
+            }
+
+            if (aiPlayer.getCurrentWeapon().getCurrentAmmo() < aiPlayer.getCurrentWeapon().getMagazineSize() * 0.3) {
+                input.setReload(true);
+            }
+        } else {
+            // No enemies nearby — escort the carrier at a comfortable distance
+            if (distanceToCarrier > 120) {
+                Vector2 toCarrier = carrierPos.copy().subtract(myPos).getNormalized();
+                toCarrier = HazardAvoidance.calculateSafeMovement(myPos, toCarrier, gameEntities, 100.0);
+                input.setMoveX(toCarrier.x);
+                input.setMoveY(toCarrier.y);
+            } else if (distanceToCarrier < 40) {
+                // Too close — back off slightly so we don't crowd them
+                Vector2 awayFromCarrier = myPos.copy().subtract(carrierPos).getNormalized();
+                input.setMoveX(awayFromCarrier.x * 0.4);
+                input.setMoveY(awayFromCarrier.y * 0.4);
+            }
+            input.setWorldX(carrierPos.x);
+            input.setWorldY(carrierPos.y);
+        }
+    }
+
+    /**
      * Hunter behavior - chase and kill the ball carrier.
      */
     private void executeHunterBehavior(AIPlayer aiPlayer, GameEntities gameEntities, PlayerInput input, double deltaTime) {
@@ -145,9 +225,15 @@ public class OddballBehavior implements AIBehavior {
         // Find the ball carrier
         Player carrier = gameEntities.getPlayer(oddball.getCarriedByPlayerId());
         if (carrier == null || !carrier.isActive()) {
-            // Carrier not found, switch to grabber but still execute grabber behavior this frame
             currentRole = OddballRole.GRABBER;
             executeGrabberBehavior(aiPlayer, gameEntities, input, deltaTime);
+            return;
+        }
+
+        // Safety check: don't hunt teammates — switch to defender instead
+        if (isTeammate(aiPlayer, carrier)) {
+            currentRole = OddballRole.DEFENDER;
+            executeDefenderBehavior(aiPlayer, gameEntities, input, deltaTime);
             return;
         }
 
@@ -309,6 +395,17 @@ public class OddballBehavior implements AIBehavior {
             }
         }
         return null;
+    }
+
+    /**
+     * Check if the given player is a teammate of the AI player.
+     * In FFA mode (team 0), no one is a teammate.
+     */
+    private boolean isTeammate(AIPlayer aiPlayer, Player other) {
+        if (other == null || aiPlayer.getTeam() == 0 || other.getTeam() == 0) {
+            return false;
+        }
+        return aiPlayer.getTeam() == other.getTeam();
     }
 
     /**

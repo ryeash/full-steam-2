@@ -27,6 +27,15 @@ public class AIPlayer extends Player {
     private Vector2 targetMoveDirection = new Vector2(0, 0);
     private double movementSmoothingFactor = 0.7; // How much to blend between old and new movement
 
+    // Stuck detection state
+    private Vector2 lastRecordedPosition = null;
+    private double stuckCheckTimer = 0;
+    private double stuckDuration = 0;
+    private static final double STUCK_CHECK_INTERVAL = 0.5; // Check every 500ms
+    private static final double STUCK_MOVEMENT_THRESHOLD = 5.0; // Less than 5 units moved = stuck
+    private static final double STUCK_DURATION_THRESHOLD = 1.5; // Considered stuck after 1.5s of no progress
+    private boolean isStuck = false;
+
     public AIPlayer(int id, String playerName, double x, double y, AIPersonality personality, int team, double maxHealth) {
         super(id, playerName, x, y, team, maxHealth);
         this.personality = personality;
@@ -45,8 +54,60 @@ public class AIPlayer extends Player {
             lastDecisionTime = 0;
         }
 
+        // Update stuck detection
+        updateStuckDetection(deltaTime);
+
         // Update memory with current game state
         memory.update(deltaTime);
+    }
+
+    /**
+     * Detect when the AI is stuck against a wall or obstacle by tracking
+     * whether its actual position changes despite movement inputs being generated.
+     */
+    private void updateStuckDetection(double deltaTime) {
+        if (!isActive()) {
+            resetStuckState();
+            return;
+        }
+
+        stuckCheckTimer += deltaTime;
+        if (stuckCheckTimer < STUCK_CHECK_INTERVAL) {
+            return;
+        }
+        stuckCheckTimer = 0;
+
+        Vector2 currentPos = getPosition();
+
+        if (lastRecordedPosition == null) {
+            lastRecordedPosition = currentPos.copy();
+            return;
+        }
+
+        double distanceMoved = currentPos.distance(lastRecordedPosition);
+        boolean hasMovementInput = lastMoveDirection.getMagnitude() > 0.1;
+
+        if (distanceMoved < STUCK_MOVEMENT_THRESHOLD && hasMovementInput) {
+            stuckDuration += STUCK_CHECK_INTERVAL;
+            if (stuckDuration >= STUCK_DURATION_THRESHOLD) {
+                isStuck = true;
+            }
+        } else {
+            stuckDuration = 0;
+            isStuck = false;
+        }
+
+        lastRecordedPosition = currentPos.copy();
+    }
+
+    /**
+     * Reset stuck detection state (e.g. after respawn or unstick maneuver).
+     */
+    public void resetStuckState() {
+        stuckDuration = 0;
+        isStuck = false;
+        lastRecordedPosition = null;
+        lastMoveDirection.set(0, 0);
     }
 
     public void setCurrentBehavior(AIBehavior behavior) {
@@ -69,10 +130,19 @@ public class AIPlayer extends Player {
 
     /**
      * Apply movement smoothing to reduce jerky AI movement.
+     * When stuck, bypasses smoothing to allow immediate direction changes.
      */
     public void smoothMovement(PlayerInput input) {
         // Get the new target movement direction
         targetMoveDirection.set(input.getMoveX(), input.getMoveY());
+
+        if (isStuck) {
+            // When stuck, skip smoothing entirely so the unstick direction
+            // takes effect immediately instead of being blended with the
+            // wall-directed lastMoveDirection that got us stuck.
+            lastMoveDirection.set(input.getMoveX(), input.getMoveY());
+            return;
+        }
 
         // Smooth transition between last and target movement
         double smoothing = movementSmoothingFactor;

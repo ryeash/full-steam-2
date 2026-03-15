@@ -205,16 +205,16 @@ public class WeaponConfig {
     public static final WeaponConfig FLAME_PROJECTOR_PRESET = new WeaponConfig(
             "Flame Projector",
             21,     // Good damage
-            30,     // High fire rate
+            27,     // High fire rate
             3,      // Very short range
             -10,    // Poor accuracy (spread)
-            30,     // Large magazine
+            27,     // Large magazine
             5,      // Fast reload
             8,      // Medium speed
-            10,      // Multiple streams
+            10,     // Multiple streams
             -5,     // Negative damping for spread
             Set.of(),
-            Ordinance.FLAMETHROWER  // 8 points, total: 92 + 8 = 100
+            Ordinance.FLAMETHROWER  // 14 points, total: 86 + 14 = 100
     );
 
     // Piercing Effect Showcase - Sniper that goes through enemies
@@ -301,16 +301,16 @@ public class WeaponConfig {
     public static final WeaponConfig TOXIC_SPRAYER_PRESET = new WeaponConfig(
             "Toxic Sprayer",
             12,     // Low direct damage
-            24,     // High fire rate
+            22,     // High fire rate
             6,      // Short range
             -5,     // Poor accuracy (spray)
-            20,     // Large magazine
+            18,     // Large magazine
             10,     // Medium reload
             8,      // Medium speed
-            10,      // Multiple streams
+            10,     // Multiple streams
             -3,     // Negative damping for spread
-            Set.of(BulletEffect.POISON),  // 18 points
-            Ordinance.BULLET  // 0 points, total: 75 + 18 = 93
+            Set.of(BulletEffect.POISON),  // 22 points
+            Ordinance.BULLET  // 0 points, total: 78 + 22 = 100
     );
 
     // Freezing Effect Showcase - Slows enemies
@@ -396,17 +396,17 @@ public class WeaponConfig {
     // Rail Cannon - Piercing instant beam weapon
     public static final WeaponConfig RAIL_CANNON_PRESET = new WeaponConfig(
             "Rail Cannon",
-            15,     // High damage
+            19,     // High damage
             4,      // Slow fire rate
-            15,     // Very long range
+            18,     // Very long range
             0,      // Perfect accuracy
             6,      // Small magazine
             15,     // Long reload
             0,      // Not used for beams
             0,      // Single beam
-            -10,      // Not used for beams
+            -10,    // Not used for beams
             Set.of(),  // No effects
-            Ordinance.RAILGUN
+            Ordinance.RAILGUN  // 48 points, total: 52 + 48 = 100
     );
 
     // ===== ADVANCED COMBINATION WEAPONS =====
@@ -463,16 +463,16 @@ public class WeaponConfig {
     public static final WeaponConfig VENOM_NEEDLER_PRESET = new WeaponConfig(
             "Venom Needler",
             10,     // Low direct damage
-            18,     // Good fire rate
+            16,     // Good fire rate
             15,     // Good range
             0,      // Perfect accuracy
             12,     // Medium magazine
-            10,     // Fast reload
+            8,      // Fast reload
             2,      // Very fast projectile
             0,      // Single shot
             -10,    // Negative damping
-            Set.of(BulletEffect.POISON, BulletEffect.PIERCING),  // 18 + 20 = 38 points
-            Ordinance.DART  // 5 points, total: 57 + 38 + 5 = 100
+            Set.of(BulletEffect.POISON, BulletEffect.PIERCING),  // 22 + 20 = 42 points
+            Ordinance.DART  // 5 points, total: 53 + 42 + 5 = 100
     );
 
     // Thunderbolt Cannon - Electric + Explosive electric explosion rocket
@@ -512,31 +512,31 @@ public class WeaponConfig {
             "Plague Mortar",
             15,     // Low damage
             3,      // Slow fire rate
-            10,     // Medium range
+            8,      // Medium range
             -7,     // Poor accuracy
             4,      // Small magazine
-            20,     // Long reload
+            18,     // Long reload
             10,     // Slow projectile
             0,      // Single shot
             -5,     // Negative damping
-            Set.of(BulletEffect.POISON, BulletEffect.FRAGMENTING),  // 24 + 16 = 40 points
-            Ordinance.GRENADE  // 10 points, total: 50 + 40 + 10 = 100
+            Set.of(BulletEffect.POISON, BulletEffect.FRAGMENTING),  // 22 + 22 = 44 points
+            Ordinance.GRENADE  // 10 points, total: 46 + 44 + 10 = 100
     );
 
     // Wildfire Sprayer - Incendiary + Bouncy bouncing fire streams
     public static final WeaponConfig WILDFIRE_SPRAYER_PRESET = new WeaponConfig(
             "Wildfire Sprayer",
-            9,     // Low damage per stream
-            20,     // High fire rate
+            9,      // Low damage per stream
+            17,     // High fire rate
             4,      // Very short range
-            -10,     // Poor accuracy
-            19,     // Large magazine
+            -10,    // Poor accuracy
+            16,     // Large magazine
             8,      // Fast reload
-            9,     // Medium speed
+            9,      // Medium speed
             10,     // Many streams
             -10,    // High negative damping
             Set.of(BulletEffect.INCENDIARY, BulletEffect.BOUNCY),  // 18 + 15 = 33 points
-            Ordinance.FLAMETHROWER  // 8 points, total: 59 + 33 + 8 = 100
+            Ordinance.FLAMETHROWER  // 14 points, total: 53 + 33 + 14 = 100
     );
 
     // Frost Lance - Freezing + Piercing ice beam that slows all in line
@@ -639,16 +639,16 @@ public class WeaponConfig {
     public static final WeaponConfig CORROSIVE_CANNON_PRESET = new WeaponConfig(
             "Corrosive Cannon",
             13,     // Medium damage
-            7,     // Very slow fire rate
+            5,      // Very slow fire rate
             12,     // Medium range
             0,      // Perfect accuracy
-            2,      // Tiny magazine
-            5,     // Long reload
+            0,      // Tiny magazine
+            5,      // Long reload
             8,      // Slow projectile
             0,      // Single shot
             -10,    // Negative damping
-            Set.of(BulletEffect.POISON, BulletEffect.EXPLOSIVE),  // 18 + 25 = 43 points
-            Ordinance.ROCKET  // 20 points, total: 51 + 43 + 20 = 100
+            Set.of(BulletEffect.POISON, BulletEffect.EXPLOSIVE),  // 22 + 25 = 47 points
+            Ordinance.ROCKET  // 20 points, total: 33 + 47 + 20 = 100
     );
 
     public int getAttributePoints() {

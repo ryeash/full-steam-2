@@ -9,6 +9,7 @@ import java.util.Set;
 public class Weapon {
     private final String name;
     private final double damage;
+    private final double damagePerBullet;
     private final double fireRate;
     private final double range;
     private final double accuracy;
@@ -62,6 +63,9 @@ public class Weapon {
         // Apply ordinance speed multiplier to projectile speed
         this.projectileSpeed = WeaponAttribute.PROJECTILE_SPEED.compute(projectileSpeed) * ordinance.getSpeedMultiplier();
         this.bulletsPerShot = (int) WeaponAttribute.BULLETS_PER_SHOT.compute(bulletsPerShot);
+        this.damagePerBullet = this.bulletsPerShot > 1
+                ? this.damage / Math.pow(this.bulletsPerShot, 0.7)
+                : this.damage;
         this.linearDamping = WeaponAttribute.LINEAR_DAMPING.compute(linearDamping);
         this.currentAmmo = magazineSize;
     }
@@ -70,6 +74,7 @@ public class Weapon {
     public Weapon(Weapon other) {
         this.name = other.name;
         this.damage = other.damage;
+        this.damagePerBullet = other.damagePerBullet;
         this.fireRate = other.fireRate;
         this.range = other.range;
         this.accuracy = other.accuracy;

@@ -87,27 +87,35 @@ public class AIMemory {
     }
 
     private void updateThreatLevel(int playerId, Player player) {
-        double currentThreat = playerThreatLevels.getOrDefault(playerId, 0.5);
+        // Calculate a snapshot-based threat score rather than accumulating,
+        // so it doesn't saturate to 1.0 over long games.
+        double snapshotThreat = 0.5; // Baseline
 
-        // Factors that increase threat level
         if (player.getKills() > player.getDeaths()) {
-            currentThreat += 0.1;
+            double kdr = player.getDeaths() > 0
+                    ? (double) player.getKills() / player.getDeaths()
+                    : player.getKills();
+            snapshotThreat += Math.min(0.2, kdr * 0.05);
+        } else if (player.getDeaths() > player.getKills()) {
+            snapshotThreat -= 0.1;
         }
 
         if (player.getHealth() > 80) {
-            currentThreat += 0.05;
-        }
-
-        // Factors that decrease threat level
-        if (player.getHealth() < 30) {
-            currentThreat -= 0.1;
+            snapshotThreat += 0.1;
+        } else if (player.getHealth() < 30) {
+            snapshotThreat -= 0.15;
         }
 
         if (!player.isActive()) {
-            currentThreat -= 0.2;
+            snapshotThreat -= 0.3;
         }
 
-        // Clamp between 0 and 1
+        // Blend toward the snapshot value rather than adding to the running total.
+        // This naturally decays old assessments and prevents saturation.
+        double currentThreat = playerThreatLevels.getOrDefault(playerId, 0.5);
+        double blendFactor = 0.3;
+        currentThreat = currentThreat * (1.0 - blendFactor) + snapshotThreat * blendFactor;
+
         currentThreat = Math.max(0.0, Math.min(1.0, currentThreat));
         playerThreatLevels.put(playerId, currentThreat);
     }

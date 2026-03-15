@@ -229,7 +229,7 @@ public class Player extends GameEntity {
                     pos.y + ((i > 0) ? ThreadLocalRandom.current().nextDouble(-3, 3) : 0),
                     velocity.x,
                     velocity.y,
-                    weapon.getDamage(),
+                    weapon.getDamagePerBullet(),
                     weapon.getRange(),
                     team,
                     weapon.getLinearDamping(),

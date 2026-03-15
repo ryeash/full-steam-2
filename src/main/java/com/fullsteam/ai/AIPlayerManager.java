@@ -7,6 +7,7 @@ import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
 import lombok.Getter;
+import org.dyn4j.geometry.Vector2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -96,11 +97,41 @@ public class AIPlayerManager {
             // Generate input for this AI player
             PlayerInput input = generatePlayerInput(aiPlayer, gameEntities, deltaTime);
             if (input != null) {
+                // If stuck, override movement with an escape direction
+                if (aiPlayer.isStuck()) {
+                    applyUnstickMovement(aiPlayer, input, gameEntities);
+                }
+
                 // Apply movement smoothing for continuous motion
                 aiPlayer.smoothMovement(input);
                 generatedInputs.put(aiPlayer.getId(), input);
             }
         }
+    }
+
+    /**
+     * Override movement input to escape when stuck against a wall or obstacle.
+     * Picks a direction roughly opposite to the current (failed) movement,
+     * with some randomization to avoid oscillating between two stuck states.
+     */
+    private void applyUnstickMovement(AIPlayer aiPlayer, PlayerInput input, GameEntities gameEntities) {
+        Vector2 stuckDirection = aiPlayer.getCurrentMovementDirection();
+
+        Vector2 escapeDirection;
+        if (stuckDirection.getMagnitude() > 0.05) {
+            // Move roughly opposite to the stuck direction with a random offset
+            // to avoid just hitting the same wall from a different angle
+            double stuckAngle = Math.atan2(stuckDirection.y, stuckDirection.x);
+            double offsetAngle = stuckAngle + Math.PI + (ThreadLocalRandom.current().nextDouble() - 0.5) * Math.PI * 0.8;
+            escapeDirection = new Vector2(Math.cos(offsetAngle), Math.sin(offsetAngle));
+        } else {
+            // No clear stuck direction, pick random
+            double angle = ThreadLocalRandom.current().nextDouble() * Math.PI * 2;
+            escapeDirection = new Vector2(Math.cos(angle), Math.sin(angle));
+        }
+
+        input.setMoveX(escapeDirection.x);
+        input.setMoveY(escapeDirection.y);
     }
 
     /**

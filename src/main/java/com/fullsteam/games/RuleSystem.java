@@ -381,10 +381,10 @@ public class RuleSystem {
         vipKillScores.clear();
 
         gameEntities.getFlags().values().forEach(Flag::returnToHome);
-        gameEntities.getDefenseLasers().clear();
-        gameEntities.getFieldEffects().clear();
-        gameEntities.getBeams().clear();
-        gameEntities.getProjectiles().clear();
+        gameEntities.clearEntitiesFromWorld(gameEntities.getDefenseLasers());
+        gameEntities.clearEntitiesFromWorld(gameEntities.getFieldEffects());
+        gameEntities.clearEntitiesFromWorld(gameEntities.getBeams());
+        gameEntities.clearEntitiesFromWorld(gameEntities.getProjectiles());
 
         // Reassign VIPs for new round
         if (rules.hasVip()) {

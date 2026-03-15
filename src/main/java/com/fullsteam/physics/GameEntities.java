@@ -404,6 +404,18 @@ public class GameEntities {
         return kothZones;
     }
 
+    /**
+     * Remove all entities in the given map from the physics world, then clear the map.
+     * Prevents orphaned physics bodies from continuing to trigger collision callbacks
+     * after entities are logically removed (e.g., between rounds).
+     */
+    public <T extends GameEntity> void clearEntitiesFromWorld(Map<Integer, T> entityMap) {
+        for (T entity : entityMap.values()) {
+            world.removeBody(entity.getBody());
+        }
+        entityMap.clear();
+    }
+
     public void addPostUpdateHook(Runnable runnable) {
         postWorldUpdateHooks.offer(Objects.requireNonNull(runnable));
     }

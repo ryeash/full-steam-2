@@ -9,12 +9,13 @@ public enum WeaponAttribute {
             return 10 + points;
         }
     },
-    // Fire Rate: 1-16 shots/sec (base 1 + 0.5 per point, max 30 points)
+    // Fire Rate: diminishing returns via sqrt curve (max 30 points)
+    // 0 pts → 0.5, 10 pts → 4.3, 20 pts → 5.9, 30 pts → 7.1
     FIRE_RATE(0, 30) {
         @Override
         public double compute(int points) {
             validate(points);
-            return 0.3 + points * 0.3;
+            return 0.5 + 1.2 * Math.sqrt(points);
         }
     },
     // Range: 150-1550 units (base 150 + 40 per point, max 35 points)
@@ -57,7 +58,7 @@ public enum WeaponAttribute {
             return 300 + (points * 20);
         }
     },
-    // Bullets Per Shot: 1-8 bullets (base 1 + 1 per 5 points, max 35 points)
+    // Bullets Per Shot: 1-6 bullets (base 1 + 1 per 7 points, max 35 points)
     BULLETS_PER_SHOT(0, 35) {
         @Override
         public double compute(int points) {

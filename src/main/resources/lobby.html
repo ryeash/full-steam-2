@@ -370,6 +370,18 @@
                 </div>
 
                 <div class="config-section">
+                    <h3>👑 VIP Mode</h3>
+                    <div class="config-item">
+                        <label for="enableVip">Enable VIP:</label>
+                        <input type="checkbox" id="enableVip">
+                        <small style="color: #888; font-size: 0.8em;">One player per team is the VIP — only VIP kills score!</small>
+                    </div>
+                    <div class="config-item">
+                        <small style="color: #ff9500; font-size: 0.8em;">⚠️ Best with team mode and OBJECTIVE scoring</small>
+                    </div>
+                </div>
+
+                <div class="config-section">
                     <h3>🔀 Random Weapons</h3>
                     <div class="config-item">
                         <label for="enableRandomWeapons">Enable Random Weapons:</label>
@@ -1330,6 +1342,7 @@
                 document.getElementById('kothPointsPerSecond').value = defaultConfig.rules.kothPointsPerSecond || 1.0;
                 document.getElementById('enableOddball').checked = defaultConfig.rules.enableOddball || false;
                 document.getElementById('oddballPointsPerSecond').value = defaultConfig.rules.oddballPointsPerSecond || 1.0;
+                document.getElementById('enableVip').checked = defaultConfig.rules.enableVip || false;
                 document.getElementById('enableRandomWeapons').checked = defaultConfig.rules.enableRandomWeapons || false;
                 document.getElementById('randomWeaponInterval').value = defaultConfig.rules.randomWeaponInterval || 30;
                 document.getElementById('obstacleDensity').value = defaultConfig.rules.obstacleDensity || 'RANDOM';
@@ -1362,6 +1375,7 @@
                 document.getElementById('kothPointsPerSecond').value = 1.0;
                 document.getElementById('enableOddball').checked = false;
                 document.getElementById('oddballPointsPerSecond').value = 1.0;
+                document.getElementById('enableVip').checked = false;
                 document.getElementById('enableRandomWeapons').checked = false;
                 document.getElementById('randomWeaponInterval').value = 30;
                 document.getElementById('obstacleDensity').value = 'RANDOM';
@@ -1486,6 +1500,7 @@
                 kothPointsPerSecond: parseFloat(document.getElementById('kothPointsPerSecond').value),
                 enableOddball: document.getElementById('enableOddball').checked,
                 oddballPointsPerSecond: parseFloat(document.getElementById('oddballPointsPerSecond').value),
+                enableVip: document.getElementById('enableVip').checked,
                 enableRandomWeapons: document.getElementById('enableRandomWeapons').checked,
                 randomWeaponInterval: parseFloat(document.getElementById('randomWeaponInterval').value),
                 obstacleDensity: document.getElementById('obstacleDensity').value,
