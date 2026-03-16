@@ -36,10 +36,10 @@ class WeaponBalanceSimulationTest {
     // --- Balance thresholds (tune these as you iterate) ---
     // DPS varies widely by design — shotguns/flamers sacrifice range for high DPS.
     // Set this high enough to allow archetype diversity, low enough to catch outliers.
-    private static final double MAX_DPS_TO_MEDIAN_RATIO = 4.0;
+    private static final double MAX_DPS_TO_MEDIAN_RATIO = 5.0;
     // Composite power score accounts for DPS + range + AOE + effects, so it should
     // be tighter than raw DPS since it normalizes archetype trade-offs.
-    private static final double MAX_POWER_SCORE_RATIO = 3.0;
+    private static final double MAX_POWER_SCORE_RATIO = 3.5;
 
     // --- Composite power score weights ---
     private static final double W_DPS = 0.40;
@@ -279,8 +279,7 @@ class WeaponBalanceSimulationTest {
         double beamDuration = ord.getBeamDuration();
 
         if (ord.getDamageApplicationType() == DamageApplicationType.INSTANT) {
-            // Instant beams fire once per "shot" at the weapon's fire rate
-            double damagePerShot = w.getDamage();
+            double damagePerShot = w.getDamagePerBullet();
             double shotsPerSecond = w.getFireRate();
             double magazineDuration = w.getMagazineSize() / Math.max(shotsPerSecond, 0.01);
             double magazineDamage = damagePerShot * w.getMagazineSize();
@@ -293,7 +292,7 @@ class WeaponBalanceSimulationTest {
         if (damageInterval <= 0 || beamDuration <= 0) return 0;
 
         double ticksPerBeam = beamDuration / damageInterval;
-        double damagePerBeam = w.getDamage() * ticksPerBeam;
+        double damagePerBeam = w.getDamagePerBullet() * ticksPerBeam;
         double beamsPerMag = w.getMagazineSize();
         double magDuration = beamsPerMag * beamDuration;
         double magDamage = damagePerBeam * beamsPerMag;

@@ -139,23 +139,24 @@ public class IdleBehavior implements AIBehavior {
     private void generateNewWanderTarget(AIPlayer aiPlayer, GameEntities gameEntities) {
         Vector2 playerPos = aiPlayer.getPosition();
 
+        double wallMargin = 50.0;
+        double halfW = gameEntities.getConfig().getWorldWidth() / 2.0 - wallMargin;
+        double halfH = gameEntities.getConfig().getWorldHeight() / 2.0 - wallMargin;
+
         // Try to find a safe wander target (avoid hazards)
         int attempts = 0;
         while (attempts < 5) {
-            // Generate a random point within reasonable distance - ensure minimum distance to keep moving
             double angle = ThreadLocalRandom.current().nextDouble() * 2 * Math.PI;
-            double distance = 150 + ThreadLocalRandom.current().nextDouble() * 250; // 150-400 units away (increased min)
+            double distance = 150 + ThreadLocalRandom.current().nextDouble() * 250;
 
             Vector2 candidateTarget = new Vector2(
                     playerPos.x + Math.cos(angle) * distance,
                     playerPos.y + Math.sin(angle) * distance
             );
 
-            // Keep within world bounds (rough approximation)
-            candidateTarget.x = Math.max(-900, Math.min(900, candidateTarget.x));
-            candidateTarget.y = Math.max(-900, Math.min(900, candidateTarget.y));
+            candidateTarget.x = Math.max(-halfW, Math.min(halfW, candidateTarget.x));
+            candidateTarget.y = Math.max(-halfH, Math.min(halfH, candidateTarget.y));
 
-            // Check if this target is safe
             if (HazardAvoidance.isPositionSafe(candidateTarget, 30.0, gameEntities) &&
                 !HazardAvoidance.pathCrossesHazards(playerPos, candidateTarget, gameEntities)) {
                 wanderTarget = candidateTarget;
@@ -165,16 +166,14 @@ public class IdleBehavior implements AIBehavior {
             attempts++;
         }
 
-        // If we couldn't find a safe target after 5 attempts, just use the last candidate
-        // (better to move somewhere than stand still)
         double angle = ThreadLocalRandom.current().nextDouble() * 2 * Math.PI;
         double distance = 150 + ThreadLocalRandom.current().nextDouble() * 250;
         wanderTarget = new Vector2(
                 playerPos.x + Math.cos(angle) * distance,
                 playerPos.y + Math.sin(angle) * distance
         );
-        wanderTarget.x = Math.max(-900, Math.min(900, wanderTarget.x));
-        wanderTarget.y = Math.max(-900, Math.min(900, wanderTarget.y));
+        wanderTarget.x = Math.max(-halfW, Math.min(halfW, wanderTarget.x));
+        wanderTarget.y = Math.max(-halfH, Math.min(halfH, wanderTarget.y));
     }
 
     private AITargetWrapper findNearestEnemy(AIPlayer aiPlayer, GameEntities gameEntities) {

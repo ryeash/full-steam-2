@@ -251,7 +251,7 @@
                     <h3>🎮 Game Settings</h3>
                     <div class="config-item">
                         <label for="maxPlayers">Max Players:</label>
-                        <input type="number" id="maxPlayers" min="2" max="50" value="10">
+                        <input type="number" id="maxPlayers" min="2" max="100" value="10">
                     </div>
                     <div class="config-item">
                         <label for="teamCount">Team Mode:</label>
@@ -281,11 +281,11 @@
                     <h3>🗺️ World Settings</h3>
                     <div class="config-item">
                         <label for="worldWidth">World Width:</label>
-                        <input type="number" id="worldWidth" min="1000" max="5000" step="100" value="2000">
+                        <input type="number" id="worldWidth" min="800" max="10000" step="100" value="2000">
                     </div>
                     <div class="config-item">
                         <label for="worldHeight">World Height:</label>
-                        <input type="number" id="worldHeight" min="1000" max="5000" step="100" value="2000">
+                        <input type="number" id="worldHeight" min="800" max="10000" step="100" value="2000">
                     </div>
                     <div class="config-item">
                         <label for="obstacleDensity">Obstacle Density:</label>
@@ -311,7 +311,7 @@
                     <h3>⚔️ Player Settings</h3>
                     <div class="config-item">
                         <label for="playerMaxHealth">Max Health:</label>
-                        <input type="number" id="playerMaxHealth" min="50" max="500" step="10" value="100">
+                        <input type="number" id="playerMaxHealth" min="10" max="1000" step="10" value="100">
                     </div>
                 </div>
 
@@ -319,7 +319,7 @@
                     <h3>⏱️ Round Rules</h3>
                     <div class="config-item">
                         <label for="roundDuration">Round Duration (seconds):</label>
-                        <input type="number" id="roundDuration" min="0" max="600" step="30" value="0">
+                        <input type="number" id="roundDuration" min="0" max="7200" step="30" value="0">
                         <small style="color: #888; font-size: 0.8em;">0 = infinite (no rounds)</small>
                     </div>
                     <div class="config-item">
@@ -346,7 +346,7 @@
                     </div>
                     <div class="config-item">
                         <label for="kothPointsPerSecond">Points Per Second:</label>
-                        <input type="number" id="kothPointsPerSecond" min="0.5" max="5" step="0.5" value="1.0">
+                        <input type="number" id="kothPointsPerSecond" min="0.1" max="100" step="0.5" value="1.0">
                         <small style="color: #888; font-size: 0.8em;">Points awarded for controlling a zone</small>
                     </div>
                 </div>
@@ -361,7 +361,7 @@
                     </div>
                     <div class="config-item">
                         <label for="oddballPointsPerSecond">Points Per Second:</label>
-                        <input type="number" id="oddballPointsPerSecond" min="0.5" max="5" step="0.5" value="1.0">
+                        <input type="number" id="oddballPointsPerSecond" min="0.1" max="100" step="0.5" value="1.0">
                         <small style="color: #888; font-size: 0.8em;">Points awarded for holding the ball</small>
                     </div>
                     <div class="config-item">
@@ -390,7 +390,7 @@
                     </div>
                     <div class="config-item">
                         <label for="randomWeaponInterval">Weapon Change Interval (seconds):</label>
-                        <input type="number" id="randomWeaponInterval" min="10" max="120" step="5" value="30">
+                        <input type="number" id="randomWeaponInterval" min="5" max="300" step="5" value="30">
                         <small style="color: #888; font-size: 0.8em;">How often weapons change (30s default)</small>
                     </div>
                     <div class="config-item">
@@ -408,17 +408,17 @@
                     </div>
                     <div class="config-item">
                         <label for="workshopCraftTime">Craft Time (seconds):</label>
-                        <input type="number" id="workshopCraftTime" min="5" max="30" step="1" value="10">
+                        <input type="number" id="workshopCraftTime" min="1" max="120" step="1" value="10">
                         <small style="color: #888; font-size: 0.8em;">Time required to craft a power-up</small>
                     </div>
                     <div class="config-item">
                         <label for="workshopCraftRadius">Craft Radius:</label>
-                        <input type="number" id="workshopCraftRadius" min="50" max="150" step="10" value="80">
+                        <input type="number" id="workshopCraftRadius" min="10" max="500" step="10" value="80">
                         <small style="color: #888; font-size: 0.8em;">Range around workshop for crafting</small>
                     </div>
                     <div class="config-item">
                         <label for="maxPowerUpsPerWorkshop">Max Power-ups per Workshop:</label>
-                        <input type="number" id="maxPowerUpsPerWorkshop" min="1" max="8" value="3">
+                        <input type="number" id="maxPowerUpsPerWorkshop" min="1" max="20" value="3">
                         <small style="color: #888; font-size: 0.8em;">Maximum power-ups that can exist around each
                             workshop</small>
                     </div>
@@ -434,18 +434,18 @@
                     </div>
                     <div class="config-item">
                         <label for="headquartersMaxHealth">Max Health:</label>
-                        <input type="number" id="headquartersMaxHealth" min="500" max="5000" step="100" value="1000">
+                        <input type="number" id="headquartersMaxHealth" min="100" max="100000" step="100" value="1000">
                         <small style="color: #888; font-size: 0.8em;">Health of each headquarters structure</small>
                     </div>
                     <div class="config-item">
                         <label for="headquartersPointsPerDamage">Points Per Damage:</label>
-                        <input type="number" id="headquartersPointsPerDamage" min="0" max="1" step="0.05" value="0.1">
+                        <input type="number" id="headquartersPointsPerDamage" min="0.01" max="10" step="0.05" value="0.1">
                         <small style="color: #888; font-size: 0.8em;">Points awarded per damage dealt (0.1 = 1 point per
                             10 damage)</small>
                     </div>
                     <div class="config-item">
                         <label for="headquartersDestructionBonus">Destruction Bonus:</label>
-                        <input type="number" id="headquartersDestructionBonus" min="0" max="500" step="10" value="100">
+                        <input type="number" id="headquartersDestructionBonus" min="0" max="10000" step="10" value="100">
                         <small style="color: #888; font-size: 0.8em;">Bonus points for destroying enemy HQ</small>
                     </div>
                     <div class="config-item">
@@ -472,12 +472,12 @@
                     </div>
                     <div class="config-item" id="scoreLimitField" style="display: none;">
                         <label for="scoreLimit">Score Limit:</label>
-                        <input type="number" id="scoreLimit" min="1" max="200" value="50">
+                        <input type="number" id="scoreLimit" min="1" max="10000" value="50">
                         <small style="color: #888; font-size: 0.8em;">First to reach this score wins</small>
                     </div>
                     <div class="config-item" id="timeLimitField" style="display: none;">
                         <label for="timeLimit">Time Limit (seconds):</label>
-                        <input type="number" id="timeLimit" min="60" max="3600" step="60" value="600">
+                        <input type="number" id="timeLimit" min="1" max="7200" step="60" value="600">
                         <small style="color: #888; font-size: 0.8em;">Game duration (10 min default)</small>
                     </div>
                     <div class="config-item" id="suddenDeathField" style="display: none;">
@@ -488,7 +488,7 @@
                     </div>
                     <div class="config-item">
                         <label for="lockGameAfterSeconds">Lock Game After (seconds):</label>
-                        <input type="number" id="lockGameAfterSeconds" min="0" max="600" step="10" value="0">
+                        <input type="number" id="lockGameAfterSeconds" min="0" max="3600" step="10" value="0">
                         <small style="color: #888; font-size: 0.8em;">Prevent new players from joining after this time (0 = never lock, useful for Battle Royale)</small>
                     </div>
                 </div>
@@ -507,17 +507,17 @@
                     </div>
                     <div class="config-item" id="respawnDelayField">
                         <label for="respawnDelay">Respawn Delay (seconds):</label>
-                        <input type="number" id="respawnDelay" min="0" max="30" step="1" value="5">
+                        <input type="number" id="respawnDelay" min="0" max="60" step="1" value="5">
                         <small style="color: #888; font-size: 0.8em;">Time before respawn</small>
                     </div>
                     <div class="config-item" id="waveIntervalField" style="display: none;">
                         <label for="waveRespawnInterval">Wave Interval (seconds):</label>
-                        <input type="number" id="waveRespawnInterval" min="10" max="120" step="10" value="30">
+                        <input type="number" id="waveRespawnInterval" min="1" max="300" step="10" value="30">
                         <small style="color: #888; font-size: 0.8em;">Time between wave respawns</small>
                     </div>
                     <div class="config-item" id="maxLivesField" style="display: none;">
                         <label for="maxLives">Max Lives Per Player:</label>
-                        <input type="number" id="maxLives" min="1" max="10" value="3">
+                        <input type="number" id="maxLives" min="1" max="100" value="3">
                         <small style="color: #888; font-size: 0.8em;">Lives before elimination</small>
                     </div>
                 </div>
@@ -527,13 +527,13 @@
                     <small style="color: #888; font-size: 0.9em; display: block; margin-bottom: 10px;">Configure event timing and density (enable in World Settings)</small>
                     <div id="eventConfigFields" style="display: none;">
                         <div class="config-item">
-                            <label for="randomEventInterval">Event Interval (seconds):</label>
-                            <input type="number" id="randomEventInterval" min="20" max="300" step="10" value="40">
+                        <label for="randomEventInterval">Event Interval (seconds):</label>
+                        <input type="number" id="randomEventInterval" min="5" max="600" step="10" value="40">
                             <small style="color: #888; font-size: 0.8em;">Average time between events</small>
                         </div>
                         <div class="config-item">
-                            <label for="eventWarningDuration">Warning Duration (seconds):</label>
-                            <input type="number" id="eventWarningDuration" min="1" max="10" step="0.5" value="3">
+                        <label for="eventWarningDuration">Warning Duration (seconds):</label>
+                        <input type="number" id="eventWarningDuration" min="0" max="30" step="0.5" value="3">
                             <small style="color: #888; font-size: 0.8em;">Warning time before event activates</small>
                         </div>
                         <div class="config-item">
@@ -1562,6 +1562,29 @@
             closeCustomGameModal();
         }
     });
+
+    // Live clamping: constrain number inputs to their min/max on change
+    function clampInput(input) {
+        if (input.type !== 'number' || input.value === '') return;
+        const val = parseFloat(input.value);
+        if (isNaN(val)) return;
+        const min = input.hasAttribute('min') ? parseFloat(input.min) : -Infinity;
+        const max = input.hasAttribute('max') ? parseFloat(input.max) : Infinity;
+        const clamped = Math.min(Math.max(val, min), max);
+        if (clamped !== val) {
+            input.value = clamped;
+            input.style.borderColor = '#ff9500';
+            setTimeout(() => { input.style.borderColor = ''; }, 800);
+        }
+    }
+
+    document.getElementById('custom-game-modal').addEventListener('change', function(e) {
+        if (e.target.type === 'number') clampInput(e.target);
+    });
+
+    document.getElementById('custom-game-modal').addEventListener('blur', function(e) {
+        if (e.target.type === 'number') clampInput(e.target);
+    }, true);
 </script>
 </body>
 </html>

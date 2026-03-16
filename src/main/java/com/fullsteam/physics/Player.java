@@ -242,43 +242,46 @@ public class Player extends GameEntity {
     }
 
     /**
-     * Shoot a beam weapon instead of projectiles
+     * Shoot beam weapon(s). Supports multiple beams per shot with accuracy spread,
+     * mirroring how shoot() handles multiple projectiles.
      *
-     * @return Beam object if weapon can fire beams and conditions are met, null otherwise
+     * @return List of Beam objects (empty if weapon cannot fire)
      */
-    public Beam shootBeam() {
-        Weapon weapon = this.getCurrentWeapon(); // Always use primary weapon
+    public List<Beam> shootBeam() {
+        Weapon weapon = this.getCurrentWeapon();
         if (!canShoot() || !weapon.getOrdinance().isBeamType()) {
             if (!isReloading && weapon.getCurrentAmmo() <= 0) {
                 startReload();
             }
-            return null;
+            return List.of();
         }
 
         lastShotTime = System.currentTimeMillis();
-        weapon.setCurrentAmmo(weapon.getCurrentAmmo() - 1); // Beams consume 1 ammo
+
+        int beamsToFire = Math.min(weapon.getBulletsPerShot(), weapon.getCurrentAmmo());
+        weapon.setCurrentAmmo(weapon.getCurrentAmmo() - beamsToFire);
 
         Vector2 pos = getPosition();
-        Vector2 direction = aimDirection.copy();
-        direction.normalize();
+        Vector2 baseDirection = aimDirection.copy();
+        baseDirection.normalize();
+        double baseAngle = Math.atan2(baseDirection.y, baseDirection.x);
 
         Ordinance ordinance = weapon.getOrdinance();
-        double range = weapon.getRange() * 0.6; // Beams have 60% the range of bullets
-        double damage = weapon.getDamage();
+        double range = weapon.getRange() * 0.6;
+        double damage = weapon.getDamagePerBullet();
+        double maxAccuracySpread = (1.0 - weapon.getAccuracy()) * 0.17;
 
-        // Create the appropriate beam type based on ordinance
-        return createBeamFromOrdinance(ordinance, pos, direction, range, damage);
-    }
+        List<Beam> beams = new LinkedList<>();
+        double angle = baseAngle;
+        for (int i = 0; i < beamsToFire; i++) {
+            angle += (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * maxAccuracySpread;
+            Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
 
-    /**
-     * Factory method to create a beam based on ordinance (simplified single-class approach)
-     */
-    private Beam createBeamFromOrdinance(Ordinance ordinance, Vector2 startPoint, Vector2 direction,
-                                         double range, double damage) {
-        int beamId = IdGenerator.nextEntityId();
-
-        // Single Beam class handles all beam types via ordinance
-        return new Beam(beamId, startPoint, direction, range, damage, getId(), getTeam(), ordinance, getCurrentWeapon().getBulletEffects());
+            int beamId = IdGenerator.nextEntityId();
+            beams.add(new Beam(beamId, pos, direction, range, damage, getId(), getTeam(),
+                    ordinance, weapon.getBulletEffects()));
+        }
+        return beams;
     }
 
     /**

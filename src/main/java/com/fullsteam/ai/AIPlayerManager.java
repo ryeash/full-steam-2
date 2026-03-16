@@ -37,6 +37,7 @@ public class AIPlayerManager {
             new KothBehavior(),
             new HeadquartersBehavior(),
             new OddballBehavior(),
+            new VipBehavior(),
             new PowerUpBehavior()
     );
 
@@ -300,6 +301,8 @@ public class AIPlayerManager {
             return new HeadquartersBehavior();
         } else if (template instanceof OddballBehavior) {
             return new OddballBehavior();
+        } else if (template instanceof VipBehavior) {
+            return new VipBehavior();
         } else if (template instanceof PowerUpBehavior) {
             return new PowerUpBehavior();
         }

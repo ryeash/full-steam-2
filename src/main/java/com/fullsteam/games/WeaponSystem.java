@@ -62,28 +62,27 @@ public class WeaponSystem {
     }
 
     /**
-     * Handle firing of beam weapons.
+     * Handle firing of beam weapons. Supports multiple beams per shot.
      */
     private void handleBeamFire(Player player) {
-        Beam beam = player.shootBeam();
-        if (beam == null) {
-            return;
+        List<Beam> beams = player.shootBeam();
+
+        for (Beam beam : beams) {
+            Vector2 effectiveEnd = findBeamObstacleIntersection(beam);
+            beam.setEffectiveEndPoint(effectiveEnd);
+
+            gameEntities.addBeam(beam);
+            world.addBody(beam.getBody());
+
+            if (beam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
+                processStandardBeamHit(beam);
+            }
         }
 
-        // Update beam's effective end point based on obstacle collisions
-        Vector2 effectiveEnd = findBeamObstacleIntersection(beam);
-        beam.setEffectiveEndPoint(effectiveEnd);
-
-        gameEntities.addBeam(beam);
-        world.addBody(beam.getBody());
-
-        // Process initial hit for instant damage beams
-        if (beam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
-            processStandardBeamHit(beam);
+        if (!beams.isEmpty()) {
+            log.debug("Player {} fired {} beam(s): {}", player.getId(),
+                    beams.size(), player.getCurrentWeapon().getName());
         }
-
-        log.debug("Player {} fired beam weapon: {}", player.getId(),
-                player.getCurrentWeapon().getName());
     }
 
     /**

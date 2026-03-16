@@ -1,5 +1,7 @@
 package com.fullsteam.model;
 
+import lombok.Getter;
+
 public enum BulletEffect {
     // AOE
     EXPLOSIVE(25, "Projectiles explode on impact, dealing area damage", 50.0, 1.5, 1.0),
@@ -14,13 +16,17 @@ public enum BulletEffect {
     FRAGMENTING(22, "Projectiles split into multiple smaller projectiles on impact", 20, 0.0, 0.0),
     HOMING(30, "Projectiles slightly track towards nearby enemies", 0, 1.0, 1.0);
 
+    @Getter
     private final int pointCost;
+    @Getter
     private final String description;
 
     // these only apply to AOE effects
     // size of the effected area
+    @Getter
     private final double baseRadius;
     // how much projectile damage the effect carries into it's area
+    @Getter
     private final double damageModification;
     // how much the projectile damage effects the radius
     private final double damageModificationForSize;
@@ -33,24 +39,8 @@ public enum BulletEffect {
         this.damageModificationForSize = damageModificationForSize;
     }
 
-    public int getPointCost() {
-        return pointCost;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public double getBaseRadius() {
-        return baseRadius;
-    }
-
-    public double getDamageModification() {
-        return damageModification;
-    }
-
     public double calculateRadius(double damage, Ordinance ordinance) {
-        return (this.baseRadius * ordinance.getAreaOfEffectModification()) + (damage * damageModificationForSize);
+        return (this.baseRadius * ordinance.getAreaOfEffectModification()) + (Math.sqrt(damage) * damageModificationForSize);
     }
 
     public double calculateDamage(double damage) {
