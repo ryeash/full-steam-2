@@ -264,13 +264,7 @@ public class WeaponSystem {
                         break;
                     }
                 }
-            } else if (userData instanceof Obstacle obstacle) {
-                // Apply damage to player-created obstacles if beam can damage them
-                if (obstacle.getType() == Obstacle.ObstacleType.PLAYER_BARRIER &&
-                        canBeamDamageObstacle(beam, obstacle)) {
-                    obstacle.takeDamage(beam.getDamage());
-                }
-
+            } else if (userData instanceof Obstacle) {
                 // Stop at obstacle if beam doesn't pierce obstacles
                 if (!beam.canPierceObstacles()) {
                     break;
@@ -304,21 +298,4 @@ public class WeaponSystem {
                 beam.getId(), player.getId(), beam.getDamage(), killed);
     }
 
-    /**
-     * Check if a beam can damage an obstacle based on team rules
-     */
-    private boolean canBeamDamageObstacle(Beam beam, Obstacle obstacle) {
-        // Can't damage obstacles created by the same player
-        if (beam.getOwnerId() == obstacle.getOwnerId()) {
-            return false;
-        }
-
-        // In FFA mode (team 0), can damage any obstacle except own
-        if (beam.getOwnerTeam() == 0 || obstacle.getOwnerTeam() == 0) {
-            return true;
-        }
-
-        // In team mode, can only damage obstacles created by different teams
-        return beam.getOwnerTeam() != obstacle.getOwnerTeam();
-    }
 }

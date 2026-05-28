@@ -31,8 +31,7 @@ public class Obstacle extends GameEntity {
         HEXAGON_CRYSTAL,  // Regular hexagonal formations
         DIAMOND_STONE,    // Diamond/rhombus shaped rocks
         L_SHAPED_WALL,    // L-shaped structural obstacles
-        CROSS_BARRIER,    // Cross/plus shaped obstacles
-        PLAYER_BARRIER    // Temporary player-deployed barriers
+        CROSS_BARRIER     // Cross/plus shaped obstacles
     }
 
     public enum ShapeCategory {
@@ -53,25 +52,14 @@ public class Obstacle extends GameEntity {
     private final double boundingRadius;
     @Getter
     private final Map<String, Object> shapeData;
-    @Getter
-    private final int ownerId; // Player who created this barrier (0 for map obstacles)
-    @Getter
-    private final int ownerTeam; // Team of the player who created this barrier (0 for map obstacles)
 
     public Obstacle(int id, double x, double y, ObstacleType type) {
-        this(id, x, y, type, 0, 0, 0.0, Double.POSITIVE_INFINITY);
-    }
-
-    public Obstacle(int id, double x, double y, ObstacleType type, int ownerId, int ownerTeam, double lifespan, double health) {
-        super(id, createObstacleBody(x, y, type), health);
+        super(id, createObstacleBody(x, y, type), Double.POSITIVE_INFINITY);
         this.type = type;
-        this.ownerId = ownerId;
-        this.ownerTeam = ownerTeam;
         this.primaryShape = getBody().getFixture(0).getShape();
         this.shapeCategory = determineShapeCategory(type);
         this.boundingRadius = calculateBoundingRadius();
         this.shapeData = generateShapeData();
-        this.expires = lifespan > 0 ? (long) (System.currentTimeMillis() + (lifespan * 1000)) : 0;
         getBody().setMass(MassType.INFINITE);
         getBody().setUserData(this);
     }
@@ -79,7 +67,7 @@ public class Obstacle extends GameEntity {
     private ShapeCategory determineShapeCategory(ObstacleType type) {
         return switch (type) {
             case BOULDER -> ShapeCategory.CIRCULAR;
-            case HOUSE, WALL_SEGMENT, PLAYER_BARRIER -> ShapeCategory.RECTANGULAR;
+            case HOUSE, WALL_SEGMENT -> ShapeCategory.RECTANGULAR;
             case TRIANGLE_ROCK -> ShapeCategory.TRIANGULAR;
             case POLYGON_DEBRIS, HEXAGON_CRYSTAL, DIAMOND_STONE -> ShapeCategory.POLYGONAL;
             case L_SHAPED_WALL, CROSS_BARRIER -> ShapeCategory.COMPOUND;
@@ -130,7 +118,6 @@ public class Obstacle extends GameEntity {
             case DIAMOND_STONE -> createDiamondShape(random);
             case L_SHAPED_WALL -> createLShape(random);
             case CROSS_BARRIER -> createCrossShape(random);
-            case PLAYER_BARRIER -> createPlayerBarrierShape();
             default -> createCircularShape(random);
         };
     }
@@ -462,11 +449,6 @@ public class Obstacle extends GameEntity {
         return new Polygon(ensureCounterClockwiseWinding(vertices));
     }
 
-    private static Convex createPlayerBarrierShape() {
-        // Player barriers are always rectangular, 80 units wide by 10 units thick
-        return new Rectangle(80.0, 10.0);
-    }
-
     /**
      * Calculate the bounding radius for this obstacle.
      */
@@ -503,19 +485,6 @@ public class Obstacle extends GameEntity {
         return data;
     }
 
-    @Override
-    public void update(double deltaTime) {
-        if (type == ObstacleType.PLAYER_BARRIER && expires > 0) {
-            if (!active) {
-                return;
-            }
-            if (System.currentTimeMillis() > expires) {
-                active = false;
-            }
-            lastUpdateTime = System.currentTimeMillis();
-        }
-    }
-
     /**
      * Factory method to create extra chaotic obstacles with maximum randomization.
      */
@@ -543,35 +512,10 @@ public class Obstacle extends GameEntity {
     }
 
     /**
-     * Factory method to create a player barrier.
-     */
-    public static Obstacle createPlayerBarrier(int id, int ownerId, int ownerTeam, Vector2 position, Vector2 direction, double lifespan) {
-        Obstacle barrier = new Obstacle(id, position.x, position.y, ObstacleType.PLAYER_BARRIER, ownerId, ownerTeam, lifespan, 100.0);
-
-        // Orient the barrier perpendicular to the direction (same as original Barrier class)
-        if (direction.getMagnitude() > 0) {
-            double angle = Math.atan2(direction.y, direction.x);
-            barrier.getBody().getTransform().setRotation(angle + Math.PI / 2); // Perpendicular to aim direction
-        }
-
-        return barrier;
-    }
-
-    /**
-     * Override damage handling - barriers can be destroyed, permanent obstacles cannot
+     * Permanent map obstacles cannot be damaged.
      */
     @Override
     public boolean takeDamage(double damage) {
-        if (type == ObstacleType.PLAYER_BARRIER) {
-            if (!active) {
-                return false;
-            }
-            health -= damage;
-            if (health <= 0) {
-                active = false;
-            }
-            return !active; // Return true if barrier was destroyed
-        }
         return false;
     }
 }

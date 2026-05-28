@@ -41,7 +41,6 @@ public class GameEntities {
     private final Map<Integer, Turret> turrets = new ConcurrentSkipListMap<>();
     private final Map<Integer, DefenseLaser> defenseLasers = new ConcurrentSkipListMap<>();
     private final Map<Integer, NetProjectile> netProjectiles = new ConcurrentSkipListMap<>();
-    private final Map<Integer, TeleportPad> teleportPads = new ConcurrentSkipListMap<>();
     private final Map<Integer, Beam> beams = new ConcurrentSkipListMap<>();
 
     // Capture the Flag entities
@@ -111,18 +110,6 @@ public class GameEntities {
 
     public void addObstacle(Obstacle obstacle) {
         obstacles.put(obstacle.getId(), obstacle);
-
-        if (obstacle.getOwnerId() > 0) {
-            List<Obstacle> forOwner = obstacles.values()
-                    .stream()
-                    .filter(tp -> tp.getOwnerId() == obstacle.getOwnerId())
-                    .sorted(Comparator.comparing(Obstacle::getCreated))
-                    .collect(Collectors.toCollection(LinkedList::new));
-            while (forOwner.size() > 4) {
-                Obstacle remove = forOwner.remove(0);
-                remove.setActive(false);
-            }
-        }
     }
 
     public Collection<Obstacle> getAllObstacles() {
@@ -198,16 +185,6 @@ public class GameEntities {
             return false;
         });
 
-        teleportPads.entrySet().removeIf(entry -> {
-            TeleportPad o = entry.getValue();
-            if (o.isExpired()) {
-                o.destroy();
-                world.removeBody(o.getBody());
-                return true;
-            }
-            return false;
-        });
-
         defenseLasers.entrySet().removeIf(entry -> {
             DefenseLaser o = entry.getValue();
             if (!o.isActive()) {
@@ -251,7 +228,6 @@ public class GameEntities {
         turrets.values().forEach(turret -> turret.update(deltaTime));
         defenseLasers.values().forEach(defenseLaser -> defenseLaser.update(deltaTime));
         netProjectiles.values().forEach(net -> net.update(deltaTime));
-        teleportPads.values().forEach(pad -> pad.update(deltaTime));
         beams.values().forEach(beam -> beam.update(deltaTime));
         kothZones.values().forEach(zone -> zone.update(deltaTime));
         workshops.values().forEach(workshop -> workshop.update(deltaTime));
@@ -316,29 +292,6 @@ public class GameEntities {
 
     public Collection<NetProjectile> getAllNetProjectiles() {
         return netProjectiles.values();
-    }
-
-    // TeleportPad management
-    public void addTeleportPad(TeleportPad teleportPad) {
-        teleportPads.put(teleportPad.getId(), teleportPad);
-
-        List<TeleportPad> padsForOwner = teleportPads.values()
-                .stream()
-                .filter(tp -> tp.getOwnerId() == teleportPad.getOwnerId())
-                .sorted(Comparator.comparing(TeleportPad::getCreated))
-                .collect(Collectors.toCollection(LinkedList::new));
-        while (padsForOwner.size() > 4) {
-            TeleportPad remove = padsForOwner.remove(0);
-            remove.destroy();
-        }
-    }
-
-    public TeleportPad getTeleportPad(int teleportPadId) {
-        return teleportPads.get(teleportPadId);
-    }
-
-    public Collection<TeleportPad> getAllTeleportPads() {
-        return teleportPads.values();
     }
 
     public void addBeam(Beam beam) {

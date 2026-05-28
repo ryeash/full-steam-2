@@ -9,10 +9,9 @@ class GameEngine {
         this.obstacles = new Map();
         this.fieldEffects = new Map();
         this.beams = new Map();
-        this.utilityEntities = new Map(); // For turrets, barriers, nets, mines, teleport pads
+        this.utilityEntities = new Map(); // For turrets, nets, mines, defense lasers, workshops, headquarters, power-ups
         this.flags = new Map(); // CTF flags
         this.kothZones = new Map(); // King of the Hill zones
-        this.teleportConnections = new Map(); // Track teleport pad connections
         this.myPlayerId = null;
         this.gameState = null;
         this.websocket = null;
@@ -1138,15 +1137,6 @@ class GameEngine {
                 } else {
                     this.createObstacle(obstacleData);
                 }
-                
-                // Create health bar for player barriers if it doesn't exist
-                if (obstacleData.type === 'PLAYER_BARRIER' && obstacleData.ownerId > 0) {
-                    this.obstacleHealthBars = this.obstacleHealthBars || new Map();
-                    if (!this.obstacleHealthBars.has(obstacleData.id)) {
-                        const healthBarContainer = this.createObstacleHealthBar(obstacleData);
-                        this.obstacleHealthBars.set(obstacleData.id, healthBarContainer);
-                    }
-                }
             });
 
             for (let [obstacleId, obstacle] of this.obstacles) {
@@ -1232,7 +1222,7 @@ class GameEngine {
             }
         }
         
-        // Handle utility entities (turrets, barriers, nets, mines, teleport pads)
+        // Handle utility entities (turrets, nets, mines, defense lasers, workshops, headquarters, power-ups)
         this.handleUtilityEntities(data);
         
         this.updateUI(data);
@@ -1276,18 +1266,6 @@ class GameEngine {
                     this.updateUtilityEntity(mineData);
                 } else {
                     this.createUtilityEntity(mineData);
-                }
-            });
-        }
-        
-        // Handle teleport pads
-        if (data.teleportPads) {
-            data.teleportPads.forEach(padData => {
-                currentEntityIds.add(padData.id);
-                if (this.utilityEntities.has(padData.id)) {
-                    this.updateUtilityEntity(padData);
-                } else {
-                    this.createUtilityEntity(padData);
                 }
             });
         }
@@ -1402,11 +1380,6 @@ class GameEngine {
         entityContainer.entityGraphics = entityGraphics;
         this.utilityEntities.set(entityData.id, entityContainer);
         this.gameContainer.addChild(entityContainer);
-        
-        // Handle teleport pad connections
-        if (entityData.type === 'TELEPORT_PAD') {
-            this.updateTeleportPadConnections(entityData);
-        }
         
         // Enable sorting
         this.gameContainer.sortableChildren = true;
@@ -2502,22 +2475,6 @@ class GameEngine {
     }
     
     /**
-     * Create health bar for an obstacle
-     */
-    createObstacleHealthBar(obstacleData) {
-        return this.createHealthBar(obstacleData, {
-            width: 30,
-            height: 4,
-            yOffset: 25,
-            bgColor: 0x222222,
-            fillColor: 0x4a90e2,
-            cornerRadius: 1,
-            showWhenFull: false,
-            dynamicColor: false
-        });
-    }
-    
-    /**
      * Create health bar for a turret
      */
     createTurretHealthBar(entityData) {
@@ -3460,13 +3417,6 @@ class GameEngine {
         graphics.zIndex = 5;
         this.obstacles.set(obstacleData.id, graphics);
         this.gameContainer.addChild(graphics);
-        
-        // Create health bar for player-created obstacles (barriers)
-        if (obstacleData.type === 'PLAYER_BARRIER' && obstacleData.ownerId > 0) {
-            const healthBarContainer = this.createObstacleHealthBar(obstacleData);
-            this.obstacleHealthBars = this.obstacleHealthBars || new Map();
-            this.obstacleHealthBars.set(obstacleData.id, healthBarContainer);
-        }
     }
 
     /**
@@ -3522,7 +3472,6 @@ class GameEngine {
             case 'DIAMOND_STONE': return 0x9370DB; // Medium purple
             case 'L_SHAPED_WALL': return 0x2F4F4F; // Dark slate gray
             case 'CROSS_BARRIER': return 0x8B7D6B; // Light gray
-            case 'PLAYER_BARRIER': return 0x8B4513; // Light gray
             default: return 0x808080; // Default gray
         }
     }
@@ -3591,12 +3540,6 @@ class GameEngine {
         if (!graphics) return;
         graphics.position.set(obstacleData.x, obstacleData.y);
         graphics.rotation = obstacleData.rotation || 0;
-        
-        // Update health bar if it exists
-        if (this.obstacleHealthBars && this.obstacleHealthBars.has(obstacleData.id)) {
-            const healthBar = this.obstacleHealthBars.get(obstacleData.id);
-            this.updateHealthBar(healthBar, obstacleData, graphics, healthBar.config);
-        }
     }
 
     removeObstacle(obstacleId) {
@@ -3615,61 +3558,8 @@ class GameEngine {
             sprite.obstacleData = null;
             sprite.destroy();
         }
-        
-        // Remove health bar if it exists
-        if (this.obstacleHealthBars && this.obstacleHealthBars.has(obstacleId)) {
-            const healthBar = this.obstacleHealthBars.get(obstacleId);
-            if (healthBar.parent) {
-                healthBar.parent.removeChild(healthBar);
-            }
-            healthBar.destroy();
-            this.obstacleHealthBars.delete(obstacleId);
-        }
     }
     
-    /**
-     * Create health bar for player-created obstacles (barriers).
-     * Uses a smaller, more subtle design to distinguish from player health bars.
-     */
-    createObstacleHealthBar(obstacleData) {
-        const healthBarContainer = new PIXI.Container();
-        
-        // Smaller health bar background (half the size of player health bars)
-        const healthBg = new PIXI.Graphics();
-        healthBg.roundRect(-15, 0, 30, 4, 1).fill({ color: 0x222222, alpha: 0.8 }); // Darker, more subtle background
-        healthBarContainer.addChild(healthBg);
-        
-        // Health bar fill
-        const healthFill = new PIXI.Graphics();
-        healthFill.roundRect(-15, 0, 30, 4, 1).fill(0x4a90e2); // Blue color to distinguish from player health
-        healthBarContainer.addChild(healthFill);
-        
-        // Store references for updates
-        healthBarContainer.healthBg = healthBg;
-        healthBarContainer.healthFill = healthFill;
-        healthBarContainer.config = {
-            width: 30,
-            height: 4,
-            yOffset: 25,
-            bgColor: 0x222222,
-            fillColor: 0x4a90e2,
-            cornerRadius: 1,
-            showWhenFull: false,
-            dynamicColor: false
-        };
-        
-        // Position above obstacle (will be updated in updateObstacleHealthBar)
-        healthBarContainer.position.set(obstacleData.x, obstacleData.y - 25); // Closer to obstacle than player health bars
-        
-        // Add to name container so it doesn't rotate with obstacle
-        this.nameContainer.addChild(healthBarContainer);
-        
-        return healthBarContainer;
-    }
-    
-    /**
-     * Update obstacle health bar appearance and position.
-     */
     /**
      * Create a field effect (explosion, fire, electric, etc.)
      */
@@ -4457,8 +4347,6 @@ class GameEngine {
                 return this.createNetGraphics(graphics, entityData);
             case 'MINE':
                 return this.createMineGraphics(graphics, entityData);
-            case 'TELEPORT_PAD':
-                return this.createTeleportPadGraphics(graphics, entityData);
             case 'DEFENSE_LASER':
                 return this.createDefenseLaserGraphics(graphics, entityData);
             case 'WORKSHOP':
@@ -4730,63 +4618,6 @@ class GameEngine {
             // Armed indicator - small pulsing center light
             const centerPulse = 0.3 + 0.7 * Math.sin(Date.now() * 0.015);
             graphics.circle(0, 0, 1.5).fill({ color: teamColor, alpha: centerPulse });
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create teleport pad graphics
-     */
-    createTeleportPadGraphics(graphics, entityData) {
-        const isLinked = entityData.isLinked || false;
-        const isCharging = entityData.isCharging || false;
-        const chargingProgress = entityData.chargingProgress || 0;
-        const pulseValue = entityData.pulseValue || 0.5;
-        
-        // Teleport pad base - large circle
-        const baseColor = isLinked ? 0x9b59b6 : 0x6c5ce7; // Purple when linked, blue when not
-        graphics.circle(0, 0, 20).fill({ color: baseColor, alpha: 0.3 });
-        
-        // Outer ring
-        graphics.circle(0, 0, 20).stroke({ width: 3, color: baseColor, alpha: 0.8 });
-        
-        // Inner energy core
-        const coreAlpha = isCharging ? chargingProgress : 1.0;
-        graphics.circle(0, 0, 8).fill({ color: 0xffffff, alpha: coreAlpha * 0.6 });
-        
-        // Pulsing energy rings
-        if (!isCharging || chargingProgress > 0.5) {
-            const pulseAlpha = pulseValue * 0.5;
-            graphics.circle(0, 0, 12).stroke({ width: 2, color: 0xffffff, alpha: pulseAlpha });
-            graphics.circle(0, 0, 16).stroke({ width: 2, color: 0xffffff, alpha: pulseAlpha });
-        }
-        
-        // Link indicator
-        if (isLinked) {
-            // Draw connection symbols - more prominent
-            for (let i = 0; i < 4; i++) {
-                const angle = (i / 4) * Math.PI * 2;
-                const x = Math.cos(angle) * 16;
-                const y = Math.sin(angle) * 16;
-                
-                // Outer glow effect
-                graphics.circle(x, y, 6).fill({ color: 0x9b59b6, alpha: 0.3 });
-                
-                // Arrow pointing outward
-                graphics.poly([
-                    x - 2, y - 2,
-                    x + 2, y - 2,
-                    x + 4, y,
-                    x + 2, y + 2,
-                    x - 2, y + 2,
-                    x - 4, y
-                ]).fill({ color: 0x9b59b6, alpha: 0.9 });
-            }
-            
-            // Add pulsing connection ring
-            const connectionRingAlpha = pulseValue * 0.6;
-            graphics.circle(0, 0, 25).stroke({ width: 2, color: 0x9b59b6, alpha: connectionRingAlpha });
         }
         
         return graphics;
@@ -5113,14 +4944,10 @@ class GameEngine {
                 return 12; // Above players
             case 'DEFENSE_LASER':
                 return 12; // Above players, same as turret
-            case 'BARRIER':
-                return 6;  // Above obstacles, below players
             case 'NET':
                 return 9;  // Same as projectiles
             case 'MINE':
                 return 7;  // Above obstacles, below players
-            case 'TELEPORT_PAD':
-                return 5;  // Below most things
             case 'WORKSHOP':
                 return 6;  // Above obstacles, below players
             case 'HEADQUARTERS':
@@ -5192,9 +5019,6 @@ class GameEngine {
             case 'MINE':
                 this.updateMineVisual(container, entityData);
                 break;
-            case 'TELEPORT_PAD':
-                this.updateTeleportPadVisual(container, entityData);
-                break;
             case 'TURRET':
                 this.updateTurretVisual(container, entityData);
                 break;
@@ -5227,185 +5051,6 @@ class GameEngine {
             container.entityGraphics = newGraphics;
             container.lastArmedState = entityData.isArmed;
         }
-    }
-    
-    /**
-     * Update teleport pad visual effects
-     */
-    updateTeleportPadVisual(container, entityData) {
-        // Only recreate graphics if state changed (cooldown, active, etc)
-        // This prevents memory leak from recreating graphics every frame
-        const stateKey = `${entityData.active}_${entityData.cooldownRemaining || 0}`;
-        if (container.lastStateKey === stateKey) {
-            return; // No change, skip recreation
-        }
-        
-        // Recreate graphics for dynamic effects
-        if (container.entityGraphics) {
-            container.removeChild(container.entityGraphics);
-            container.entityGraphics.destroy({ children: true, texture: false, baseTexture: false });
-        }
-        
-        const newGraphics = this.createTeleportPadGraphics(new PIXI.Graphics(), entityData);
-        container.addChild(newGraphics);
-        container.entityGraphics = newGraphics;
-        container.lastStateKey = stateKey;
-        
-        // Update connection lines if this pad is linked
-        this.updateTeleportPadConnections(entityData);
-    }
-    
-    /**
-     * Update teleport pad connection lines
-     */
-    updateTeleportPadConnections(entityData) {
-        const padId = entityData.id;
-        const linkedPadId = entityData.linkedPadId;
-        
-        // Remove existing connection for this pad
-        if (this.teleportConnections.has(padId)) {
-            const connection = this.teleportConnections.get(padId);
-            if (connection.animationFunction) {
-                this.app.ticker.remove(connection.animationFunction);
-                connection.animationFunction = null;
-            }
-            if (connection.parent) {
-                connection.parent.removeChild(connection);
-            }
-            connection.destroy();
-            this.teleportConnections.delete(padId);
-        }
-        
-        // Remove any connections pointing TO this pad from other pads
-        // This handles the case where another pad was linked to this one but is now being re-linked
-        for (let [otherPadId, connection] of this.teleportConnections) {
-            if (connection.linkedPadId === padId) {
-                if (connection.animationFunction) {
-                    this.app.ticker.remove(connection.animationFunction);
-                    connection.animationFunction = null;
-                }
-                if (connection.parent) {
-                    connection.parent.removeChild(connection);
-                }
-                connection.destroy();
-                this.teleportConnections.delete(otherPadId);
-            }
-        }
-        
-        // Create new connection if this pad is linked
-        if (linkedPadId && this.utilityEntities.has(linkedPadId)) {
-            const linkedPad = this.utilityEntities.get(linkedPadId);
-            if (linkedPad && linkedPad.entityData && linkedPad.entityData.type === 'TELEPORT_PAD') {
-                this.createTeleportConnection(padId, linkedPadId, entityData, linkedPad.entityData);
-            }
-        }
-    }
-    
-    /**
-     * Create a visual connection line between two teleport pads
-     */
-    createTeleportConnection(padId1, padId2, padData1, padData2) {
-        const connectionGraphics = new PIXI.Graphics();
-        
-        const pos1 = { x: padData1.x, y: padData1.y };
-        const pos2 = { x: padData2.x, y: padData2.y };
-        
-        // Create animated connection line
-        this.drawAnimatedConnectionLine(connectionGraphics, pos1, pos2);
-        
-        // Add to game container (behind other entities)
-        connectionGraphics.zIndex = 1;
-        this.gameContainer.addChild(connectionGraphics);
-        
-        // Store metadata about the connection for cleanup
-        connectionGraphics.linkedPadId = padId2;
-        
-        // Store connection for cleanup
-        this.teleportConnections.set(padId1, connectionGraphics);
-        
-        // Add animation ticker for the connection line
-        const animateConnection = () => {
-            if (!connectionGraphics.parent) {
-                // Connection was removed - cleanup ticker
-                if (connectionGraphics.animationFunction) {
-                    this.removeTickerCallback(connectionGraphics.animationFunction);
-                    connectionGraphics.animationFunction = null;
-                }
-                return;
-            }
-            
-            connectionGraphics.clear();
-            this.drawAnimatedConnectionLine(connectionGraphics, pos1, pos2);
-        };
-        
-        connectionGraphics.animationFunction = animateConnection;
-        this.addTickerCallback(animateConnection);
-    }
-    
-    /**
-     * Draw an animated connection line between two points
-     */
-    drawAnimatedConnectionLine(graphics, pos1, pos2) {
-        const time = performance.now() * 0.003; // Slow animation
-        const distance = Math.sqrt((pos2.x - pos1.x) ** 2 + (pos2.y - pos1.y) ** 2);
-        
-        // Create flowing energy effect along the line
-        const segments = Math.max(8, Math.floor(distance / 20));
-        const segmentLength = distance / segments;
-        
-        // Calculate direction vector
-        const dx = (pos2.x - pos1.x) / distance;
-        const dy = (pos2.y - pos1.y) / distance;
-        
-        // Draw animated segments
-        for (let i = 0; i < segments; i++) {
-            const progress = i / segments;
-            const segmentStart = progress * distance;
-            const segmentEnd = (progress + 1 / segments) * distance;
-            
-            // Animate the segment opacity
-            const waveOffset = (time + progress * 3) % (Math.PI * 2);
-            const alpha = 0.3 + 0.4 * Math.sin(waveOffset);
-            
-            // Calculate segment positions
-            const startX = pos1.x + dx * segmentStart;
-            const startY = pos1.y + dy * segmentStart;
-            const endX = pos1.x + dx * segmentEnd;
-            const endY = pos1.y + dy * segmentEnd;
-            
-            // Draw segment with gradient effect
-            graphics.moveTo(startX, startY);
-            graphics.lineTo(endX, endY);
-            graphics.stroke({ width: 3, color: 0x9b59b6, alpha });
-            
-            // Add energy particles along the line
-            if (i % 2 === 0) {
-                const particleProgress = (progress + 0.5 / segments) % 1;
-                const particleX = pos1.x + dx * particleProgress * distance;
-                const particleY = pos1.y + dy * particleProgress * distance;
-                
-                graphics.circle(particleX, particleY, 2).fill({ color: 0xffffff, alpha: alpha * 0.8 });
-            }
-        }
-        
-        // Add connection indicators at both ends
-        graphics.circle(pos1.x, pos1.y, 3).fill({ color: 0x9b59b6, alpha: 0.6 });
-        graphics.circle(pos2.x, pos2.y, 3).fill({ color: 0x9b59b6, alpha: 0.6 });
-        
-        // Add directional arrows
-        const midX = (pos1.x + pos2.x) / 2;
-        const midY = (pos1.y + pos2.y) / 2;
-        
-        // Arrow pointing from pad1 to pad2
-        const arrowSize = 4;
-        const perpX = -dy * arrowSize;
-        const perpY = dx * arrowSize;
-        
-        graphics.poly([
-            midX + dx * arrowSize, midY + dy * arrowSize,
-            midX - dx * arrowSize + perpX, midY - dy * arrowSize + perpY,
-            midX - dx * arrowSize - perpX, midY - dy * arrowSize - perpY
-        ]).fill({ color: 0x9b59b6, alpha: 0.8 });
     }
     
     /**
@@ -5609,38 +5254,6 @@ class GameEngine {
      * Clean up utility entity container
      */
     cleanupUtilityEntityContainer(container) {
-        // Clean up teleport pad connections if this is a teleport pad
-        if (container.entityData && container.entityData.type === 'TELEPORT_PAD') {
-            const padId = container.entityData.id;
-            
-            // Remove connection from this pad
-            if (this.teleportConnections.has(padId)) {
-                const connection = this.teleportConnections.get(padId);
-                if (connection.animationFunction) {
-                    this.removeTickerCallback(connection.animationFunction);
-                }
-                if (connection.parent) {
-                    connection.parent.removeChild(connection);
-                }
-                connection.destroy();
-                this.teleportConnections.delete(padId);
-            }
-            
-            // Remove any connections TO this pad
-            for (let [otherPadId, connection] of this.teleportConnections) {
-                if (connection.linkedPadId === padId) {
-                    if (connection.animationFunction) {
-                        this.removeTickerCallback(connection.animationFunction);
-                    }
-                    if (connection.parent) {
-                        connection.parent.removeChild(connection);
-                    }
-                    connection.destroy();
-                    this.teleportConnections.delete(otherPadId);
-                }
-            }
-        }
-        
         // Clean up graphics
         if (container.entityGraphics) {
             container.entityGraphics.destroy();
@@ -6741,39 +6354,42 @@ class GameEngine {
     }
     
     /**
-     * Fade out effect before removal
+     * Fade out effect before removal. Guarantees `callback` is invoked at most once,
+     * even if both the per-frame ticker and the safety timeout race.
      */
     fadeOutEffect(container, callback) {
         const fadeSpeed = 0.05;
-        
-        // Store fade function reference for proper cleanup
-        const fadeOut = () => {
-            if (!container || container.alpha === undefined) {
-                // Container was already destroyed, clean up ticker
-                this.removeTickerCallback(fadeOut);
-                if (callback) callback();
-                return;
-            }
-            
-            container.alpha -= fadeSpeed;
-            if (container.alpha <= 0) {
-                this.removeTickerCallback(fadeOut);
-                if (callback) callback();
-            }
-        };
-        
-        // Store reference on container for emergency cleanup
-        container.fadeOutFunction = fadeOut;
-        this.addTickerCallback(fadeOut);
-        
-        // Safety timeout to prevent infinite fade
-        this.safeSetTimeout(() => {
+        let finished = false;
+
+        const finalize = () => {
+            if (finished) return;
+            finished = true;
             if (container && container.fadeOutFunction) {
                 this.removeTickerCallback(container.fadeOutFunction);
                 container.fadeOutFunction = null;
-                if (callback) callback();
             }
-        }, 5000); // 5 second timeout
+            if (callback) callback();
+        };
+
+        const fadeOut = () => {
+            if (finished) return;
+            if (!container || container.destroyed || container.alpha === undefined) {
+                // Container was destroyed externally; ensure ticker is removed
+                finalize();
+                return;
+            }
+
+            container.alpha -= fadeSpeed;
+            if (container.alpha <= 0) {
+                finalize();
+            }
+        };
+
+        container.fadeOutFunction = fadeOut;
+        this.addTickerCallback(fadeOut);
+
+        // Safety timeout to guarantee completion even if the ticker stalls
+        this.safeSetTimeout(finalize, 5000);
     }
     
     // Health bar methods removed - health now shown in consolidated HUD
@@ -7006,67 +6622,63 @@ class GameEngine {
     
     updateMinimap() {
         if (!this.hudMinimap || !this.minimapWidth || !this.minimapHeight) return;
-        
-        // Clear previous minimap content (keep background and title)
-        if (this.minimapContent) {
-            // Properly destroy all Graphics objects to prevent memory leak
-            const childrenToDestroy = [...this.minimapContent.children];
-            childrenToDestroy.forEach(child => {
-                child.destroy({ children: true, texture: false, baseTexture: false });
-            });
-            
-            // Remove all children from the container
-            this.minimapContent.removeChildren();
-        } else {
-            // Create new minimap content container if it doesn't exist
+
+        // Throttle minimap updates to ~10Hz instead of 60Hz to reduce CPU/GC pressure
+        const now = performance.now();
+        if (this._lastMinimapUpdate && now - this._lastMinimapUpdate < 100) return;
+        this._lastMinimapUpdate = now;
+
+        // Reuse a single Graphics object for all player dots; clear-and-redraw avoids
+        // allocating/destroying PIXI.Graphics every frame, which was a major leak source.
+        if (!this.minimapContent) {
             this.minimapContent = new PIXI.Container();
             this.minimapContent.position.set(2, 16); // Below title, within border
             this.hudMinimap.addChild(this.minimapContent);
         }
-        
+        if (!this.minimapPlayerDots) {
+            this.minimapPlayerDots = new PIXI.Graphics();
+            this.minimapContent.addChild(this.minimapPlayerDots);
+        }
+
+        const dots = this.minimapPlayerDots;
+        dots.clear();
+
         // Use actual minimap dimensions minus borders and title space
         const mapWidth = this.minimapWidth - 4; // Account for 2px border on each side
         const mapHeight = this.minimapHeight - 18; // Account for borders and title space
-        
+
         // Use uniform scaling to maintain aspect ratio
         const scale = Math.min(mapWidth / this.worldBounds.width, mapHeight / this.worldBounds.height);
-        
+
         // Calculate actual scaled world dimensions
         const scaledWorldWidth = this.worldBounds.width * scale;
         const scaledWorldHeight = this.worldBounds.height * scale;
-        
+
         // Calculate offsets to center the scaled world within the available minimap space
         const offsetX = (mapWidth - scaledWorldWidth) / 2;
         const offsetY = (mapHeight - scaledWorldHeight) / 2;
 
-        // Draw players
+        // Draw players into the shared Graphics object
         this.players.forEach(player => {
             const data = player.playerData;
-            if (!data.active) return;
-            
+            if (!data || !data.active) return;
+
             const x = (data.x + this.worldBounds.width / 2) * scale + offsetX;
             const y = (-data.y + this.worldBounds.height / 2) * scale + offsetY; // Flip y-axis to match physics world
-            
-            const playerDot = new PIXI.Graphics();
-            
-            // Use team colors
+
             const teamColor = this.getTeamColor(data.team || 0);
-            
-            // Make current player slightly larger
-            const radius = data.id === this.myPlayerId ? 2.5 : 1.5;
-            playerDot.circle(x, y, radius).fill(teamColor);
-            
-            // Add white border for current player
-            if (data.id === this.myPlayerId) {
-                playerDot.circle(x, y, radius).stroke({ width: 1, color: 0xffffff });
+            const isMe = data.id === this.myPlayerId;
+            const radius = isMe ? 2.5 : 1.5;
+
+            dots.circle(x, y, radius).fill(teamColor);
+
+            if (isMe) {
+                dots.circle(x, y, radius).stroke({ width: 1, color: 0xffffff });
             }
-            
-            // Add golden ring for VIP players
+
             if (data.isVip) {
-                playerDot.circle(x, y, radius + 1.5).stroke({ width: 1, color: 0xFFD700 });
+                dots.circle(x, y, radius + 1.5).stroke({ width: 1, color: 0xFFD700 });
             }
-            
-            this.minimapContent.addChild(playerDot);
         });
     }
     
@@ -7418,19 +7030,6 @@ class GameEngine {
             }
         });
         
-        // Clean up orphaned obstacle health bars
-        if (this.obstacleHealthBars) {
-            this.obstacleHealthBars.forEach((healthBar, obstacleId) => {
-                if (!this.obstacles.has(obstacleId)) {
-                    if (healthBar.parent) {
-                        healthBar.parent.removeChild(healthBar);
-                    }
-                    healthBar.destroy();
-                    this.obstacleHealthBars.delete(obstacleId);
-                }
-            });
-        }
-
         // Force garbage collection if available (Chrome DevTools)
         if (window.gc) {
             window.gc();
@@ -7531,17 +7130,6 @@ class GameEngine {
         });
         this.obstacles.clear();
         
-        // Clean up obstacle health bars
-        if (this.obstacleHealthBars) {
-            this.obstacleHealthBars.forEach(healthBar => {
-                if (healthBar.parent) {
-                    healthBar.parent.removeChild(healthBar);
-                }
-                healthBar.destroy();
-            });
-            this.obstacleHealthBars.clear();
-        }
-        
         // Clean up flags
         this.flags.forEach(flag => {
             flag.destroy({ children: true });
@@ -7553,18 +7141,6 @@ class GameEngine {
             zone.destroy({ children: true });
         });
         this.kothZones.clear();
-        
-        // Clean up teleport pad connections
-        this.teleportConnections.forEach(connection => {
-            if (connection.animationFunction) {
-                this.removeTickerCallback(connection.animationFunction);
-            }
-            if (connection.parent) {
-                connection.parent.removeChild(connection);
-            }
-            connection.destroy();
-        });
-        this.teleportConnections.clear();
         
         // Close WebSocket connection
         if (this.websocket) {

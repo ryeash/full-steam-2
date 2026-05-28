@@ -30,7 +30,6 @@ import com.fullsteam.physics.PowerUp;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.TeamSpawnArea;
 import com.fullsteam.physics.TeamSpawnManager;
-import com.fullsteam.physics.TeleportPad;
 import com.fullsteam.physics.Turret;
 import com.fullsteam.util.IdGenerator;
 import com.fullsteam.util.WeaponFormatter;
@@ -628,26 +627,6 @@ public class GameManager {
             if (turretShot != null) {
                 gameEntities.addProjectile(turretShot);
                 world.addBody(turretShot.getBody());
-            }
-        }
-
-        // Handle teleport pad activations
-        for (TeleportPad teleportPad : gameEntities.getAllTeleportPads()) {
-            if (!teleportPad.isActive()) {
-                continue;
-            }
-
-            // Check for player activations
-            Vector2 padPos = teleportPad.getPosition();
-            for (Player player : gameEntities.getAllPlayers()) {
-                if (!player.isActive()) {
-                    continue;
-                }
-
-                double distance = padPos.distance(player.getPosition());
-                if (distance <= teleportPad.getActivationRadius()) {
-                    teleportPad.teleportPlayer(player);
-                }
             }
         }
 

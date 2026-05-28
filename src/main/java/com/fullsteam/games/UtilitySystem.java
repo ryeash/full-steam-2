@@ -10,10 +10,8 @@ import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.NetProjectile;
-import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Projectile;
-import com.fullsteam.physics.TeleportPad;
 import com.fullsteam.physics.Turret;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Vector2;
@@ -90,17 +88,11 @@ public class UtilitySystem {
             case TURRET_CONSTRUCTOR:
                 createTurret(activation);
                 break;
-            case WALL_BUILDER:
-                createBarrier(activation);
-                break;
             case NET_LAUNCHER:
                 createNetProjectile(activation);
                 break;
             case MINE_LAYER:
                 createProximityMine(activation);
-                break;
-            case TELEPORTER:
-                createTeleportPad(activation);
                 break;
             case DEFENSE_LASER:
                 createDefenseLaser(activation);
@@ -142,31 +134,6 @@ public class UtilitySystem {
     }
 
     /**
-     * Create a barrier/wall entity.
-     */
-    private void createBarrier(Player.UtilityActivation activation) {
-        // Calculate placement position in front of player
-        Vector2 placement = activation.position.copy();
-        Vector2 offset = activation.direction.copy();
-        offset.multiply(40.0); // Place 40 units in front
-        placement.add(offset);
-
-        Obstacle barrier = Obstacle.createPlayerBarrier(
-                IdGenerator.nextEntityId(),
-                activation.playerId,
-                activation.team,
-                placement,
-                activation.direction,
-                20.0 // 20 second lifespan
-        );
-
-        gameEntities.addObstacle(barrier);
-        world.addBody(barrier.getBody());
-
-        log.debug("Player {} created barrier at ({}, {})", activation.playerId, placement.x, placement.y);
-    }
-
-    /**
      * Create a net projectile entity.
      */
     private void createNetProjectile(Player.UtilityActivation activation) {
@@ -202,26 +169,6 @@ public class UtilitySystem {
         );
         gameEntities.addFieldEffect(mine);
         world.addBody(mine.getBody());
-    }
-
-    /**
-     * Create a teleport pad entity.
-     */
-    private void createTeleportPad(Player.UtilityActivation activation) {
-        Vector2 placement = activation.position.copy();
-        Vector2 offset = activation.direction.copy();
-        offset.multiply(30.0);
-        placement.add(offset);
-        TeleportPad teleportPad = new TeleportPad(
-                IdGenerator.nextEntityId(),
-                activation.playerId,
-                activation.team,
-                placement,
-                60.0
-        );
-        gameEntities.addTeleportPad(teleportPad);
-        world.addBody(teleportPad.getBody());
-        linkTeleportPads(teleportPad, activation.playerId);
     }
 
     /**
@@ -280,20 +227,5 @@ public class UtilitySystem {
         );
         gameEntities.addProjectile(grenade);
         world.addBody(grenade.getBody());
-    }
-
-    /**
-     * Link teleport pads from the same player.
-     */
-    private void linkTeleportPads(TeleportPad newPad, int playerId) {
-        for (TeleportPad existingPad : gameEntities.getAllTeleportPads()) {
-            if (existingPad.getId() != newPad.getId() &&
-                    existingPad.getOwnerId() == playerId &&
-                    !existingPad.isLinked() &&
-                    existingPad.isActive()) {
-                newPad.linkTo(existingPad);
-                break;
-            }
-        }
     }
 }

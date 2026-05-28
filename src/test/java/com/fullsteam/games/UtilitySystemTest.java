@@ -124,21 +124,6 @@ class UtilitySystemTest extends BaseTestClass {
     }
 
     @Test
-    @DisplayName("Should create barrier entity")
-    void testBarrierCreation() {
-        // Arrange
-        Player player = createTestPlayer(1, 1);
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.WALL_BUILDER);
-
-        // Act
-        utilitySystem.handleUtilityActivation(activation);
-
-        // Assert
-        assertFalse(gameEntities.getObstacles().isEmpty(), "Barrier should be created");
-        assertEquals(1, gameEntities.getObstacles().size(), "Exactly one barrier should be created");
-    }
-
-    @Test
     @DisplayName("Should create net projectile entity")
     void testNetProjectileCreation() {
         // Arrange
@@ -166,21 +151,6 @@ class UtilitySystemTest extends BaseTestClass {
         // Assert
         assertFalse(gameEntities.getFieldEffects().isEmpty(), "Proximity mine should be created");
         assertEquals(1, gameEntities.getFieldEffects().size(), "Exactly one mine should be created");
-    }
-
-    @Test
-    @DisplayName("Should create teleport pad entity")
-    void testTeleportPadCreation() {
-        // Arrange
-        Player player = createTestPlayer(1, 1);
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.TELEPORTER);
-
-        // Act
-        utilitySystem.handleUtilityActivation(activation);
-
-        // Assert
-        assertFalse(gameEntities.getAllTeleportPads().isEmpty(), "Teleport pad should be created");
-        assertEquals(1, gameEntities.getAllTeleportPads().size(), "Exactly one teleport pad should be created");
     }
 
     /**

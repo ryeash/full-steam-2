@@ -28,12 +28,6 @@ public enum UtilityWeapon {
     NET_LAUNCHER("Net Launcher", "Fires nets that immobilize enemies temporarily",
             null, "NetProjectile", 1.5, 90.0, 30.0, 20.0, UtilityCategory.CROWD_CONTROL),
 
-    WALL_BUILDER("Wall Builder", "Constructs temporary barriers for cover",
-            null, "Barrier", 4.0, 30.0, 20.0, 0.0, UtilityCategory.DEFENSIVE),
-
-    TELEPORTER("Teleporter", "Creates linked portals for quick movement",
-            null, "TeleportPad", 8.0, 120.0, 35.0, 0.0, UtilityCategory.TACTICAL),
-
     MINE_LAYER("Mine Layer", "Places proximity mines that explode when enemies approach",
             null, "ProximityMine", 2.0, 50.0, 40.0, 40.0, UtilityCategory.DEFENSIVE),
 

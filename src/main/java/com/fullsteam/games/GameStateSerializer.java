@@ -15,7 +15,6 @@ import com.fullsteam.physics.Player;
 import com.fullsteam.physics.PowerUp;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.TeamSpawnManager;
-import com.fullsteam.physics.TeleportPad;
 import com.fullsteam.physics.Turret;
 import com.fullsteam.physics.Workshop;
 import org.dyn4j.geometry.Rectangle;
@@ -70,7 +69,6 @@ public class GameStateSerializer {
         gameState.put("turrets", createTurretStates());
         gameState.put("nets", createNetStates());
         gameState.put("mines", createMineStates());
-        gameState.put("teleportPads", createTeleportPadStates());
         gameState.put("defenseLasers", createDefenseLaserStates());
         gameState.put("beams", createBeamStates());
         gameState.put("powerUps", createPowerUpStates());
@@ -297,12 +295,6 @@ public class GameStateSerializer {
             obsState.put("shapeCategory", obstacle.getShapeCategory().name());
             obsState.put("boundingRadius", obstacle.getBoundingRadius());
             obsState.put("rotation", obstacle.getBody().getTransform().getRotation().toRadians());
-            if (obstacle.getType() == Obstacle.ObstacleType.PLAYER_BARRIER) {
-                obsState.put("health", obstacle.healthPercent());
-                obsState.put("active", obstacle.isActive());
-                obsState.put("ownerId", obstacle.getOwnerId());
-                obsState.put("ownerTeam", obstacle.getOwnerTeam());
-            }
 
             // Add detailed shape data for client rendering
             obsState.putAll(obstacle.getShapeData());
@@ -324,10 +316,6 @@ public class GameStateSerializer {
             obsData.put("shapeCategory", obstacle.getShapeCategory().name());
             obsData.put("boundingRadius", obstacle.getBoundingRadius());
             obsData.put("rotation", obstacle.getBody().getTransform().getRotation().toRadians());
-            obsData.put("health", obstacle.getHealth());
-            obsData.put("active", obstacle.isActive());
-            obsData.put("ownerId", obstacle.getOwnerId());
-            obsData.put("ownerTeam", obstacle.getOwnerTeam());
 
             // Add detailed shape data for client rendering
             obsData.putAll(obstacle.getShapeData());
@@ -422,30 +410,6 @@ public class GameStateSerializer {
         return mineStates;
     }
 
-    private List<Map<String, Object>> createTeleportPadStates() {
-        List<Map<String, Object>> teleportPadStates = new ArrayList<>();
-        for (TeleportPad teleportPad : gameEntities.getAllTeleportPads()) {
-            Vector2 pos = teleportPad.getPosition();
-            Map<String, Object> padState = new HashMap<>();
-            padState.put("id", teleportPad.getId());
-            padState.put("type", "TELEPORT_PAD");
-            padState.put("x", pos.x);
-            padState.put("y", pos.y);
-            padState.put("active", teleportPad.isActive());
-            padState.put("ownerId", teleportPad.getOwnerId());
-            padState.put("ownerTeam", teleportPad.getOwnerTeam());
-            padState.put("isLinked", teleportPad.isLinked());
-            padState.put("isCharging", teleportPad.isCharging());
-            padState.put("chargingProgress", teleportPad.getChargingProgress());
-            padState.put("pulseValue", teleportPad.getPulseValue());
-            if (teleportPad.getLinkedPad() != null) {
-                padState.put("linkedPadId", teleportPad.getLinkedPad().getId());
-            }
-            teleportPadStates.add(padState);
-        }
-        return teleportPadStates;
-    }
-
     private List<Map<String, Object>> createDefenseLaserStates() {
         List<Map<String, Object>> defenseLaserStates = new ArrayList<>();
         for (DefenseLaser defenseLaser : gameEntities.getAllDefenseLasers()) {
@@ -533,7 +497,7 @@ public class GameStateSerializer {
                     && !key.equals("players") && !key.equals("projectiles")
                     && !key.equals("fieldEffects") && !key.equals("beams")
                     && !key.equals("turrets") && !key.equals("nets")
-                    && !key.equals("mines") && !key.equals("teleportPads")
+                    && !key.equals("mines")
                     && !key.equals("defenseLasers") && !key.equals("powerUps")) {
                 state.put(key, entry.getValue());
             }
@@ -592,7 +556,6 @@ public class GameStateSerializer {
         state.put("turrets", List.of());
         state.put("nets", List.of());
         state.put("mines", List.of());
-        state.put("teleportPads", List.of());
         state.put("defenseLasers", List.of());
         state.put("powerUps", List.of());
 

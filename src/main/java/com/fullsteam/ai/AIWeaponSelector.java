@@ -430,9 +430,7 @@ public class AIWeaponSelector {
                 // Snipers prefer tactical and defensive utilities
                 List<UtilityWeapon> sniperUtilities = List.of(
                         UtilityWeapon.TURRET_CONSTRUCTOR,
-                        UtilityWeapon.WALL_BUILDER,
-                        UtilityWeapon.MINE_LAYER,
-                        UtilityWeapon.TELEPORTER
+                        UtilityWeapon.MINE_LAYER
                 );
                 yield sniperUtilities.get(random.nextInt(sniperUtilities.size()));
             }
@@ -441,7 +439,6 @@ public class AIWeaponSelector {
                 List<UtilityWeapon> rusherUtilities = List.of(
                         UtilityWeapon.SPEED_BOOST_PAD,
                         UtilityWeapon.NET_LAUNCHER,
-                        UtilityWeapon.TELEPORTER,
                         UtilityWeapon.SMOKE_GRENADE
                 );
                 yield rusherUtilities.get(random.nextInt(rusherUtilities.size()));
@@ -454,7 +451,6 @@ public class AIWeaponSelector {
                         UtilityWeapon.TURRET_CONSTRUCTOR,
                         UtilityWeapon.GRAVITY_WELL,
                         UtilityWeapon.SLOW_FIELD,
-                        UtilityWeapon.TELEPORTER,
                         UtilityWeapon.SMOKE_GRENADE
                 );
                 yield strategistUtilities.get(random.nextInt(strategistUtilities.size()));
@@ -464,7 +460,6 @@ public class AIWeaponSelector {
                 List<UtilityWeapon> guardianUtilities = List.of(
                         UtilityWeapon.HEAL_ZONE,
                         UtilityWeapon.SHIELD_GENERATOR,
-                        UtilityWeapon.WALL_BUILDER,
                         UtilityWeapon.TURRET_CONSTRUCTOR,
                         UtilityWeapon.MINE_LAYER,
                         UtilityWeapon.SPEED_BOOST_PAD

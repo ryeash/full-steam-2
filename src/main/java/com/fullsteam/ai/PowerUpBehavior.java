@@ -175,8 +175,8 @@ public class PowerUpBehavior implements AIBehavior {
         
         for (Workshop workshop : gameEntities.getAllWorkshops()) {
             if (workshop.getId() == targetWorkshopId && workshop.isActive()) {
-                // Check if it's our team's workshop or FFA
-                if (aiPlayer.getTeam() == 0 || workshop.getOwnerTeam() == aiPlayer.getTeam()) {
+                // Workshops are team-neutral; any player may use them in FFA mode
+                if (aiPlayer.getTeam() == 0) {
                     return workshop;
                 }
             }
@@ -198,8 +198,8 @@ public class PowerUpBehavior implements AIBehavior {
                 continue;
             }
             
-            // Only use our team's workshop (or any in FFA)
-            if (aiPlayer.getTeam() != 0 && workshop.getOwnerTeam() != aiPlayer.getTeam()) {
+            // Workshops are team-neutral; team-affiliated AIs skip them (matches prior behavior)
+            if (aiPlayer.getTeam() != 0) {
                 continue;
             }
             
