@@ -2,7 +2,9 @@ package com.fullsteam.controller;
 
 import com.fullsteam.GameLobby;
 import com.fullsteam.games.GameManager;
+import com.fullsteam.games.GameManager.JoinRejectReason;
 import com.fullsteam.model.PlayerSession;
+import com.fullsteam.model.PlayerSessionState;
 import com.fullsteam.util.IdGenerator;
 import io.micronaut.websocket.WebSocketSession;
 import jakarta.inject.Inject;
@@ -22,53 +24,54 @@ public class PlayerConnectionService {
         this.gameLobby = gameLobby;
     }
 
-    public boolean connectPlayer(WebSocketSession session, String gameId) {
-        return connectPlayer(session, gameId, false);
+    /**
+     * Outcome of a {@link #connectPlayer} attempt. On success the session is
+     * attached to the supplied WebSocket. On failure the caller is expected to
+     * send a typed {@code joinRejected} message and close the socket.
+     */
+    public sealed interface ConnectResult {
+        record Success() implements ConnectResult {}
+        record Rejected(JoinRejectReason reason) implements ConnectResult {}
     }
 
-    public boolean connectPlayer(WebSocketSession session, String gameId, boolean asSpectator) {
+    public ConnectResult connectPlayer(WebSocketSession session, String gameId, boolean asSpectator) {
         try {
             int playerId = IdGenerator.nextPlayerId();
             PlayerSession playerSession = new PlayerSession(playerId, session);
-            playerSession.setSpectator(asSpectator);
+            playerSession.setState(asSpectator ? PlayerSessionState.SPECTATOR : PlayerSessionState.LOBBY);
 
-            // Get or create game
             GameManager game = gameLobby.getGame(gameId);
             if (game == null) {
-                if (asSpectator) {
-                    // Spectators can't join non-existent games
-                    log.warn("Spectator {} attempted to join non-existent game {}", playerId, gameId);
-                    return false;
-                }
-                game = gameLobby.createGame();
-                gameId = game.getGameId();
+                // No more silent auto-create. Games are spawned explicitly via POST /api/games.
+                log.warn("{} {} attempted to join unknown game {}",
+                        asSpectator ? "Spectator" : "Player", playerId, gameId);
+                return new ConnectResult.Rejected(JoinRejectReason.GAME_NOT_FOUND);
             }
 
-            // Add player/spectator to game
             if (game.addPlayer(playerSession)) {
                 playerSession.setGame(game);
                 session.put(SESSION_KEY, playerSession);
-                
-                // Only increment player count for actual players, not spectators
+
                 if (!asSpectator) {
                     gameLobby.incrementPlayerCount();
                 }
-
-                log.info("{} {} connected to game {}", 
-                    asSpectator ? "Spectator" : "Player", 
-                    playerSession.getPlayerId(), 
-                    gameId);
-                return true;
-            } else {
-                log.warn("Failed to add {} {} to game {}", 
-                    asSpectator ? "spectator" : "player",
-                    playerSession.getPlayerId(), 
-                    gameId);
-                return false;
+                log.info("{} {} connected to game {}",
+                        asSpectator ? "Spectator" : "Player",
+                        playerSession.getPlayerId(),
+                        gameId);
+                return new ConnectResult.Success();
             }
+
+            JoinRejectReason reason = game.determineJoinRejectReason(playerSession);
+            log.warn("Failed to add {} {} to game {} (reason: {})",
+                    asSpectator ? "spectator" : "player",
+                    playerSession.getPlayerId(),
+                    gameId,
+                    reason);
+            return new ConnectResult.Rejected(reason);
         } catch (Exception e) {
             log.error("Error connecting to game {}", gameId, e);
-            return false;
+            return new ConnectResult.Rejected(JoinRejectReason.GAME_NOT_FOUND);
         }
     }
 
@@ -89,12 +92,10 @@ public class PlayerConnectionService {
             if (!playerSession.isSpectator()) {
                 gameLobby.decrementPlayerCount();
             }
-            
-            log.info("{} {} disconnected", 
-                playerSession.isSpectator() ? "Spectator" : "Player",
-                playerSession.getPlayerId());
+
+            log.info("{} {} disconnected",
+                    playerSession.isSpectator() ? "Spectator" : "Player",
+                    playerSession.getPlayerId());
         }
     }
 }
-
-

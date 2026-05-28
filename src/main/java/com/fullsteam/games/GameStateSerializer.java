@@ -153,6 +153,99 @@ public class GameStateSerializer {
     }
 
     /**
+     * Create initial game state for a session in {@code LOBBY} (yet-to-spawn)
+     * state. Includes the static world (terrain, obstacles, flag homes, KOTH
+     * zones, headquarters, workshops) so the client can render a minimal
+     * preview behind the customization modal, but no player or projectile data.
+     *
+     * @param lobbyTimeoutMs Milliseconds the server will wait before
+     *                       soft-downgrading the session to spectator; the
+     *                       client uses this for an informational countdown.
+     */
+    public Map<String, Object> createLobbyInitialState(long lobbyTimeoutMs) {
+        Map<String, Object> state = new HashMap<>();
+        state.put("type", "lobbyInit");
+        state.put("awaitingSpawn", true);
+        state.put("lobbyTimeoutMs", lobbyTimeoutMs);
+        state.put("worldWidth", gameConfig.getWorldWidth());
+        state.put("worldHeight", gameConfig.getWorldHeight());
+        state.put("teamCount", gameConfig.getTeamCount());
+        state.put("teamMode", gameConfig.isTeamMode());
+
+        // Static world data
+        if (teamSpawnManager.isTeamSpawningEnabled()) {
+            state.put("teamAreas", teamSpawnManager.getTeamAreaInfo());
+        }
+        state.put("terrain", terrainGenerator.getTerrainData());
+        state.put("obstacles", createInitialObstacleStates());
+
+        if (gameConfig.getRules().hasFlags()) {
+            state.put("flags", createInitialFlagStates());
+            state.put("flagsPerTeam", gameConfig.getRules().getFlagsPerTeam());
+            state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
+        }
+        if (gameConfig.getRules().hasOddball()) {
+            Map<String, Object> oddballData = createInitialOddballState();
+            if (oddballData != null) {
+                state.put("oddball", oddballData);
+            }
+        }
+        if (gameConfig.getRules().hasVip()) {
+            state.put("vipMode", true);
+        }
+
+        return state;
+    }
+
+    /**
+     * Strip dynamic entity collections from a full game state for delivery to a
+     * {@code LOBBY} session. The modal sits over a static map preview, so we
+     * only keep map geometry and objective-style entities (workshops, KOTH
+     * zones, headquarters, flag positions). All player/projectile/utility data
+     * is replaced with empty lists.
+     *
+     * <p>Mirrors the {@link #createBlindedGameState} pattern.
+     *
+     * @param fullState the unfiltered state produced by {@link #createGameState()}.
+     */
+    public Map<String, Object> createLobbyGameState(Map<String, Object> fullState) {
+        Map<String, Object> state = new HashMap<>();
+        state.put("type", "gameState");
+        state.put("timestamp", System.currentTimeMillis());
+        state.put("awaitingSpawn", true);
+
+        // Carry through rule/round/score metadata, plus any objective-style entity
+        // collections that aren't part of the dynamic-actor stripping below.
+        for (Map.Entry<String, Object> entry : fullState.entrySet()) {
+            String key = entry.getKey();
+            if (key.equals("type") || key.equals("timestamp")) {
+                continue;
+            }
+            if (key.equals("players") || key.equals("projectiles")
+                    || key.equals("fieldEffects") || key.equals("beams")
+                    || key.equals("turrets") || key.equals("nets")
+                    || key.equals("mines") || key.equals("defenseLasers")
+                    || key.equals("powerUps")) {
+                continue;
+            }
+            state.put(key, entry.getValue());
+        }
+
+        // Empty out the dynamic actor collections the client expects to iterate
+        state.put("players", List.of());
+        state.put("projectiles", List.of());
+        state.put("fieldEffects", List.of());
+        state.put("beams", List.of());
+        state.put("turrets", List.of());
+        state.put("nets", List.of());
+        state.put("mines", List.of());
+        state.put("defenseLasers", List.of());
+        state.put("powerUps", List.of());
+
+        return state;
+    }
+
+    /**
      * Create initial game state for spectators (no player entity).
      */
     public Map<String, Object> createSpectatorInitialState() {

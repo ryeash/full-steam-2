@@ -889,7 +889,9 @@
     }
 
     function joinGame(gameId) {
-        window.location.href = `/config.html?gameId=${gameId}`;
+        // Player customizes their loadout inside game.html now (modal). The
+        // WebSocket opens immediately and reserves a slot in LOBBY state.
+        window.location.href = `/game.html?gameId=${gameId}`;
     }
 
     async function createPresetGame(presetType) {
@@ -1264,7 +1266,7 @@
             }
 
             const result = await response.json();
-            window.location.href = `/config.html?gameId=${result.gameId}`;
+            window.location.href = `/game.html?gameId=${result.gameId}`;
         } catch (error) {
             console.error('Error creating preset game:', error);
             alert('Failed to create game. Please try again.');
@@ -1540,9 +1542,9 @@
 
             const result = await response.json();
             closeCustomGameModal();
-            
-            // Redirect to weapon config page for the new game
-            window.location.href = `/config.html?gameId=${result.gameId}`;
+
+            // Loadout is now picked from the modal inside game.html.
+            window.location.href = `/game.html?gameId=${result.gameId}`;
         } catch (error) {
             console.error('Error creating custom game:', error);
             alert('Failed to create custom game. Please try again.');

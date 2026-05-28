@@ -1,7 +1,9 @@
 package com.fullsteam.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fullsteam.controller.PlayerConnectionService.ConnectResult;
 import com.fullsteam.games.GameManager;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
@@ -43,16 +45,36 @@ public class GameWebSocketEndpoint {
         } catch (Exception e) {
             log.debug("Could not parse spectate parameter from URI: {}", e.getMessage());
         }
-        
+
         log.info("WebSocket connection opened for gameId: {} (spectator: {})", gameId, asSpectator);
-        
-        if (!connectionService.connectPlayer(session, gameId, asSpectator)) {
-            log.warn("Failed to connect {} to game {}, closing session", 
-                asSpectator ? "spectator" : "player", gameId);
+
+        ConnectResult result = connectionService.connectPlayer(session, gameId, asSpectator);
+        if (result instanceof ConnectResult.Rejected rejected) {
+            log.warn("Failed to connect {} to game {} (reason: {}), closing session",
+                    asSpectator ? "spectator" : "player", gameId, rejected.reason());
+            sendJoinRejected(session, rejected.reason().name());
             session.close();
         } else {
-            log.info("{} successfully connected to game {}", 
-                asSpectator ? "Spectator" : "Player", gameId);
+            log.info("{} successfully connected to game {}",
+                    asSpectator ? "Spectator" : "Player", gameId);
+        }
+    }
+
+    private void sendJoinRejected(WebSocketSession session, String reason) {
+        try {
+            if (session.isOpen() && session.isWritable()) {
+                String json = objectMapper.writeValueAsString(Map.of(
+                        "type", "joinRejected",
+                        "reason", reason
+                ));
+                // Use sendSync where available so the client receives the
+                // message before we close the socket; fall back to async otherwise.
+                session.sendSync(json);
+            }
+        } catch (JsonProcessingException e) {
+            log.error("Error serializing joinRejected message", e);
+        } catch (Exception e) {
+            log.debug("Failed to send joinRejected before close: {}", e.getMessage());
         }
     }
 
@@ -87,6 +109,10 @@ public class GameWebSocketEndpoint {
                         PlayerConfigRequest request = objectMapper.treeToValue(rootNode, PlayerConfigRequest.class);
                         game.handlePlayerConfigChange(playerId, request);
                     }
+                    break;
+                case "readyToSpawn":
+                    PlayerConfigRequest spawnRequest = objectMapper.treeToValue(rootNode, PlayerConfigRequest.class);
+                    game.handleReadyToSpawn(playerId, spawnRequest);
                     break;
                 case "playerInput":
                     // Spectators can't send player input

@@ -818,24 +818,32 @@ class GameEngine {
         const params = new URLSearchParams(window.location.search);
         const gameId = params.get('gameId') || 'default';
         const spectate = params.get('spectate') === 'true';
-        
-        // Set spectator flag
+
+        // Set spectator flag (preserved for SpectatorMode)
         this.isSpectator = spectate;
-        
+        // Indicates the player has not yet spawned. Becomes false on initialState.
+        this.isAwaitingSpawn = !spectate;
+        // Was set when the server told us our lobby slot was freed (timeout).
+        // After this, "Ready" actually retries as SPECTATOR->PLAYING.
+        this.wasLobbyDowngraded = false;
+        // Suppresses the generic connection-lost overlay when the server is
+        // closing the socket on a typed joinRejected.
+        this.expectingSocketClose = false;
+
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/game/${gameId}?spectate=${spectate}`;
-        
+
         return new Promise((resolve, reject) => {
             this.websocket = new WebSocket(wsUrl);
-            
+
             this.websocket.onopen = () => {
-                // Spectators don't need to send configuration
-                if (!this.isSpectator) {
-                    this.sendPlayerConfiguration();
-                }
+                // No client-initiated configChange here. For non-spectators the
+                // server will send `lobbyInit`; we wait for that and then show
+                // the customization modal. `readyToSpawn` is what spawns the
+                // player.
                 resolve();
             };
-            
+
             this.websocket.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
@@ -844,15 +852,17 @@ class GameEngine {
                     console.error('Error parsing server message:', error);
                 }
             };
-            
+
             this.websocket.onclose = () => {
-                this.showConnectionError();
+                if (!this.expectingSocketClose) {
+                    this.showConnectionError();
+                }
             };
-            
+
             this.websocket.onerror = (error) => {
                 reject(error);
             };
-            
+
             this.safeSetTimeout(() => {
                 if (this.websocket.readyState !== WebSocket.OPEN) {
                     reject(new Error('Connection timeout'));
@@ -975,13 +985,22 @@ class GameEngine {
             this.handleSpectatorInit(data);
             return;
         }
-        
+
         // Delegate to spectator mode if active
         if (this.spectatorMode) {
             this.spectatorMode.handleServerMessage(data);
         }
-        
+
         switch (data.type) {
+            case 'lobbyInit':
+                this.handleLobbyInit(data);
+                break;
+            case 'lobbyTimeout':
+                this.handleLobbyTimeout(data);
+                break;
+            case 'joinRejected':
+                this.handleJoinRejected(data);
+                break;
             case 'initialState':
                 this.handleInitialState(data);
                 break;
@@ -1007,75 +1026,237 @@ class GameEngine {
     }
     
     handleSpectatorInit(data) {
-        // Set world bounds (server sends worldWidth/worldHeight directly)
-        this.worldBounds.width = data.worldWidth || 2000;
-        this.worldBounds.height = data.worldHeight || 2000;
-        
-        // Store team information (for rendering)
-        this.teamMode = data.teamMode || false;
-        this.teamCount = data.teamCount || 0;
-        
-        // Store terrain information
-        this.terrainData = data.terrain || null;
-        
-        // Create background and grid (same as normal players)
-        if (this.terrainData) {
-            this.createProceduralTerrain();
+        // Use the shared world setup so a LOBBY -> SPECTATOR downgrade doesn't
+        // duplicate obstacles/terrain/grid that we already drew during lobbyInit.
+        // Skip the minimap because the spectator HUD has a full-map overlay.
+        this.setupWorldFromInitData(data, /* includeMinimap */ false);
+
+        // If the user joined directly as a spectator (URL flag), close the
+        // loadout modal. After a lobby-timeout downgrade, keep it open so the
+        // user can still pick a loadout and click Ready to claim a free slot.
+        if (!this.wasLobbyDowngraded) {
+            this.hideLoadoutModal();
         }
-        
-        if (this.teamMode && data.teamAreas) {
-            this.teamAreas = data.teamAreas;
-            this.createTeamSpawnAreas();
+
+        // Create the spectator mode instance if one isn't already running.
+        if (!this.spectatorMode && typeof SpectatorMode !== 'undefined') {
+            this.spectatorMode = new SpectatorMode(this);
+            this.spectatorMode.init(data);
         }
-        
-        this.createCrosshatchGrid();
-        
-        // Don't create minimap for spectators (they have full view)
-        // Spectators don't need player HUD either
-        
-        // Create spectator mode instance
-        this.spectatorMode = new SpectatorMode(this);
-        this.spectatorMode.init(data);
-        
+
         // Show game UI
-        document.getElementById('game-ui').style.display = 'block';
+        const gameUi = document.getElementById('game-ui');
+        if (gameUi) gameUi.style.display = 'block';
     }
     
     handleInitialState(data) {
         this.myPlayerId = data.playerId;
-        this.worldBounds.width = data.worldWidth || 2000;
-        this.worldBounds.height = data.worldHeight || 2000;
-        
-        // Store team information
-        this.teamMode = data.teamMode || false;
-        this.teamCount = data.teamCount || 0;
-        this.teamAreas = data.teamAreas || null;
-        
-        // Store terrain information
-        this.terrainData = data.terrain || null;
+        // World may already be set up from a prior lobbyInit; setup is idempotent.
+        this.setupWorldFromInitData(data);
 
-        if (data.obstacles) {
-            data.obstacles.forEach(obstacle => {
-                this.createObstacle(obstacle);
+        this.isAwaitingSpawn = false;
+        this.hideLoadoutModal();
+    }
+
+    /**
+     * Idempotently configure world bounds, terrain, obstacles, grid, team
+     * areas, and (optionally) the minimap from an initial-state-style
+     * payload. Shared between {@code handleInitialState},
+     * {@code handleLobbyInit}, and {@code handleSpectatorInit}.
+     *
+     * @param data           initial-state payload from the server.
+     * @param includeMinimap when false (spectators), the minimap is skipped
+     *                       since the spectator HUD has its own full-map view.
+     */
+    setupWorldFromInitData(data, includeMinimap = true) {
+        if (!this._worldSetupDone) {
+            this.worldBounds.width = data.worldWidth || 2000;
+            this.worldBounds.height = data.worldHeight || 2000;
+            this.teamMode = data.teamMode || false;
+            this.teamCount = data.teamCount || 0;
+            this.teamAreas = data.teamAreas || null;
+            this.terrainData = data.terrain || null;
+
+            if (data.obstacles) {
+                data.obstacles.forEach(obstacle => this.createObstacle(obstacle));
+            }
+            if (this.terrainData) {
+                this.createProceduralTerrain();
+            }
+            if (this.teamMode && this.teamAreas) {
+                this.createTeamSpawnAreas();
+            }
+            this.createCrosshatchGrid();
+            if (includeMinimap) {
+                this.createHUDMinimap();
+                this.updateHUDLayout();
+            }
+
+            this._worldSetupDone = true;
+        }
+    }
+
+    handleLobbyInit(data) {
+        this.setupWorldFromInitData(data);
+        // Show the loading screen briefly during initial layout so the canvas
+        // doesn't pop up under the modal; the modal itself takes over right after.
+        this.showLoadoutModal(data);
+    }
+
+    handleLobbyTimeout(data) {
+        // Server has soft-downgraded us to spectator. The modal stays visible
+        // so the user can still pick a loadout and click Ready when a slot opens.
+        this.wasLobbyDowngraded = true;
+        this.isAwaitingSpawn = false; // We're effectively a spectator now.
+        this.showLoadoutBanner(
+            'Your slot was freed for being idle. Press Ready when you want to '
+            + 'try to spawn into an available slot.'
+        );
+        const countdownEl = document.getElementById('lobby-countdown');
+        if (countdownEl) countdownEl.textContent = '';
+        if (this._lobbyCountdownInterval) {
+            clearInterval(this._lobbyCountdownInterval);
+            this._lobbyCountdownInterval = null;
+        }
+    }
+
+    handleJoinRejected(data) {
+        // Server explicitly rejected our spawn/join. Show a friendly overlay
+        // and stop the generic disconnect screen from masking the reason.
+        this.expectingSocketClose = true;
+        this.hideLoadoutModal();
+
+        const reason = data && data.reason ? data.reason : 'UNKNOWN';
+        const messages = {
+            GAME_FULL: 'This game is full. Try a different game or wait for a slot to open.',
+            GAME_LOCKED: 'This game has locked late joiners out and cannot accept new players.',
+            GAME_ENDED: 'This game has already finished.',
+            GAME_NOT_FOUND: "That game doesn't exist anymore. It may have ended."
+        };
+        const titleEl = document.getElementById('join-rejected-title');
+        const msgEl = document.getElementById('join-rejected-message');
+        const returnBtn = document.getElementById('join-rejected-return');
+        const overlay = document.getElementById('join-rejected');
+        if (titleEl) {
+            titleEl.textContent = reason === 'GAME_NOT_FOUND' ? 'Game not found' : 'Unable to join';
+        }
+        if (msgEl) {
+            msgEl.textContent = messages[reason] || `Reason: ${reason}`;
+        }
+        if (returnBtn && !returnBtn._handlerBound) {
+            returnBtn._handlerBound = true;
+            returnBtn.addEventListener('click', () => {
+                window.location.href = '/lobby.html';
             });
         }
-        
-        // Create procedural terrain background
-        if (this.terrainData) {
-            this.createProceduralTerrain();
+        if (overlay) overlay.classList.add('visible');
+    }
+
+    showLoadoutModal(data) {
+        const modal = document.getElementById('loadout-modal');
+        if (!modal) {
+            console.warn('Loadout modal markup missing from page');
+            return;
         }
-        
-        // Draw team spawn areas if in team mode
-        if (this.teamMode && this.teamAreas) {
-            this.createTeamSpawnAreas();
+
+        const root = document.getElementById('loadout-customizer-root');
+        const readyBtn = document.getElementById('ready-up');
+
+        if (!this.weaponCustomizer && root && typeof WeaponCustomizer !== 'undefined') {
+            this.weaponCustomizer = new WeaponCustomizer(root, {
+                onValidityChange: (isValid) => {
+                    if (readyBtn) readyBtn.disabled = !isValid;
+                }
+            });
+            this.weaponCustomizer.init();
         }
-        
-        // Create crosshatch grid background with correct world dimensions
-        this.createCrosshatchGrid();
-        
-        // Create minimap with correct aspect ratio
-        this.createHUDMinimap();
-        this.updateHUDLayout();
+
+        if (readyBtn && !readyBtn._handlerBound) {
+            readyBtn._handlerBound = true;
+            readyBtn.addEventListener('click', () => this.submitReadyToSpawn());
+        }
+
+        // Show the modal and hide the loading screen behind it
+        modal.classList.add('visible');
+        const loading = document.getElementById('loading-screen');
+        if (loading) loading.style.display = 'none';
+        const gameUi = document.getElementById('game-ui');
+        if (gameUi) gameUi.style.display = 'block';
+
+        // Kick off the lobby countdown if the server told us a timeout
+        const timeoutMs = data && typeof data.lobbyTimeoutMs === 'number' ? data.lobbyTimeoutMs : null;
+        if (timeoutMs) this.startLobbyCountdown(timeoutMs);
+    }
+
+    hideLoadoutModal() {
+        const modal = document.getElementById('loadout-modal');
+        if (modal) modal.classList.remove('visible');
+        if (this._lobbyCountdownInterval) {
+            clearInterval(this._lobbyCountdownInterval);
+            this._lobbyCountdownInterval = null;
+        }
+        const countdownEl = document.getElementById('lobby-countdown');
+        if (countdownEl) countdownEl.textContent = '';
+    }
+
+    showLoadoutBanner(message) {
+        const banner = document.getElementById('loadout-banner');
+        if (banner) {
+            banner.textContent = message;
+            banner.classList.add('visible');
+        }
+    }
+
+    startLobbyCountdown(timeoutMs) {
+        const deadline = Date.now() + timeoutMs;
+        const el = document.getElementById('lobby-countdown');
+        if (this._lobbyCountdownInterval) {
+            clearInterval(this._lobbyCountdownInterval);
+        }
+        const tick = () => {
+            const remaining = Math.max(0, deadline - Date.now());
+            if (el) {
+                const seconds = Math.ceil(remaining / 1000);
+                el.textContent = remaining > 0
+                    ? `Slot held for ${seconds}s while customizing`
+                    : '';
+            }
+            if (remaining <= 0 && this._lobbyCountdownInterval) {
+                clearInterval(this._lobbyCountdownInterval);
+                this._lobbyCountdownInterval = null;
+            }
+        };
+        tick();
+        this._lobbyCountdownInterval = setInterval(tick, 1000);
+    }
+
+    submitReadyToSpawn() {
+        if (!this.weaponCustomizer || !this.websocket
+            || this.websocket.readyState !== WebSocket.OPEN) {
+            return;
+        }
+        const config = this.weaponCustomizer.getPlayerConfig();
+        const message = {
+            type: 'readyToSpawn',
+            weaponConfig: config.weaponConfig,
+            utilityWeapon: config.utilityWeapon
+        };
+        this.websocket.send(JSON.stringify(message));
+
+        // Visually indicate the action is in flight; server will reply with
+        // `initialState` (success) or `joinRejected` (failure).
+        const readyBtn = document.getElementById('ready-up');
+        if (readyBtn) {
+            readyBtn.disabled = true;
+            readyBtn.textContent = 'Spawning...';
+            // Restore label if server takes too long (defensive only)
+            this.safeSetTimeout(() => {
+                if (readyBtn && readyBtn.textContent === 'Spawning...') {
+                    readyBtn.textContent = 'Ready';
+                    readyBtn.disabled = !(this.weaponCustomizer && this.weaponCustomizer.isValid());
+                }
+            }, 5000);
+        }
     }
     
     handleGameState(data) {
@@ -6758,41 +6939,6 @@ class GameEngine {
         }
     }
     
-    sendPlayerConfiguration() {
-        const params = new URLSearchParams(window.location.search);
-        
-        // Try to decode Base64 encoded config first
-        let playerConfig = null;
-        const encodedConfig = params.get('config');
-        
-        if (encodedConfig) {
-            try {
-                const decodedString = decodeURIComponent(escape(atob(encodedConfig)));
-                playerConfig = JSON.parse(decodedString);
-            } catch (error) {
-                console.error('Failed to decode player config:', error);
-                playerConfig = null;
-            }
-        }
-        
-        // Use decoded config or fall back to legacy URL params
-        let weaponConfig, utilityWeapon;
-        
-        if (playerConfig && playerConfig.weaponConfig) {
-            weaponConfig = playerConfig.weaponConfig;
-            utilityWeapon = playerConfig.utilityWeapon;
-        } else {
-            throw Error("missing configuration")
-        }
-
-        const message = {
-            type: 'configChange',
-            weaponConfig: weaponConfig,
-            utilityWeapon: utilityWeapon
-        };
-        this.websocket.send(JSON.stringify(message));
-    }
-    
     updateLoadingProgress(percent, status) {
         const progressBar = document.getElementById('loading-progress');
         const statusText = document.getElementById('loading-status');
@@ -7051,7 +7197,13 @@ class GameEngine {
             clearInterval(this.memoryCleanupInterval);
             this.memoryCleanupInterval = null;
         }
-        
+
+        // Clear the lobby countdown interval, if any
+        if (this._lobbyCountdownInterval) {
+            clearInterval(this._lobbyCountdownInterval);
+            this._lobbyCountdownInterval = null;
+        }
+
         // Clear all pending timeouts
         this.pendingTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
         this.pendingTimeouts = [];

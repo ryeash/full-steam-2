@@ -14,6 +14,7 @@ import com.fullsteam.model.GameInfo;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
+import com.fullsteam.model.PlayerSessionState;
 import com.fullsteam.model.RespawnMode;
 import com.fullsteam.model.Rules;
 import com.fullsteam.model.UtilityWeapon;
@@ -60,6 +61,13 @@ import java.util.stream.Collectors;
 
 public class GameManager {
     protected static final Logger log = LoggerFactory.getLogger(GameManager.class);
+
+    /**
+     * How long (ms) a session may sit in {@link PlayerSessionState#LOBBY} before
+     * being soft-downgraded to {@link PlayerSessionState#SPECTATOR}, freeing
+     * the slot for AI fill.
+     */
+    public static final long LOBBY_TIMEOUT_MS = 180_000L;
 
     @Getter
     protected final String gameId;
@@ -220,19 +228,58 @@ public class GameManager {
     }
 
     public boolean addPlayer(PlayerSession playerSession) {
-        if (gameEntities.getPlayerSessions().size() >= getMaxPlayers()) {
+        // Spectators don't consume a player slot, so they're only blocked by
+        // game-over. Real players (LOBBY/PLAYING) are gated on cap + lock + game-over.
+        boolean asSpectator = playerSession.getState() == PlayerSessionState.SPECTATOR;
+
+        if (ruleSystem.isGameOver()) {
+            log.info("{} {} attempted to join finished game {}",
+                    asSpectator ? "Spectator" : "Player", playerSession.getPlayerId(), gameId);
             return false;
         }
 
-        // Check if game is locked to new players
-        if (isGameLocked()) {
-            log.info("Player {} attempted to join locked game {}", playerSession.getPlayerId(), gameId);
-            return false;
+        if (!asSpectator) {
+            if (getPlayingAndLobbyCount() >= getMaxPlayers()) {
+                return false;
+            }
+            if (isGameLocked()) {
+                log.info("Player {} attempted to join locked game {}",
+                        playerSession.getPlayerId(), gameId);
+                return false;
+            }
         }
 
         gameEntities.addPlayerSession(playerSession);
         onPlayerJoined(playerSession);
         return true;
+    }
+
+    /**
+     * Reason a {@link #addPlayer} call failed; used by the connection layer to
+     * produce a typed {@code joinRejected} message before closing the socket.
+     */
+    public JoinRejectReason determineJoinRejectReason(PlayerSession playerSession) {
+        if (ruleSystem.isGameOver()) {
+            return JoinRejectReason.GAME_ENDED;
+        }
+        if (playerSession.getState() == PlayerSessionState.SPECTATOR) {
+            return JoinRejectReason.GAME_ENDED; // only game-over rejects spectators
+        }
+        if (isGameLocked()) {
+            return JoinRejectReason.GAME_LOCKED;
+        }
+        return JoinRejectReason.GAME_FULL;
+    }
+
+    /**
+     * Reason a join attempt was rejected. Mirrors the wire protocol's
+     * {@code joinRejected.reason} string.
+     */
+    public enum JoinRejectReason {
+        GAME_FULL,
+        GAME_LOCKED,
+        GAME_NOT_FOUND,
+        GAME_ENDED
     }
 
     public void removePlayer(int playerId) {
@@ -253,6 +300,73 @@ public class GameManager {
         if (playerSession != null) {
             processPlayerConfigChange(playerSession, request);
         }
+    }
+
+    /**
+     * Handle a client's {@code readyToSpawn} request - the player has finished
+     * customizing their loadout and wants to enter the game.
+     *
+     * <ul>
+     *   <li>{@code LOBBY} → {@code PLAYING}: always succeeds (slot was already
+     *       reserved at WebSocket open).</li>
+     *   <li>{@code SPECTATOR} → {@code PLAYING}: only succeeds if there is a
+     *       free player slot. AI may be evicted to make room. Sends a typed
+     *       {@code joinRejected} reply on failure.</li>
+     *   <li>{@code PLAYING}: no-op (idempotent).</li>
+     * </ul>
+     */
+    public void handleReadyToSpawn(int playerId, PlayerConfigRequest request) {
+        PlayerSession playerSession = gameEntities.getPlayerSession(playerId);
+        if (playerSession == null) {
+            return;
+        }
+
+        WeaponConfig weaponConfig = request != null ? request.getWeaponConfig() : null;
+        UtilityWeapon utilityWeapon = null;
+        if (request != null && request.getUtilityWeapon() != null) {
+            try {
+                utilityWeapon = UtilityWeapon.valueOf(request.getUtilityWeapon());
+            } catch (IllegalArgumentException e) {
+                log.warn("Unknown utility weapon '{}' in readyToSpawn for player {}",
+                        request.getUtilityWeapon(), playerId);
+            }
+        }
+
+        switch (playerSession.getState()) {
+            case PLAYING -> log.debug("Ignoring readyToSpawn from already-playing session {}", playerId);
+            case LOBBY -> spawnPlayerFromSession(playerSession, weaponConfig, utilityWeapon);
+            case SPECTATOR -> spawnFromSpectator(playerSession, weaponConfig, utilityWeapon);
+        }
+    }
+
+    private void spawnFromSpectator(PlayerSession playerSession,
+                                    WeaponConfig weaponConfig,
+                                    UtilityWeapon utilityWeapon) {
+        if (ruleSystem.isGameOver()) {
+            sendJoinRejected(playerSession, "GAME_ENDED");
+            return;
+        }
+        if (isGameLocked()) {
+            sendJoinRejected(playerSession, "GAME_LOCKED");
+            return;
+        }
+        // Free a slot by evicting an AI if we're at the player cap
+        if (getPlayingAndLobbyCount() >= getMaxPlayers()) {
+            if (gameConfig.isEnableAIFilling() && getAIPlayerCount() > 0) {
+                removeExcessAIPlayers(1);
+            } else {
+                sendJoinRejected(playerSession, "GAME_FULL");
+                return;
+            }
+        }
+        spawnPlayerFromSession(playerSession, weaponConfig, utilityWeapon);
+    }
+
+    private void sendJoinRejected(PlayerSession playerSession, String reason) {
+        send(playerSession.getSession(), Map.of(
+                "type", "joinRejected",
+                "reason", reason
+        ));
     }
 
     public void send(WebSocketSession session, Object message) {
@@ -293,6 +407,17 @@ public class GameManager {
 
     public int getPlayerCount() {
         return gameEntities.getPlayerSessions().size();
+    }
+
+    /**
+     * Number of sessions that are reserving a player slot - both {@code LOBBY}
+     * (yet-to-spawn) and {@code PLAYING}. Spectators are excluded. This is the
+     * count that gates new joins against {@link #getMaxPlayers()}.
+     */
+    public int getPlayingAndLobbyCount() {
+        return (int) gameEntities.getPlayerSessions().values().stream()
+                .filter(s -> s.getState() != PlayerSessionState.SPECTATOR)
+                .count();
     }
 
     /**
@@ -411,10 +536,13 @@ public class GameManager {
     }
 
     /**
-     * Check if the game has any human players currently.
+     * Check if the game has any human player sessions occupying a slot
+     * (LOBBY or PLAYING). Spectators are intentionally excluded so the
+     * AI-only cleanup sweep ({@link com.fullsteam.GameLobby#cleanupAIOnlyGames})
+     * can reap a game that has nothing but spectators hanging around.
      */
     public boolean hasHumanPlayers() {
-        return getPlayerCount() > 0;
+        return getPlayingAndLobbyCount() > 0;
     }
 
     /**
@@ -545,6 +673,9 @@ public class GameManager {
             // Process individual player respawns based on rules
             processPlayerRespawns();
 
+            // Soft-downgrade idle lobby sessions so freed slots can be back-filled
+            processLobbyTimeouts();
+
             aiPlayerManager.update(gameEntities, deltaTime);
             gameEntities.getPlayerInputs().putAll(aiPlayerManager.getAllPlayerInputs());
             checkAndAdjustAIPlayers();
@@ -665,37 +796,69 @@ public class GameManager {
     }
 
     protected void onPlayerJoined(PlayerSession playerSession) {
-        // Handle spectators differently - they don't get a Player entity
-        if (playerSession.isSpectator()) {
-            // Send spectator-specific initial game state
-            send(playerSession.getSession(), gameStateSerializer.createSpectatorInitialState());
-
-            log.info("Spectator {} joined game {} successfully. Total spectators: {}",
-                    playerSession.getPlayerId(), gameId, getSpectatorCount());
-
-            // Notify players that a spectator joined (subtle notification)
-            gameEventManager.broadcastEvent(
-                    GameEvent.builder()
-                            .message("👁️ A spectator joined")
-                            .category(GameEvent.EventCategory.INFO)
-                            .color(GameEvent.EventCategory.INFO.getDefaultColor())
-                            .target(GameEvent.EventTarget.builder()
-                                    .type(GameEvent.EventTarget.TargetType.ALL)
-                                    .build())
-                            .displayDuration(2000L)
-                            .build()
-            );
-            return;
+        switch (playerSession.getState()) {
+            case SPECTATOR -> onSpectatorJoined(playerSession);
+            case LOBBY -> onLobbyJoined(playerSession);
+            case PLAYING -> log.warn("Session {} entered onPlayerJoined already in PLAYING state; ignoring.",
+                    playerSession.getPlayerId());
         }
+    }
 
-        // Normal player join logic
+    private void onSpectatorJoined(PlayerSession playerSession) {
+        // Send spectator-specific initial game state
+        send(playerSession.getSession(), gameStateSerializer.createSpectatorInitialState());
+
+        log.info("Spectator {} joined game {} successfully. Total spectators: {}",
+                playerSession.getPlayerId(), gameId, getSpectatorCount());
+
+        // Notify players that a spectator joined (subtle notification)
+        gameEventManager.broadcastEvent(
+                GameEvent.builder()
+                        .message("👁️ A spectator joined")
+                        .category(GameEvent.EventCategory.INFO)
+                        .color(GameEvent.EventCategory.INFO.getDefaultColor())
+                        .target(GameEvent.EventTarget.builder()
+                                .type(GameEvent.EventTarget.TargetType.ALL)
+                                .build())
+                        .displayDuration(2000L)
+                        .build()
+        );
+    }
+
+    private void onLobbyJoined(PlayerSession playerSession) {
+        // Holds a player slot but has no Player entity yet. The client renders
+        // the customization modal until it sends readyToSpawn. No AI rebalance
+        // here (the AI pre-fill stays put until the player actually spawns).
+        playerSession.setLobbyEnteredAt(System.currentTimeMillis());
+        send(playerSession.getSession(), gameStateSerializer.createLobbyInitialState(LOBBY_TIMEOUT_MS));
+        log.info("Player {} joined game {} in LOBBY state (awaiting loadout). Total sessions: {}",
+                playerSession.getPlayerId(), gameId, gameEntities.getPlayerSessions().size());
+    }
+
+    /**
+     * Materialize a {@link Player} entity for a session that is in LOBBY (or
+     * SPECTATOR) state. Caller is responsible for confirming the session is
+     * eligible (e.g. that a slot is available when transitioning a SPECTATOR
+     * to PLAYING).
+     */
+    protected Player spawnPlayerFromSession(PlayerSession playerSession,
+                                            WeaponConfig weaponConfig,
+                                            UtilityWeapon utilityWeapon) {
         int assignedTeam = assignPlayerToTeam();
         Vector2 spawnPoint = spawnPointManager.findVariedSpawnPointForTeam(assignedTeam);
-        log.info("Player {} joining game {} at spawn point ({}, {}) on team {}",
+        log.info("Player {} spawning in game {} at spawn point ({}, {}) on team {}",
                 playerSession.getPlayerId(), gameId, spawnPoint.x, spawnPoint.y, assignedTeam);
 
-        Player player = new Player(playerSession.getPlayerId(), playerSession.getPlayerName(), spawnPoint.x, spawnPoint.y, assignedTeam, gameConfig.getPlayerMaxHealth());
+        Player player = new Player(playerSession.getPlayerId(), playerSession.getPlayerName(),
+                spawnPoint.x, spawnPoint.y, assignedTeam, gameConfig.getPlayerMaxHealth());
         player.setHealth(gameConfig.getPlayerMaxHealth());
+
+        // Apply the loadout the client chose before we add the player to the world
+        if (weaponConfig != null || utilityWeapon != null) {
+            WeaponConfig primary = weaponConfig != null ? weaponConfig : WeaponConfig.ASSAULT_RIFLE_PRESET;
+            UtilityWeapon utility = utilityWeapon != null ? utilityWeapon : UtilityWeapon.HEAL_ZONE;
+            player.applyWeaponConfig(primary, utility);
+        }
 
         // Initialize lives based on respawn mode
         if (gameConfig.getRules().hasLimitedLives()) {
@@ -709,9 +872,11 @@ public class GameManager {
         gameEntities.addPlayer(player);
         world.addBody(player.getBody());
 
+        playerSession.setState(PlayerSessionState.PLAYING);
         send(playerSession.getSession(), createInitialGameState(player));
-        log.info("Player {} ({}) joined game {} successfully. Total players: {}, Total sessions: {}",
-                playerSession.getPlayerId(), playerSession.getPlayerName(), gameId, gameEntities.getPlayers().size(), gameEntities.getPlayerSessions().size());
+        log.info("Player {} ({}) spawned in game {} successfully. Total players: {}, Total sessions: {}",
+                playerSession.getPlayerId(), playerSession.getPlayerName(), gameId,
+                gameEntities.getPlayers().size(), gameEntities.getPlayerSessions().size());
 
         // Broadcast player join event with team color
         gameEventManager.broadcastPlayerJoin(playerSession.getPlayerName(), assignedTeam);
@@ -721,8 +886,9 @@ public class GameManager {
             ruleSystem.ensureVipForTeam(assignedTeam);
         }
 
-        // Adjust AI players when a human player joins
+        // Adjust AI players when a human player spawns
         adjustAIPlayers();
+        return player;
     }
 
     protected void onPlayerLeft(PlayerSession playerSession) {
@@ -903,14 +1069,27 @@ public class GameManager {
 
         boolean anyBlinded = gameEntities.getAllPlayers().stream()
                 .anyMatch(Player::isVisionObscured);
+        boolean anyLobby = gameEntities.getPlayerSessions().values().stream()
+                .anyMatch(s -> s.getState() == PlayerSessionState.LOBBY);
 
-        if (!anyBlinded) {
+        if (!anyBlinded && !anyLobby) {
             broadcast(fullState);
             return;
         }
 
-        // Per-player filtering: blinded players receive restricted state
+        // Per-session filtering for blinded/lobby sessions. Lazily computed so
+        // we don't materialize the stripped state when nobody's actually in
+        // LOBBY this tick.
+        Map<String, Object> lobbyState = null;
+
         for (PlayerSession session : gameEntities.getPlayerSessions().values()) {
+            if (session.getState() == PlayerSessionState.LOBBY) {
+                if (lobbyState == null) {
+                    lobbyState = gameStateSerializer.createLobbyGameState(fullState);
+                }
+                send(session.getSession(), lobbyState);
+                continue;
+            }
             Player player = gameEntities.getPlayer(session.getPlayerId());
             if (player != null && player.isVisionObscured()) {
                 send(session.getSession(), gameStateSerializer.createBlindedGameState(player, fullState));
@@ -930,6 +1109,41 @@ public class GameManager {
                 respawnPlayer(player);
             }
         }
+    }
+
+    /**
+     * Walk every active {@code LOBBY} session and downgrade any that have been
+     * idle longer than {@link #LOBBY_TIMEOUT_MS} to {@code SPECTATOR}. The
+     * freed slot is then back-filled by AI (if AI filling is enabled).
+     *
+     * <p>This is invoked every tick from {@link #update()}; the work is O(n)
+     * over sessions and trivially cheap for normal player counts.
+     */
+    private void processLobbyTimeouts() {
+        long now = System.currentTimeMillis();
+        boolean anyDowngraded = false;
+        for (PlayerSession session : gameEntities.getPlayerSessions().values()) {
+            if (session.getState() != PlayerSessionState.LOBBY) {
+                continue;
+            }
+            if (now - session.getLobbyEnteredAt() <= LOBBY_TIMEOUT_MS) {
+                continue;
+            }
+            downgradeLobbyToSpectator(session);
+            anyDowngraded = true;
+        }
+        if (anyDowngraded) {
+            adjustAIPlayers();
+        }
+    }
+
+    private void downgradeLobbyToSpectator(PlayerSession session) {
+        session.setState(PlayerSessionState.SPECTATOR);
+        send(session.getSession(), Map.of("type", "lobbyTimeout"));
+        // Switch the client over to the spectator view (full game state)
+        send(session.getSession(), gameStateSerializer.createSpectatorInitialState());
+        log.info("Lobby session {} timed out after {}ms; downgraded to SPECTATOR.",
+                session.getPlayerId(), LOBBY_TIMEOUT_MS);
     }
 
     public void respawnPlayer(Player player) {
