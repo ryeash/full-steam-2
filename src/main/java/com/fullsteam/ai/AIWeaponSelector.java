@@ -441,7 +441,8 @@ public class AIWeaponSelector {
                 List<UtilityWeapon> rusherUtilities = List.of(
                         UtilityWeapon.SPEED_BOOST_PAD,
                         UtilityWeapon.NET_LAUNCHER,
-                        UtilityWeapon.TELEPORTER
+                        UtilityWeapon.TELEPORTER,
+                        UtilityWeapon.SMOKE_GRENADE
                 );
                 yield rusherUtilities.get(random.nextInt(rusherUtilities.size()));
             }
@@ -453,7 +454,8 @@ public class AIWeaponSelector {
                         UtilityWeapon.TURRET_CONSTRUCTOR,
                         UtilityWeapon.GRAVITY_WELL,
                         UtilityWeapon.SLOW_FIELD,
-                        UtilityWeapon.TELEPORTER
+                        UtilityWeapon.TELEPORTER,
+                        UtilityWeapon.SMOKE_GRENADE
                 );
                 yield strategistUtilities.get(random.nextInt(strategistUtilities.size()));
             }

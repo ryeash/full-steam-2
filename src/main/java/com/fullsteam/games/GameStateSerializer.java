@@ -510,6 +510,98 @@ public class GameStateSerializer {
         return powerUpStates;
     }
 
+    // ========== Blinded Game State ==========
+
+    /**
+     * Create a restricted game state for a player whose vision is obscured by smoke.
+     * Only includes the player's own data and smoke field effects; all other entity
+     * data is stripped to enforce server-authoritative blindness.
+     *
+     * @param blindedPlayer The player inside smoke
+     * @param fullState     The full game state (reused for rule/round data)
+     */
+    public Map<String, Object> createBlindedGameState(Player blindedPlayer, Map<String, Object> fullState) {
+        Map<String, Object> state = new HashMap<>();
+        state.put("type", "gameState");
+        state.put("timestamp", System.currentTimeMillis());
+        state.put("visionObscured", true);
+
+        // Include rule system state (rounds, scores, victory) from full state
+        for (Map.Entry<String, Object> entry : fullState.entrySet()) {
+            String key = entry.getKey();
+            if (!key.equals("type") && !key.equals("timestamp")
+                    && !key.equals("players") && !key.equals("projectiles")
+                    && !key.equals("fieldEffects") && !key.equals("beams")
+                    && !key.equals("turrets") && !key.equals("nets")
+                    && !key.equals("mines") && !key.equals("teleportPads")
+                    && !key.equals("defenseLasers") && !key.equals("powerUps")) {
+                state.put(key, entry.getValue());
+            }
+        }
+
+        // Only include the blinded player's own data
+        List<Map<String, Object>> selfOnly = new ArrayList<>();
+        Vector2 pos = blindedPlayer.getPosition();
+        Map<String, Object> playerState = new HashMap<>();
+        playerState.put("id", blindedPlayer.getId());
+        playerState.put("name", blindedPlayer.getPlayerName());
+        playerState.put("team", blindedPlayer.getTeam());
+        playerState.put("x", pos.x);
+        playerState.put("y", pos.y);
+        playerState.put("rotation", blindedPlayer.getRotation());
+        playerState.put("health", blindedPlayer.healthPercent());
+        playerState.put("active", blindedPlayer.isActive());
+        playerState.put("ammo", blindedPlayer.getCurrentWeapon().getCurrentAmmo());
+        playerState.put("maxAmmo", blindedPlayer.getCurrentWeapon().getMagazineSize());
+        playerState.put("reloading", blindedPlayer.isReloading());
+        playerState.put("weaponRange", blindedPlayer.getCurrentWeapon().getRange());
+        playerState.put("kills", blindedPlayer.getKills());
+        playerState.put("deaths", blindedPlayer.getDeaths());
+        playerState.put("captures", blindedPlayer.getCaptures());
+        playerState.put("respawnTime", Math.max(0, ((double) blindedPlayer.getRespawnTime() - System.currentTimeMillis()) / 1000));
+        playerState.put("livesRemaining", blindedPlayer.getLivesRemaining());
+        playerState.put("eliminated", blindedPlayer.isEliminated());
+        playerState.put("activePowerUps", List.of());
+        selfOnly.add(playerState);
+        state.put("players", selfOnly);
+
+        // Only include SMOKE field effects (so the client can render the smoke cloud)
+        List<Map<String, Object>> smokeEffects = new ArrayList<>();
+        for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
+            if (effect.getType() == FieldEffectType.SMOKE) {
+                Vector2 ePos = effect.getPosition();
+                Map<String, Object> effectState = new HashMap<>();
+                effectState.put("id", effect.getId());
+                effectState.put("type", effect.getType().name());
+                effectState.put("x", ePos.x);
+                effectState.put("y", ePos.y);
+                effectState.put("radius", effect.getRadius());
+                effectState.put("duration", effect.getDuration());
+                effectState.put("timeRemaining", effect.getTimeRemaining());
+                effectState.put("progress", effect.getProgress());
+                effectState.put("active", effect.isActive());
+                effectState.put("ownerTeam", effect.getOwnerTeam());
+                smokeEffects.add(effectState);
+            }
+        }
+        state.put("fieldEffects", smokeEffects);
+
+        // Empty all other entity lists
+        state.put("projectiles", List.of());
+        state.put("beams", List.of());
+        state.put("turrets", List.of());
+        state.put("nets", List.of());
+        state.put("mines", List.of());
+        state.put("teleportPads", List.of());
+        state.put("defenseLasers", List.of());
+        state.put("powerUps", List.of());
+
+        // Keep obstacles (static map geometry doesn't reveal enemy positions)
+        state.put("obstacles", fullState.get("obstacles"));
+
+        return state;
+    }
+
     // ========== Game Mode Specific States ==========
 
     private List<Map<String, Object>> createKothZoneStates() {

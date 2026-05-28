@@ -41,7 +41,7 @@ class GameEngine {
             closeScoreboard: null
         };
         this.pendingTimeouts = [];
-        this.tickerCallbacks = [];
+        this.tickerCallbacks = new Set();
         this.memoryCleanupInterval = null;
         
         this.init();
@@ -177,7 +177,7 @@ class GameEngine {
      * Add a ticker callback with proper tracking for cleanup
      */
     addTickerCallback(callback) {
-        this.tickerCallbacks.push(callback);
+        this.tickerCallbacks.add(callback);
         this.app.ticker.add(callback);
     }
     
@@ -185,10 +185,7 @@ class GameEngine {
      * Remove a ticker callback and stop tracking it
      */
     removeTickerCallback(callback) {
-        const index = this.tickerCallbacks.indexOf(callback);
-        if (index > -1) {
-            this.tickerCallbacks.splice(index, 1);
-        }
+        this.tickerCallbacks.delete(callback);
         this.app.ticker.remove(callback);
     }
     
@@ -1349,8 +1346,36 @@ class GameEngine {
                 this.removeUtilityEntity(entityId);
             }
         }
+
+        // Handle vision-obscured overlay
+        this.updateVisionObscuredOverlay(data.visionObscured === true);
     }
     
+    /**
+     * Show or hide a full-screen smoke overlay when the player's vision is obscured.
+     */
+    updateVisionObscuredOverlay(isObscured) {
+        if (isObscured && !this.smokeOverlay) {
+            this.smokeOverlay = new PIXI.Graphics();
+            this.smokeOverlay.rect(
+                -this.app.screen.width,
+                -this.app.screen.height,
+                this.app.screen.width * 3,
+                this.app.screen.height * 3
+            ).fill({ color: 0x888888, alpha: 0.75 });
+            this.smokeOverlay.zIndex = 45; // Above game objects, below HUD
+            this.gameContainer.addChild(this.smokeOverlay);
+            this.gameContainer.sortableChildren = true;
+        } else if (isObscured && this.smokeOverlay) {
+            // Keep it visible, follow camera
+            this.smokeOverlay.visible = true;
+        } else if (!isObscured && this.smokeOverlay) {
+            this.gameContainer.removeChild(this.smokeOverlay);
+            this.smokeOverlay.destroy();
+            this.smokeOverlay = null;
+        }
+    }
+
     /**
      * Create a utility entity
      */
@@ -1519,58 +1544,61 @@ class GameEngine {
         
         document.body.appendChild(this.eventContainer);
         
-        // Add CSS styles for events
-        const style = document.createElement('style');
-        style.textContent = `
-            .game-event {
-                background: rgba(0, 0, 0, 0.85);
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 4px;
-                padding: 6px 10px;
-                margin-bottom: 4px;
-                font-weight: 500;
-                text-align: left;
-                font-size: 12px;
-                line-height: 1.3;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-                backdrop-filter: blur(3px);
-                -webkit-backdrop-filter: blur(3px);
-                max-width: 100%;
-                word-wrap: break-word;
-            }
-            
-            .game-event.event-kill {
-                border-left: 3px solid #FF4444;
-                border-color: rgba(255, 68, 68, 0.6);
-            }
-            
-            .game-event.event-capture {
-                border-left: 3px solid #00FF88;
-                border-color: rgba(0, 255, 136, 0.6);
-            }
-            
-            .game-event.event-system {
-                border-left: 3px solid #FFAA00;
-                border-color: rgba(255, 170, 0, 0.6);
-            }
-            
-            .game-event.event-achievement {
-                border-left: 3px solid #FFD700;
-                border-color: rgba(255, 215, 0, 0.6);
-                background: linear-gradient(135deg, rgba(255, 215, 0, 0.05), rgba(0, 0, 0, 0.85));
-            }
-            
-            .game-event.event-warning {
-                border-left: 3px solid #FF8800;
-                border-color: rgba(255, 136, 0, 0.6);
-            }
-            
-            .game-event.event-info {
-                border-left: 3px solid #00AAFF;
-                border-color: rgba(0, 170, 255, 0.6);
-            }
-        `;
-        document.head.appendChild(style);
+        // Add CSS styles for events (only once — survives reconnects)
+        if (!document.getElementById('game-event-styles')) {
+            const style = document.createElement('style');
+            style.id = 'game-event-styles';
+            style.textContent = `
+                .game-event {
+                    background: rgba(0, 0, 0, 0.85);
+                    border: 1px solid rgba(255, 255, 255, 0.3);
+                    border-radius: 4px;
+                    padding: 6px 10px;
+                    margin-bottom: 4px;
+                    font-weight: 500;
+                    text-align: left;
+                    font-size: 12px;
+                    line-height: 1.3;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+                    backdrop-filter: blur(3px);
+                    -webkit-backdrop-filter: blur(3px);
+                    max-width: 100%;
+                    word-wrap: break-word;
+                }
+                
+                .game-event.event-kill {
+                    border-left: 3px solid #FF4444;
+                    border-color: rgba(255, 68, 68, 0.6);
+                }
+                
+                .game-event.event-capture {
+                    border-left: 3px solid #00FF88;
+                    border-color: rgba(0, 255, 136, 0.6);
+                }
+                
+                .game-event.event-system {
+                    border-left: 3px solid #FFAA00;
+                    border-color: rgba(255, 170, 0, 0.6);
+                }
+                
+                .game-event.event-achievement {
+                    border-left: 3px solid #FFD700;
+                    border-color: rgba(255, 215, 0, 0.6);
+                    background: linear-gradient(135deg, rgba(255, 215, 0, 0.05), rgba(0, 0, 0, 0.85));
+                }
+                
+                .game-event.event-warning {
+                    border-left: 3px solid #FF8800;
+                    border-color: rgba(255, 136, 0, 0.6);
+                }
+                
+                .game-event.event-info {
+                    border-left: 3px solid #00AAFF;
+                    border-color: rgba(0, 170, 255, 0.6);
+                }
+            `;
+            document.head.appendChild(style);
+        }
     }
     
     removeGameEvent(eventElement) {
@@ -2581,6 +2609,7 @@ class GameEngine {
         // Create power-up container if it doesn't exist
         if (!sprite.powerUpContainer) {
             sprite.powerUpContainer = new PIXI.Container();
+            sprite.powerUpContainer._powerUpFingerprint = '';
             this.gameContainer.addChild(sprite.powerUpContainer);
         }
         
@@ -2588,19 +2617,20 @@ class GameEngine {
         sprite.powerUpContainer.position.set(sprite.x, sprite.y);
         sprite.powerUpContainer.visible = playerData.active;
         
-        // Parse active power-ups and create/update visuals
+        // Build a fingerprint so we only rebuild graphics when the set of effects changes
+        const fingerprint = activePowerUps.join('|');
+        const changed = fingerprint !== sprite.powerUpContainer._powerUpFingerprint;
+        sprite.powerUpContainer._powerUpFingerprint = fingerprint;
+        
         if (activePowerUps.length > 0) {
-            this.updatePowerUpVisuals(sprite.powerUpContainer, activePowerUps, sprite);
-        } else {
-            // Clear all power-up effects if no active power-ups - properly destroy to prevent memory leak
-            const childrenToDestroy = [...sprite.powerUpContainer.children];
-            childrenToDestroy.forEach(child => {
-                if (child.clear && typeof child.clear === 'function') {
-                    child.clear();
-                }
+            this.updatePowerUpVisuals(sprite.powerUpContainer, activePowerUps, sprite, changed);
+        } else if (changed) {
+            // Effects just cleared — destroy all children so nothing renders
+            const toDestroy = [...sprite.powerUpContainer.children];
+            toDestroy.forEach(child => {
+                sprite.powerUpContainer.removeChild(child);
                 child.destroy({ children: true, texture: false, baseTexture: false });
             });
-            sprite.powerUpContainer.removeChildren();
         }
     }
     
@@ -2628,21 +2658,18 @@ class GameEngine {
      * "poison:#8BC34A:cloud:true:Poison"
      * "fire:#FF4500:flame:true:Burning:{\"count\":12,\"radius\":22,\"height\":10}"
      */
-    updatePowerUpVisuals(container, activePowerUps, sprite) {
+    updatePowerUpVisuals(container, activePowerUps, sprite, changed) {
         // Parse render hints: "effect_name:#COLOR:animation_type:show_icon:Display Name:params"
-        // params is optional JSON object for animation customization
         const effects = activePowerUps.map(hint => {
             const parts = hint.split(':');
             
-            // Try to parse optional params (6th field onwards, rejoined in case of colons in JSON)
             let params = {};
             if (parts.length > 5) {
                 try {
                     const paramsString = parts.slice(5).join(':');
                     params = JSON.parse(paramsString);
                 } catch (e) {
-                    // If JSON parsing fails, treat as legacy format without params
-                    console.warn('Failed to parse renderHint params:', e);
+                    // Legacy format without params
                 }
             }
             
@@ -2656,20 +2683,26 @@ class GameEngine {
             };
         });
         
-        // Clear existing visuals - properly destroy to prevent memory leak
-        const childrenToDestroy = [...container.children];
-        childrenToDestroy.forEach(child => {
-            if (child.clear && typeof child.clear === 'function') {
-                child.clear();
+        // When the set of active effects changes we need to adjust the number
+        // of Graphics children. Otherwise we just clear() and redraw them.
+        if (changed) {
+            // Remove excess children
+            while (container.children.length > effects.length) {
+                const child = container.children[container.children.length - 1];
+                container.removeChild(child);
+                child.destroy({ children: true, texture: false, baseTexture: false });
             }
-            child.destroy({ children: true, texture: false, baseTexture: false });
-        });
-        container.removeChildren();
+            // Add missing children
+            while (container.children.length < effects.length) {
+                container.addChild(new PIXI.Graphics());
+            }
+        }
         
-        // Create visual effect for each active power-up
+        // Redraw each effect into its reusable Graphics object
         effects.forEach((effect, index) => {
-            // Create aura/glow around player
-            const aura = new PIXI.Graphics();
+            const aura = container.children[index];
+            if (!aura) return;
+            aura.clear();
             
             // Draw aura based on effect type
             if (effect.animation === 'sparkle' || effect.animation === 'pulse') {
@@ -2905,19 +2938,27 @@ class GameEngine {
                 aura.circle(0, 0, pulseSize * 0.7).fill({ color: effect.color, alpha: 0.3 });
             }
             
-            // Store animation type for update loop
             aura.animationType = effect.animation;
             aura.effectColor = effect.color;
             aura.effectIndex = index;
-            
-            container.addChild(aura);
-            
-            // Add icon badge if requested (for player's own view)
-            if (effect.showIcon && sprite.playerData.id === this.myPlayerId) {
-                const badge = this.createPowerUpBadge(effect, index);
-                container.addChild(badge);
-            }
         });
+        
+        // Rebuild badge overlays only when the effect set changes
+        if (changed) {
+            // Remove old badges (anything beyond the reusable aura slots)
+            while (container.children.length > effects.length) {
+                const child = container.children[container.children.length - 1];
+                container.removeChild(child);
+                child.destroy({ children: true, texture: false, baseTexture: false });
+            }
+            // Add icon badges for local player
+            effects.forEach((effect, index) => {
+                if (effect.showIcon && sprite.playerData.id === this.myPlayerId) {
+                    const badge = this.createPowerUpBadge(effect, index);
+                    container.addChild(badge);
+                }
+            });
+        }
     }
     
     /**
@@ -3768,22 +3809,16 @@ class GameEngine {
         const length = Math.sqrt(dx * dx + dy * dy);
         const angle = Math.atan2(dy, dx);
         
-        // Update beam graphics if length or angle changed significantly
+        // Redraw beam graphics when geometry changed — reuse the existing object
         if (Math.abs(length - beamContainer.beamLength) > 5 ||
             Math.abs(angle - beamContainer.beamAngle) > 0.1) {
             
-            // Remove old graphics
             if (beamContainer.beamGraphics) {
-                beamContainer.removeChild(beamContainer.beamGraphics);
-                beamContainer.beamGraphics.destroy();
+                beamContainer.beamGraphics.clear();
+                this.drawBeamGraphics(beamContainer.beamGraphics, beamData, length);
+                beamContainer.beamGraphics.rotation = angle;
             }
             
-            // Create new graphics with updated dimensions
-            const beamGraphics = this.createBeamGraphics(beamData, length);
-            beamGraphics.rotation = angle;
-            beamContainer.addChild(beamGraphics);
-            
-            beamContainer.beamGraphics = beamGraphics;
             beamContainer.beamLength = length;
             beamContainer.beamAngle = angle;
         }
@@ -4231,9 +4266,12 @@ class GameEngine {
      */
     createBeamGraphics(beamData, length) {
         const graphics = new PIXI.Graphics();
-        
-        // Determine beam type from damage properties
-        let beamType = 'LASER'; // default
+        this.drawBeamGraphics(graphics, beamData, length);
+        return graphics;
+    }
+    
+    drawBeamGraphics(graphics, beamData, length) {
+        let beamType = 'LASER';
         if (beamData.isHealingBeam) {
             beamType = 'HEAL_BEAM';
         } else if (beamData.damageType === 'DAMAGE_OVER_TIME') {
@@ -4246,15 +4284,15 @@ class GameEngine {
         
         switch (beamType) {
             case 'LASER':
-                return this.createLaserGraphics(graphics, length, beamData);
+                this.createLaserGraphics(graphics, length, beamData); break;
             case 'PLASMA_BEAM':
-                return this.createPlasmaBeamGraphics(graphics, length, beamData);
+                this.createPlasmaBeamGraphics(graphics, length, beamData); break;
             case 'HEAL_BEAM':
-                return this.createHealBeamGraphics(graphics, length, beamData);
+                this.createHealBeamGraphics(graphics, length, beamData); break;
             case 'RAILGUN':
-                return this.createRailgunGraphics(graphics, length, beamData);
+                this.createRailgunGraphics(graphics, length, beamData); break;
             default:
-                return this.createGenericBeamGraphics(graphics, length, beamData);
+                this.createGenericBeamGraphics(graphics, length, beamData); break;
         }
     }
     
@@ -5124,6 +5162,10 @@ class GameEngine {
             case 'SHIELD_BARRIER':
                 return 15; // Above players but below dangerous effects
             
+            // Smoke - render above players for visibility
+            case 'SMOKE':
+                return 25; // Above everything for visual coverage
+
             // Environmental effects
             case 'WARNING_ZONE':
             case 'EARTHQUAKE':
@@ -5720,6 +5762,8 @@ class GameEngine {
                 return this.createGravityWellGraphics(graphics, radius, effectData);
             case 'SPEED_BOOST':
                 return this.createSpeedBoostGraphics(graphics, radius, effectData);
+            case 'SMOKE':
+                return this.createSmokeGraphics(graphics, radius, effectData);
             // Environmental event effects
             case 'WARNING_ZONE':
                 return this.createWarningZoneGraphics(graphics, radius, effectData);
@@ -6235,6 +6279,34 @@ class GameEngine {
     }
     
     /**
+     * Create smoke cloud graphics (grey/white swirling cloud)
+     */
+    createSmokeGraphics(graphics, radius, effectData) {
+        // Outer smoke haze
+        graphics.circle(0, 0, radius).fill({ color: 0x888888, alpha: 0.5 });
+
+        // Mid-layer denser smoke
+        graphics.circle(0, 0, radius * 0.75).fill({ color: 0xaaaaaa, alpha: 0.55 });
+
+        // Inner dense core
+        graphics.circle(0, 0, radius * 0.45).fill({ color: 0xcccccc, alpha: 0.6 });
+
+        // Scattered smoke puffs for organic feel
+        for (let i = 0; i < 12; i++) {
+            const angle = (i / 12) * Math.PI * 2;
+            const distance = radius * (0.3 + Math.random() * 0.55);
+            const x = Math.cos(angle) * distance;
+            const y = Math.sin(angle) * distance;
+            const size = 6 + Math.random() * 10;
+
+            const grey = 0x999999 + Math.floor(Math.random() * 0x333333);
+            graphics.circle(x, y, size).fill({ color: grey, alpha: 0.4 + Math.random() * 0.2 });
+        }
+
+        return graphics;
+    }
+
+    /**
      * Create generic effect graphics
      */
     createGenericEffectGraphics(graphics, radius, effectData) {
@@ -6313,6 +6385,9 @@ class GameEngine {
                 break;
             case 'SPEED_BOOST':
                 this.animateSpeedBoost(container);
+                break;
+            case 'SMOKE':
+                this.animateSmoke(container);
                 break;
             // Environmental event animations
             case 'WARNING_ZONE':
@@ -6596,6 +6671,23 @@ class GameEngine {
     }
     
     /**
+     * Animate smoke cloud (slow swirling drift)
+     */
+    animateSmoke(container) {
+        const time = container.animationTime;
+
+        // Slow rotation for swirling effect
+        container.rotation = Math.sin(time * 0.7) * 0.15;
+
+        // Gentle pulsing scale
+        const pulse = 1.0 + Math.sin(time * 1.2) * 0.04;
+        container.scale.set(pulse);
+
+        // Alpha fluctuation to simulate drifting density
+        container.alpha = 0.65 + Math.sin(time * 0.9) * 0.1 + Math.sin(time * 2.1) * 0.05;
+    }
+
+    /**
      * Get animation speed for different effect types
      */
     getEffectAnimationSpeed(effectType) {
@@ -6619,6 +6711,8 @@ class GameEngine {
                 return 0.12; // Medium-fast, energetic
             case 'GRAVITY_WELL':
                 return 0.06; // Slow, ominous
+            case 'SMOKE':
+                return 0.04; // Slow, drifting animation
             // Environmental event speeds
             case 'WARNING_ZONE':
                 return 0.2; // Fast, urgent pulsing
@@ -6774,6 +6868,11 @@ class GameEngine {
     updateScoreboard(players) {
         const content = document.getElementById('scoreboard-content');
         if (!content || !players) return;
+        
+        // Throttle DOM updates to ~4 times per second
+        const now = performance.now();
+        if (this._lastScoreboardUpdate && now - this._lastScoreboardUpdate < 250) return;
+        this._lastScoreboardUpdate = now;
         
         // Check if we're in team mode
         const hasTeams = players.some(p => p.team && p.team > 0);
@@ -7360,7 +7459,7 @@ class GameEngine {
         
         // Remove all ticker callbacks
         if (this.app && this.app.ticker) {
-            this.tickerCallbacks.forEach(callback => {
+            [...this.tickerCallbacks].forEach(callback => {
                 this.removeTickerCallback(callback);
             });
             

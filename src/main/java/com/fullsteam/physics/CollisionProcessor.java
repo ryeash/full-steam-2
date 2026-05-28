@@ -416,6 +416,9 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             case SPEED_BOOST -> {
                 StatusEffectManager.applySpeedBoost(player, 0, 2.0, String.valueOf(fieldEffect.getOwnerId()));
             }
+            case SMOKE -> {
+                player.setVisionObscured(true);
+            }
             case PROXIMITY_MINE -> {
                 fieldEffect.setActive(false);
                 FieldEffect explosion = new FieldEffect(

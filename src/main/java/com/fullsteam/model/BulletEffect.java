@@ -9,6 +9,7 @@ public enum BulletEffect {
     ELECTRIC(16, "Projectiles chain lightning damage to nearby enemies", 60.0, 0.8, 1.0),
     FREEZING(14, "Projectiles slow down hit targets temporarily", 35.0, 0.2, 1.0),
     POISON(22, "Projectiles release poison gas, dealing area damage over time", 50.0, 0.5, 1.0),
+    SMOKE(0, "Projectiles create a vision-blocking smoke cloud on impact", 60.0, 0.0, 0.0),
 
     // Special
     BOUNCY(15, "Projectiles bounce off obstacles instead of stopping", 0, 1.0, 1.0),

@@ -41,6 +41,8 @@ public class Player extends GameEntity {
     private double maxSpeed = Config.PLAYER_SPEED;
     private final Set<AttributeModification> attributeModifications = new HashSet<>();
 
+    private boolean visionObscured = false; // Set true each tick while inside SMOKE field, reset before collision processing
+
     private int livesRemaining = -1; // -1 = unlimited, 0 = eliminated
     private boolean eliminated = false; // Permanently eliminated (no more respawns)
     private long eliminationTime = 0; // Timestamp when player was eliminated (for Battle Royale ranking)

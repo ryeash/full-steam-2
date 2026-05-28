@@ -2,6 +2,7 @@ package com.fullsteam.model;
 
 import com.fullsteam.physics.GameEntity;
 import com.fullsteam.physics.Player;
+import com.fullsteam.physics.Turret;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
@@ -120,6 +121,11 @@ public class FieldEffect extends GameEntity {
                 // For instantaneous effects, check if already affected
                 || (type.isInstantaneous() && affectedEntities.contains(entity.getId()))) {
             return false;
+        }
+
+        // SMOKE affects ALL players/turrets regardless of team or ownership
+        if (type == FieldEffectType.SMOKE) {
+            return entity instanceof Player || entity instanceof Turret;
         }
 
         if (entity instanceof Player player) {

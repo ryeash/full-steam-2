@@ -573,6 +573,9 @@ public class GameManager {
             updateUtilityEntities(deltaTime);
             updateDefenseLaserBeamEndpoints();
 
+            // Reset vision flags before physics collision pass re-evaluates them
+            gameEntities.getAllPlayers().forEach(p -> p.setVisionObscured(false));
+
             world.updatev(deltaTime);
 
             gameEntities.runPostUpdateHooks();
@@ -917,8 +920,25 @@ public class GameManager {
     }
 
     private void sendGameState() {
-        Map<String, Object> gameState = gameStateSerializer.createGameState();
-        broadcast(gameState);
+        Map<String, Object> fullState = gameStateSerializer.createGameState();
+
+        boolean anyBlinded = gameEntities.getAllPlayers().stream()
+                .anyMatch(Player::isVisionObscured);
+
+        if (!anyBlinded) {
+            broadcast(fullState);
+            return;
+        }
+
+        // Per-player filtering: blinded players receive restricted state
+        for (PlayerSession session : gameEntities.getPlayerSessions().values()) {
+            Player player = gameEntities.getPlayer(session.getPlayerId());
+            if (player != null && player.isVisionObscured()) {
+                send(session.getSession(), gameStateSerializer.createBlindedGameState(player, fullState));
+            } else {
+                send(session.getSession(), fullState);
+            }
+        }
     }
 
     private Map<String, Object> createInitialGameState(Player player) {

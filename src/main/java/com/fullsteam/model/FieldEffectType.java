@@ -17,6 +17,8 @@ public enum FieldEffectType {
     SPEED_BOOST(7.0, false),   // Increases ally movement speed
     PROXIMITY_MINE(30.0, false), // Proximity-triggered explosive mine
     
+    SMOKE(5.0, false),         // Vision-blocking smoke cloud (no damage, affects all players)
+
     // Event/Hazard effects
     WARNING_ZONE(3.0, false),  // Visual indicator for incoming hazard (no damage)
     EARTHQUAKE(4.0, false);    // Ground shake with damage over time

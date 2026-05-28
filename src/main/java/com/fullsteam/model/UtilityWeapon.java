@@ -38,7 +38,10 @@ public enum UtilityWeapon {
             null, "ProximityMine", 2.0, 50.0, 40.0, 40.0, UtilityCategory.DEFENSIVE),
 
     DEFENSE_LASER("Defense Laser", "Deploys rotating laser beams that sweep around the area",
-            null, "DefenseLaser", 8.0, 60.0, 40.0, 20.0, UtilityCategory.DEFENSIVE);
+            null, "DefenseLaser", 8.0, 60.0, 40.0, 20.0, UtilityCategory.DEFENSIVE),
+
+    SMOKE_GRENADE("Smoke Grenade", "Throws a grenade that detonates into a vision-blocking smoke cloud",
+            null, "Projectile", 4.0, 280.0, 60.0, 0.0, UtilityCategory.TACTICAL);
 
     private final String displayName;
     private final String description;

@@ -1,8 +1,10 @@
 package com.fullsteam.games;
 
 import com.fullsteam.util.IdGenerator;
+import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
+import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.DefenseLaser;
@@ -10,6 +12,7 @@ import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
+import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.TeleportPad;
 import com.fullsteam.physics.Turret;
 import org.dyn4j.dynamics.Body;
@@ -18,8 +21,8 @@ import org.dyn4j.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Set;
 import java.util.function.BiFunction;
-import java.util.function.Function;
 
 /**
  * Manages all utility weapon functionality including field effects, entity-based utilities, and utility beams.
@@ -101,6 +104,9 @@ public class UtilitySystem {
                 break;
             case DEFENSE_LASER:
                 createDefenseLaser(activation);
+                break;
+            case SMOKE_GRENADE:
+                createSmokeProjectile(activation);
                 break;
             default:
                 log.warn("Unknown entity-based utility weapon: {}", utility.getDisplayName());
@@ -249,6 +255,31 @@ public class UtilitySystem {
             gameEntities.addBeam(beam);
             world.addBody(beam.getBody());
         }
+    }
+
+    /**
+     * Create a smoke grenade using the standard Projectile system with GRENADE ordinance
+     * and SMOKE bullet effect. The projectile arcs, slows, and detonates into a SMOKE
+     * field effect via BulletEffectProcessor when dismissed.
+     */
+    private void createSmokeProjectile(Player.UtilityActivation activation) {
+        Vector2 velocity = activation.direction.copy();
+        velocity.multiply(250.0);
+        Projectile grenade = new Projectile(
+                activation.playerId,
+                activation.position.x,
+                activation.position.y,
+                velocity.x,
+                velocity.y,
+                0.0,
+                activation.utilityWeapon.getRange(),
+                activation.team,
+                0.87,
+                Set.of(BulletEffect.SMOKE),
+                Ordinance.GRENADE
+        );
+        gameEntities.addProjectile(grenade);
+        world.addBody(grenade.getBody());
     }
 
     /**

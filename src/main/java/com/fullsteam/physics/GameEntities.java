@@ -318,7 +318,6 @@ public class GameEntities {
         return netProjectiles.values();
     }
 
-
     // TeleportPad management
     public void addTeleportPad(TeleportPad teleportPad) {
         teleportPads.put(teleportPad.getId(), teleportPad);

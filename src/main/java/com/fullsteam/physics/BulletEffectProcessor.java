@@ -56,6 +56,9 @@ public class BulletEffectProcessor {
                 case POISON:
                     createPoisonEffect(projectile, hitPosition);
                     break;
+                case SMOKE:
+                    createSmokeEffect(projectile, hitPosition);
+                    break;
                 case PIERCING:
                     // Piercing is handled in collision detection - projectile continues
                     break;
@@ -144,6 +147,21 @@ public class BulletEffectProcessor {
         gameEntities.addFieldEffect(poison);
         log.debug("Created poison field effect at ({}, {}) with radius {} and damage {}",
                 position.x, position.y, poison.getRadius(), poison.getDamage());
+    }
+
+    public void createSmokeEffect(Projectile projectile, Vector2 position) {
+        FieldEffect smoke = new FieldEffect(
+                IdGenerator.nextEntityId(),
+                projectile.getOwnerId(),
+                FieldEffectType.SMOKE,
+                position,
+                BulletEffect.SMOKE.calculateRadius(projectile.getDamage(), projectile.getOrdinance()),
+                0.0,
+                FieldEffectType.SMOKE.getDefaultDuration(),
+                projectile.getOwnerTeam()
+        );
+        world.addBody(smoke.getBody());
+        gameEntities.addFieldEffect(smoke);
     }
 
     private void createFragmentation(Projectile projectile, Vector2 position) {
@@ -307,6 +325,7 @@ public class BulletEffectProcessor {
                 case HOMING:
                 case BOUNCY:
                 case FRAGMENTING:
+                case SMOKE:
                     break;
             }
         }

@@ -60,6 +60,8 @@ public class HazardAvoidance {
             case FREEZE, SLOW_FIELD, GRAVITY_WELL -> true;
             // Proximity mines - definitely avoid
             case PROXIMITY_MINE -> true;
+            // Smoke obscures vision - avoid unless intentionally using it
+            case SMOKE -> true;
             // Safe or beneficial effects
             case HEAL_ZONE, SPEED_BOOST, SHIELD_BARRIER, FRAGMENTATION -> false;
         };
@@ -77,6 +79,7 @@ public class HazardAvoidance {
             case ELECTRIC -> 0.75; // Can chain to nearby allies
             case WARNING_ZONE -> 0.6; // Incoming hazard
             case FREEZE, SLOW_FIELD -> 0.4; // Impairs movement
+            case SMOKE -> 0.5; // Blocks vision
             case GRAVITY_WELL -> 0.3; // Pulls you around
             default -> 0.0;
         };
