@@ -683,49 +683,29 @@ public class RuleSystem {
     private Map<Integer, Integer> calculateTeamScores() {
         Map<Integer, Integer> teamScores = new HashMap<>();
 
-        // Add player-based scores based on ScoreStyle
-        if (rules.getScoreStyle() == ScoreStyle.TOTAL_KILLS ||
-                rules.getScoreStyle() == ScoreStyle.TOTAL) {
-
-            for (Player player : gameEntities.getAllPlayers()) {
-                int score = getPlayerScore(player);
-                teamScores.merge(player.getTeam(), score, Integer::sum);
-            }
+        // Per-player scoring (kills / captures*multiplier / oddball) is computed
+        // once via getPlayerScore so the ScoreStyle and pointsPerFlagCapture
+        // rules apply exactly the same way for team and FFA mode, and so
+        // captures/oddball can't be double-counted by also appearing below.
+        for (Player player : gameEntities.getAllPlayers()) {
+            int score = getPlayerScore(player);
+            teamScores.merge(player.getTeam(), score, Integer::sum);
         }
 
-        // Add objective scores (KOTH zones, captures, oddball, VIP kills) based on ScoreStyle
-        if (rules.getScoreStyle() == ScoreStyle.OBJECTIVE ||
-                rules.getScoreStyle() == ScoreStyle.TOTAL) {
-
-            // Add player captures
-            for (Player player : gameEntities.getAllPlayers()) {
-                teamScores.merge(player.getTeam(), player.getCaptures(), Integer::sum);
-            }
-
-            // Add KOTH zone scores
+        // Team-level objective scores (KOTH zones, VIP kills) are added on top
+        // when objectives count. They are not part of getPlayerScore because
+        // they aren't attributable to a single player.
+        if (rules.getScoreStyle() == ScoreStyle.OBJECTIVE
+                || rules.getScoreStyle() == ScoreStyle.TOTAL) {
             for (KothZone zone : gameEntities.getAllKothZones()) {
                 Map<Integer, Double> zoneTeamScores = zone.getAllTeamScores();
                 for (Map.Entry<Integer, Double> entry : zoneTeamScores.entrySet()) {
                     int team = entry.getKey();
-                    double kothPoints = entry.getValue();
-                    // Convert KOTH points to integer for scoring
-                    int kothScore = (int) Math.round(kothPoints);
+                    int kothScore = (int) Math.round(entry.getValue());
                     teamScores.merge(team, kothScore, Integer::sum);
                 }
             }
 
-            // Add oddball scores (per player, then summed to team)
-            if (rules.hasOddball()) {
-                for (Map.Entry<Integer, Double> entry : oddballPlayerScores.entrySet()) {
-                    Player player = gameEntities.getPlayer(entry.getKey());
-                    if (player != null) {
-                        int oddballScore = (int) Math.round(entry.getValue());
-                        teamScores.merge(player.getTeam(), oddballScore, Integer::sum);
-                    }
-                }
-            }
-
-            // Add VIP kill scores
             if (rules.hasVip()) {
                 for (Map.Entry<Integer, Integer> entry : vipKillScores.entrySet()) {
                     teamScores.merge(entry.getKey(), entry.getValue(), Integer::sum);
@@ -733,7 +713,7 @@ public class RuleSystem {
             }
         }
 
-        // Add bonus points (HQ damage, objectives, etc.) - always included
+        // Bonus points (HQ damage, headquarters destruction, etc.) - always included
         for (Map.Entry<Integer, Integer> entry : bonusTeamPoints.entrySet()) {
             teamScores.merge(entry.getKey(), entry.getValue(), Integer::sum);
         }
@@ -785,10 +765,11 @@ public class RuleSystem {
     }
 
     private int getPlayerScore(Player player) {
+        int capturePoints = player.getCaptures() * rules.getPointsPerFlagCapture();
         int score = switch (rules.getScoreStyle()) {
             case TOTAL_KILLS -> player.getKills();
-            case OBJECTIVE -> player.getCaptures(); // Only captures for individual scoring; KOTH is team-based
-            case TOTAL -> player.getKills() + player.getCaptures();
+            case OBJECTIVE -> capturePoints; // Only captures for individual scoring; KOTH is team-based
+            case TOTAL -> player.getKills() + capturePoints;
         };
 
         // Add oddball scores for this player

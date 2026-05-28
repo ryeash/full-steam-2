@@ -141,7 +141,7 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         // With TOTAL score style:
         // - Team 1: 1 kill + 1 capture + 5 KOTH points = 7 points
         // - Team 2: 2 kills + 0 captures + 10 KOTH points = 12 points
-        assertEquals(8, teamScores.get(1));
+        assertEquals(7, teamScores.get(1));
         assertEquals(12, teamScores.get(2));
     }
 
@@ -193,6 +193,115 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         // - Team 2: 2 kills (objectives and KOTH scores ignored)
         assertEquals(1, teamScores.get(1));
         assertEquals(2, teamScores.get(2));
+    }
+
+    @Test
+    @DisplayName("pointsPerFlagCapture multiplies captures in OBJECTIVE score style")
+    void testPointsPerFlagCaptureWithObjectiveStyle() {
+        Rules rules = Rules.builder()
+                .roundDuration(60.0)
+                .restDuration(10.0)
+                .scoreStyle(ScoreStyle.OBJECTIVE)
+                .flagsPerTeam(1)
+                .pointsPerFlagCapture(10)
+                .kothZones(0)
+                .build();
+        ruleSystem = new RuleSystem("test-game", rules, gameEntities, null, broadcaster, 2);
+
+        Player player1 = new Player(1, "Player1", 100, 100, 1, 100.0);
+        Player player2 = new Player(2, "Player2", 200, 200, 2, 100.0);
+        player1.addCapture(); // 1 capture = 10 pts
+        player2.addCapture();
+        player2.addCapture(); // 2 captures = 20 pts
+        gameEntities.addPlayer(player1);
+        gameEntities.addPlayer(player2);
+
+        @SuppressWarnings("unchecked")
+        Map<Integer, Integer> teamScores = (Map<Integer, Integer>) ruleSystem.getStateData().get("teamScores");
+
+        assertEquals(10, teamScores.get(1), "Team 1: 1 capture * 10 pts");
+        assertEquals(20, teamScores.get(2), "Team 2: 2 captures * 10 pts");
+    }
+
+    @Test
+    @DisplayName("pointsPerFlagCapture is additive with kills under TOTAL score style")
+    void testPointsPerFlagCaptureWithTotalStyle() {
+        Rules rules = Rules.builder()
+                .roundDuration(60.0)
+                .restDuration(10.0)
+                .scoreStyle(ScoreStyle.TOTAL)
+                .flagsPerTeam(1)
+                .pointsPerFlagCapture(5)
+                .kothZones(0)
+                .build();
+        ruleSystem = new RuleSystem("test-game", rules, gameEntities, null, broadcaster, 2);
+
+        Player player1 = new Player(1, "Player1", 100, 100, 1, 100.0);
+        Player player2 = new Player(2, "Player2", 200, 200, 2, 100.0);
+        player1.addKill();
+        player1.addKill();
+        player1.addCapture(); // 2 kills (worth 1 each) + 1 capture * 5 = 7
+        player2.addKill(); // 1 kill, no captures = 1
+        gameEntities.addPlayer(player1);
+        gameEntities.addPlayer(player2);
+
+        @SuppressWarnings("unchecked")
+        Map<Integer, Integer> teamScores = (Map<Integer, Integer>) ruleSystem.getStateData().get("teamScores");
+
+        assertEquals(7, teamScores.get(1), "Team 1: 2 kills + 1 capture * 5 pts");
+        assertEquals(1, teamScores.get(2), "Team 2: 1 kill only");
+    }
+
+    @Test
+    @DisplayName("pointsPerFlagCapture has no effect under TOTAL_KILLS score style")
+    void testPointsPerFlagCaptureIgnoredByTotalKills() {
+        Rules rules = Rules.builder()
+                .roundDuration(60.0)
+                .restDuration(10.0)
+                .scoreStyle(ScoreStyle.TOTAL_KILLS)
+                .flagsPerTeam(1)
+                .pointsPerFlagCapture(50)
+                .build();
+        ruleSystem = new RuleSystem("test-game", rules, gameEntities, null, broadcaster, 2);
+
+        Player player1 = new Player(1, "Player1", 100, 100, 1, 100.0);
+        player1.addKill();
+        player1.addCapture(); // captures should be ignored entirely
+        gameEntities.addPlayer(player1);
+
+        @SuppressWarnings("unchecked")
+        Map<Integer, Integer> teamScores = (Map<Integer, Integer>) ruleSystem.getStateData().get("teamScores");
+
+        assertEquals(1, teamScores.get(1),
+                "TOTAL_KILLS ignores captures, so the per-capture multiplier should not contribute");
+    }
+
+    @Test
+    @DisplayName("Default pointsPerFlagCapture preserves legacy 1:1 capture-to-point behavior")
+    void testDefaultPointsPerFlagCapturePreservesLegacyScoring() {
+        // No explicit pointsPerFlagCapture - relies on the Builder.Default of 1
+        Rules rules = Rules.builder()
+                .roundDuration(60.0)
+                .restDuration(10.0)
+                .scoreStyle(ScoreStyle.OBJECTIVE)
+                .flagsPerTeam(1)
+                .build();
+        assertEquals(1, rules.getPointsPerFlagCapture(),
+                "Default pointsPerFlagCapture should be 1 for backwards compatibility");
+
+        ruleSystem = new RuleSystem("test-game", rules, gameEntities, null, broadcaster, 2);
+
+        Player player1 = new Player(1, "Player1", 100, 100, 1, 100.0);
+        player1.addCapture();
+        player1.addCapture();
+        player1.addCapture();
+        gameEntities.addPlayer(player1);
+
+        @SuppressWarnings("unchecked")
+        Map<Integer, Integer> teamScores = (Map<Integer, Integer>) ruleSystem.getStateData().get("teamScores");
+
+        assertEquals(3, teamScores.get(1),
+                "With default multiplier, 3 captures -> 3 points (the prior behavior)");
     }
 
     private static class TestBroadcaster implements Consumer<Map<String, Object>> {

@@ -5,6 +5,8 @@ import com.fullsteam.games.StatusEffectManager;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
+import com.fullsteam.model.Rules;
+import com.fullsteam.model.ScoreStyle;
 import com.fullsteam.util.IdGenerator;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
@@ -793,11 +795,21 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         log.info("Player {} (team {}) captured flag {} (team {})!",
                 player.getId(), player.getTeam(), carriedFlag.getId(), carriedFlag.getOwnerTeam());
 
-        // Broadcast capture event
+        // Broadcast capture event. When the rules give a flag more than one point
+        // AND the active score style actually awards capture points, surface the
+        // actual value so the player sees how much that capture was worth.
+        Rules rules = gameManager.getGameConfig().getRules();
+        ScoreStyle style = rules.getScoreStyle();
+        boolean stylePointsCaptures = style == ScoreStyle.OBJECTIVE || style == ScoreStyle.TOTAL;
+        int capturePoints = rules.getPointsPerFlagCapture();
+        String captureText = (stylePointsCaptures && capturePoints > 1)
+                ? String.format("+1 CAPTURE (+%d pts)", capturePoints)
+                : "+1 CAPTURE";
         gameManager.broadcastGameEvent(
-                String.format("%s captured the %s flag! +1 CAPTURE",
+                String.format("%s captured the %s flag! %s",
                         player.getPlayerName(),
-                        getTeamName(carriedFlag.getOwnerTeam())),
+                        getTeamName(carriedFlag.getOwnerTeam()),
+                        captureText),
                 "FLAG_CAPTURE",
                 "#00ff00"
         );

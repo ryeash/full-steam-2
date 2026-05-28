@@ -42,7 +42,21 @@ public class Rules {
     @Max(3)
     @Builder.Default
     private int flagsPerTeam = 0;
-    
+
+    /**
+     * How many "objective" points a single flag capture is worth, used when
+     * computing team or per-player scores under {@link ScoreStyle#OBJECTIVE}
+     * and {@link ScoreStyle#TOTAL}. The raw capture count on the player is
+     * unchanged (it stays a per-event tally for display), only the score
+     * derived from it is multiplied. Useful for mixed-objective modes
+     * (CTF + team kills) where a flag should be worth substantially more
+     * than a single kill.
+     */
+    @Min(1)
+    @Max(1000)
+    @Builder.Default
+    private int pointsPerFlagCapture = 1;
+
     /**
      * How team/player scores are calculated
      */
