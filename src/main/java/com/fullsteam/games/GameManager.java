@@ -1,7 +1,5 @@
 package com.fullsteam.games;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fullsteam.Config;
 import com.fullsteam.ai.AIGameHelper;
 import com.fullsteam.ai.AIPlayer;
@@ -29,10 +27,8 @@ import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.PowerUp;
 import com.fullsteam.physics.Projectile;
-import com.fullsteam.physics.TeamSpawnArea;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.Turret;
-import com.fullsteam.util.IdGenerator;
 import com.fullsteam.util.WeaponFormatter;
 import io.micronaut.websocket.WebSocketSession;
 import io.micronaut.websocket.exceptions.WebSocketSessionException;
@@ -48,6 +44,7 @@ import org.dyn4j.world.World;
 import org.dyn4j.world.result.RaycastResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -375,8 +372,6 @@ public class GameManager {
                 String json = objectMapper.writeValueAsString(message);
                 session.sendAsync(json);
             }
-        } catch (JsonProcessingException e) {
-            log.error("Error serializing message", e);
         } catch (WebSocketSessionException e) {
             if (!(e.getCause() instanceof InterruptedException)) {
                 log.error("Error sending message", e);
@@ -465,7 +460,7 @@ public class GameManager {
 
         int assignedTeam = assignPlayerToTeam();
         Vector2 spawnPoint = spawnPointManager.findVariedSpawnPointForTeam(assignedTeam);
-        AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithPersonality(IdGenerator.nextEntityId(), spawnPoint.x, spawnPoint.y, personalityType, assignedTeam, gameConfig.getPlayerMaxHealth());
+        AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithPersonality(Config.nextEntityId(), spawnPoint.x, spawnPoint.y, personalityType, assignedTeam, gameConfig.getPlayerMaxHealth());
         aiPlayer.setHealth(gameConfig.getPlayerMaxHealth());
 
         // Initialize lives based on respawn mode (delegated to RuleSystem)
@@ -1301,7 +1296,7 @@ public class GameManager {
 
         // Create large explosion effect at HQ location
         FieldEffect explosion = new FieldEffect(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 -1, // No owner
                 FieldEffectType.EXPLOSION,
                 pos,

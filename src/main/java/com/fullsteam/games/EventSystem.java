@@ -1,7 +1,6 @@
 package com.fullsteam.games;
 
 import com.fullsteam.Config;
-import com.fullsteam.util.IdGenerator;
 import com.fullsteam.model.ActiveGameEvent;
 import com.fullsteam.model.EnvironmentalEvent;
 import com.fullsteam.model.FieldEffect;
@@ -233,7 +232,7 @@ public class EventSystem {
             double radius = getWarningRadius(event.getEventType());
 
             FieldEffect warningZone = new FieldEffect(
-                    IdGenerator.nextEntityId(),
+                    Config.nextEntityId(),
                     -1, // No owner (system event)
                     FieldEffectType.WARNING_ZONE,
                     location,
@@ -274,7 +273,7 @@ public class EventSystem {
         switch (event.getEventType()) {
             case METEOR_SHOWER -> triggerStaggeredEventFieldEffect(event, (e, l) ->
                     new FieldEffect(
-                            IdGenerator.nextEntityId(),
+                            Config.nextEntityId(),
                             -1, // System event
                             FieldEffectType.EXPLOSION,
                             l,
@@ -285,7 +284,7 @@ public class EventSystem {
                     ));
             case VOLCANIC_ERUPTION -> triggerStaggeredEventFieldEffect(event, (e, l) ->
                     new FieldEffect(
-                            IdGenerator.nextEntityId(),
+                            Config.nextEntityId(),
                             -1,
                             FieldEffectType.FIRE,
                             l,
@@ -298,7 +297,7 @@ public class EventSystem {
                     ));
             case EARTHQUAKE -> triggerStaggeredEventFieldEffect(event, (e, l) ->
                     new FieldEffect(
-                            IdGenerator.nextEntityId(),
+                            Config.nextEntityId(),
                             -1,
                             FieldEffectType.EARTHQUAKE,
                             l,
@@ -309,7 +308,7 @@ public class EventSystem {
                     ));
             case ION_STORM -> triggerStaggeredEventFieldEffect(event, (e, l) ->
                     new FieldEffect(
-                            IdGenerator.nextEntityId(),
+                            Config.nextEntityId(),
                             -1,
                             FieldEffectType.ELECTRIC,
                             l,
@@ -320,7 +319,7 @@ public class EventSystem {
                     ));
             case BLIZZARD -> triggerStaggeredEventFieldEffect(event, (e, l) ->
                     new FieldEffect(
-                            IdGenerator.nextEntityId(),
+                            Config.nextEntityId(),
                             -1,
                             FieldEffectType.FREEZE,
                             l,
@@ -363,7 +362,7 @@ public class EventSystem {
             Config.EXECUTOR.schedule(() -> {
                 gameEntities.addPostUpdateHook(() -> {
                     FieldEffect explosion = new FieldEffect(
-                            IdGenerator.nextEntityId(),
+                            Config.nextEntityId(),
                             -1,
                             FieldEffectType.EXPLOSION,
                             location,
@@ -378,7 +377,7 @@ public class EventSystem {
                     // Spawn random power-up
                     PowerUp.PowerUpType powerUpType = getRandomPowerUpType();
                     PowerUp powerUp = new PowerUp(
-                            IdGenerator.nextEntityId(),
+                            Config.nextEntityId(),
                             location,
                             powerUpType,
                             -1, // Not from a workshop

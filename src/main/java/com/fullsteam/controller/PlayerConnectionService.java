@@ -1,11 +1,11 @@
 package com.fullsteam.controller;
 
+import com.fullsteam.Config;
 import com.fullsteam.GameLobby;
 import com.fullsteam.games.GameManager;
 import com.fullsteam.games.GameManager.JoinRejectReason;
 import com.fullsteam.model.PlayerSession;
 import com.fullsteam.model.PlayerSessionState;
-import com.fullsteam.util.IdGenerator;
 import io.micronaut.websocket.WebSocketSession;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -36,7 +36,7 @@ public class PlayerConnectionService {
 
     public ConnectResult connectPlayer(WebSocketSession session, String gameId, boolean asSpectator) {
         try {
-            int playerId = IdGenerator.nextPlayerId();
+            int playerId = Config.nextPlayerId();
             PlayerSession playerSession = new PlayerSession(playerId, session);
             playerSession.setState(asSpectator ? PlayerSessionState.SPECTATOR : PlayerSessionState.LOBBY);
 

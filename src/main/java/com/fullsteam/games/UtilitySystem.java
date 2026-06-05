@@ -1,6 +1,6 @@
 package com.fullsteam.games;
 
-import com.fullsteam.util.IdGenerator;
+import com.fullsteam.Config;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
@@ -66,7 +66,7 @@ public class UtilitySystem {
             targetPos.add(offset);
         }
         FieldEffect fieldEffect = new FieldEffect(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 activation.playerId,
                 effectType,
                 targetPos,
@@ -123,7 +123,7 @@ public class UtilitySystem {
             return;
         }
         Turret turret = new Turret(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 activation.playerId,
                 activation.team,
                 placement,
@@ -140,7 +140,7 @@ public class UtilitySystem {
         Vector2 velocity = activation.direction.copy();
         velocity.multiply(300.0);
         NetProjectile netProjectile = new NetProjectile(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 activation.playerId,
                 activation.team,
                 activation.position,
@@ -156,7 +156,7 @@ public class UtilitySystem {
      */
     private void createProximityMine(Player.UtilityActivation activation) {
         FieldEffect mine = new FieldEffect(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 activation.playerId,
                 FieldEffectType.PROXIMITY_MINE,
                 activation.position,
@@ -189,7 +189,7 @@ public class UtilitySystem {
             return;
         }
         DefenseLaser defenseLaser = new DefenseLaser(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 activation.playerId,
                 activation.team,
                 placement,

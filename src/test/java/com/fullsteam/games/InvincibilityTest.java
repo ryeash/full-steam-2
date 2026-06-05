@@ -1,8 +1,8 @@
 package com.fullsteam.games;
 
 import com.fullsteam.BaseTestClass;
+import com.fullsteam.Config;
 import com.fullsteam.physics.Player;
-import com.fullsteam.util.GameConstants;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -69,8 +69,8 @@ public class InvincibilityTest extends BaseTestClass {
     @Test
     void testInvincibilityDuration() {
         // Verify the constant is set to a reasonable value
-        assertTrue(GameConstants.SPAWN_INVINCIBILITY_DURATION > 0, "Spawn invincibility duration should be positive");
-        assertTrue(GameConstants.SPAWN_INVINCIBILITY_DURATION <= 10, "Spawn invincibility duration should be reasonable (<=10 seconds)");
+        assertTrue(Config.SPAWN_INVINCIBILITY_DURATION > 0, "Spawn invincibility duration should be positive");
+        assertTrue(Config.SPAWN_INVINCIBILITY_DURATION <= 10, "Spawn invincibility duration should be reasonable (<=10 seconds)");
     }
 
     @Test

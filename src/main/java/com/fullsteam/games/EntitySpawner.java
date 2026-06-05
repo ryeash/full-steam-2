@@ -1,8 +1,15 @@
 package com.fullsteam.games;
 
-import com.fullsteam.physics.*;
-import com.fullsteam.util.GameConstants;
-import com.fullsteam.util.IdGenerator;
+import com.fullsteam.Config;
+import com.fullsteam.model.Rules;
+import com.fullsteam.physics.Flag;
+import com.fullsteam.physics.GameEntities;
+import com.fullsteam.physics.Headquarters;
+import com.fullsteam.physics.KothZone;
+import com.fullsteam.physics.Obstacle;
+import com.fullsteam.physics.TeamSpawnArea;
+import com.fullsteam.physics.TeamSpawnManager;
+import com.fullsteam.physics.Workshop;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Rectangle;
@@ -10,8 +17,6 @@ import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.fullsteam.model.Rules;
 
 /**
  * Handles creation and spawning of all game entities.
@@ -27,9 +32,12 @@ public class EntitySpawner {
     private final TerrainGenerator terrainGenerator;
     private final String gameId;
 
-    public EntitySpawner(String gameId, GameConfig gameConfig, GameEntities gameEntities,
-                        World<Body> world, TeamSpawnManager teamSpawnManager,
-                        TerrainGenerator terrainGenerator) {
+    public EntitySpawner(String gameId,
+                         GameConfig gameConfig,
+                         GameEntities gameEntities,
+                         World<Body> world,
+                         TeamSpawnManager teamSpawnManager,
+                         TerrainGenerator terrainGenerator) {
         this.gameId = gameId;
         this.gameConfig = gameConfig;
         this.gameEntities = gameEntities;
@@ -44,7 +52,7 @@ public class EntitySpawner {
     public void createWorldBoundaries() {
         double halfWidth = gameConfig.getWorldWidth() / 2.0;
         double halfHeight = gameConfig.getWorldHeight() / 2.0;
-        double wallThickness = GameConstants.WORLD_BOUNDARY_THICKNESS;
+        double wallThickness = Config.WORLD_BOUNDARY_THICKNESS;
 
         Body topWall = new Body();
         topWall.addFixture(new Rectangle(gameConfig.getWorldWidth() + wallThickness * 2, wallThickness));
@@ -212,21 +220,21 @@ public class EntitySpawner {
 
         log.info("Creating {} KOTH zones for game {}", zoneCount, gameId);
 
-        int zoneId = IdGenerator.nextEntityId();
+        int zoneId = Config.nextEntityId();
 
         // Calculate zone positions based on number of zones and teams
         for (int i = 0; i < zoneCount; i++) {
             Vector2 zonePosition = calculateKothZonePosition(i, zoneCount, teamCount);
 
             // Ensure zone position is clear of obstacles
-            if (!terrainGenerator.isPositionClear(zonePosition, GameConstants.SPAWN_CLEARANCE_RADIUS)) {
+            if (!terrainGenerator.isPositionClear(zonePosition, Config.SPAWN_CLEARANCE_RADIUS)) {
                 // Try to find a nearby clear position
                 for (int attempt = 0; attempt < 10; attempt++) {
                     double offsetX = (Math.random() - 0.5) * 200;
                     double offsetY = (Math.random() - 0.5) * 200;
                     Vector2 candidate = new Vector2(zonePosition.x + offsetX, zonePosition.y + offsetY);
 
-                    if (terrainGenerator.isPositionClear(candidate, GameConstants.SPAWN_CLEARANCE_RADIUS)) {
+                    if (terrainGenerator.isPositionClear(candidate, Config.SPAWN_CLEARANCE_RADIUS)) {
                         zonePosition = candidate;
                         break;
                     }
@@ -319,7 +327,7 @@ public class EntitySpawner {
             }
 
             Workshop workshop = new Workshop(
-                    IdGenerator.nextEntityId(),
+                    Config.nextEntityId(),
                     workshopPosition,
                     rules.getWorkshopCraftTime(),
                     rules.getMaxPowerUpsPerWorkshop()
@@ -394,7 +402,7 @@ public class EntitySpawner {
             }
 
             Headquarters hq = new Headquarters(
-                    IdGenerator.nextEntityId(),
+                    Config.nextEntityId(),
                     teamNumber,
                     hqPosition.x,
                     hqPosition.y,

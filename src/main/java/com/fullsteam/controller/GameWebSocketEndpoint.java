@@ -1,8 +1,5 @@
 package com.fullsteam.controller;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fullsteam.controller.PlayerConnectionService.ConnectResult;
 import com.fullsteam.games.GameManager;
 import com.fullsteam.model.PlayerConfigRequest;
@@ -16,6 +13,8 @@ import io.micronaut.websocket.annotation.ServerWebSocket;
 import jakarta.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.Map;
 
@@ -49,10 +48,10 @@ public class GameWebSocketEndpoint {
         log.info("WebSocket connection opened for gameId: {} (spectator: {})", gameId, asSpectator);
 
         ConnectResult result = connectionService.connectPlayer(session, gameId, asSpectator);
-        if (result instanceof ConnectResult.Rejected rejected) {
+        if (result instanceof ConnectResult.Rejected(GameManager.JoinRejectReason reason)) {
             log.warn("Failed to connect {} to game {} (reason: {}), closing session",
-                    asSpectator ? "spectator" : "player", gameId, rejected.reason());
-            sendJoinRejected(session, rejected.reason().name());
+                    asSpectator ? "spectator" : "player", gameId, reason);
+            sendJoinRejected(session, reason.name());
             session.close();
         } else {
             log.info("{} successfully connected to game {}",
@@ -71,8 +70,6 @@ public class GameWebSocketEndpoint {
                 // message before we close the socket; fall back to async otherwise.
                 session.sendSync(json);
             }
-        } catch (JsonProcessingException e) {
-            log.error("Error serializing joinRejected message", e);
         } catch (Exception e) {
             log.debug("Failed to send joinRejected before close: {}", e.getMessage());
         }
@@ -97,7 +94,7 @@ public class GameWebSocketEndpoint {
 
         try {
             JsonNode rootNode = objectMapper.readTree(message);
-            String type = rootNode.path("type").asText("playerInput");
+            String type = rootNode.path("type").asString("playerInput");
 
             switch (type) {
                 case "ping":

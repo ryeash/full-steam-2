@@ -1,10 +1,12 @@
 package com.fullsteam.physics;
 
-import com.fullsteam.util.IdGenerator;
+import com.fullsteam.Config;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
+import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.Convex;
+import org.dyn4j.geometry.Geometry;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Polygon;
 import org.dyn4j.geometry.Rectangle;
@@ -20,8 +22,8 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * Represents obstacles in the game world that support various geometric shapes.
  */
+@Getter
 public class Obstacle extends GameEntity {
-
     public enum ObstacleType {
         BOULDER,           // Circular rocks
         HOUSE,            // Rectangular buildings
@@ -36,26 +38,20 @@ public class Obstacle extends GameEntity {
 
     public enum ShapeCategory {
         CIRCULAR,    // Circle-based shapes
-        RECTANGULAR, // Rectangle-based shapes  
+        RECTANGULAR, // Rectangle-based shapes
         TRIANGULAR,  // Triangle-based shapes
         POLYGONAL,   // Multi-sided polygon shapes
         COMPOUND     // Multiple connected shapes
     }
 
-    @Getter
-    private final ObstacleType type;
-    @Getter
+    private final ObstacleType type = ObstacleType.values()[ThreadLocalRandom.current().nextInt(ObstacleType.values().length)];
     private final ShapeCategory shapeCategory;
-    @Getter
     private final Shape primaryShape;
-    @Getter
     private final double boundingRadius;
-    @Getter
     private final Map<String, Object> shapeData;
 
     public Obstacle(int id, double x, double y, ObstacleType type) {
         super(id, createObstacleBody(x, y, type), Double.POSITIVE_INFINITY);
-        this.type = type;
         this.primaryShape = getBody().getFixture(0).getShape();
         this.shapeCategory = determineShapeCategory(type);
         this.boundingRadius = calculateBoundingRadius();
@@ -80,45 +76,35 @@ public class Obstacle extends GameEntity {
      */
     private static Body createObstacleBody(double x, double y, ObstacleType type) {
         Body body = new Body();
-        Convex shape = createShapeForType(type);
-        body.addFixture(shape);
-
+        List<Convex> shapes = createShapeForType(type);
+        for (Convex shape : shapes) {
+            BodyFixture bodyFixture = body.addFixture(shape);
+            bodyFixture.setRestitution(0.6);
+        }
         // Set restitution for obstacles - moderate bounce to make projectiles bounce off nicely
-        body.getFixture(0).setRestitution(0.6); // Retains 60% of velocity on bounce
-
         body.setMass(MassType.INFINITE);
         body.getTransform().setTranslation(x, y);
-
-        // Add completely chaotic rotation - any angle possible
-        ThreadLocalRandom random = ThreadLocalRandom.current();
-        double rotation = random.nextDouble(0, Math.PI * 2);
-
-        // 30% chance for "tilted" angles that look more chaotic
-        if (random.nextDouble() < 0.3) {
-            rotation += random.nextGaussian() * 0.5; // Add some gaussian noise
-        }
-
+        // Add chaotic rotation - any angle possible
+        double rotation = ThreadLocalRandom.current().nextDouble(0, Math.PI * 2);
         body.getTransform().setRotation(rotation);
-
         return body;
     }
 
     /**
      * Create the appropriate shape based on obstacle type.
      */
-    private static Convex createShapeForType(ObstacleType type) {
+    private static List<Convex> createShapeForType(ObstacleType type) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         return switch (type) {
-            case BOULDER -> createCircularShape(random);
-            case HOUSE -> createRectangularShape(random);
-            case WALL_SEGMENT -> createWallShape(random);
-            case TRIANGLE_ROCK -> createTriangularShape(random);
-            case POLYGON_DEBRIS -> createIrregularPolygon(random);
-            case HEXAGON_CRYSTAL -> createRegularPolygon(ThreadLocalRandom.current().nextInt(4, 9), random);
-            case DIAMOND_STONE -> createDiamondShape(random);
+            case BOULDER -> List.of(createCircularShape(random));
+            case HOUSE -> List.of(createRectangularShape(random));
+            case WALL_SEGMENT -> List.of(createWallShape(random));
+            case TRIANGLE_ROCK -> List.of(createTriangularShape(random));
+            case POLYGON_DEBRIS -> List.of(createIrregularPolygon(random));
+            case HEXAGON_CRYSTAL -> List.of(createRegularPolygon(ThreadLocalRandom.current().nextInt(4, 9), random));
+            case DIAMOND_STONE -> List.of(createDiamondShape(random));
             case L_SHAPED_WALL -> createLShape(random);
             case CROSS_BARRIER -> createCrossShape(random);
-            default -> createCircularShape(random);
         };
     }
 
@@ -286,26 +272,19 @@ public class Obstacle extends GameEntity {
     }
 
     private static Convex createTriangularShape(ThreadLocalRandom random) {
-        double baseSize = random.nextDouble(15, 70);
-
+        double baseSize = random.nextDouble(45, 80);
         // 20% chance for massive jagged rocks
         if (random.nextDouble() < 0.2) {
-            baseSize = random.nextDouble(60, 120);
+            baseSize = random.nextDouble(80, 160);
         }
-
-        // Create a more chaotic triangle with irregular proportions
-        Vector2[] vertices = new Vector2[3];
-
-        // Randomize the triangle shape significantly
-        double heightVariation = 0.4 + random.nextDouble() * 0.8; // 0.4 to 1.2
-        double widthVariation = 0.6 + random.nextDouble() * 0.8;   // 0.6 to 1.4
-        double asymmetry = random.nextGaussian() * 0.3;            // Asymmetric offset
-
-        vertices[0] = new Vector2(asymmetry * baseSize, baseSize * 0.577 * heightVariation); // Top vertex (offset)
-        vertices[1] = new Vector2(-baseSize * 0.5 * widthVariation, -baseSize * 0.289); // Bottom left
-        vertices[2] = new Vector2(baseSize * 0.5 * widthVariation, -baseSize * 0.289);  // Bottom right
-
-        return new Polygon(ensureCounterClockwiseWinding(vertices));
+        double type = random.nextDouble();
+        if (type < .33) {
+            return Geometry.createEquilateralTriangle(baseSize);
+        } else if (type < .66) {
+            return Geometry.createIsoscelesTriangle(baseSize, baseSize / 2);
+        } else {
+            return Geometry.createRightTriangle(baseSize, baseSize / 2, random.nextBoolean());
+        }
     }
 
     private static Convex createIrregularPolygon(ThreadLocalRandom random) {
@@ -342,56 +321,24 @@ public class Obstacle extends GameEntity {
     }
 
     private static Convex createRegularPolygon(int sides, ThreadLocalRandom random) {
-        double radius = random.nextDouble(18, 120);
-
-        // 12% chance for massive crystal formations
-        if (random.nextDouble() < 0.12) {
-            radius = random.nextDouble(80, 150);
-        }
-
-        Vector2[] vertices = new Vector2[sides];
-        for (int i = 0; i < sides; i++) {
-            double angle = (2 * Math.PI * i) / sides;
-
-            // Add slight irregularity even to "regular" polygons
-            double radiusVariation = 1.0 + random.nextGaussian() * 0.05; // Very slight variation
-            double actualRadius = radius * radiusVariation;
-
-            vertices[i] = new Vector2(
-                    Math.cos(angle) * actualRadius,
-                    Math.sin(angle) * actualRadius
-            );
-        }
-
-        return new Polygon(ensureCounterClockwiseWinding(vertices));
+        double radius = random.nextDouble() < 0.12
+                ? random.nextDouble(80, 150)
+                : random.nextDouble(18, 120);
+        return Geometry.createPolygonalCircle(sides, radius);
     }
 
     private static Convex createDiamondShape(ThreadLocalRandom random) {
         double width = random.nextDouble(20, 120);
         double height = random.nextDouble(20, 120);
-
         // 18% chance for massive diamond formations
         if (random.nextDouble() < 0.18) {
             width = random.nextDouble(80, 140);
             height = random.nextDouble(70, 120);
         }
-
-        // Add asymmetry to make diamonds more chaotic
-        double widthAsymmetry = 1.0 + random.nextGaussian() * 0.3;
-        double heightAsymmetry = 1.0 + random.nextGaussian() * 0.3;
-        double offsetX = random.nextGaussian() * (width * 0.1);
-        double offsetY = random.nextGaussian() * (height * 0.1);
-
-        Vector2[] vertices = new Vector2[4];
-        vertices[0] = new Vector2(offsetX, height * 0.5 * heightAsymmetry); // Top
-        vertices[1] = new Vector2(width * 0.5 * widthAsymmetry + offsetX, offsetY); // Right
-        vertices[2] = new Vector2(offsetX, -height * 0.5 * heightAsymmetry); // Bottom
-        vertices[3] = new Vector2(-width * 0.5 * widthAsymmetry + offsetX, offsetY); // Left
-
-        return new Polygon(ensureCounterClockwiseWinding(vertices));
+        return Geometry.createPolygonalEllipse(4, width, height);
     }
 
-    private static Convex createLShape(ThreadLocalRandom random) {
+    private static List<Convex> createLShape(ThreadLocalRandom random) {
         // Since L-shapes are inherently concave, create a convex approximation
         // Use an irregular pentagon that suggests an L-shape but remains convex
         double size = random.nextDouble(35, 80);
@@ -400,60 +347,26 @@ public class Obstacle extends GameEntity {
         if (random.nextDouble() < 0.1) {
             size = random.nextDouble(100, 180);
         }
-
-        // Create a convex pentagon that approximates an L-shape
-        double variation = 0.8 + random.nextDouble() * 0.4; // 0.8 to 1.2
-
-        Vector2[] vertices = new Vector2[5];
-        vertices[0] = new Vector2(-size * 0.5, size * 0.5 * variation);        // Top-left
-        vertices[1] = new Vector2(size * 0.3 * variation, size * 0.4);         // Top-right
-        vertices[2] = new Vector2(size * 0.5 * variation, -size * 0.2);        // Right
-        vertices[3] = new Vector2(size * 0.1, -size * 0.5 * variation);        // Bottom-right
-        vertices[4] = new Vector2(-size * 0.5, -size * 0.3);                   // Bottom-left
-
-        return new Polygon(ensureCounterClockwiseWinding(vertices));
+        Rectangle lower = Geometry.createRectangle(size, size / 4);
+        lower.translate(size / 2, 0);
+        Rectangle upper = Geometry.createRectangle(size / 4, size);
+        upper.translate(0, size / 2);
+        return List.of(upper, lower);
     }
 
-    private static Convex createCrossShape(ThreadLocalRandom random) {
-        // Since cross shapes are inherently concave, create a convex approximation
-        // Use a regular octagon with slight variations to suggest a cross
+    private static List<Convex> createCrossShape(ThreadLocalRandom random) {
         double size = random.nextDouble(30, 70);
-
-        // 8% chance for massive cross barriers
         if (random.nextDouble() < 0.08) {
             size = random.nextDouble(90, 160);
         }
-
-        // Create a convex octagon that approximates a cross shape
-        Vector2[] vertices = new Vector2[8];
-        for (int i = 0; i < 8; i++) {
-            double angle = (2 * Math.PI * i) / 8;
-
-            // Vary the radius to create a cross-like appearance while staying convex
-            double radiusMultiplier;
-            if (i % 2 == 0) {
-                // "Arms" of the cross - extend further
-                radiusMultiplier = 0.9 + random.nextDouble() * 0.2; // 0.9 to 1.1
-            } else {
-                // "Corners" between arms - pull in slightly
-                radiusMultiplier = 0.6 + random.nextDouble() * 0.2; // 0.6 to 0.8
-            }
-
-            double radius = size * 0.5 * radiusMultiplier;
-            vertices[i] = new Vector2(
-                    Math.cos(angle) * radius,
-                    Math.sin(angle) * radius
-            );
-        }
-
-        return new Polygon(ensureCounterClockwiseWinding(vertices));
+        return List.of(Geometry.createRectangle(size, size / 4), Geometry.createRectangle(size / 4, size));
     }
 
     /**
      * Calculate the bounding radius for this obstacle.
      */
     private double calculateBoundingRadius() {
-        return getBody().getFixture(0).getShape().getRadius();
+        return getBody().getRotationDiscRadius();
     }
 
     /**
@@ -462,9 +375,6 @@ public class Obstacle extends GameEntity {
     private Map<String, Object> generateShapeData() {
         Map<String, Object> data = new HashMap<>();
         Shape shape = getBody().getFixture(0).getShape();
-
-        data.put("shapeType", getShapeCategory().name());
-        data.put("obstacleType", getType().name());
 
         if (shape instanceof Circle circle) {
             data.put("radius", circle.getRadius());
@@ -490,25 +400,9 @@ public class Obstacle extends GameEntity {
      */
     public static Obstacle createChaoticObstacle(double x, double y) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
-
-        // Bias towards more interesting shapes for chaotic generation
-        ObstacleType[] chaoticTypes = {
-                ObstacleType.POLYGON_DEBRIS,
-                ObstacleType.TRIANGLE_ROCK,
-                ObstacleType.DIAMOND_STONE,
-                ObstacleType.HEXAGON_CRYSTAL,
-                ObstacleType.L_SHAPED_WALL,
-                ObstacleType.CROSS_BARRIER,
-                ObstacleType.BOULDER,
-                ObstacleType.HOUSE,
-                ObstacleType.WALL_SEGMENT
-        };
-
-        ObstacleType randomType = chaoticTypes[random.nextInt(chaoticTypes.length)];
         double xOffset = random.nextGaussian() * 15;
         double yOffset = random.nextGaussian() * 15;
-
-        return new Obstacle(IdGenerator.nextEntityId(), x + xOffset, y + yOffset, randomType);
+        return new Obstacle(Config.nextEntityId(), x + xOffset, y + yOffset, ObstacleType.values()[random.nextInt(ObstacleType.values().length)]);
     }
 
     /**

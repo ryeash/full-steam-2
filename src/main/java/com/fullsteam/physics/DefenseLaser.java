@@ -1,6 +1,6 @@
 package com.fullsteam.physics;
 
-import com.fullsteam.util.IdGenerator;
+import com.fullsteam.Config;
 import com.fullsteam.model.Ordinance;
 import lombok.Getter;
 import lombok.Setter;
@@ -70,7 +70,7 @@ public class DefenseLaser extends GameEntity {
             Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
             
             Beam beam = new Beam(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 center,
                 direction,
                 beamLength,

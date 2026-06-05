@@ -5,6 +5,7 @@ import com.fullsteam.games.GameConfig;
 import com.fullsteam.games.GameManager;
 import com.fullsteam.model.Rules;
 import org.dyn4j.geometry.Vector2;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,13 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
     private Player testPlayer;
     private Workshop testWorkshop;
     private CollisionProcessor collisionProcessor;
+
+    @AfterEach
+    void tearDown() {
+        if (gameManager != null) {
+            gameManager.shutdown();
+        }
+    }
 
     @BeforeEach
     void setUp() {
@@ -167,10 +175,15 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
         
         // Simulate collision detection
         collisionProcessor.handlePlayerPowerUpCollision(testPlayer, powerUp);
-        
-        // Power-up should be collected and removed
-        assertEquals(0, gameManager.getGameEntities().getAllPowerUps().size());
+
+        // Collision handler marks the power-up inactive; the game loop's cleanup pass removes it.
         assertFalse(powerUp.isActive());
+        assertTrue(powerUp.isExpired());
+
+        // Drive the cleanup pass explicitly (mirrors what GameManager.update() does each tick).
+        gameManager.getGameEntities().removeInactiveEntities();
+
+        assertEquals(0, gameManager.getGameEntities().getAllPowerUps().size());
     }
 
     @Test

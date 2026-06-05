@@ -1,7 +1,6 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.Config;
-import com.fullsteam.util.IdGenerator;
 import com.fullsteam.model.AttributeModification;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerInput;
@@ -15,10 +14,10 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Getter
@@ -39,7 +38,7 @@ public class Player extends GameEntity {
     private long respawnTime = 0;
     private Vector2 respawnPoint;
     private double maxSpeed = Config.PLAYER_SPEED;
-    private final Set<AttributeModification> attributeModifications = new HashSet<>();
+    private final Set<AttributeModification> attributeModifications = ConcurrentHashMap.newKeySet();
 
     private boolean visionObscured = false; // Set true each tick while inside SMOKE field, reset before collision processing
 
@@ -279,7 +278,7 @@ public class Player extends GameEntity {
             angle += (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * maxAccuracySpread;
             Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
 
-            int beamId = IdGenerator.nextEntityId();
+            int beamId = Config.nextEntityId();
             beams.add(new Beam(beamId, pos, direction, range, damage, getId(), getTeam(),
                     ordinance, weapon.getBulletEffects()));
         }

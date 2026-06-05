@@ -1,6 +1,7 @@
 package com.fullsteam.util;
 
 import com.fullsteam.model.BulletEffect;
+import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.Weapon;
 
 import java.util.Comparator;
@@ -56,7 +57,7 @@ public final class WeaponFormatter {
      * @param ordinance The ordinance type
      * @return Human-readable ordinance name
      */
-    private static String formatOrdinanceName(com.fullsteam.model.Ordinance ordinance) {
+    private static String formatOrdinanceName(Ordinance ordinance) {
         return switch (ordinance) {
             case BULLET -> "Bullet";
             case ROCKET -> "Rocket";
@@ -68,7 +69,6 @@ public final class WeaponFormatter {
             case PLASMA_BEAM -> "Plasma Beam";
             case HEAL_BEAM -> "Heal Beam";
             case RAILGUN -> "Railgun";
-            default -> ordinance.name();
         };
     }
 

@@ -1,12 +1,11 @@
 package com.fullsteam.physics;
 
-import com.fullsteam.util.IdGenerator;
+import com.fullsteam.Config;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.Ordinance;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Circle;
-import org.dyn4j.geometry.Geometry;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
@@ -32,7 +31,7 @@ public class Projectile extends GameEntity {
 
     public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange,
                       int ownerTeam, double linearDamping, Set<BulletEffect> bulletEffects, Ordinance ordinance) {
-        super(IdGenerator.nextEntityId(), createProjectileBody(x, y, vx, vy, linearDamping, ordinance, bulletEffects), 1.0);
+        super(Config.nextEntityId(), createProjectileBody(x, y, vx, vy, linearDamping, ordinance, bulletEffects), 1.0);
         this.ownerId = ownerId;
         this.ownerTeam = ownerTeam;
         this.damage = damage;

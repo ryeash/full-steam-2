@@ -46,7 +46,7 @@ class EventSystemTest extends BaseTestClass {
         GameEntities gameEntities = new GameEntities(config, world);
         GameEventManager eventManager = new GameEventManager(gameEntities, (session, msg) -> {
         });
-        TerrainGenerator terrainGenerator = new TerrainGenerator(2000, 2000);
+        TerrainGenerator terrainGenerator = new TerrainGenerator(2000, 2000, false, EntityWorldDensity.RANDOM);
 
         EventSystem eventSystem = new EventSystem(
                 "test-game",
@@ -190,7 +190,7 @@ class EventSystemTest extends BaseTestClass {
     void testAllEventTypesCount() {
         // Ensure we have all expected event types
         EnvironmentalEvent[] events = EnvironmentalEvent.values();
-        assertEquals(7, events.length, "Should have 7 environmental event types");
+        assertEquals(6, events.length, "Should have 6 environmental event types");
     }
 
     @Test
@@ -209,7 +209,7 @@ class EventSystemTest extends BaseTestClass {
         GameEntities gameEntities = new GameEntities(config, world);
         GameEventManager eventManager = new GameEventManager(gameEntities, (session, msg) -> {
         });
-        TerrainGenerator terrainGenerator = new TerrainGenerator(2000, 2000);
+        TerrainGenerator terrainGenerator = new TerrainGenerator(2000, 2000, false, EntityWorldDensity.RANDOM);
 
         EventSystem eventSystem = new EventSystem(
                 "test-game",

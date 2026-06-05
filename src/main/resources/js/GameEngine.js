@@ -3601,119 +3601,77 @@ class GameEngine {
     }
 
     /**
-     * Create graphics for an obstacle based on its shape data.
+     * Parse the compact shapes shorthand string produced by the server into an
+     * array of drawable fixture descriptors.
+     *
+     * Format:  "fixture1;fixture2;..."
+     *   Polygon fixture:  "(x1,y1)/(x2,y2)/..."
+     *   Circle fixture:   "(cx,cy,r)"   (distinguished by having 3 comma-separated numbers)
+     *
+     * Returns an array of objects:
+     *   { type: 'circle',  cx, cy, r }
+     *   { type: 'polygon', points: [[x,y], ...] }
+     */
+    parseObstacleShapes(shapesStr) {
+        if (!shapesStr) return [];
+        return shapesStr.split(';').filter(s => s.length > 0).map(fixtureStr => {
+            const parts = fixtureStr.split('/').map(v => {
+                return v.replace(/[()]/g, '').split(',').map(Number);
+            });
+            if (parts[0].length === 3) {
+                const [cx, cy, r] = parts[0];
+                return { type: 'circle', cx, cy, r };
+            }
+            return { type: 'polygon', points: parts };
+        });
+    }
+
+    /**
+     * Create graphics for an obstacle using the compact shapes shorthand.
+     * Handles circles, convex polygons, and multi-fixture compound shapes
+     * (e.g. L-walls, cross-barriers) — all drawn from the same data.
      */
     createObstacleGraphics(obstacleData) {
         const graphics = new PIXI.Graphics();
-        const shapeCategory = obstacleData.shapeCategory || 'CIRCULAR';
         const obstacleType = obstacleData.type || 'BOULDER';
-        
-        // Get color based on obstacle type
         const color = this.getObstacleColor(obstacleType);
         const outlineColor = this.darkenColor(color);
-        
-        switch (shapeCategory) {
-            case 'CIRCULAR':
-                this.drawCircularObstacle(graphics, obstacleData);
-                break;
-            case 'RECTANGULAR':
-                this.drawRectangularObstacle(graphics, obstacleData);
-                break;
-            case 'TRIANGULAR':
-                this.drawTriangularObstacle(graphics, obstacleData);
-                break;
-            case 'POLYGONAL':
-                this.drawPolygonalObstacle(graphics, obstacleData);
-                break;
-            case 'COMPOUND':
-                this.drawCompoundObstacle(graphics, obstacleData);
-                break;
-            default:
-                // Fallback to circle
-                graphics.circle(0, 0, obstacleData.boundingRadius || 20);
-                break;
+
+        const shapes = this.parseObstacleShapes(obstacleData.shapes);
+        if (shapes.length > 0) {
+            for (const shape of shapes) {
+                if (shape.type === 'circle') {
+                    graphics.circle(shape.cx, shape.cy, shape.r);
+                } else {
+                    graphics.poly(shape.points.flatMap(([x, y]) => [x, y]));
+                }
+            }
+        } else {
+            // Fallback for missing shape data
+            graphics.circle(0, 0, obstacleData.boundingRadius || 20);
         }
-        
+
         graphics.fill({ color, alpha: 0.8 });
         graphics.stroke({ width: 2, color: outlineColor });
         return graphics;
     }
-    
+
     /**
      * Get color for obstacle based on type.
      */
     getObstacleColor(obstacleType) {
         switch (obstacleType) {
-            case 'BOULDER': return 0x808080; // Gray
-            case 'HOUSE': return 0x8B4513; // Brown
-            case 'WALL_SEGMENT': return 0x696969; // Dark gray
-            case 'TRIANGLE_ROCK': return 0x708090; // Slate gray
-            case 'POLYGON_DEBRIS': return 0x654321; // Dark brown
-            case 'HEXAGON_CRYSTAL': return 0x4169E1; // Royal blue
-            case 'DIAMOND_STONE': return 0x9370DB; // Medium purple
-            case 'L_SHAPED_WALL': return 0x2F4F4F; // Dark slate gray
-            case 'CROSS_BARRIER': return 0x8B7D6B; // Light gray
-            default: return 0x808080; // Default gray
+            case 'BOULDER': return 0x808080;
+            case 'HOUSE': return 0x8B4513;
+            case 'WALL_SEGMENT': return 0x696969;
+            case 'TRIANGLE_ROCK': return 0x708090;
+            case 'POLYGON_DEBRIS': return 0x654321;
+            case 'HEXAGON_CRYSTAL': return 0x4169E1;
+            case 'DIAMOND_STONE': return 0x9370DB;
+            case 'L_SHAPED_WALL': return 0x2F4F4F;
+            case 'CROSS_BARRIER': return 0x8B7D6B;
+            default: return 0x808080;
         }
-    }
-    
-    drawCircularObstacle(graphics, obstacleData) {
-        const radius = obstacleData.radius || obstacleData.boundingRadius || 20;
-        graphics.circle(0, 0, radius);
-    }
-    
-    drawRectangularObstacle(graphics, obstacleData) {
-        const width = obstacleData.width || obstacleData.boundingRadius * 1.5 || 30;
-        const height = obstacleData.height || obstacleData.boundingRadius * 1.2 || 25;
-        graphics.rect(-width/2, -height/2, width, height);
-    }
-    
-    drawTriangularObstacle(graphics, obstacleData) {
-        if (obstacleData.vertices && obstacleData.vertices.length >= 3) {
-            this.drawPolygonFromVertices(graphics, obstacleData.vertices);
-        } else {
-            // Fallback equilateral triangle
-            const size = obstacleData.boundingRadius || 25;
-            graphics.poly([
-                0, -size * 0.577,          // Top (inverted Y)
-                -size * 0.5, size * 0.289, // Bottom left (inverted Y)
-                size * 0.5, size * 0.289   // Bottom right (inverted Y)
-            ]);
-        }
-    }
-    
-    drawPolygonalObstacle(graphics, obstacleData) {
-        if (obstacleData.vertices && obstacleData.vertices.length >= 3) {
-            this.drawPolygonFromVertices(graphics, obstacleData.vertices);
-        } else {
-            // Fallback to hexagon
-            const radius = obstacleData.boundingRadius || 25;
-            const sides = 6;
-            const points = [];
-            for (let i = 0; i < sides; i++) {
-                const angle = (2 * Math.PI * i) / sides;
-                points.push(Math.cos(angle) * radius);
-                points.push(-Math.sin(angle) * radius);  // Invert Y for PIXI coordinate system
-            }
-            graphics.poly(points);
-        }
-    }
-    
-    drawCompoundObstacle(graphics, obstacleData) {
-        // For now, draw as rectangle - compound shapes would need special handling
-        this.drawRectangularObstacle(graphics, obstacleData);
-    }
-    
-    drawPolygonFromVertices(graphics, vertices) {
-        if (vertices.length < 3) return;
-        
-        const points = [];
-        vertices.forEach(vertex => {
-            // No coordinate conversion needed - gameContainer Y-axis is flipped to match physics
-            points.push(vertex.x);
-            points.push(vertex.y);
-        });
-        graphics.poly(points);
     }
 
     updateObstacle(obstacleData) {

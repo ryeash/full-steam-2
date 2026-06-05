@@ -1,6 +1,6 @@
 package com.fullsteam.physics;
 
-import com.fullsteam.util.IdGenerator;
+import com.fullsteam.Config;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
@@ -74,7 +74,7 @@ public class BulletEffectProcessor {
 
     public void createExplosion(Projectile projectile, Vector2 position) {
         FieldEffect explosion = new FieldEffect(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 projectile.getOwnerId(),
                 FieldEffectType.EXPLOSION,
                 position,
@@ -89,7 +89,7 @@ public class BulletEffectProcessor {
 
     public void createFireEffect(Projectile projectile, Vector2 position) {
         FieldEffect fire = new FieldEffect(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 projectile.getOwnerId(),
                 FieldEffectType.FIRE,
                 position,
@@ -104,7 +104,7 @@ public class BulletEffectProcessor {
 
     public void createElectricEffect(Projectile projectile, Vector2 position) {
         FieldEffect electric = new FieldEffect(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 projectile.getOwnerId(),
                 FieldEffectType.ELECTRIC,
                 position,
@@ -119,7 +119,7 @@ public class BulletEffectProcessor {
 
     public void createFreezeEffect(Projectile projectile, Vector2 position) {
         FieldEffect freeze = new FieldEffect(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 projectile.getOwnerId(),
                 FieldEffectType.FREEZE,
                 position,
@@ -134,7 +134,7 @@ public class BulletEffectProcessor {
 
     public void createPoisonEffect(Projectile projectile, Vector2 position) {
         FieldEffect poison = new FieldEffect(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 projectile.getOwnerId(),
                 FieldEffectType.POISON,
                 position,
@@ -151,7 +151,7 @@ public class BulletEffectProcessor {
 
     public void createSmokeEffect(Projectile projectile, Vector2 position) {
         FieldEffect smoke = new FieldEffect(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 projectile.getOwnerId(),
                 FieldEffectType.SMOKE,
                 position,
@@ -167,7 +167,7 @@ public class BulletEffectProcessor {
     private void createFragmentation(Projectile projectile, Vector2 position) {
         // Create visual fragmentation effect first
         FieldEffect fragmentation = new FieldEffect(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 projectile.getOwnerId(),
                 FieldEffectType.FRAGMENTATION,
                 position,
@@ -336,7 +336,7 @@ public class BulletEffectProcessor {
      */
     private void createExplosionForBeam(Beam beam, Vector2 position) {
         FieldEffect explosion = new FieldEffect(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 beam.getOwnerId(),
                 FieldEffectType.EXPLOSION,
                 position,
@@ -354,7 +354,7 @@ public class BulletEffectProcessor {
      */
     private void createFireEffectForBeam(Beam beam, Vector2 position) {
         FieldEffect fire = new FieldEffect(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 beam.getOwnerId(),
                 FieldEffectType.FIRE,
                 position,
@@ -372,7 +372,7 @@ public class BulletEffectProcessor {
      */
     private void createElectricEffectForBeam(Beam beam, Vector2 position) {
         FieldEffect electric = new FieldEffect(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 beam.getOwnerId(),
                 FieldEffectType.ELECTRIC,
                 position,
@@ -390,7 +390,7 @@ public class BulletEffectProcessor {
      */
     private void createFreezeEffectForBeam(Beam beam, Vector2 position) {
         FieldEffect freeze = new FieldEffect(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 beam.getOwnerId(),
                 FieldEffectType.FREEZE,
                 position,
@@ -408,7 +408,7 @@ public class BulletEffectProcessor {
      */
     private void createPoisonEffectForBeam(Beam beam, Vector2 position) {
         FieldEffect poison = new FieldEffect(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 beam.getOwnerId(),
                 FieldEffectType.POISON,
                 position,

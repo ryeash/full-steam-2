@@ -24,10 +24,6 @@ public class TerrainGenerator {
     private final EntityWorldDensity configuredDensity;
     private final List<Obstacle> generatedObstacles = new ArrayList<>();
 
-    public TerrainGenerator(double worldWidth, double worldHeight) {
-        this(worldWidth, worldHeight, false, EntityWorldDensity.RANDOM);
-    }
-
     public TerrainGenerator(double worldWidth, double worldHeight, boolean reserveCenterForOddball, EntityWorldDensity configuredDensity) {
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;

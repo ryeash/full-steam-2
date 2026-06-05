@@ -5,7 +5,6 @@ import com.fullsteam.model.AttributeModification;
 import com.fullsteam.model.BaseAttributeModification;
 import com.fullsteam.model.Weapon;
 import com.fullsteam.physics.Player;
-import com.fullsteam.util.GameConstants;
 
 /**
  * Manages status effects that can be applied to players during gameplay.
@@ -172,7 +171,7 @@ public final class StatusEffectManager {
      * This is the standard spawn protection applied when players join or respawn.
      */
     public static void applySpawnInvincibility(Player player) {
-        applyInvincibility(player, GameConstants.SPAWN_INVINCIBILITY_DURATION, "spawn_protection");
+        applyInvincibility(player, Config.SPAWN_INVINCIBILITY_DURATION, "spawn_protection");
     }
 
     /**

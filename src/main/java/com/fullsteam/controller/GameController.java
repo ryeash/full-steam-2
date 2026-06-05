@@ -1,6 +1,6 @@
 package com.fullsteam.controller;
 
-import com.fullsteam.util.GameConstants;
+import com.fullsteam.Config;
 import com.fullsteam.GameLobby;
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.games.GameManager;
@@ -60,7 +60,7 @@ public class GameController {
     public LobbyInfo getGames() {
         return new LobbyInfo(
                 gameLobby.getGlobalPlayerCount(),
-                GameConstants.MAX_GLOBAL_PLAYERS,
+                Config.MAX_GLOBAL_PLAYERS,
                 gameLobby.getActiveGames()
         );
     }
@@ -141,15 +141,13 @@ public class GameController {
         // Preset weapons
         Map<String, Map<String, Object>> presets = new HashMap<>();
 
-        // Basic ordinance showcases
+        // ordinance showcases
         presets.put("ASSAULT_RIFLE", createPresetData(WeaponConfig.ASSAULT_RIFLE_PRESET));
         presets.put("HAND_CANNON", createPresetData(WeaponConfig.HAND_CANNON_PRESET));
         presets.put("SNIPER_RIFLE", createPresetData(WeaponConfig.SNIPER_RIFLE_PRESET));
         presets.put("PLASMA_RIFLE", createPresetData(WeaponConfig.PLASMA_RIFLE_PRESET));
         presets.put("TWIN_SIXES", createPresetData(WeaponConfig.TWIN_SIXES_PRESET));
         presets.put("MINIGUN", createPresetData(WeaponConfig.MINIGUN_PRESET));
-
-        // New ordinance showcases
         presets.put("PRECISION_DART_GUN", createPresetData(WeaponConfig.PRECISION_DART_GUN_PRESET));
         presets.put("FLAME_PROJECTOR", createPresetData(WeaponConfig.FLAME_PROJECTOR_PRESET));
 
@@ -167,7 +165,6 @@ public class GameController {
         presets.put("ARC_PISTOL", createPresetData(WeaponConfig.ARC_PISTOL_PRESET));
         presets.put("TOXIC_SPRAYER", createPresetData(WeaponConfig.TOXIC_SPRAYER_PRESET));
         presets.put("ICE_CANNON", createPresetData(WeaponConfig.ICE_CANNON_PRESET));
-
 
         // Beam weapon presets
         presets.put("LASER_RIFLE", createPresetData(WeaponConfig.LASER_RIFLE_PRESET));

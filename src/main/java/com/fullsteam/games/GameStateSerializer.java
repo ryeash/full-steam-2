@@ -17,13 +17,19 @@ import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.Turret;
 import com.fullsteam.physics.Workshop;
+import org.dyn4j.dynamics.Body;
+import org.dyn4j.geometry.Circle;
+import org.dyn4j.geometry.Convex;
+import org.dyn4j.geometry.Polygon;
 import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
 
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
 /**
@@ -127,7 +133,7 @@ public class GameStateSerializer {
         state.put("terrain", terrainGenerator.getTerrainData());
 
         // Add obstacles
-        state.put("obstacles", createInitialObstacleStates());
+        state.put("obstacles", createObstacleStates());
 
         // Add flag information if flags are enabled
         if (gameConfig.getRules().hasFlags()) {
@@ -177,7 +183,7 @@ public class GameStateSerializer {
             state.put("teamAreas", teamSpawnManager.getTeamAreaInfo());
         }
         state.put("terrain", terrainGenerator.getTerrainData());
-        state.put("obstacles", createInitialObstacleStates());
+        state.put("obstacles", createObstacleStates());
 
         if (gameConfig.getRules().hasFlags()) {
             state.put("flags", createInitialFlagStates());
@@ -267,7 +273,7 @@ public class GameStateSerializer {
         state.put("terrain", terrainGenerator.getTerrainData());
 
         // Add obstacles
-        state.put("obstacles", createInitialObstacleStates());
+        state.put("obstacles", createObstacleStates());
 
         // Add flag information if flags are enabled
         if (gameConfig.getRules().hasFlags()) {
@@ -375,6 +381,7 @@ public class GameStateSerializer {
     }
 
     // ========== Obstacle States ==========
+    private static final DecimalFormat DOUBLE_SHORTFORM = new DecimalFormat("#.##");
 
     private List<Map<String, Object>> createObstacleStates() {
         List<Map<String, Object>> obstacleStates = new ArrayList<>();
@@ -385,37 +392,38 @@ public class GameStateSerializer {
             obsState.put("x", pos.x);
             obsState.put("y", pos.y);
             obsState.put("type", obstacle.getType().name());
-            obsState.put("shapeCategory", obstacle.getShapeCategory().name());
             obsState.put("boundingRadius", obstacle.getBoundingRadius());
             obsState.put("rotation", obstacle.getBody().getTransform().getRotation().toRadians());
-
-            // Add detailed shape data for client rendering
-            obsState.putAll(obstacle.getShapeData());
-
+            obsState.put("shapes", verticesShorthand(obstacle.getBody()));
             obstacleStates.add(obsState);
         }
         return obstacleStates;
     }
 
-    private List<Map<String, Object>> createInitialObstacleStates() {
-        List<Map<String, Object>> obstacles = new ArrayList<>();
-        for (Obstacle obstacle : gameEntities.getAllObstacles()) {
-            Vector2 pos = obstacle.getPosition();
-            Map<String, Object> obsData = new HashMap<>();
-            obsData.put("id", obstacle.getId());
-            obsData.put("x", pos.x);
-            obsData.put("y", pos.y);
-            obsData.put("type", obstacle.getType().name());
-            obsData.put("shapeCategory", obstacle.getShapeCategory().name());
-            obsData.put("boundingRadius", obstacle.getBoundingRadius());
-            obsData.put("rotation", obstacle.getBody().getTransform().getRotation().toRadians());
-
-            // Add detailed shape data for client rendering
-            obsData.putAll(obstacle.getShapeData());
-
-            obstacles.add(obsData);
+    private String verticesShorthand(Body body) {
+        if (body.getFixtureCount() == 0) {
+            return "";
         }
-        return obstacles;
+        StringJoiner outer = new StringJoiner(";");
+        for (int i = 0; i < body.getFixtureCount(); i++) {
+            Convex convex = body.getFixture(i).getShape();
+            StringJoiner joiner = new StringJoiner("/");
+            if (convex instanceof Polygon polygon) {
+                Vector2[] polyVertices = polygon.getVertices();
+                for (Vector2 vertex : polyVertices) {
+                    joiner.add("(" + DOUBLE_SHORTFORM.format(vertex.x) +
+                            "," + DOUBLE_SHORTFORM.format(vertex.y) + ")");
+                }
+            } else if (convex instanceof Circle circle) {
+                double radius = circle.getRadius();
+                Vector2 center = circle.getCenter();
+                joiner.add("(" + DOUBLE_SHORTFORM.format(center.x) +
+                        "," + DOUBLE_SHORTFORM.format(center.y) +
+                        "," + DOUBLE_SHORTFORM.format(radius) + ")");
+            }
+            outer.add(joiner.toString());
+        }
+        return outer.toString();
     }
 
     // ========== Field Effect States ==========

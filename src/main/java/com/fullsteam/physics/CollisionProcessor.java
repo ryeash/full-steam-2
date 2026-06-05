@@ -1,5 +1,6 @@
 package com.fullsteam.physics;
 
+import com.fullsteam.Config;
 import com.fullsteam.games.GameManager;
 import com.fullsteam.games.StatusEffectManager;
 import com.fullsteam.model.BulletEffect;
@@ -7,7 +8,6 @@ import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Rules;
 import com.fullsteam.model.ScoreStyle;
-import com.fullsteam.util.IdGenerator;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
@@ -412,7 +412,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             case PROXIMITY_MINE -> {
                 fieldEffect.setActive(false);
                 FieldEffect explosion = new FieldEffect(
-                        IdGenerator.nextEntityId(), // Offset ID to avoid conflicts
+                        Config.nextEntityId(), // Offset ID to avoid conflicts
                         fieldEffect.getOwnerId(),
                         FieldEffectType.EXPLOSION,
                         fieldEffect.getPosition(),
@@ -499,7 +499,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         if (turretDestroyed) {
             // Create zero-damage explosion field effect
             FieldEffect explosion = new FieldEffect(
-                    IdGenerator.nextEntityId(),
+                    Config.nextEntityId(),
                     turret.getOwnerId(), // Use turret owner for attribution
                     FieldEffectType.EXPLOSION,
                     turret.getPosition(),
@@ -560,7 +560,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         if (turretDestroyed) {
             // Create zero-damage explosion field effect
             FieldEffect explosion = new FieldEffect(
-                    IdGenerator.nextEntityId(),
+                    Config.nextEntityId(),
                     turret.getOwnerId(), // Use turret owner for attribution
                     FieldEffectType.EXPLOSION,
                     turret.getPosition(),
@@ -667,7 +667,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      */
     private void createTurretDestructionExplosion(Turret turret) {
         FieldEffect explosion = new FieldEffect(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 turret.getOwnerId(),
                 FieldEffectType.EXPLOSION,
                 turret.getPosition(),
@@ -1044,7 +1044,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
         // Create the power-up
         PowerUp powerUp = new PowerUp(
-                IdGenerator.nextEntityId(),
+                Config.nextEntityId(),
                 spawnPos,
                 selectedType,
                 workshop.getId(),
