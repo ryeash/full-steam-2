@@ -4788,19 +4788,34 @@ class GameEngine {
         if (entityData.type !== 'WORKSHOP') {
             return;
         }
-        
-        // Use the same approach as rectangular obstacles
-        const width = entityData.width;
-        const height = entityData.height;
-        
-        const halfWidth = width / 2;
-        const halfHeight = height / 2;
-        
-        // Workshop base - industrial gray rectangle
-        graphics.rect(-halfWidth, -halfHeight, width, height).fill({ color: 0x555555, alpha: 0.9 });
-        
-        // Workshop outline
-        graphics.rect(-halfWidth, -halfHeight, width, height).stroke({ width: 3, color: 0x777777 });
+
+        // Derive bounding dimensions from the compact shapes string so we don't
+        // rely on separate width/height fields from the server.
+        const shapes = this.parseObstacleShapes(entityData.shapes);
+        let halfWidth = entityData.craftRadius * 0.5 || 40;
+        let halfHeight = entityData.craftRadius * 0.4 || 30;
+
+        if (shapes.length > 0 && shapes[0].type === 'polygon') {
+            const xs = shapes[0].points.map(([x]) => x);
+            const ys = shapes[0].points.map(([, y]) => y);
+            halfWidth  = (Math.max(...xs) - Math.min(...xs)) / 2;
+            halfHeight = (Math.max(...ys) - Math.min(...ys)) / 2;
+        }
+
+        // Workshop base — drawn from shapes for consistency with obstacle rendering
+        if (shapes.length > 0) {
+            for (const shape of shapes) {
+                if (shape.type === 'circle') {
+                    graphics.circle(shape.cx, shape.cy, shape.r);
+                } else {
+                    graphics.poly(shape.points.flatMap(([x, y]) => [x, y]));
+                }
+            }
+        } else {
+            graphics.rect(-halfWidth, -halfHeight, halfWidth * 2, halfHeight * 2);
+        }
+        graphics.fill({ color: 0x555555, alpha: 0.9 });
+        graphics.stroke({ width: 3, color: 0x777777 });
         
         // Crafting radius indicator (subtle)
         graphics.circle(0, 0, entityData.craftRadius || 80).stroke({ width: 1, color: 0x888888, alpha: 0.3 });

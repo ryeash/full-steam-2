@@ -21,7 +21,6 @@ import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.Convex;
 import org.dyn4j.geometry.Polygon;
-import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
 
 import java.text.DecimalFormat;
@@ -696,18 +695,13 @@ public class GameStateSerializer {
             workshopState.put("type", "WORKSHOP");
             workshopState.put("x", pos.x);
             workshopState.put("y", pos.y);
-            workshopState.put("width", ((Rectangle) workshop.getBody().getFixture(0).getShape()).getWidth());
-            workshopState.put("height", ((Rectangle) workshop.getBody().getFixture(0).getShape()).getHeight());
             workshopState.put("craftRadius", workshop.getBoundingRadius());
             workshopState.put("craftTime", workshop.getCraftTime());
             workshopState.put("maxPowerUps", workshop.getMaxPowerUps());
             int activeCrafters = workshop.getActiveCrafters();
             workshopState.put("activeCrafters", activeCrafters);
             workshopState.put("craftingProgress", workshop.getAllCraftingProgress());
-
-            // Add detailed shape data for client rendering (inherited from Obstacle)
-            workshopState.putAll(workshop.getShapeData());
-
+            workshopState.put("shapes", verticesShorthand(workshop.getBody()));
             workshopStates.add(workshopState);
         }
         return workshopStates;
