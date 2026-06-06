@@ -2,6 +2,7 @@ package com.fullsteam.controller;
 
 import com.fullsteam.Config;
 import com.fullsteam.GameLobby;
+import com.fullsteam.RandomNames;
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.games.GameManager;
 import com.fullsteam.model.BulletEffect;
@@ -40,7 +41,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Singleton
-@Controller
+@Controller(produces = MediaType.APPLICATION_JSON, consumes = MediaType.APPLICATION_JSON)
 public class GameController {
 
     private static final Logger log = LoggerFactory.getLogger(GameController.class);
@@ -55,8 +56,6 @@ public class GameController {
     }
 
     @Get("/api/games")
-    @Produces(MediaType.APPLICATION_JSON)
-    @Consumes(MediaType.APPLICATION_JSON)
     public LobbyInfo getGames() {
         return new LobbyInfo(
                 gameLobby.getGlobalPlayerCount(),
@@ -65,15 +64,17 @@ public class GameController {
         );
     }
 
+    @Get("/api/names")
+    public List<String> getNames() {
+        return RandomNames.getNames();
+    }
+
     @Get("/api/game-config/default")
-    @Produces(MediaType.APPLICATION_JSON)
     public GameConfig getDefaultGameConfig() {
         return GameConfig.builder().build(); // Returns default values from @Builder.Default
     }
 
     @Post("/api/games")
-    @Produces(MediaType.APPLICATION_JSON)
-    @Consumes(MediaType.APPLICATION_JSON)
     public Map<String, String> createGame(@Valid @Body GameConfig gameConfig) {
         try {
             GameManager game;
@@ -93,7 +94,6 @@ public class GameController {
     }
 
     @Get("/api/weapon-customization")
-    @Produces(MediaType.APPLICATION_JSON)
     public Map<String, Object> getWeaponCustomizationData() {
         Map<String, Object> data = new HashMap<>();
 
