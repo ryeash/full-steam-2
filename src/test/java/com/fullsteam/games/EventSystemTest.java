@@ -46,7 +46,7 @@ class EventSystemTest extends BaseTestClass {
         GameEntities gameEntities = new GameEntities(config, world);
         GameEventManager eventManager = new GameEventManager(gameEntities, (session, msg) -> {
         });
-        TerrainGenerator terrainGenerator = new TerrainGenerator(2000, 2000, false, EntityWorldDensity.RANDOM);
+        TerrainGenerator terrainGenerator = new TerrainGenerator(world, 2000, 2000, false, EntityWorldDensity.RANDOM);
 
         EventSystem eventSystem = new EventSystem(
                 "test-game",
@@ -209,7 +209,7 @@ class EventSystemTest extends BaseTestClass {
         GameEntities gameEntities = new GameEntities(config, world);
         GameEventManager eventManager = new GameEventManager(gameEntities, (session, msg) -> {
         });
-        TerrainGenerator terrainGenerator = new TerrainGenerator(2000, 2000, false, EntityWorldDensity.RANDOM);
+        TerrainGenerator terrainGenerator = new TerrainGenerator(world,  2000, 2000, false, EntityWorldDensity.RANDOM);
 
         EventSystem eventSystem = new EventSystem(
                 "test-game",

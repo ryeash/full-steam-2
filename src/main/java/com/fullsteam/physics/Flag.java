@@ -1,5 +1,6 @@
 package com.fullsteam.physics;
 
+import com.fullsteam.Config;
 import lombok.Getter;
 import lombok.Setter;
 import org.dyn4j.dynamics.Body;
@@ -24,8 +25,8 @@ public class Flag extends GameEntity {
     private long lastCaptureTime = 0;
     private int captureCount = 0; // How many times this flag has been captured
 
-    public Flag(int id, int ownerTeam, double x, double y) {
-        super(id, createFlagBody(x, y), Double.POSITIVE_INFINITY); // Flags are indestructible
+    public Flag(int ownerTeam, double x, double y) {
+        super(Config.nextEntityId(), createFlagBody(x, y), Double.POSITIVE_INFINITY); // Flags are indestructible
         this.ownerTeam = ownerTeam;
         this.homePosition = new Vector2(x, y);
     }

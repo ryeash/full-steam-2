@@ -67,7 +67,6 @@ public class UtilitySystem {
             targetPos.add(offset);
         }
         FieldEffect fieldEffect = new FieldEffect(
-                Config.nextEntityId(),
                 activation.playerId(),
                 effectType,
                 targetPos,
@@ -123,7 +122,6 @@ public class UtilitySystem {
             return;
         }
         Turret turret = new Turret(
-                Config.nextEntityId(),
                 activation.playerId(),
                 activation.team(),
                 placement,
@@ -154,7 +152,6 @@ public class UtilitySystem {
      */
     private void createProximityMine(UtilityActivation activation) {
         FieldEffect mine = new FieldEffect(
-                Config.nextEntityId(),
                 activation.playerId(),
                 FieldEffectType.PROXIMITY_MINE,
                 activation.position(),
@@ -187,7 +184,6 @@ public class UtilitySystem {
             return;
         }
         DefenseLaser defenseLaser = new DefenseLaser(
-                Config.nextEntityId(),
                 activation.playerId(),
                 activation.team(),
                 placement,

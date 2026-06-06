@@ -123,12 +123,6 @@ public class GameManager {
         // Pass oddball info and obstacle density to terrain generator
         boolean hasOddball = gameConfig.getRules().hasOddball();
         EntityWorldDensity obstacleDensity = gameConfig.getRules().getObstacleDensity();
-        this.terrainGenerator = new TerrainGenerator(
-                gameConfig.getWorldWidth(),
-                gameConfig.getWorldHeight(),
-                hasOddball,
-                obstacleDensity
-        );
 
         this.world = new World<>();
 
@@ -159,6 +153,14 @@ public class GameManager {
         this.weaponSystem = new WeaponSystem(gameEntities, world);
         // Set kill callback for beam weapons
         this.weaponSystem.setKillCallback(this::killPlayer);
+
+        this.terrainGenerator = new TerrainGenerator(
+                world,
+                gameConfig.getWorldWidth(),
+                gameConfig.getWorldHeight(),
+                hasOddball,
+                obstacleDensity
+        );
 
         // Initialize utility system
         this.utilitySystem = new UtilitySystem(
@@ -1294,7 +1296,6 @@ public class GameManager {
 
         // Create large explosion effect at HQ location
         FieldEffect explosion = new FieldEffect(
-                Config.nextEntityId(),
                 -1, // No owner
                 FieldEffectType.EXPLOSION,
                 pos,

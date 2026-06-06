@@ -277,9 +277,7 @@ public class Player extends GameEntity {
         for (int i = 0; i < beamsToFire; i++) {
             angle += (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * maxAccuracySpread;
             Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
-
-            int beamId = Config.nextEntityId();
-            beams.add(new Beam(beamId, pos, direction, range, damage, getId(), getTeam(),
+            beams.add(new Beam(pos, direction, range, damage, getId(), getTeam(),
                     ordinance, weapon.getBulletEffects()));
         }
         return beams;

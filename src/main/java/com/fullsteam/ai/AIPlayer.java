@@ -37,7 +37,7 @@ public class AIPlayer extends Player {
     private boolean isStuck = false;
 
     public AIPlayer(int id, String playerName, double x, double y, AIPersonality personality, int team, double maxHealth) {
-        super(id, playerName, x, y, team, maxHealth);
+        super(id, "[AI] " + playerName, x, y, team, maxHealth);
         this.personality = personality;
         this.memory = new AIMemory();
         this.currentBehavior = new IdleBehavior();
@@ -178,7 +178,7 @@ public class AIPlayer extends Player {
     /**
      * Evaluate if AI should switch weapons based on tactical situation.
      * Returns true if weapon switch would be beneficial.
-     * 
+     *
      * @param targetDistance Distance to current target
      * @return true if should switch weapons
      */
@@ -190,7 +190,7 @@ public class AIPlayer extends Player {
 
         // Check if weapon is ineffective at current range
         double weaponRange = getCurrentWeapon().getRange();
-        
+
         // Too far for current weapon
         if (targetDistance > weaponRange * 0.9) {
             return true;

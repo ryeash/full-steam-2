@@ -107,7 +107,6 @@ public class EntitySpawner {
 
         log.info("Creating {} flags per team for {} teams", flagsPerTeam, teamCount);
 
-        int flagId = 1;
         for (int team = 1; team <= teamCount; team++) {
             TeamSpawnArea teamArea = teamSpawnManager.getTeamArea(team);
             if (teamArea == null) {
@@ -129,7 +128,7 @@ public class EntitySpawner {
                         }
                     }
                 }
-                Flag flag = new Flag(flagId++, team, flagPosition.x, flagPosition.y);
+                Flag flag = new Flag(team, flagPosition.x, flagPosition.y);
                 gameEntities.add(flag);
             }
         }
@@ -141,21 +140,20 @@ public class EntitySpawner {
      */
     private Vector2 calculateFlagPosition(TeamSpawnArea teamArea, int flagIndex, int totalFlags) {
         Vector2 center = teamArea.getCenter();
-
         if (totalFlags == 1) {
             // Single flag: place at team center
             return center.copy();
+        } else {
+            // Multiple flags: distribute in a circle around center
+            double radius = Math.min(teamArea.getWidth(), teamArea.getHeight()) * 0.3;
+            double angleStep = (2 * Math.PI) / totalFlags;
+            double angle = flagIndex * angleStep;
+
+            double x = center.x + radius * Math.cos(angle);
+            double y = center.y + radius * Math.sin(angle);
+
+            return new Vector2(x, y);
         }
-
-        // Multiple flags: distribute in a circle around center
-        double radius = Math.min(teamArea.getWidth(), teamArea.getHeight()) * 0.3;
-        double angleStep = (2 * Math.PI) / totalFlags;
-        double angle = flagIndex * angleStep;
-
-        double x = center.x + radius * Math.cos(angle);
-        double y = center.y + radius * Math.sin(angle);
-
-        return new Vector2(x, y);
     }
 
     /**
@@ -166,12 +164,8 @@ public class EntitySpawner {
         if (!gameConfig.getRules().hasOddball()) {
             return; // Oddball not enabled
         }
-
-        log.info("Creating oddball at world center for game {}", gameId);
-
         // Create oddball at world center (team 0 = neutral)
         Vector2 centerPosition = new Vector2(0, 0);
-
         // Ensure position is clear of obstacles
         if (!terrainGenerator.isPositionClear(centerPosition, 30.0)) {
             // Try to find a nearby clear position
@@ -179,16 +173,13 @@ public class EntitySpawner {
                 double offsetX = (Math.random() - 0.5) * 200;
                 double offsetY = (Math.random() - 0.5) * 200;
                 Vector2 candidate = new Vector2(offsetX, offsetY);
-
                 if (terrainGenerator.isPositionClear(candidate, 30.0)) {
                     centerPosition = candidate;
                     break;
                 }
             }
         }
-
-        // Use flag ID 9999 for oddball to distinguish it from regular flags
-        Flag oddball = new Flag(9999, 0, centerPosition.x, centerPosition.y);
+        Flag oddball = new Flag(0, centerPosition.x, centerPosition.y);
         gameEntities.add(oddball);
     }
 
@@ -212,22 +203,8 @@ public class EntitySpawner {
         // Calculate zone positions based on number of zones and teams
         for (int i = 0; i < zoneCount; i++) {
             Vector2 zonePosition = calculateKothZonePosition(i, zoneCount, teamCount);
-
-            // Ensure zone position is clear of obstacles
-            if (!terrainGenerator.isPositionClear(zonePosition, Config.SPAWN_CLEARANCE_RADIUS)) {
-                // Try to find a nearby clear position
-                for (int attempt = 0; attempt < 10; attempt++) {
-                    double offsetX = (Math.random() - 0.5) * 200;
-                    double offsetY = (Math.random() - 0.5) * 200;
-                    Vector2 candidate = new Vector2(zonePosition.x + offsetX, zonePosition.y + offsetY);
-
-                    if (terrainGenerator.isPositionClear(candidate, Config.SPAWN_CLEARANCE_RADIUS)) {
-                        zonePosition = candidate;
-                        break;
-                    }
-                }
-            }
             KothZone zone = new KothZone(zoneId++, i, zonePosition.x, zonePosition.y, gameConfig.getRules().getKothPointsPerSecond());
+            terrainGenerator.moveToOpenPlace(zone.getBody());
             gameEntities.add(zone);
         }
     }

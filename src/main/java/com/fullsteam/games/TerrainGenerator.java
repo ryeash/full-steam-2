@@ -3,7 +3,12 @@ package com.fullsteam.games;
 import com.fullsteam.model.EntityWorldDensity;
 import com.fullsteam.physics.Obstacle;
 import lombok.Getter;
+import org.dyn4j.dynamics.Body;
+import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.geometry.Vector2;
+import org.dyn4j.world.DetectFilter;
+import org.dyn4j.world.World;
+import org.dyn4j.world.result.DetectResult;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -18,13 +23,15 @@ import java.util.concurrent.ThreadLocalRandom;
 @Getter
 public class TerrainGenerator {
 
+    private final World<Body> world;
     private final double worldWidth;
     private final double worldHeight;
     private final boolean reserveCenterForOddball;
     private final EntityWorldDensity configuredDensity;
     private final List<Obstacle> generatedObstacles = new ArrayList<>();
 
-    public TerrainGenerator(double worldWidth, double worldHeight, boolean reserveCenterForOddball, EntityWorldDensity configuredDensity) {
+    public TerrainGenerator(World<Body> world, double worldWidth, double worldHeight, boolean reserveCenterForOddball, EntityWorldDensity configuredDensity) {
+        this.world = world;
         this.worldWidth = worldWidth;
         this.worldHeight = worldHeight;
         this.reserveCenterForOddball = reserveCenterForOddball;
@@ -105,6 +112,36 @@ public class TerrainGenerator {
             }
         }
         return true;
+    }
+
+    public void moveToOpenPlace(Body bodyToPlace) {
+        Vector2 initialPosition = bodyToPlace.getTransform().getTranslation();
+        List<DetectResult<Body, BodyFixture>> collisions = world.detect(bodyToPlace.createAABB(), bodyToPlace, new DetectFilter<>(true, true, null));
+        for (int i = 0; i < 20 && !collisions.isEmpty(); i++) {
+            double offsetX = (Math.random() - 0.5) * (2 * bodyToPlace.getRotationDiscRadius());
+            double offsetY = (Math.random() - 0.5) * (2 * bodyToPlace.getRotationDiscRadius());
+            bodyToPlace.getTransform().setTranslation(initialPosition.copy().add(offsetX, offsetY));
+            collisions = world.detect(bodyToPlace.createAABB(), bodyToPlace, new DetectFilter<>(true, true, null));
+            if (collisions.isEmpty()) {
+                return;
+            }
+        }
+
+//        Vector2 finalPosition = initialPosition;
+//        // Ensure zone position is clear of obstacles
+//        if (!isPositionClear(finalPosition, bodyToPlace.getRotationDiscRadius() + buffer)) {
+//            // Try to find a nearby clear position
+//            for (int attempt = 0; attempt < 20; attempt++) {
+//                double offsetX = (Math.random() - 0.5) * (2 * bodyToPlace.getRotationDiscRadius());
+//                double offsetY = (Math.random() - 0.5) * (2 * bodyToPlace.getRotationDiscRadius());
+//                Vector2 candidate = new Vector2(finalPosition.x + offsetX, finalPosition.y + offsetY);
+//                if (isPositionClear(candidate, bodyToPlace.getRotationDiscRadius() + buffer)) {
+//                    finalPosition = candidate;
+//                    break;
+//                }
+//            }
+//        }
+//        bodyToPlace.translate(finalPosition);
     }
 
     /**

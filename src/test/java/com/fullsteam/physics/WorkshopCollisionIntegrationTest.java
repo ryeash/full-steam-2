@@ -161,7 +161,7 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
         PowerUp powerUp = new PowerUp(
                 1,
                 playerPos,
-                PowerUp.PowerUpType.SPEED_BOOST,
+                PowerUpType.SPEED_BOOST,
                 testWorkshop.getId(),
                 30.0,
                 1.0
@@ -201,7 +201,7 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
             PowerUp powerUp = new PowerUp(
                     i + 1,
                     new Vector2(workshopPos.x + i * 20, workshopPos.y + i * 20),
-                    PowerUp.PowerUpType.SPEED_BOOST,
+                    PowerUpType.SPEED_BOOST,
                     testWorkshop.getId(),
                     30.0,
                     1.0
@@ -307,7 +307,7 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
         PowerUp powerUp = new PowerUp(
                 1,
                 new Vector2(100, 100),
-                PowerUp.PowerUpType.SPEED_BOOST,
+                PowerUpType.SPEED_BOOST,
                 testWorkshop.getId(),
                 30.0,
                 1.0

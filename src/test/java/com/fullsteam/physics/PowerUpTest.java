@@ -61,7 +61,7 @@ class PowerUpTest extends BaseTestClass {
         PowerUp powerUp = new PowerUp(
                 1,
                 spawnPos,
-                PowerUp.PowerUpType.SPEED_BOOST,
+                PowerUpType.SPEED_BOOST,
                 testWorkshop.getId(),
                 30.0,
                 1.5
@@ -69,7 +69,7 @@ class PowerUpTest extends BaseTestClass {
         
         assertNotNull(powerUp);
         assertTrue(powerUp.isActive());
-        assertEquals(PowerUp.PowerUpType.SPEED_BOOST, powerUp.getType());
+        assertEquals(PowerUpType.SPEED_BOOST, powerUp.getType());
         assertEquals(testWorkshop.getId(), powerUp.getWorkshopId());
         assertEquals(30.0, powerUp.getDuration()); // Duration of effect
         assertEquals(spawnPos, powerUp.getPosition());
@@ -81,7 +81,7 @@ class PowerUpTest extends BaseTestClass {
     void testAllPowerUpTypes() {
         Vector2 spawnPos = new Vector2(100, 100);
         
-        for (PowerUp.PowerUpType type : PowerUp.PowerUpType.values()) {
+        for (PowerUpType type : PowerUpType.values()) {
             PowerUp powerUp = new PowerUp(
                     1,
                     spawnPos,
@@ -104,18 +104,18 @@ class PowerUpTest extends BaseTestClass {
         PowerUp powerUp = new PowerUp(
                 1,
                 new Vector2(100, 100),
-                PowerUp.PowerUpType.DAMAGE_BOOST,
+                PowerUpType.DAMAGE_BOOST,
                 testWorkshop.getId(),
                 25.0,
                 2.0
         );
         
-        PowerUp.PowerUpEffect effect = powerUp.getEffect();
+        PowerUpEffect effect = powerUp.getEffect();
         
         assertNotNull(effect);
-        assertEquals(PowerUp.PowerUpType.DAMAGE_BOOST, effect.getType());
-        assertEquals(25.0, effect.getDuration());
-        assertEquals(2.0, effect.getStrength());
+        assertEquals(PowerUpType.DAMAGE_BOOST, effect.type());
+        assertEquals(25.0, effect.duration());
+        assertEquals(2.0, effect.strength());
     }
 
     @Test
@@ -127,7 +127,7 @@ class PowerUpTest extends BaseTestClass {
         PowerUp powerUp = new PowerUp(
                 1,
                 playerPos, // Same position as player
-                PowerUp.PowerUpType.HEALTH_REGENERATION,
+                PowerUpType.HEALTH_REGENERATION,
                 testWorkshop.getId(),
                 30.0,
                 1.0
@@ -152,7 +152,7 @@ class PowerUpTest extends BaseTestClass {
         PowerUp powerUp = new PowerUp(
                 1,
                 new Vector2(100, 100),
-                PowerUp.PowerUpType.DAMAGE_RESISTANCE,
+                PowerUpType.DAMAGE_RESISTANCE,
                 testWorkshop.getId(),
                 30.0,
                 1.0
@@ -175,20 +175,20 @@ class PowerUpTest extends BaseTestClass {
     @Test
     @DisplayName("PowerUp display names and render hints")
     void testPowerUpDisplayProperties() {
-        assertEquals("Speed Boost", PowerUp.PowerUpType.SPEED_BOOST.getDisplayName());
-        assertEquals("⚡", PowerUp.PowerUpType.SPEED_BOOST.getRenderHint());
+        assertEquals("Speed Boost", PowerUpType.SPEED_BOOST.getDisplayName());
+        assertEquals("⚡", PowerUpType.SPEED_BOOST.getRenderHint());
         
-        assertEquals("Health Regen", PowerUp.PowerUpType.HEALTH_REGENERATION.getDisplayName());
-        assertEquals("❤️", PowerUp.PowerUpType.HEALTH_REGENERATION.getRenderHint());
+        assertEquals("Health Regen", PowerUpType.HEALTH_REGENERATION.getDisplayName());
+        assertEquals("❤️", PowerUpType.HEALTH_REGENERATION.getRenderHint());
         
-        assertEquals("Damage Boost", PowerUp.PowerUpType.DAMAGE_BOOST.getDisplayName());
-        assertEquals("⚔️", PowerUp.PowerUpType.DAMAGE_BOOST.getRenderHint());
+        assertEquals("Damage Boost", PowerUpType.DAMAGE_BOOST.getDisplayName());
+        assertEquals("⚔️", PowerUpType.DAMAGE_BOOST.getRenderHint());
         
-        assertEquals("Damage Resist", PowerUp.PowerUpType.DAMAGE_RESISTANCE.getDisplayName());
-        assertEquals("🛡️", PowerUp.PowerUpType.DAMAGE_RESISTANCE.getRenderHint());
+        assertEquals("Damage Resist", PowerUpType.DAMAGE_RESISTANCE.getDisplayName());
+        assertEquals("🛡️", PowerUpType.DAMAGE_RESISTANCE.getRenderHint());
         
-        assertEquals("Berserker", PowerUp.PowerUpType.BERSERKER_MODE.getDisplayName());
-        assertEquals("🔥", PowerUp.PowerUpType.BERSERKER_MODE.getRenderHint());
+        assertEquals("Berserker", PowerUpType.BERSERKER_MODE.getDisplayName());
+        assertEquals("🔥", PowerUpType.BERSERKER_MODE.getRenderHint());
     }
 
     @Test
@@ -197,7 +197,7 @@ class PowerUpTest extends BaseTestClass {
         PowerUp powerUp = new PowerUp(
                 1,
                 new Vector2(100, 100),
-                PowerUp.PowerUpType.SPEED_BOOST,
+                PowerUpType.SPEED_BOOST,
                 testWorkshop.getId(),
                 30.0,
                 1.0
@@ -216,7 +216,7 @@ class PowerUpTest extends BaseTestClass {
         PowerUp powerUp = new PowerUp(
                 1,
                 new Vector2(100, 100),
-                PowerUp.PowerUpType.SPEED_BOOST,
+                PowerUpType.SPEED_BOOST,
                 testWorkshop.getId(),
                 30.0,
                 1.0
@@ -251,7 +251,7 @@ class PowerUpTest extends BaseTestClass {
         PowerUp powerUp = new PowerUp(
                 1,
                 new Vector2(100, 100),
-                PowerUp.PowerUpType.SPEED_BOOST,
+                PowerUpType.SPEED_BOOST,
                 testWorkshop.getId(),
                 30.0,
                 1.0
@@ -263,7 +263,7 @@ class PowerUpTest extends BaseTestClass {
         PowerUp powerUp2 = new PowerUp(
                 2,
                 new Vector2(200, 200),
-                PowerUp.PowerUpType.DAMAGE_BOOST,
+                PowerUpType.DAMAGE_BOOST,
                 999, // Different workshop ID
                 30.0,
                 1.0
@@ -279,7 +279,7 @@ class PowerUpTest extends BaseTestClass {
         PowerUp weakPowerUp = new PowerUp(
                 1,
                 new Vector2(100, 100),
-                PowerUp.PowerUpType.SPEED_BOOST,
+                PowerUpType.SPEED_BOOST,
                 testWorkshop.getId(),
                 30.0,
                 0.5 // Weak effect
@@ -288,7 +288,7 @@ class PowerUpTest extends BaseTestClass {
         PowerUp strongPowerUp = new PowerUp(
                 2,
                 new Vector2(200, 200),
-                PowerUp.PowerUpType.SPEED_BOOST,
+                PowerUpType.SPEED_BOOST,
                 testWorkshop.getId(),
                 30.0,
                 3.0 // Strong effect
@@ -297,7 +297,7 @@ class PowerUpTest extends BaseTestClass {
         assertEquals(0.5, weakPowerUp.getEffectStrength());
         assertEquals(3.0, strongPowerUp.getEffectStrength());
         
-        assertEquals(0.5, weakPowerUp.getEffect().getStrength());
-        assertEquals(3.0, strongPowerUp.getEffect().getStrength());
+        assertEquals(0.5, weakPowerUp.getEffect().strength());
+        assertEquals(3.0, strongPowerUp.getEffect().strength());
     }
 }

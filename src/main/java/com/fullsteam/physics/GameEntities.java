@@ -6,6 +6,9 @@ import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
+import org.dyn4j.dynamics.BodyFixture;
+import org.dyn4j.geometry.AABB;
+import org.dyn4j.world.DetectFilter;
 import org.dyn4j.world.World;
 
 import java.util.Collection;

@@ -3836,34 +3836,46 @@ class GameEngine {
     updateBeam(beamData) {
         const beamContainer = this.beams.get(beamData.id);
         if (!beamContainer) return;
-        
-        // Update position and angle
+
         beamContainer.position.set(beamData.startX, beamData.startY);
-        
-        // Recalculate beam properties
+
         const dx = beamData.endX - beamData.startX;
         const dy = beamData.endY - beamData.startY;
         const length = Math.sqrt(dx * dx + dy * dy);
         const angle = Math.atan2(dy, dx);
-        
-        // Redraw beam graphics when geometry changed — reuse the existing object
-        if (Math.abs(length - beamContainer.beamLength) > 5 ||
-            Math.abs(angle - beamContainer.beamAngle) > 0.1) {
-            
+
+        // Only re-rasterise when the beam length changes — that's the expensive
+        // path (clear + redraw path geometry). Rotation is just a cheap matrix
+        // property and must be synced every frame so rotating beams (e.g. the
+        // defense laser) don't leave stale ghost graphics at the original angle.
+        if (Math.abs(length - beamContainer.beamLength) > 5) {
             if (beamContainer.beamGraphics) {
                 beamContainer.beamGraphics.clear();
                 this.drawBeamGraphics(beamContainer.beamGraphics, beamData, length);
-                beamContainer.beamGraphics.rotation = angle;
             }
-            
+            if (beamContainer.energyEffect) {
+                beamContainer.energyEffect.clear();
+                beamContainer.energyEffect.moveTo(0, 0);
+                beamContainer.energyEffect.lineTo(length, 0);
+                beamContainer.energyEffect.stroke({ width: 8, color: 0x4488ff, alpha: 0.1 });
+            }
             beamContainer.beamLength = length;
-            beamContainer.beamAngle = angle;
         }
-        
-        // Update beam intensity based on duration
+
+        // Always sync rotation on both children — this is free and ensures
+        // energyEffect stays aligned with beamGraphics as the beam rotates.
+        if (beamContainer.beamGraphics) {
+            beamContainer.beamGraphics.rotation = angle;
+        }
+        if (beamContainer.energyEffect) {
+            beamContainer.energyEffect.rotation = angle;
+        }
+        beamContainer.beamAngle = angle;
+
+        // Fade the whole container as the beam nears expiry
         const intensity = beamData.durationPercent || 1.0;
         beamContainer.alpha = Math.max(0.3, intensity);
-        
+
         beamContainer.beamData = beamData;
     }
     

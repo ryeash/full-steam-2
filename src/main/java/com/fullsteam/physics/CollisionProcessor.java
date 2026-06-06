@@ -412,7 +412,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             case PROXIMITY_MINE -> {
                 fieldEffect.setActive(false);
                 FieldEffect explosion = new FieldEffect(
-                        Config.nextEntityId(), // Offset ID to avoid conflicts
                         fieldEffect.getOwnerId(),
                         FieldEffectType.EXPLOSION,
                         fieldEffect.getPosition(),
@@ -496,7 +495,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         if (turretDestroyed) {
             // Create zero-damage explosion field effect
             FieldEffect explosion = new FieldEffect(
-                    Config.nextEntityId(),
                     turret.getOwnerId(), // Use turret owner for attribution
                     FieldEffectType.EXPLOSION,
                     turret.getPosition(),
@@ -554,7 +552,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         if (turretDestroyed) {
             // Create zero-damage explosion field effect
             FieldEffect explosion = new FieldEffect(
-                    Config.nextEntityId(),
                     turret.getOwnerId(), // Use turret owner for attribution
                     FieldEffectType.EXPLOSION,
                     turret.getPosition(),
@@ -589,8 +586,8 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      * Handle field effect hitting a turret.
      */
     private void handleTurretFieldEffectCollision(Turret turret, FieldEffect fieldEffect) {
-        if (!turret.isActive() 
-                || !fieldEffect.isActive() 
+        if (!turret.isActive()
+                || !fieldEffect.isActive()
                 || !fieldEffect.canAffect(turret)) {
             return;
         }
@@ -658,7 +655,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      */
     private void createTurretDestructionExplosion(Turret turret) {
         FieldEffect explosion = new FieldEffect(
-                Config.nextEntityId(),
                 turret.getOwnerId(),
                 FieldEffectType.EXPLOSION,
                 turret.getPosition(),
@@ -864,7 +860,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
         // Check if power-up can be collected by this player
         if (powerUp.canBeCollectedBy(player)) {
-            PowerUp.PowerUpEffect effect = powerUp.getEffect();
+            PowerUpEffect effect = powerUp.getEffect();
             applyPowerUpEffect(player, effect);
             powerUp.setActive(false);
         }
@@ -1017,8 +1013,8 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         }
 
         // Randomly select a power-up type
-        PowerUp.PowerUpType[] powerUpTypes = PowerUp.PowerUpType.values();
-        PowerUp.PowerUpType selectedType = powerUpTypes[ThreadLocalRandom.current().nextInt(powerUpTypes.length)];
+        PowerUpType[] powerUpTypes = PowerUpType.values();
+        PowerUpType selectedType = powerUpTypes[ThreadLocalRandom.current().nextInt(powerUpTypes.length)];
 
         // Calculate spawn position around the workshop
         Vector2 workshopPos = workshop.getPosition();
@@ -1047,25 +1043,25 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     /**
      * Apply a power-up effect to a player.
      */
-    private void applyPowerUpEffect(Player player, PowerUp.PowerUpEffect effect) {
-        switch (effect.getType()) {
+    private void applyPowerUpEffect(Player player, PowerUpEffect effect) {
+        switch (effect.type()) {
             case SPEED_BOOST:
-                StatusEffectManager.applySpeedBoost(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
+                StatusEffectManager.applySpeedBoost(player, effect.strength(), effect.duration(), "Workshop Power-up");
                 break;
             case HEALTH_REGENERATION:
-                StatusEffectManager.applyHealthRegeneration(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
+                StatusEffectManager.applyHealthRegeneration(player, effect.strength(), effect.duration(), "Workshop Power-up");
                 break;
             case DAMAGE_BOOST:
-                StatusEffectManager.applyDamageBoost(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
+                StatusEffectManager.applyDamageBoost(player, effect.strength(), effect.duration(), "Workshop Power-up");
                 break;
             case DAMAGE_RESISTANCE:
-                StatusEffectManager.applyDamageResistance(player, effect.getStrength(), effect.getDuration(), "Workshop Power-up");
+                StatusEffectManager.applyDamageResistance(player, effect.strength(), effect.duration(), "Workshop Power-up");
                 break;
             case BERSERKER_MODE:
-                StatusEffectManager.applyBerserkerMode(player, effect.getDuration(), "Workshop Power-up");
+                StatusEffectManager.applyBerserkerMode(player, effect.duration(), "Workshop Power-up");
                 break;
             case INFINITE_AMMO:
-                StatusEffectManager.applyInfiniteAmmo(player, effect.getDuration(), "Workshop Power-up");
+                StatusEffectManager.applyInfiniteAmmo(player, effect.duration(), "Workshop Power-up");
                 break;
         }
     }

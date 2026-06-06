@@ -1,5 +1,6 @@
 package com.fullsteam.model;
 
+import com.fullsteam.Config;
 import com.fullsteam.physics.GameEntity;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Turret;
@@ -32,12 +33,12 @@ public class FieldEffect extends GameEntity {
     private final Set<Integer> affectedEntities; // Track which entities have been affected
     private final Map<Integer, Long> lastDamageTime; // Track last damage time for each player (in milliseconds)
 
-    public FieldEffect(int id, int ownerId, FieldEffectType type, Vector2 position, double radius, double damage, double duration, int ownerTeam) {
-        this(id, ownerId, type, position, radius, radius, damage, duration, 0, ownerTeam);
+    public FieldEffect(int ownerId, FieldEffectType type, Vector2 position, double radius, double damage, double duration, int ownerTeam) {
+        this(ownerId, type, position, radius, radius, damage, duration, 0, ownerTeam);
     }
 
-    public FieldEffect(int id, int ownerId, FieldEffectType type, Vector2 position, double radius, double maxRadius, double damage, double duration, long armingTime, int ownerTeam) {
-        super(id, createFieldEffectBody(position, radius), Double.POSITIVE_INFINITY); // Field effects are indestructible
+    public FieldEffect(int ownerId, FieldEffectType type, Vector2 position, double radius, double maxRadius, double damage, double duration, long armingTime, int ownerTeam) {
+        super(Config.nextEntityId(), createFieldEffectBody(position, radius), Double.POSITIVE_INFINITY); // Field effects are indestructible
         this.ownerId = ownerId;
         this.type = type;
         this.initialRadius = radius;

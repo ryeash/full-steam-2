@@ -3,10 +3,9 @@ package com.fullsteam.ai;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.PowerUp;
+import com.fullsteam.physics.PowerUpType;
 import com.fullsteam.physics.Workshop;
 import org.dyn4j.geometry.Vector2;
-
-import java.util.List;
 
 /**
  * Behavior for seeking and collecting power-ups from workshops.
@@ -111,7 +110,7 @@ public class PowerUpBehavior implements AIBehavior {
     /**
      * Evaluate how valuable a power-up type is for this AI based on current state.
      */
-    private double evaluatePowerUpValue(AIPlayer aiPlayer, PowerUp.PowerUpType type, double healthPercent) {
+    private double evaluatePowerUpValue(AIPlayer aiPlayer, PowerUpType type, double healthPercent) {
         return switch (type) {
             case HEALTH_REGENERATION -> {
                 // Very valuable when low health
@@ -325,12 +324,12 @@ public class PowerUpBehavior implements AIBehavior {
             }
             
             // Health regen is high priority when low health
-            if (powerUp.getType() == PowerUp.PowerUpType.HEALTH_REGENERATION && healthPercent < 0.4) {
+            if (powerUp.getType() == PowerUpType.HEALTH_REGENERATION && healthPercent < 0.4) {
                 return 80; // High priority
             }
             
             // Damage boost is high priority for aggressive personalities
-            if (powerUp.getType() == PowerUp.PowerUpType.DAMAGE_BOOST && 
+            if (powerUp.getType() == PowerUpType.DAMAGE_BOOST &&
                 aiPlayer.getPersonality().getAggressiveness() > 0.7) {
                 return 70;
             }

@@ -22,7 +22,7 @@ public class Turret extends GameEntity {
     private final int ownerId;
     private final int ownerTeam;
     private final double detectionRange;
-    private final double fireRate; // shots per second
+    private final double fireRate;
     private final double damage;
     private final double projectileSpeed;
     private final long expires;
@@ -30,12 +30,12 @@ public class Turret extends GameEntity {
     private Player currentTarget;
     private Vector2 aimDirection = new Vector2(1, 0);
 
-    public Turret(int id, int ownerId, int ownerTeam, Vector2 position, double lifespan) {
-        super(id, createTurretBody(position), 50.0); // 50 HP turret
+    public Turret(int ownerId, int ownerTeam, Vector2 position, double lifespan) {
+        super(Config.nextEntityId(), createTurretBody(position), 50.0); // 50 HP turret
         this.ownerId = ownerId;
         this.ownerTeam = ownerTeam;
         this.detectionRange = 400.0; // Detection range
-        this.fireRate = 3.0; // 3 shots per second
+        this.fireRate = 1.5;
         this.damage = 15.0; // Moderate damage
         this.projectileSpeed = 400.0; // Fast projectiles
         this.expires = (long) (System.currentTimeMillis() + (lifespan * 1000));

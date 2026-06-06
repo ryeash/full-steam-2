@@ -28,14 +28,14 @@ public class DefenseLaser extends GameEntity {
     private final double rotationSpeed; // radians per second
     private final double damage;
     private final long expires;
-    
+
     // Three rotating beams
     private final List<Beam> beams = new ArrayList<>();
     private double currentRotation = 0.0;
     private final World<Body> world;
 
-    public DefenseLaser(int id, int ownerId, int ownerTeam, Vector2 position, double lifespan, World<Body> world) {
-        super(id, createDefenseLaserBody(position), 75.0); // 75 HP
+    public DefenseLaser(int ownerId, int ownerTeam, Vector2 position, double lifespan, World<Body> world) {
+        super(Config.nextEntityId(), createDefenseLaserBody(position), 75.0); // 75 HP
         this.ownerId = ownerId;
         this.ownerTeam = ownerTeam;
         this.detectionRange = 300.0;
@@ -44,7 +44,7 @@ public class DefenseLaser extends GameEntity {
         this.damage = 40.0; // Moderate DOT damage
         this.expires = (long) (System.currentTimeMillis() + (lifespan * 1000));
         this.world = world;
-        
+
         // Create initial beams at 120-degree intervals
         createRotatingBeams();
     }
@@ -64,21 +64,20 @@ public class DefenseLaser extends GameEntity {
     private void createRotatingBeams() {
         beams.clear();
         Vector2 center = getPosition();
-        
+
         for (int i = 0; i < 3; i++) {
             double angle = currentRotation + (i * 2 * Math.PI / 3);
             Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
-            
+
             Beam beam = new Beam(
-                Config.nextEntityId(),
-                center,
-                direction,
-                beamLength,
-                damage,
-                ownerId,
-                ownerTeam,
-                Ordinance.PLASMA_BEAM, // Reuse existing plasma beam
-                Set.of() // No special effects needed
+                    center,
+                    direction,
+                    beamLength,
+                    damage,
+                    ownerId,
+                    ownerTeam,
+                    Ordinance.PLASMA_BEAM, // Reuse existing plasma beam
+                    Set.of() // No special effects needed
             );
             beam.setExpires(this.getExpires());
             beams.add(beam);
@@ -100,7 +99,7 @@ public class DefenseLaser extends GameEntity {
         // Rotate beams
         currentRotation += rotationSpeed * deltaTime;
         updateBeamPositions();
-        
+
         lastUpdateTime = System.currentTimeMillis();
     }
 
@@ -110,29 +109,29 @@ public class DefenseLaser extends GameEntity {
      */
     private void updateBeamPositions() {
         Vector2 center = getPosition();
-        
+
         for (int i = 0; i < beams.size(); i++) {
             Beam beam = beams.get(i);
             double angle = currentRotation + (i * 2 * Math.PI / 3);
             Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
-            
+
             // Update beam start point (if needed)
             beam.getStartPoint().set(center);
-            
+
             // Update beam direction
             beam.getDirection().set(direction);
             beam.getDirection().normalize();
-            
+
             // Update beam end point
             Vector2 offset = direction.copy();
             offset.multiply(beamLength);
             beam.getEndPoint().set(center);
             beam.getEndPoint().add(offset);
-            
+
             // Note: Effective endpoint will be updated by WeaponSystem via updateBeamEffectiveEndpoints()
         }
     }
-    
+
     /**
      * Update the effective endpoints of all beams based on obstacle collisions.
      * This method should be called by WeaponSystem after updateBeamPositions().
@@ -141,7 +140,7 @@ public class DefenseLaser extends GameEntity {
         if (effectiveEndpoints.length != beams.size()) {
             throw new IllegalArgumentException("Effective endpoints array size must match beam count");
         }
-        
+
         for (int i = 0; i < beams.size(); i++) {
             beams.get(i).setEffectiveEndPoint(effectiveEndpoints[i]);
         }

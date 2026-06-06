@@ -14,30 +14,6 @@ import org.dyn4j.geometry.Vector2;
 @Getter
 @Setter
 public class PowerUp extends GameEntity {
-    public enum PowerUpType {
-        SPEED_BOOST("Speed Boost", "⚡"),
-        HEALTH_REGENERATION("Health Regen", "❤️"),
-        DAMAGE_BOOST("Damage Boost", "⚔️"),
-        DAMAGE_RESISTANCE("Damage Resist", "🛡️"),
-        BERSERKER_MODE("Berserker", "🔥"),
-        INFINITE_AMMO("Infinite Ammo", "∞");
-
-        private final String displayName;
-        private final String renderHint;
-
-        PowerUpType(String displayName, String renderHint) {
-            this.displayName = displayName;
-            this.renderHint = renderHint;
-        }
-
-        public String getDisplayName() {
-            return displayName;
-        }
-
-        public String getRenderHint() {
-            return renderHint;
-        }
-    }
 
     private final PowerUpType type;
     private final int workshopId; // Which workshop spawned this power-up
@@ -76,30 +52,4 @@ public class PowerUp extends GameEntity {
         return new PowerUpEffect(type, duration, effectStrength);
     }
 
-    /**
-     * Data class containing power-up effect information.
-     */
-    public static class PowerUpEffect {
-        private final PowerUpType type;
-        private final double duration;
-        private final double strength;
-
-        public PowerUpEffect(PowerUpType type, double duration, double strength) {
-            this.type = type;
-            this.duration = duration;
-            this.strength = strength;
-        }
-
-        public PowerUpType getType() {
-            return type;
-        }
-
-        public double getDuration() {
-            return duration;
-        }
-
-        public double getStrength() {
-            return strength;
-        }
-    }
 }

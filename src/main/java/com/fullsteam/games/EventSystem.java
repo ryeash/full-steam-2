@@ -8,6 +8,7 @@ import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Rules;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.PowerUp;
+import com.fullsteam.physics.PowerUpType;
 import lombok.Getter;
 import org.dyn4j.geometry.Vector2;
 import org.slf4j.Logger;
@@ -232,7 +233,6 @@ public class EventSystem {
             double radius = getWarningRadius(event.getEventType());
 
             FieldEffect warningZone = new FieldEffect(
-                    Config.nextEntityId(),
                     -1, // No owner (system event)
                     FieldEffectType.WARNING_ZONE,
                     location,
@@ -272,7 +272,6 @@ public class EventSystem {
         switch (event.getEventType()) {
             case METEOR_SHOWER -> triggerStaggeredEventFieldEffect(event, (e, l) ->
                     new FieldEffect(
-                            Config.nextEntityId(),
                             -1, // System event
                             FieldEffectType.EXPLOSION,
                             l,
@@ -283,7 +282,6 @@ public class EventSystem {
                     ));
             case VOLCANIC_ERUPTION -> triggerStaggeredEventFieldEffect(event, (e, l) ->
                     new FieldEffect(
-                            Config.nextEntityId(),
                             -1,
                             FieldEffectType.FIRE,
                             l,
@@ -296,7 +294,6 @@ public class EventSystem {
                     ));
             case EARTHQUAKE -> triggerStaggeredEventFieldEffect(event, (e, l) ->
                     new FieldEffect(
-                            Config.nextEntityId(),
                             -1,
                             FieldEffectType.EARTHQUAKE,
                             l,
@@ -307,7 +304,6 @@ public class EventSystem {
                     ));
             case ION_STORM -> triggerStaggeredEventFieldEffect(event, (e, l) ->
                     new FieldEffect(
-                            Config.nextEntityId(),
                             -1,
                             FieldEffectType.ELECTRIC,
                             l,
@@ -318,7 +314,6 @@ public class EventSystem {
                     ));
             case BLIZZARD -> triggerStaggeredEventFieldEffect(event, (e, l) ->
                     new FieldEffect(
-                            Config.nextEntityId(),
                             -1,
                             FieldEffectType.FREEZE,
                             l,
@@ -360,7 +355,6 @@ public class EventSystem {
             Config.EXECUTOR.schedule(() -> {
                 gameEntities.addPostUpdateHook(() -> {
                     FieldEffect explosion = new FieldEffect(
-                            Config.nextEntityId(),
                             -1,
                             FieldEffectType.EXPLOSION,
                             location,
@@ -372,7 +366,7 @@ public class EventSystem {
                     gameEntities.add(explosion);
 
                     // Spawn random power-up
-                    PowerUp.PowerUpType powerUpType = getRandomPowerUpType();
+                    PowerUpType powerUpType = getRandomPowerUpType();
                     PowerUp powerUp = new PowerUp(
                             Config.nextEntityId(),
                             location,
@@ -390,8 +384,8 @@ public class EventSystem {
     /**
      * Get a random power-up type for supply drops.
      */
-    private PowerUp.PowerUpType getRandomPowerUpType() {
-        PowerUp.PowerUpType[] types = PowerUp.PowerUpType.values();
+    private PowerUpType getRandomPowerUpType() {
+        PowerUpType[] types = PowerUpType.values();
         return types[ThreadLocalRandom.current().nextInt(types.length)];
     }
 

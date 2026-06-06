@@ -1,5 +1,6 @@
 package com.fullsteam.physics;
 
+import com.fullsteam.Config;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.DamageApplicationType;
 import com.fullsteam.model.Ordinance;
@@ -42,9 +43,9 @@ public class Beam extends GameEntity {
     protected final Map<Integer, Long> lastDamageTime = new HashMap<>();
 
 
-    public Beam(int id, Vector2 startPoint, Vector2 direction, double range, double damage,
+    public Beam(Vector2 startPoint, Vector2 direction, double range, double damage,
                 int ownerId, int ownerTeam, Ordinance ordinance, Set<BulletEffect> bulletEffects) {
-        super(id, createBeamBody(startPoint, direction, range), Double.POSITIVE_INFINITY); // Beams don't have health
+        super(Config.nextEntityId(), createBeamBody(startPoint, direction, range), Double.POSITIVE_INFINITY); // Beams don't have health
         this.startPoint = startPoint.copy();
         this.direction = direction.copy();
         this.direction.normalize();
