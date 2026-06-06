@@ -163,7 +163,6 @@ public class UtilitySystem {
                 activation.team()
         );
         gameEntities.add(mine);
-        world.addBody(mine.getBody());
     }
 
     /**

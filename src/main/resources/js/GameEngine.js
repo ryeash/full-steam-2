@@ -1176,6 +1176,10 @@ class GameEngine {
             readyBtn.addEventListener('click', () => this.submitReadyToSpawn());
         }
 
+        // Populate the name dropdown with the curated list; pre-select the
+        // server-assigned random name so the player can just hit Ready.
+        this.populateNamePicker(data && data.assignedName);
+
         // Show the modal and hide the loading screen behind it
         modal.classList.add('visible');
         const loading = document.getElementById('loading-screen');
@@ -1186,6 +1190,65 @@ class GameEngine {
         // Kick off the lobby countdown if the server told us a timeout
         const timeoutMs = data && typeof data.lobbyTimeoutMs === 'number' ? data.lobbyTimeoutMs : null;
         if (timeoutMs) this.startLobbyCountdown(timeoutMs);
+    }
+
+    /**
+     * Fetch the curated name list from /api/names, populate #name-select, and
+     * pre-select the server-assigned name. Attaches the randomise button handler.
+     * Safe to call multiple times — skips re-population when the list is already loaded.
+     */
+    async populateNamePicker(assignedName) {
+        const select = document.getElementById('name-select');
+        const randomBtn = document.getElementById('name-randomize');
+        if (!select) return;
+
+        // Only fetch once; on subsequent calls just update the selection.
+        if (!this._namePicker_loaded) {
+            try {
+                const resp = await fetch('/api/names');
+                const names = await resp.json();
+                select.innerHTML = '';
+                names.forEach(name => {
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = name;
+                    select.appendChild(opt);
+                });
+                this._namePicker_loaded = true;
+                this._namePicker_names = names;
+            } catch (err) {
+                console.error('Failed to load name list', err);
+                select.innerHTML = '<option value="">Could not load names</option>';
+                return;
+            }
+        }
+
+        // Priority: previously saved name → server-assigned random name → first in list.
+        const saved = localStorage.getItem('fullsteam_playerName');
+        if (saved && this._namePicker_names && this._namePicker_names.includes(saved)) {
+            select.value = saved;
+        } else if (assignedName) {
+            select.value = assignedName;
+        }
+
+        // Persist any manual selection immediately so it survives page reloads.
+        if (!select._changeHandlerBound) {
+            select._changeHandlerBound = true;
+            select.addEventListener('change', () => {
+                if (select.value) localStorage.setItem('fullsteam_playerName', select.value);
+            });
+        }
+
+        // Randomise button — picks a new entry from the already-loaded list.
+        if (randomBtn && !randomBtn._handlerBound) {
+            randomBtn._handlerBound = true;
+            randomBtn.addEventListener('click', () => {
+                const names = this._namePicker_names;
+                if (!names || !names.length) return;
+                select.value = names[Math.floor(Math.random() * names.length)];
+                if (select.value) localStorage.setItem('fullsteam_playerName', select.value);
+            });
+        }
     }
 
     hideLoadoutModal() {
@@ -1236,10 +1299,12 @@ class GameEngine {
             return;
         }
         const config = this.weaponCustomizer.getPlayerConfig();
+        const nameSelect = document.getElementById('name-select');
         const message = {
             type: 'readyToSpawn',
             weaponConfig: config.weaponConfig,
-            utilityWeapon: config.utilityWeapon
+            utilityWeapon: config.utilityWeapon,
+            playerName: nameSelect ? nameSelect.value : undefined
         };
         this.websocket.send(JSON.stringify(message));
 

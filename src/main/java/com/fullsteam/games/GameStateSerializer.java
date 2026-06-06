@@ -157,12 +157,15 @@ public class GameStateSerializer {
      * @param lobbyTimeoutMs Milliseconds the server will wait before
      *                       soft-downgrading the session to spectator; the
      *                       client uses this for an informational countdown.
+     * @param assignedName   the server-chosen random name for this session;
+     *                       the client pre-selects it in the name dropdown.
      */
-    public Map<String, Object> createLobbyInitialState(long lobbyTimeoutMs) {
+    public Map<String, Object> createLobbyInitialState(long lobbyTimeoutMs, String assignedName) {
         Map<String, Object> state = new HashMap<>();
         state.put("type", "lobbyInit");
         state.put("awaitingSpawn", true);
         state.put("lobbyTimeoutMs", lobbyTimeoutMs);
+        state.put("assignedName", assignedName);
         state.put("worldWidth", gameConfig.getWorldWidth());
         state.put("worldHeight", gameConfig.getWorldHeight());
         state.put("teamCount", gameConfig.getTeamCount());

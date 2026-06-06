@@ -91,27 +91,6 @@ class WeaponCustomizer {
     _renderShell() {
         this.root.innerHTML = `
             <div class="weapon-customizer-root">
-                <div class="point-tracker">
-                    <div class="point-display">
-                        <span id="points-used">0</span> / <span id="points-max">100</span> Points
-                    </div>
-                    <div id="validation-message" class="validation-message hidden"></div>
-                    <div class="point-breakdown">
-                        <div class="breakdown-item">
-                            <span class="breakdown-label">Attributes</span>
-                            <span class="breakdown-value" id="attr-points">0</span>
-                        </div>
-                        <div class="breakdown-item">
-                            <span class="breakdown-label">Effects</span>
-                            <span class="breakdown-value" id="effect-points">0</span>
-                        </div>
-                        <div class="breakdown-item">
-                            <span class="breakdown-label">Ordinance</span>
-                            <span class="breakdown-value" id="ordinance-points">0</span>
-                        </div>
-                    </div>
-                </div>
-
                 <div id="loading-message" class="loading">
                     Loading weapon customization data...
                 </div>
@@ -144,7 +123,26 @@ class WeaponCustomizer {
                     </div>
 
                     <div class="customization-grid">
+                        <!-- Column 1: name, points, then attributes -->
                         <div class="customization-section">
+                            <div id="name-picker">
+                                <h3>Your Name</h3>
+                                <div class="name-picker-row">
+                                    <select id="name-select" aria-label="Choose a name">
+                                        <option value="">Loading…</option>
+                                    </select>
+                                    <button id="name-randomize" type="button" title="Pick a random name">🎲</button>
+                                </div>
+                            </div>
+                            <div class="point-tracker">
+                                <div class="point-status-line">
+                                    <span id="points-used" class="pt-used">0</span><span class="pt-sep">/</span><span id="points-max" class="pt-max">100</span><span class="pt-label">pts</span>
+                                    <span id="alloc-icon" class="alloc-icon">⚠</span>
+                                    <span class="pt-breakdown-label">Attr:</span><span id="attr-points" class="pt-breakdown-value">0</span>
+                                    <span class="pt-breakdown-label">FX:</span><span id="effect-points" class="pt-breakdown-value">0</span>
+                                    <span class="pt-breakdown-label">Ord:</span><span id="ordinance-points" class="pt-breakdown-value">0</span>
+                                </div>
+                            </div>
                             <h3>Primary Weapon Attributes</h3>
                             <div id="attribute-sliders"></div>
                         </div>
@@ -408,36 +406,30 @@ class WeaponCustomizer {
         const totalPoints = attrPoints + effectPoints + ordinancePoints;
         const maxPoints = this.weaponData.maxPoints;
 
-        this._q('#points-used').textContent = totalPoints;
+        const pointsUsedEl = this._q('#points-used');
+        const iconEl       = this._q('#alloc-icon');
+
+        pointsUsedEl.textContent = totalPoints;
         this._q('#points-max').textContent = maxPoints;
         this._q('#attr-points').textContent = attrPoints;
         this._q('#effect-points').textContent = effectPoints;
         this._q('#ordinance-points').textContent = ordinancePoints;
 
-        const pointsUsed = this._q('#points-used');
-        const validation = this._q('#validation-message');
-
-        pointsUsed.className = '';
-        validation.className = 'validation-message';
-
         let valid;
         if (totalPoints > maxPoints) {
-            pointsUsed.classList.add('points-over');
-            validation.classList.add('validation-error');
-            validation.textContent = `Over budget by ${totalPoints - maxPoints} points. Reduce allocations.`;
-            validation.classList.remove('hidden');
+            pointsUsedEl.className = 'pt-used points-over';
+            iconEl.textContent = '❗';
+            iconEl.className = 'alloc-icon alloc-over';
             valid = false;
         } else if (totalPoints < maxPoints) {
-            pointsUsed.classList.add('points-under');
-            validation.classList.add('validation-warning');
-            validation.textContent = `${maxPoints - totalPoints} points remaining.`;
-            validation.classList.remove('hidden');
+            pointsUsedEl.className = 'pt-used points-under';
+            iconEl.textContent = '⚠';
+            iconEl.className = 'alloc-icon alloc-under';
             valid = true;
         } else {
-            pointsUsed.classList.add('points-used');
-            validation.classList.add('validation-success');
-            validation.textContent = 'Perfect allocation.';
-            validation.classList.remove('hidden');
+            pointsUsedEl.className = 'pt-used points-used';
+            iconEl.textContent = '✓';
+            iconEl.className = 'alloc-icon alloc-perfect';
             valid = true;
         }
 

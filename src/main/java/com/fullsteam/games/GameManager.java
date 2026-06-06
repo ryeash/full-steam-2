@@ -1,6 +1,7 @@
 package com.fullsteam.games;
 
 import com.fullsteam.Config;
+import com.fullsteam.RandomNames;
 import com.fullsteam.ai.AIGameHelper;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
@@ -331,6 +332,9 @@ public class GameManager {
                         request.getUtilityWeapon(), playerId);
             }
         }
+
+        // Apply chosen name only when it comes from the curated list.
+        applyPlayerNameFromRequest(playerSession, request);
 
         switch (playerSession.getState()) {
             case PLAYING -> log.debug("Ignoring readyToSpawn from already-playing session {}", playerId);
@@ -826,7 +830,7 @@ public class GameManager {
         // the customization modal until it sends readyToSpawn. No AI rebalance
         // here (the AI pre-fill stays put until the player actually spawns).
         playerSession.setLobbyEnteredAt(System.currentTimeMillis());
-        send(playerSession.getSession(), gameStateSerializer.createLobbyInitialState(LOBBY_TIMEOUT_MS));
+        send(playerSession.getSession(), gameStateSerializer.createLobbyInitialState(LOBBY_TIMEOUT_MS, playerSession.getPlayerName()));
         log.info("Player {} joined game {} in LOBBY state (awaiting loadout). Total sessions: {}",
                 playerSession.getPlayerId(), gameId, gameEntities.getPlayerSessions().size());
     }
@@ -982,6 +986,7 @@ public class GameManager {
     }
 
     protected void processPlayerConfigChange(PlayerSession playerSession, PlayerConfigRequest request) {
+        applyPlayerNameFromRequest(playerSession, request);
         Player player = gameEntities.getPlayer(playerSession.getPlayerId());
         if (player != null) {
             WeaponConfig primaryConfig = WeaponConfig.ASSAULT_RIFLE_PRESET;
@@ -993,6 +998,23 @@ public class GameManager {
                 utilityConfig = UtilityWeapon.valueOf(request.getUtilityWeapon());
             }
             player.applyWeaponConfig(primaryConfig, utilityConfig);
+            player.setPlayerName(playerSession.getPlayerName());
+        }
+    }
+
+    /**
+     * If {@code request} contains a non-null name that exists in the curated
+     * names list, apply it to the session. Silently ignores invalid or missing
+     * names so that the server-assigned random name is kept as the fallback.
+     */
+    private void applyPlayerNameFromRequest(PlayerSession playerSession, PlayerConfigRequest request) {
+        if (request == null || request.getPlayerName() == null) return;
+        String name = request.getPlayerName().trim();
+        if (RandomNames.getNames().contains(name)) {
+            playerSession.setPlayerName(name);
+        } else {
+            log.warn("Player {} submitted non-curated name '{}', keeping assigned name",
+                    playerSession.getPlayerId(), name);
         }
     }
 
