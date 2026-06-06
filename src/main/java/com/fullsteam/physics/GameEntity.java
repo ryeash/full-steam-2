@@ -49,10 +49,6 @@ public abstract class GameEntity {
         return body.getLinearVelocity().copy();
     }
 
-    public void setVelocity(double x, double y) {
-        body.setLinearVelocity(x, y);
-    }
-
     public void setVelocity(Vector2 velocity) {
         body.setLinearVelocity(velocity);
     }
@@ -77,7 +73,6 @@ public abstract class GameEntity {
     public void heal(double amount) {
         health = Math.min(maxHealth, health + amount);
     }
-
 
     /**
      * Check if the beam has expired

@@ -83,8 +83,7 @@ public class BulletEffectProcessor {
                 FieldEffectType.EXPLOSION.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-        world.addBody(explosion.getBody());
-        gameEntities.addFieldEffect(explosion);
+        gameEntities.add(explosion);
     }
 
     public void createFireEffect(Projectile projectile, Vector2 position) {
@@ -98,8 +97,7 @@ public class BulletEffectProcessor {
                 FieldEffectType.FIRE.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-        world.addBody(fire.getBody());
-        gameEntities.addFieldEffect(fire);
+        gameEntities.add(fire);
     }
 
     public void createElectricEffect(Projectile projectile, Vector2 position) {
@@ -113,8 +111,7 @@ public class BulletEffectProcessor {
                 FieldEffectType.ELECTRIC.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-        world.addBody(electric.getBody());
-        gameEntities.addFieldEffect(electric);
+        gameEntities.add(electric);
     }
 
     public void createFreezeEffect(Projectile projectile, Vector2 position) {
@@ -128,8 +125,7 @@ public class BulletEffectProcessor {
                 FieldEffectType.FREEZE.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-        world.addBody(freeze.getBody());
-        gameEntities.addFieldEffect(freeze);
+        gameEntities.add(freeze);
     }
 
     public void createPoisonEffect(Projectile projectile, Vector2 position) {
@@ -143,10 +139,7 @@ public class BulletEffectProcessor {
                 FieldEffectType.POISON.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-        world.addBody(poison.getBody());
-        gameEntities.addFieldEffect(poison);
-        log.debug("Created poison field effect at ({}, {}) with radius {} and damage {}",
-                position.x, position.y, poison.getRadius(), poison.getDamage());
+        gameEntities.add(poison);
     }
 
     public void createSmokeEffect(Projectile projectile, Vector2 position) {
@@ -160,8 +153,7 @@ public class BulletEffectProcessor {
                 FieldEffectType.SMOKE.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-        world.addBody(smoke.getBody());
-        gameEntities.addFieldEffect(smoke);
+        gameEntities.add(smoke);
     }
 
     private void createFragmentation(Projectile projectile, Vector2 position) {
@@ -176,7 +168,7 @@ public class BulletEffectProcessor {
                 FieldEffectType.FRAGMENTATION.getDefaultDuration(),
                 projectile.getOwnerTeam()
         );
-        gameEntities.addFieldEffect(fragmentation);
+        gameEntities.add(fragmentation);
 
         // Create multiple smaller projectiles
         int fragmentCount = 3 + (int) (projectile.getDamage() / 15); // More fragments for higher damage
@@ -206,9 +198,7 @@ public class BulletEffectProcessor {
                     childEffects,
                     Ordinance.DART // Small, fast fragments
             );
-
-            world.addBody(fragment.getBody());
-            gameEntities.addProjectile(fragment);
+            gameEntities.add(fragment);
         }
     }
 
@@ -345,8 +335,7 @@ public class BulletEffectProcessor {
                 FieldEffectType.EXPLOSION.getDefaultDuration(),
                 beam.getOwnerTeam()
         );
-        world.addBody(explosion.getBody());
-        gameEntities.addFieldEffect(explosion);
+        gameEntities.add(explosion);
     }
 
     /**
@@ -363,8 +352,7 @@ public class BulletEffectProcessor {
                 FieldEffectType.FIRE.getDefaultDuration(),
                 beam.getOwnerTeam()
         );
-        world.addBody(fire.getBody());
-        gameEntities.addFieldEffect(fire);
+        gameEntities.add(fire);
     }
 
     /**
@@ -381,8 +369,7 @@ public class BulletEffectProcessor {
                 FieldEffectType.ELECTRIC.getDefaultDuration(),
                 beam.getOwnerTeam()
         );
-        world.addBody(electric.getBody());
-        gameEntities.addFieldEffect(electric);
+        gameEntities.add(electric);
     }
 
     /**
@@ -399,8 +386,7 @@ public class BulletEffectProcessor {
                 FieldEffectType.FREEZE.getDefaultDuration(),
                 beam.getOwnerTeam()
         );
-        world.addBody(freeze.getBody());
-        gameEntities.addFieldEffect(freeze);
+        gameEntities.add(freeze);
     }
 
     /**
@@ -417,7 +403,6 @@ public class BulletEffectProcessor {
                 FieldEffectType.POISON.getDefaultDuration(),
                 beam.getOwnerTeam()
         );
-        world.addBody(poison.getBody());
-        gameEntities.addFieldEffect(poison);
+        gameEntities.add(poison);
     }
 }

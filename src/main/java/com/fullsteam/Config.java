@@ -106,7 +106,7 @@ public class Config {
     }
 
     /**
-     * Generate next game ID with "game_" prefix.
+     * Generate next game ID.
      *
      * @return Unique game ID string
      */

@@ -1289,26 +1289,31 @@ class GameEngine {
             this.updateScoreboard(data.players);
         }
         
-        if (data.projectiles) {
+        // Projectiles: cleanup runs unconditionally so an absent field (server
+        // omits the key when the list is empty) clears any stale sprites.
+        {
             const currentProjectileIds = new Set();
-            
-            data.projectiles.forEach(projectileData => {
-                currentProjectileIds.add(projectileData.id);
-                
-                if (this.projectiles.has(projectileData.id)) {
-                    this.updateProjectile(projectileData);
-                } else {
-                    this.createProjectile(projectileData);
-                }
-            });
-            
-            for (let [projectileId, projectile] of this.projectiles) {
+            if (data.projectiles) {
+                data.projectiles.forEach(projectileData => {
+                    currentProjectileIds.add(projectileData.id);
+                    if (this.projectiles.has(projectileData.id)) {
+                        this.updateProjectile(projectileData);
+                    } else {
+                        this.createProjectile(projectileData);
+                    }
+                });
+            }
+            for (let [projectileId] of this.projectiles) {
                 if (!currentProjectileIds.has(projectileId)) {
                     this.removeProjectile(projectileId);
                 }
             }
         }
 
+        // Obstacles are static — delivered once in the init payload and never
+        // re-sent in recurring gameState messages.  We still handle the field
+        // if it appears (e.g. future reconnect flows) but never rely on its
+        // absence to remove obstacles that were set up during initialisation.
         if (data.obstacles) {
             const currentObstacleIds = new Set();
             data.obstacles.forEach(obstacleData => {
@@ -1319,44 +1324,46 @@ class GameEngine {
                     this.createObstacle(obstacleData);
                 }
             });
-
-            for (let [obstacleId, obstacle] of this.obstacles) {
+            for (let [obstacleId] of this.obstacles) {
                 if (!currentObstacleIds.has(obstacleId)) {
                     this.removeObstacle(obstacleId);
                 }
             }
         }
-        
-        // Handle field effects
-        if (data.fieldEffects) {
-            const currentFieldEffectIds = new Set();
-            data.fieldEffects.forEach(effectData => {
-                currentFieldEffectIds.add(effectData.id);
-                if (this.fieldEffects.has(effectData.id)) {
-                    this.updateFieldEffect(effectData);
-                } else {
-                    this.createFieldEffect(effectData);
-                }
-            });
 
-            for (let [effectId, effect] of this.fieldEffects) {
+        // Field effects: same absent-means-empty pattern as projectiles
+        {
+            const currentFieldEffectIds = new Set();
+            if (data.fieldEffects) {
+                data.fieldEffects.forEach(effectData => {
+                    currentFieldEffectIds.add(effectData.id);
+                    if (this.fieldEffects.has(effectData.id)) {
+                        this.updateFieldEffect(effectData);
+                    } else {
+                        this.createFieldEffect(effectData);
+                    }
+                });
+            }
+            for (let [effectId] of this.fieldEffects) {
                 if (!currentFieldEffectIds.has(effectId)) {
                     this.removeFieldEffect(effectId);
                 }
             }
         }
-        
-        // Handle beams
-        if (data.beams) {
+
+        // Beams: same pattern
+        {
             const currentBeamIds = new Set();
-            data.beams.forEach(beamData => {
-                currentBeamIds.add(beamData.id);
-                if (this.beams.has(beamData.id)) {
-                    this.updateBeam(beamData);
-                } else {
-                    this.createBeam(beamData);
-                }
-            });
+            if (data.beams) {
+                data.beams.forEach(beamData => {
+                    currentBeamIds.add(beamData.id);
+                    if (this.beams.has(beamData.id)) {
+                        this.updateBeam(beamData);
+                    } else {
+                        this.createBeam(beamData);
+                    }
+                });
+            }
 
             for (let [beamId, beam] of this.beams) {
                 if (!currentBeamIds.has(beamId)) {
@@ -2839,9 +2846,10 @@ class GameEngine {
         // Redraw each effect into its reusable Graphics object
         effects.forEach((effect, index) => {
             const aura = container.children[index];
-            if (!aura) return;
-            aura.clear();
-            
+            if (!aura) {
+                return;
+            }
+
             // Draw aura based on effect type
             if (effect.animation === 'sparkle' || effect.animation === 'pulse') {
                 // Pulsing glow ring with rotating particles
@@ -4896,21 +4904,41 @@ class GameEngine {
      * Create headquarters graphics
      */
     createHeadquartersGraphics(graphics, entityData) {
-        const width = entityData.width || 80;
-        const height = entityData.height || 60;
-        const halfWidth = width / 2;
-        const halfHeight = height / 2;
+        // Derive dimensions from the compact shapes string; fall back to
+        // sensible defaults so the renderer never breaks on missing data.
+        const shapes = this.parseObstacleShapes(entityData.shapes);
+        let halfWidth = 40;
+        let halfHeight = 30;
+        if (shapes.length > 0 && shapes[0].type === 'polygon') {
+            const xs = shapes[0].points.map(([x]) => x);
+            const ys = shapes[0].points.map(([, y]) => y);
+            halfWidth  = (Math.max(...xs) - Math.min(...xs)) / 2;
+            halfHeight = (Math.max(...ys) - Math.min(...ys)) / 2;
+        }
+        const width  = halfWidth  * 2;
+        const height = halfHeight * 2;
         const team = entityData.team || 0;
-        
+
         // Get team color
         const teamColor = this.getTeamColor(team);
-        
+
         // Health is already sent as a percentage (0.0 - 1.0) from backend
         const healthPct = entityData.health || 1.0;
-        
-        // HQ base - large fortified rectangle with team color
-        const baseAlpha = 0.9;
-        graphics.rect(-halfWidth, -halfHeight, width, height).fill({ color: teamColor, alpha: baseAlpha });
+
+        // Draw the HQ body using the exact polygon from the physics body, then
+        // overlay all the decorative details using the derived bounding box.
+        if (shapes.length > 0) {
+            for (const shape of shapes) {
+                if (shape.type === 'circle') {
+                    graphics.circle(shape.cx, shape.cy, shape.r);
+                } else {
+                    graphics.poly(shape.points.flatMap(([x, y]) => [x, y]));
+                }
+            }
+        } else {
+            graphics.rect(-halfWidth, -halfHeight, width, height);
+        }
+        graphics.fill({ color: teamColor, alpha: 0.9 });
         
         // Damage overlay (darker as health decreases)
         if (healthPct < 1.0) {

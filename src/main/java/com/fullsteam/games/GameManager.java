@@ -29,6 +29,7 @@ import com.fullsteam.physics.PowerUp;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.Turret;
+import com.fullsteam.physics.UtilityActivation;
 import com.fullsteam.util.WeaponFormatter;
 import io.micronaut.websocket.WebSocketSession;
 import io.micronaut.websocket.exceptions.WebSocketSessionException;
@@ -470,8 +471,7 @@ public class GameManager {
         StatusEffectManager.applySpawnInvincibility(aiPlayer);
 
         // Add to game entities
-        gameEntities.addPlayer(aiPlayer);
-        world.addBody(aiPlayer.getBody());
+        gameEntities.add(aiPlayer);
 
         // Add to AI manager
         aiPlayerManager.addAIPlayer(aiPlayer);
@@ -751,8 +751,7 @@ public class GameManager {
             turret.acquireTarget(gameEntities.getAllPlayers().stream().toList());
             Projectile turretShot = turret.tryFire();
             if (turretShot != null) {
-                gameEntities.addProjectile(turretShot);
-                world.addBody(turretShot.getBody());
+                gameEntities.add(turretShot);
             }
         }
 
@@ -864,8 +863,7 @@ public class GameManager {
         // Apply spawn invincibility to give player time to get their bearings
         StatusEffectManager.applySpawnInvincibility(player);
 
-        gameEntities.addPlayer(player);
-        world.addBody(player.getBody());
+        gameEntities.add(player);
 
         playerSession.setState(PlayerSessionState.PLAYING);
         send(playerSession.getSession(), createInitialGameState(player));
@@ -928,7 +926,7 @@ public class GameManager {
 
             // Handle utility weapon fire (delegated to UtilitySystem)
             if (input.isAltFire()) {
-                Player.UtilityActivation activation = player.useUtility();
+                UtilityActivation activation = player.useUtility();
                 if (activation != null) {
                     utilitySystem.handleUtilityActivation(activation);
                 }
@@ -1305,24 +1303,23 @@ public class GameManager {
                 2.0,   // 2 second duration
                 0      // No team
         );
-        gameEntities.addFieldEffect(explosion);
-        world.addBody(explosion.getBody());
+        gameEntities.add(explosion);
     }
 
     /**
      * Add a field effect to the game world (used by event system).
      */
+    @Deprecated
     private void addFieldEffectToWorld(FieldEffect fieldEffect) {
-        gameEntities.addFieldEffect(fieldEffect);
-        world.addBody(fieldEffect.getBody());
+        gameEntities.add(fieldEffect);
     }
 
     /**
      * Add a power-up to the game world (used by event system).
      */
+    @Deprecated
     private void addPowerUpToWorld(PowerUp powerUp) {
-        gameEntities.addPowerUp(powerUp);
-        world.addBody(powerUp.getBody());
+        gameEntities.add(powerUp);
     }
 
     /**

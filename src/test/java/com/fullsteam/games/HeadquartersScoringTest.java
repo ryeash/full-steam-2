@@ -63,8 +63,8 @@ public class HeadquartersScoringTest extends BaseTestClass {
         // Create test players
         team1Player = new Player(1, "Team1Player", 0, 0, 1, 100.0);
         team2Player = new Player(2, "Team2Player", 100, 100, 2, 100.0);
-        gameEntities.addPlayer(team1Player);
-        gameEntities.addPlayer(team2Player);
+        gameEntities.add(team1Player);
+        gameEntities.add(team2Player);
 
         // Get headquarters
         team1HQ = gameEntities.getTeamHeadquarters(1);
@@ -135,8 +135,8 @@ public class HeadquartersScoringTest extends BaseTestClass {
 
         Player p1 = new Player(1, "P1", 0, 0, 1, 100.0);
         Player p2 = new Player(2, "P2", 100, 100, 2, 100.0);
-        gmEnd.getGameEntities().addPlayer(p1);
-        gmEnd.getGameEntities().addPlayer(p2);
+        gmEnd.getGameEntities().add(p1);
+        gmEnd.getGameEntities().add(p2);
 
         Headquarters hq1 = gmEnd.getGameEntities().getTeamHeadquarters(1);
         assertNotNull(hq1);
@@ -271,8 +271,8 @@ public class HeadquartersScoringTest extends BaseTestClass {
 
         Player p1 = new Player(1, "P1", 0, 0, 1, 100.0);
         Player p2 = new Player(2, "P2", 100, 100, 2, 100.0);
-        gmNoPoints.getGameEntities().addPlayer(p1);
-        gmNoPoints.getGameEntities().addPlayer(p2);
+        gmNoPoints.getGameEntities().add(p1);
+        gmNoPoints.getGameEntities().add(p2);
 
         Headquarters hq1 = gmNoPoints.getGameEntities().getTeamHeadquarters(1);
 

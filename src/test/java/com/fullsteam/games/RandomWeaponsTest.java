@@ -96,8 +96,8 @@ class RandomWeaponsTest extends BaseTestClass {
         Player player2 = new Player(2, "Player2", 100, 100, 2, 100);
         player1.setActive(true);
         player2.setActive(true);
-        gameEntities.addPlayer(player1);
-        gameEntities.addPlayer(player2);
+        gameEntities.add(player1);
+        gameEntities.add(player2);
 
         String initialWeapon1 = player1.getWeapon().getName();
         String initialWeapon2 = player2.getWeapon().getName();
@@ -149,8 +149,8 @@ class RandomWeaponsTest extends BaseTestClass {
         Player inactivePlayer = new Player(2, "Inactive", 100, 100, 2, 100);
         activePlayer.setActive(true);
         inactivePlayer.setActive(false);
-        gameEntities.addPlayer(activePlayer);
-        gameEntities.addPlayer(inactivePlayer);
+        gameEntities.add(activePlayer);
+        gameEntities.add(inactivePlayer);
 
         String initialInactiveWeapon = inactivePlayer.getWeapon().getName();
 
@@ -187,7 +187,7 @@ class RandomWeaponsTest extends BaseTestClass {
         for (int i = 1; i <= 10; i++) {
             Player player = new Player(i, "Player" + i, i * 10, i * 10, (i % 2) + 1, 100);
             player.setActive(true);
-            gameEntities.addPlayer(player);
+            gameEntities.add(player);
         }
 
         // Wait for rotation

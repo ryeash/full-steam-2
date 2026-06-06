@@ -8,6 +8,8 @@ micronaut:
       worker:
         threads: 8
       max-header-size: 8192
+      websocket:
+        compression: true
   executors:
     scheduled:
       type: scheduled

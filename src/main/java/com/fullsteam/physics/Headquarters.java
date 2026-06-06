@@ -1,10 +1,10 @@
 package com.fullsteam.physics;
 
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
 import org.dyn4j.dynamics.Body;
-import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.MassType;
+import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
 
 import java.util.HashMap;
@@ -15,8 +15,8 @@ import java.util.Map;
  * Similar to Obstacle but with team ownership and scoring mechanics.
  * Each team has one headquarters in their spawn zone that can be shot to score points.
  */
-@Getter
-@Setter
+@Data
+@EqualsAndHashCode(callSuper = true)
 public class Headquarters extends GameEntity {
     private static final double HQ_WIDTH = 80.0;
     private static final double HQ_HEIGHT = 60.0;

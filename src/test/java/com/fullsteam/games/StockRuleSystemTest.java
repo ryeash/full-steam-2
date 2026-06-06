@@ -197,7 +197,7 @@ class StockRuleSystemTest extends BaseTestClass {
     void testStockInstantRespawn() {
         // Add a player
         Player player = createTestPlayer(1, 1);
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
 
         // Kill the player
         player.die();

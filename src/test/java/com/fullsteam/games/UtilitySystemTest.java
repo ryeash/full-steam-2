@@ -4,6 +4,7 @@ import com.fullsteam.BaseTestClass;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
+import com.fullsteam.physics.UtilityActivation;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.World;
@@ -60,7 +61,7 @@ class UtilitySystemTest extends BaseTestClass {
     void testHealZoneCreation() {
         // Arrange
         Player player = createTestPlayer(1, 1);
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.HEAL_ZONE);
+        UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.HEAL_ZONE);
 
         // Act
         utilitySystem.handleUtilityActivation(activation);
@@ -75,7 +76,7 @@ class UtilitySystemTest extends BaseTestClass {
     void testDamageZoneCreation() {
         // Arrange
         Player player = createTestPlayer(1, 1);
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.SLOW_FIELD);
+        UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.SLOW_FIELD);
 
         // Act
         utilitySystem.handleUtilityActivation(activation);
@@ -93,7 +94,7 @@ class UtilitySystemTest extends BaseTestClass {
         player.setPosition(100, 100);
         player.setAimDirection(new Vector2(1, 0)); // Aim right
 
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.HEAL_ZONE);
+        UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.HEAL_ZONE);
 
         // Act
         utilitySystem.handleUtilityActivation(activation);
@@ -113,7 +114,7 @@ class UtilitySystemTest extends BaseTestClass {
     void testTurretCreation() {
         // Arrange
         Player player = createTestPlayer(1, 1);
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.TURRET_CONSTRUCTOR);
+        UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.TURRET_CONSTRUCTOR);
 
         // Act
         utilitySystem.handleUtilityActivation(activation);
@@ -128,7 +129,7 @@ class UtilitySystemTest extends BaseTestClass {
     void testNetProjectileCreation() {
         // Arrange
         Player player = createTestPlayer(1, 1);
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.NET_LAUNCHER);
+        UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.NET_LAUNCHER);
 
         // Act
         utilitySystem.handleUtilityActivation(activation);
@@ -143,7 +144,7 @@ class UtilitySystemTest extends BaseTestClass {
     void testProximityMineCreation() {
         // Arrange
         Player player = createTestPlayer(1, 1);
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.MINE_LAYER);
+        UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.MINE_LAYER);
 
         // Act
         utilitySystem.handleUtilityActivation(activation);
@@ -166,8 +167,8 @@ class UtilitySystemTest extends BaseTestClass {
     /**
      * Create a utility activation for testing.
      */
-    private Player.UtilityActivation createUtilityActivation(Player player, UtilityWeapon utilityWeapon) {
-        return new Player.UtilityActivation(
+    private UtilityActivation createUtilityActivation(Player player, UtilityWeapon utilityWeapon) {
+        return new UtilityActivation(
                 utilityWeapon,
                 player.getPosition().copy(),
                 player.getAimDirection().copy(),

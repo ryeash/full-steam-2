@@ -47,7 +47,7 @@ class PowerUpTest extends BaseTestClass {
         
         // Create a test player
         testPlayer = new Player(1, "TestPlayer", 0, 0, 1, 100.0);
-        gameManager.getGameEntities().addPlayer(testPlayer);
+        gameManager.getGameEntities().add(testPlayer);
         
         // Get the test workshop
         testWorkshop = gameManager.getGameEntities().getAllWorkshops().iterator().next();

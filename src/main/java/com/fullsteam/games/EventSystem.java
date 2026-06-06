@@ -242,8 +242,7 @@ public class EventSystem {
                     0 // No team
             );
 
-            gameEntities.addFieldEffect(warningZone);
-            gameEntities.getWorld().addBody(warningZone.getBody());
+            gameEntities.add(warningZone);
             event.addWarningZoneId(warningZone.getId());
         }
 
@@ -342,8 +341,7 @@ public class EventSystem {
             Config.EXECUTOR.schedule(() -> {
                 gameEntities.addPostUpdateHook(() -> {
                     FieldEffect explosion = effectBuilder.apply(event, location);
-                    gameEntities.addFieldEffect(explosion);
-                    gameEntities.getWorld().addBody(explosion.getBody());
+                    gameEntities.add(explosion);
                 });
             }, delay, TimeUnit.MILLISECONDS);
         }
@@ -371,8 +369,7 @@ public class EventSystem {
                             FieldEffectType.EXPLOSION.getDefaultDuration(),
                             0
                     );
-                    gameEntities.addFieldEffect(explosion);
-                    gameEntities.getWorld().addBody(explosion.getBody());
+                    gameEntities.add(explosion);
 
                     // Spawn random power-up
                     PowerUp.PowerUpType powerUpType = getRandomPowerUpType();
@@ -384,8 +381,7 @@ public class EventSystem {
                             30.0, // Duration
                             1.5 // Strength
                     );
-                    gameEntities.addPowerUp(powerUp);
-                    gameEntities.getWorld().addBody(powerUp.getBody());
+                    gameEntities.add(powerUp);
                 });
             }, delay, TimeUnit.MILLISECONDS);
         }

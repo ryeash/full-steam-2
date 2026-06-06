@@ -307,25 +307,6 @@ public class Player extends GameEntity {
         );
     }
 
-    /**
-     * Data class for utility weapon activation
-     */
-    public static class UtilityActivation {
-        public final UtilityWeapon utilityWeapon;
-        public final Vector2 position;
-        public final Vector2 direction;
-        public final int playerId;
-        public final int team;
-
-        public UtilityActivation(UtilityWeapon utilityWeapon, Vector2 position, Vector2 direction, int playerId, int team) {
-            this.utilityWeapon = utilityWeapon;
-            this.position = position;
-            this.direction = direction;
-            this.playerId = playerId;
-            this.team = team;
-        }
-    }
-
     private void startReload() {
         Weapon weapon = this.getCurrentWeapon();
         if (weapon.needsReload()) {
@@ -413,12 +394,10 @@ public class Player extends GameEntity {
         if (!active) {
             return false;
         }
-
         double modifiedDamage = damage;
         for (AttributeModification attributeModification : attributeModifications) {
             modifiedDamage = attributeModification.modifyDamageReceived(modifiedDamage);
         }
-
         return super.takeDamage(modifiedDamage);
     }
 

@@ -140,7 +140,7 @@ class RuleSystemTest extends BaseTestClass {
         // Arrange
         Player player1 = createTestPlayer(1, 1);
         player1.setKills(25); // Reach score limit
-        gameEntities.addPlayer(player1);
+        gameEntities.add(player1);
 
         // Act
         ruleSystem.update(0.1);
@@ -177,8 +177,8 @@ class RuleSystemTest extends BaseTestClass {
         Player player2 = createTestPlayer(2, 2);
         player1.setKills(5);
         player2.setKills(3);
-        gameEntities.addPlayer(player1);
-        gameEntities.addPlayer(player2);
+        gameEntities.add(player1);
+        gameEntities.add(player2);
 
         // Act - Fast forward past time limit
         Thread.sleep(1500);
@@ -214,8 +214,8 @@ class RuleSystemTest extends BaseTestClass {
         Player player1 = createTestPlayer(1, 1);
         Player player2 = createTestPlayer(2, 2);
         player2.setEliminated(true); // Eliminate player 2
-        gameEntities.addPlayer(player1);
-        gameEntities.addPlayer(player2);
+        gameEntities.add(player1);
+        gameEntities.add(player2);
 
         // Act
         eliminationRuleSystem.update(0.1);
@@ -248,7 +248,7 @@ class RuleSystemTest extends BaseTestClass {
         );
 
         Player player = createTestPlayer(1, 1);
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
         limitedLivesRuleSystem.initializePlayerLives(player);
 
         // Act - Lose all lives
@@ -273,7 +273,7 @@ class RuleSystemTest extends BaseTestClass {
         player.setKills(10);
         player.setDeaths(3);
         player.setCaptures(2);
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
 
         // Act - We can't directly call getPlayerScore, but we can test the scoring logic indirectly
         // by checking if the player's kills are used for scoring
@@ -309,7 +309,7 @@ class RuleSystemTest extends BaseTestClass {
         Player player = createTestPlayer(1, 1);
         player.setKills(10);
         player.setCaptures(5);
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
 
         // Act - Test the scoring configuration
         ScoreStyle scoreStyle = objectivesConfig.getRules().getScoreStyle();
@@ -331,7 +331,7 @@ class RuleSystemTest extends BaseTestClass {
     void testStateDataCompleteness() {
         // Arrange
         Player player = createTestPlayer(1, 1);
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
 
         // Act
         Map<String, Object> stateData = ruleSystem.getStateData();
@@ -349,7 +349,7 @@ class RuleSystemTest extends BaseTestClass {
     void testPlayerLifeInitialization() {
         // Arrange
         Player player = createTestPlayer(1, 1);
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
 
         // Act
         ruleSystem.initializePlayerLives(player);
@@ -386,10 +386,10 @@ class RuleSystemTest extends BaseTestClass {
         Player team2Player1 = createTestPlayer(3, 2);
         Player team2Player2 = createTestPlayer(4, 2);
 
-        vipEntities.addPlayer(team1Player1);
-        vipEntities.addPlayer(team1Player2);
-        vipEntities.addPlayer(team2Player1);
-        vipEntities.addPlayer(team2Player2);
+        vipEntities.add(team1Player1);
+        vipEntities.add(team1Player2);
+        vipEntities.add(team2Player1);
+        vipEntities.add(team2Player2);
 
         // Act - Create rule system with VIP mode enabled
         RuleSystem vipRuleSystem = new RuleSystem(
@@ -437,8 +437,8 @@ class RuleSystemTest extends BaseTestClass {
         Player team1Player = createTestPlayer(1, 1);
         Player team2Player = createTestPlayer(2, 2);
 
-        vipEntities.addPlayer(team1Player);
-        vipEntities.addPlayer(team2Player);
+        vipEntities.add(team1Player);
+        vipEntities.add(team2Player);
 
         RuleSystem vipRuleSystem = new RuleSystem(
                 "vip-test-game",
@@ -481,8 +481,8 @@ class RuleSystemTest extends BaseTestClass {
         Player team1Player1 = createTestPlayer(1, 1);
         Player team1Player2 = createTestPlayer(2, 1);
 
-        vipEntities.addPlayer(team1Player1);
-        vipEntities.addPlayer(team1Player2);
+        vipEntities.add(team1Player1);
+        vipEntities.add(team1Player2);
 
         RuleSystem vipRuleSystem = new RuleSystem(
                 "vip-test-game",

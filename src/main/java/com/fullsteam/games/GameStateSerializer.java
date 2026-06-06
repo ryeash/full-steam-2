@@ -56,6 +56,12 @@ public class GameStateSerializer {
     /**
      * Create a complete game state snapshot for broadcasting to all clients.
      *
+     * <p>Obstacles are intentionally excluded — they are static and already
+     * delivered once via {@code initialState} / {@code lobbyInit} /
+     * {@code spectatorInit}. Transient collections (projectiles, beams, …)
+     * are omitted when empty; the client treats an absent field the same as
+     * an empty array and cleans up stale sprites accordingly.
+     *
      * @return Map containing all current game state data
      */
     public Map<String, Object> createGameState() {
@@ -66,17 +72,18 @@ public class GameStateSerializer {
         // Include rule system state (rounds, victory, respawns)
         gameState.putAll(ruleSystem.getStateData());
 
-        // Add all entity states
+        // Players are always present in a running game
         gameState.put("players", createPlayerStates());
-        gameState.put("projectiles", createProjectileStates());
-        gameState.put("obstacles", createObstacleStates());
-        gameState.put("fieldEffects", createFieldEffectStates());
-        gameState.put("turrets", createTurretStates());
-        gameState.put("nets", createNetStates());
-        gameState.put("mines", createMineStates());
-        gameState.put("defenseLasers", createDefenseLaserStates());
-        gameState.put("beams", createBeamStates());
-        gameState.put("powerUps", createPowerUpStates());
+
+        // Transient collections — omit when empty to trim the payload
+        putNonEmpty(gameState, "projectiles", createProjectileStates());
+        putNonEmpty(gameState, "fieldEffects", createFieldEffectStates());
+        putNonEmpty(gameState, "turrets", createTurretStates());
+        putNonEmpty(gameState, "nets", createNetStates());
+        putNonEmpty(gameState, "mines", createMineStates());
+        putNonEmpty(gameState, "defenseLasers", createDefenseLaserStates());
+        putNonEmpty(gameState, "beams", createBeamStates());
+        putNonEmpty(gameState, "powerUps", createPowerUpStates());
 
         // Add optional game mode states
         if (gameConfig.getRules().hasKothZones()) {
@@ -91,18 +98,9 @@ public class GameStateSerializer {
             gameState.put("headquarters", createHeadquartersStates());
         }
 
-        if (gameConfig.getRules().hasFlags()) {
-            gameState.put("flags", createFlagStates());
+        if (gameConfig.getRules().hasFlags() || gameConfig.getRules().hasOddball()) {
+            putNonEmpty(gameState, "flags", createFlagStates());
             gameState.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
-        }
-
-        // Include oddball states if oddball mode is enabled (even without CTF flags)
-        if (gameConfig.getRules().hasOddball()) {
-            List<Map<String, Object>> oddballStates = createOddballStates();
-            if (!oddballStates.isEmpty()) {
-                gameState.put("flags", oddballStates);
-                gameState.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
-            }
         }
 
         return gameState;
@@ -134,19 +132,12 @@ public class GameStateSerializer {
         // Add obstacles
         state.put("obstacles", createObstacleStates());
 
-        // Add flag information if flags are enabled
-        if (gameConfig.getRules().hasFlags()) {
-            state.put("flags", createInitialFlagStates());
-            state.put("flagsPerTeam", gameConfig.getRules().getFlagsPerTeam());
-            state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
-        }
-
-        // Add oddball information if oddball mode is enabled
-        if (gameConfig.getRules().hasOddball()) {
-            Map<String, Object> oddballData = createInitialOddballState();
-            if (oddballData != null) {
-                state.put("oddball", oddballData);
+        if (gameConfig.getRules().hasFlags() || gameConfig.getRules().hasOddball()) {
+            state.put("flags", createFlagStates());
+            if (gameConfig.getRules().hasFlags()) {
+                state.put("flagsPerTeam", gameConfig.getRules().getFlagsPerTeam());
             }
+            state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
         }
 
         // Add VIP mode information if enabled
@@ -184,16 +175,12 @@ public class GameStateSerializer {
         state.put("terrain", terrainGenerator.getTerrainData());
         state.put("obstacles", createObstacleStates());
 
-        if (gameConfig.getRules().hasFlags()) {
-            state.put("flags", createInitialFlagStates());
-            state.put("flagsPerTeam", gameConfig.getRules().getFlagsPerTeam());
-            state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
-        }
-        if (gameConfig.getRules().hasOddball()) {
-            Map<String, Object> oddballData = createInitialOddballState();
-            if (oddballData != null) {
-                state.put("oddball", oddballData);
+        if (gameConfig.getRules().hasFlags() || gameConfig.getRules().hasOddball()) {
+            state.put("flags", createFlagStates());
+            if (gameConfig.getRules().hasFlags()) {
+                state.put("flagsPerTeam", gameConfig.getRules().getFlagsPerTeam());
             }
+            state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
         }
         if (gameConfig.getRules().hasVip()) {
             state.put("vipMode", true);
@@ -274,19 +261,12 @@ public class GameStateSerializer {
         // Add obstacles
         state.put("obstacles", createObstacleStates());
 
-        // Add flag information if flags are enabled
-        if (gameConfig.getRules().hasFlags()) {
-            state.put("flags", createInitialFlagStates());
-            state.put("flagsPerTeam", gameConfig.getRules().getFlagsPerTeam());
-            state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
-        }
-
-        // Add oddball information if oddball mode is enabled
-        if (gameConfig.getRules().hasOddball()) {
-            Map<String, Object> oddballData = createInitialOddballState();
-            if (oddballData != null) {
-                state.put("oddball", oddballData);
+        if (gameConfig.getRules().hasFlags() || gameConfig.getRules().hasOddball()) {
+            state.put("flags", createFlagStates());
+            if (gameConfig.getRules().hasFlags()) {
+                state.put("flagsPerTeam", gameConfig.getRules().getFlagsPerTeam());
             }
+            state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
         }
 
         // Add VIP mode information if enabled
@@ -310,45 +290,54 @@ public class GameStateSerializer {
     private List<Map<String, Object>> createPlayerStates() {
         List<Map<String, Object>> playerStates = new ArrayList<>();
         for (Player player : gameEntities.getAllPlayers()) {
-            Vector2 pos = player.getPosition();
-            Map<String, Object> playerState = new HashMap<>();
-            playerState.put("id", player.getId());
-            playerState.put("name", player.getPlayerName());
-            playerState.put("team", player.getTeam());
-            playerState.put("x", pos.x);
-            playerState.put("y", pos.y);
-            playerState.put("rotation", player.getRotation());
-            playerState.put("health", player.healthPercent());
-            playerState.put("active", player.isActive());
-            playerState.put("ammo", player.getCurrentWeapon().getCurrentAmmo());
-            playerState.put("maxAmmo", player.getCurrentWeapon().getMagazineSize());
-            playerState.put("reloading", player.isReloading());
-            playerState.put("weaponRange", player.getCurrentWeapon().getRange());
-            playerState.put("kills", player.getKills());
-            playerState.put("deaths", player.getDeaths());
-            playerState.put("captures", player.getCaptures());
-            playerState.put("respawnTime", Math.max(0, ((double) player.getRespawnTime() - System.currentTimeMillis()) / 1000));
-            playerState.put("livesRemaining", player.getLivesRemaining());
-            playerState.put("eliminated", player.isEliminated());
-
-            // Include VIP status
-            if (gameConfig.getRules().hasVip()) {
-                playerState.put("isVip", StatusEffectManager.isVip(player));
-            }
-
-            // Include active power-up effects
-            List<String> activePowerUps = new ArrayList<>();
-            for (AttributeModification mod : player.getAttributeModifications()) {
-                String hint = mod.renderHint();
-                if (hint != null && !hint.isEmpty()) {
-                    activePowerUps.add(hint);
-                }
-            }
-            playerState.put("activePowerUps", activePowerUps);
-
-            playerStates.add(playerState);
+            playerStates.add(serializePlayerState(player, false));
         }
         return playerStates;
+    }
+
+    /**
+     * Serialize a single player's state.
+     *
+     * @param player        the player to serialize
+     * @param stripPowerUps when {@code true} the {@code activePowerUps} list is
+     *                      forced to empty (used for the smoke-blinded view so
+     *                      the client can't infer information from power-up hints)
+     */
+    private Map<String, Object> serializePlayerState(Player player, boolean stripPowerUps) {
+        Vector2 pos = player.getPosition();
+        Map<String, Object> s = new HashMap<>();
+        s.put("id", player.getId());
+        s.put("name", player.getPlayerName());
+        s.put("team", player.getTeam());
+        s.put("x", pos.x);
+        s.put("y", pos.y);
+        s.put("rotation", player.getRotation());
+        s.put("health", player.healthPercent());
+        s.put("active", player.isActive());
+        s.put("ammo", player.getCurrentWeapon().getCurrentAmmo());
+        s.put("maxAmmo", player.getCurrentWeapon().getMagazineSize());
+        s.put("reloading", player.isReloading());
+        s.put("weaponRange", player.getCurrentWeapon().getRange());
+        s.put("kills", player.getKills());
+        s.put("deaths", player.getDeaths());
+        s.put("captures", player.getCaptures());
+        s.put("respawnTime", Math.max(0, ((double) player.getRespawnTime() - System.currentTimeMillis()) / 1000));
+        s.put("livesRemaining", player.getLivesRemaining());
+        s.put("eliminated", player.isEliminated());
+
+        if (gameConfig.getRules().hasVip()) {
+            s.put("isVip", StatusEffectManager.isVip(player));
+        }
+
+        List<String> activePowerUps = new ArrayList<>();
+        if (!stripPowerUps) {
+            for (AttributeModification mod : player.getAttributeModifications()) {
+                String hint = mod.renderHint();
+                if (hint != null && !hint.isEmpty()) activePowerUps.add(hint);
+            }
+        }
+        s.put("activePowerUps", activePowerUps);
+        return s;
     }
 
     // ========== Projectile States ==========
@@ -367,16 +356,16 @@ public class GameStateSerializer {
             projState.put("ownerId", projectile.getOwnerId());
             projState.put("ownerTeam", projectile.getOwnerTeam());
             projState.put("ordinance", projectile.getOrdinance().name());
-
-            // Convert bullet effects to string list for JSON serialization
-            List<String> effectNames = projectile.getBulletEffects().stream()
-                    .map(Enum::name)
-                    .collect(Collectors.toList());
-            projState.put("bulletEffects", effectNames);
-
+            projState.put("bulletEffects", projectile.getBulletEffects().stream()
+                    .map(Enum::name).collect(Collectors.toList()));
             projectileStates.add(projState);
         }
         return projectileStates;
+    }
+
+    /** Add {@code list} to {@code map} only when it is non-empty. */
+    private static void putNonEmpty(Map<String, Object> map, String key, List<?> list) {
+        if (!list.isEmpty()) map.put(key, list);
     }
 
     // ========== Obstacle States ==========
@@ -533,7 +522,7 @@ public class GameStateSerializer {
         List<Map<String, Object>> beamStates = new ArrayList<>();
         for (Beam beam : gameEntities.getAllBeams()) {
             Vector2 startPos = beam.getStartPoint();
-            Vector2 effectiveEndPos = beam.getEffectiveEndPoint(); // Use effective end point for rendering
+            Vector2 effectiveEndPos = beam.getEffectiveEndPoint();
             Map<String, Object> beamState = new HashMap<>();
             beamState.put("id", beam.getId());
             beamState.put("startX", startPos.x);
@@ -568,7 +557,7 @@ public class GameStateSerializer {
             powerUpState.put("workshopId", powerUp.getWorkshopId());
             powerUpState.put("duration", powerUp.getDuration());
             powerUpState.put("effectStrength", powerUp.getEffectStrength());
-            powerUpState.put("radius", powerUp.getBody().getFixture(0).getShape().getRadius());
+            powerUpState.put("radius", powerUp.getBody().getRotationDiscRadius());
             powerUpStates.add(powerUpState);
         }
         return powerUpStates;
@@ -603,31 +592,10 @@ public class GameStateSerializer {
             }
         }
 
-        // Only include the blinded player's own data
-        List<Map<String, Object>> selfOnly = new ArrayList<>();
-        Vector2 pos = blindedPlayer.getPosition();
-        Map<String, Object> playerState = new HashMap<>();
-        playerState.put("id", blindedPlayer.getId());
-        playerState.put("name", blindedPlayer.getPlayerName());
-        playerState.put("team", blindedPlayer.getTeam());
-        playerState.put("x", pos.x);
-        playerState.put("y", pos.y);
-        playerState.put("rotation", blindedPlayer.getRotation());
-        playerState.put("health", blindedPlayer.healthPercent());
-        playerState.put("active", blindedPlayer.isActive());
-        playerState.put("ammo", blindedPlayer.getCurrentWeapon().getCurrentAmmo());
-        playerState.put("maxAmmo", blindedPlayer.getCurrentWeapon().getMagazineSize());
-        playerState.put("reloading", blindedPlayer.isReloading());
-        playerState.put("weaponRange", blindedPlayer.getCurrentWeapon().getRange());
-        playerState.put("kills", blindedPlayer.getKills());
-        playerState.put("deaths", blindedPlayer.getDeaths());
-        playerState.put("captures", blindedPlayer.getCaptures());
-        playerState.put("respawnTime", Math.max(0, ((double) blindedPlayer.getRespawnTime() - System.currentTimeMillis()) / 1000));
-        playerState.put("livesRemaining", blindedPlayer.getLivesRemaining());
-        playerState.put("eliminated", blindedPlayer.isEliminated());
-        playerState.put("activePowerUps", List.of());
-        selfOnly.add(playerState);
-        state.put("players", selfOnly);
+        // Only include the blinded player's own data; strip power-up hints so
+        // the client can't infer information about nearby enemies through smoke.
+        Map<String, Object> playerState = serializePlayerState(blindedPlayer, true);
+        state.put("players", List.of(playerState));
 
         // Only include SMOKE field effects (so the client can render the smoke cloud)
         List<Map<String, Object>> smokeEffects = new ArrayList<>();
@@ -650,17 +618,9 @@ public class GameStateSerializer {
         }
         state.put("fieldEffects", smokeEffects);
 
-        // Empty all other entity lists
-        state.put("projectiles", List.of());
-        state.put("beams", List.of());
-        state.put("turrets", List.of());
-        state.put("nets", List.of());
-        state.put("mines", List.of());
-        state.put("defenseLasers", List.of());
-        state.put("powerUps", List.of());
-
-        // Keep obstacles (static map geometry doesn't reveal enemy positions)
-        state.put("obstacles", fullState.get("obstacles"));
+        // Omit all other transient collections — absent field == empty array on the client.
+        // Obstacles are excluded entirely: they're static and already on the client
+        // from the initial-state payload.
 
         return state;
     }
@@ -698,8 +658,7 @@ public class GameStateSerializer {
             workshopState.put("craftRadius", workshop.getBoundingRadius());
             workshopState.put("craftTime", workshop.getCraftTime());
             workshopState.put("maxPowerUps", workshop.getMaxPowerUps());
-            int activeCrafters = workshop.getActiveCrafters();
-            workshopState.put("activeCrafters", activeCrafters);
+            workshopState.put("activeCrafters", workshop.getActiveCrafters());
             workshopState.put("craftingProgress", workshop.getAllCraftingProgress());
             workshopState.put("shapes", verticesShorthand(workshop.getBody()));
             workshopStates.add(workshopState);
@@ -712,17 +671,14 @@ public class GameStateSerializer {
         for (Headquarters hq : gameEntities.getAllHeadquarters()) {
             Vector2 pos = hq.getPosition();
             Map<String, Object> hqState = new HashMap<>();
-            hqState.put("id", hq.getId());
-            hqState.put("type", "HEADQUARTERS");
-            hqState.put("team", hq.getTeamNumber());
-            hqState.put("x", pos.x);
-            hqState.put("y", pos.y);
+            hqState.put("id",     hq.getId());
+            hqState.put("type",   "HEADQUARTERS");
+            hqState.put("team",   hq.getTeamNumber());
+            hqState.put("x",      pos.x);
+            hqState.put("y",      pos.y);
             hqState.put("health", hq.healthPercent());
             hqState.put("active", hq.isActive());
-
-            // Add shape data for client rendering
-            hqState.putAll(hq.getShapeData());
-
+            hqState.put("shapes", verticesShorthand(hq.getBody()));
             hqStates.add(hqState);
         }
         return hqStates;
@@ -748,53 +704,5 @@ public class GameStateSerializer {
         return flagStates;
     }
 
-    private List<Map<String, Object>> createOddballStates() {
-        List<Map<String, Object>> flagStates = new ArrayList<>();
-        for (Flag flag : gameEntities.getAllFlags()) {
-            if (flag.isOddball()) {
-                Vector2 pos = flag.getPosition();
-                Map<String, Object> flagState = new HashMap<>();
-                flagState.put("id", flag.getId());
-                flagState.put("x", pos.x);
-                flagState.put("y", pos.y);
-                flagState.put("ownerTeam", flag.getOwnerTeam());
-                flagState.put("state", flag.getState().name());
-                flagState.put("carriedBy", flag.getCarriedByPlayerId());
-                flagState.put("homeX", flag.getHomePosition().x);
-                flagState.put("homeY", flag.getHomePosition().y);
-                flagState.put("isOddball", true);
-                flagStates.add(flagState);
-            }
-        }
-        return flagStates;
-    }
-
-    private List<Map<String, Object>> createInitialFlagStates() {
-        List<Map<String, Object>> flagsData = new ArrayList<>();
-        for (Flag flag : gameEntities.getAllFlags()) {
-            Map<String, Object> flagData = new HashMap<>();
-            flagData.put("id", flag.getId());
-            flagData.put("ownerTeam", flag.getOwnerTeam());
-            flagData.put("homeX", flag.getHomePosition().x);
-            flagData.put("homeY", flag.getHomePosition().y);
-            flagData.put("isOddball", flag.isOddball());
-            flagsData.add(flagData);
-        }
-        return flagsData;
-    }
-
-    private Map<String, Object> createInitialOddballState() {
-        for (Flag flag : gameEntities.getAllFlags()) {
-            if (flag.isOddball()) {
-                Map<String, Object> oddballData = new HashMap<>();
-                oddballData.put("id", flag.getId());
-                oddballData.put("homeX", flag.getHomePosition().x);
-                oddballData.put("homeY", flag.getHomePosition().y);
-                oddballData.put("pointsPerSecond", gameConfig.getRules().getOddballPointsPerSecond());
-                return oddballData;
-            }
-        }
-        return null;
-    }
 }
 

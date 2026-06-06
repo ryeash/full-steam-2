@@ -227,11 +227,9 @@ public class TeamSpawnManager {
     public Map<String, Object> getTeamAreaInfo() {
         Map<String, Object> info = new HashMap<>();
         Map<Integer, Map<String, Object>> areas = new HashMap<>();
-
         for (Map.Entry<Integer, TeamSpawnArea> entry : teamAreas.entrySet()) {
             TeamSpawnArea area = entry.getValue();
             Map<String, Object> areaInfo = new HashMap<>();
-
             areaInfo.put("teamNumber", area.getTeamNumber());
             areaInfo.put("centerX", area.getCenter().x);
             areaInfo.put("centerY", area.getCenter().y);
@@ -241,20 +239,12 @@ public class TeamSpawnManager {
             areaInfo.put("minY", area.getMinBounds().y);
             areaInfo.put("maxX", area.getMaxBounds().x);
             areaInfo.put("maxY", area.getMaxBounds().y);
-
-            // Future base features
-            areaInfo.put("hasVehicleGarage", area.isHasVehicleGarage());
-            areaInfo.put("hasSupplyDepot", area.isHasSupplyDepot());
-            areaInfo.put("hasDefenseTurrets", area.isHasDefenseTurrets());
-
             areas.put(entry.getKey(), areaInfo);
         }
-
         info.put("teamAreas", areas);
         info.put("teamCount", teamCount);
         info.put("worldWidth", worldWidth);
         info.put("worldHeight", worldHeight);
-
         return info;
     }
 }

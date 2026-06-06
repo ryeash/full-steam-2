@@ -48,8 +48,8 @@ class HeadquartersTest extends BaseTestClass {
         // Create test players on different teams
         team1Player = new Player(1, "Team1Player", 0, 0, 1, 100.0);
         team2Player = new Player(2, "Team2Player", 100, 100, 2, 100.0);
-        gameManager.getGameEntities().addPlayer(team1Player);
-        gameManager.getGameEntities().addPlayer(team2Player);
+        gameManager.getGameEntities().add(team1Player);
+        gameManager.getGameEntities().add(team2Player);
     }
 
     @Test

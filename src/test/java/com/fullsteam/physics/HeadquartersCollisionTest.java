@@ -49,8 +49,8 @@ class HeadquartersCollisionTest extends BaseTestClass {
         // Create test players
         team1Player = new Player(1, "Team1Player", 0, 0, 1, 100.0);
         team2Player = new Player(2, "Team2Player", 100, 100, 2, 100.0);
-        gameEntities.addPlayer(team1Player);
-        gameEntities.addPlayer(team2Player);
+        gameEntities.add(team1Player);
+        gameEntities.add(team2Player);
         
         // Get headquarters
         team1HQ = gameEntities.getTeamHeadquarters(1);

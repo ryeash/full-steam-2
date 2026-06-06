@@ -70,10 +70,7 @@ public class WeaponSystem {
         for (Beam beam : beams) {
             Vector2 effectiveEnd = findBeamObstacleIntersection(beam);
             beam.setEffectiveEndPoint(effectiveEnd);
-
-            gameEntities.addBeam(beam);
-            world.addBody(beam.getBody());
-
+            gameEntities.add(beam);
             if (beam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
                 processStandardBeamHit(beam);
             }
@@ -93,8 +90,7 @@ public class WeaponSystem {
 
         for (Projectile projectile : projectiles) {
             if (projectile != null) {
-                gameEntities.addProjectile(projectile);
-                world.addBody(projectile.getBody());
+                gameEntities.add(projectile);
             }
         }
 

@@ -1,7 +1,7 @@
 package com.fullsteam.physics;
 
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
@@ -16,8 +16,8 @@ import java.util.Set;
  * King of the Hill zone - a circular area that awards points to the team with the most players inside.
  * Zones are sensor entities that detect player presence without physical collision.
  */
-@Getter
-@Setter
+@Data
+@EqualsAndHashCode(callSuper = true)
 public class KothZone extends GameEntity {
     private static final double ZONE_RADIUS = 80.0; // Large enough for multiple players
 

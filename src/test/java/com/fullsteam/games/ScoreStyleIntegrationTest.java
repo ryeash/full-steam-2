@@ -68,8 +68,8 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         player2.addCapture(); // Player 2 has 1 capture
         player2.addCapture(); // Player 2 has 2 captures
         
-        gameEntities.addPlayer(player1);
-        gameEntities.addPlayer(player2);
+        gameEntities.add(player1);
+        gameEntities.add(player2);
 
         // Create KOTH zones with scores
         KothZone zone1 = new KothZone(101, 0, 0, 0, 5.0);
@@ -81,8 +81,8 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         // Team 2 controls zone 2 (10 points)
         zone2.awardPointsToTeam(2, 10.0);
         
-        gameEntities.addKothZone(zone1);
-        gameEntities.addKothZone(zone2);
+        gameEntities.add(zone1);
+        gameEntities.add(zone2);
 
         // Calculate team scores
         Map<String, Object> stateData = ruleSystem.getStateData();
@@ -117,8 +117,8 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         player2.addKill(); // Player 2 has 1 kill
         player2.addKill(); // Player 2 has 2 kills total
         
-        gameEntities.addPlayer(player1);
-        gameEntities.addPlayer(player2);
+        gameEntities.add(player1);
+        gameEntities.add(player2);
 
         // Create KOTH zones with scores
         KothZone zone1 = new KothZone(101, 0, 0, 0, 5.0);
@@ -130,8 +130,8 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         // Team 2 controls zone 2 (10 points)
         zone2.awardPointsToTeam(2, 10.0);
         
-        gameEntities.addKothZone(zone1);
-        gameEntities.addKothZone(zone2);
+        gameEntities.add(zone1);
+        gameEntities.add(zone2);
 
         // Calculate team scores
         Map<String, Object> stateData = ruleSystem.getStateData();
@@ -167,8 +167,8 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         player2.addKill(); // Player 2 has 2 kills total
         player2.addCapture(); // Player 2 has 1 capture (should be ignored)
         
-        gameEntities.addPlayer(player1);
-        gameEntities.addPlayer(player2);
+        gameEntities.add(player1);
+        gameEntities.add(player2);
 
         // Create KOTH zones with scores
         KothZone zone1 = new KothZone(101, 0, 0, 0, 5.0);
@@ -180,8 +180,8 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         // Team 2 controls zone 2 (10 points, should be ignored)
         zone2.awardPointsToTeam(2, 10.0);
         
-        gameEntities.addKothZone(zone1);
-        gameEntities.addKothZone(zone2);
+        gameEntities.add(zone1);
+        gameEntities.add(zone2);
 
         // Calculate team scores
         Map<String, Object> stateData = ruleSystem.getStateData();
@@ -213,8 +213,8 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         player1.addCapture(); // 1 capture = 10 pts
         player2.addCapture();
         player2.addCapture(); // 2 captures = 20 pts
-        gameEntities.addPlayer(player1);
-        gameEntities.addPlayer(player2);
+        gameEntities.add(player1);
+        gameEntities.add(player2);
 
         @SuppressWarnings("unchecked")
         Map<Integer, Integer> teamScores = (Map<Integer, Integer>) ruleSystem.getStateData().get("teamScores");
@@ -242,8 +242,8 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         player1.addKill();
         player1.addCapture(); // 2 kills (worth 1 each) + 1 capture * 5 = 7
         player2.addKill(); // 1 kill, no captures = 1
-        gameEntities.addPlayer(player1);
-        gameEntities.addPlayer(player2);
+        gameEntities.add(player1);
+        gameEntities.add(player2);
 
         @SuppressWarnings("unchecked")
         Map<Integer, Integer> teamScores = (Map<Integer, Integer>) ruleSystem.getStateData().get("teamScores");
@@ -267,7 +267,7 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         Player player1 = new Player(1, "Player1", 100, 100, 1, 100.0);
         player1.addKill();
         player1.addCapture(); // captures should be ignored entirely
-        gameEntities.addPlayer(player1);
+        gameEntities.add(player1);
 
         @SuppressWarnings("unchecked")
         Map<Integer, Integer> teamScores = (Map<Integer, Integer>) ruleSystem.getStateData().get("teamScores");
@@ -295,7 +295,7 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         player1.addCapture();
         player1.addCapture();
         player1.addCapture();
-        gameEntities.addPlayer(player1);
+        gameEntities.add(player1);
 
         @SuppressWarnings("unchecked")
         Map<Integer, Integer> teamScores = (Map<Integer, Integer>) ruleSystem.getStateData().get("teamScores");

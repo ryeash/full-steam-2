@@ -6,7 +6,6 @@ import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Headquarters;
 import com.fullsteam.physics.KothZone;
-import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.TeamSpawnArea;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.Workshop;
@@ -87,11 +86,7 @@ public class EntitySpawner {
      * Create obstacles from terrain generator.
      */
     public void createObstacles() {
-        // Use procedurally generated simple obstacles from terrain generator
-        for (Obstacle obstacle : terrainGenerator.getGeneratedObstacles()) {
-            gameEntities.addObstacle(obstacle);
-            world.addBody(obstacle.getBody());
-        }
+        terrainGenerator.getGeneratedObstacles().forEach(gameEntities::add);
     }
 
     /**
@@ -134,13 +129,8 @@ public class EntitySpawner {
                         }
                     }
                 }
-
                 Flag flag = new Flag(flagId++, team, flagPosition.x, flagPosition.y);
-                gameEntities.addFlag(flag);
-                world.addBody(flag.getBody());
-
-                log.info("Created flag {} for team {} at position ({}, {})",
-                        flag.getId(), team, flagPosition.x, flagPosition.y);
+                gameEntities.add(flag);
             }
         }
     }
@@ -199,10 +189,7 @@ public class EntitySpawner {
 
         // Use flag ID 9999 for oddball to distinguish it from regular flags
         Flag oddball = new Flag(9999, 0, centerPosition.x, centerPosition.y);
-        gameEntities.addFlag(oddball);
-        world.addBody(oddball.getBody());
-
-        log.info("Created oddball at position ({}, {})", centerPosition.x, centerPosition.y);
+        gameEntities.add(oddball);
     }
 
     /**
@@ -240,12 +227,8 @@ public class EntitySpawner {
                     }
                 }
             }
-
             KothZone zone = new KothZone(zoneId++, i, zonePosition.x, zonePosition.y, gameConfig.getRules().getKothPointsPerSecond());
-            gameEntities.addKothZone(zone);
-            world.addBody(zone.getBody());
-
-            log.info("Created KOTH zone {} at position ({}, {})", i, zonePosition.x, zonePosition.y);
+            gameEntities.add(zone);
         }
     }
 
@@ -332,8 +315,7 @@ public class EntitySpawner {
                     rules.getWorkshopCraftTime(),
                     rules.getMaxPowerUpsPerWorkshop()
             );
-            gameEntities.addWorkshop(workshop);
-            world.addBody(workshop.getBody());
+            gameEntities.add(workshop);
         }
     }
 
@@ -408,8 +390,7 @@ public class EntitySpawner {
                     hqPosition.y,
                     rules.getHeadquartersMaxHealth()
             );
-            gameEntities.addHeadquarters(hq);
-            world.addBody(hq.getBody());
+            gameEntities.add(hq);
         }
     }
 }

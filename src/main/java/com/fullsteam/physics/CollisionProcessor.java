@@ -421,10 +421,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                         FieldEffectType.EXPLOSION.getDefaultDuration(),
                         fieldEffect.getOwnerTeam()
                 );
-                gameEntities.addFieldEffect(explosion);
-                gameEntities.addPostUpdateHook(() -> {
-                    gameEntities.getWorld().addBody(explosion.getBody());
-                });
+                gameEntities.add(explosion);
             }
         }
     }
@@ -508,10 +505,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                     FieldEffectType.EXPLOSION.getDefaultDuration(),
                     turret.getOwnerTeam()
             );
-            gameEntities.addFieldEffect(explosion);
-            gameEntities.addPostUpdateHook(() -> {
-                gameEntities.getWorld().addBody(explosion.getBody());
-            });
+            gameEntities.add(explosion);
         }
 
         // Check if projectile should pierce through the turret
@@ -569,10 +563,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                     FieldEffectType.EXPLOSION.getDefaultDuration(),
                     turret.getOwnerTeam()
             );
-            gameEntities.addFieldEffect(explosion);
-            gameEntities.addPostUpdateHook(() -> {
-                gameEntities.getWorld().addBody(explosion.getBody());
-            });
+            gameEntities.add(explosion);
         }
     }
 
@@ -676,10 +667,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 FieldEffectType.EXPLOSION.getDefaultDuration(),
                 turret.getOwnerTeam()
         );
-        gameEntities.addFieldEffect(explosion);
-        gameEntities.addPostUpdateHook(() -> {
-            gameEntities.getWorld().addBody(explosion.getBody());
-        });
+        gameEntities.add(explosion);
     }
 
     private boolean handleNetCollision(NetProjectile net, GameEntity entity) {
@@ -1053,10 +1041,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         );
 
         // Add to game world
-        gameEntities.addPowerUp(powerUp);
-        gameEntities.addPostUpdateHook(() -> {
-            gameEntities.getWorld().addBody(powerUp.getBody());
-        });
+        gameEntities.add(powerUp);
     }
 
     /**

@@ -1,5 +1,5 @@
 # Stage 1: Build Stage
-FROM gradle:jdk21-corretto AS build
+FROM gradle:jdk25-corretto AS build
 ARG GITHUB_REPO_URL=https://github.com/ryeash/full-steam-2
 ARG BRANCH=master
 
@@ -11,7 +11,7 @@ WORKDIR /app
 RUN ./gradlew clean shadowJar --no-daemon --no-build-cache
 
 # Stage 2: Runtime Stage
-FROM amazoncorretto:21-alpine-jdk
+FROM amazoncorretto:25-alpine-jdk
 EXPOSE 8080
 
 # Create a directory for the application

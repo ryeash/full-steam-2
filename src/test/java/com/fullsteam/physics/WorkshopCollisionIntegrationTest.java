@@ -60,7 +60,7 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
         
         // Create a test player
         testPlayer = new Player(1, "TestPlayer", 0, 0, 1, 100.0);
-        gameManager.getGameEntities().addPlayer(testPlayer);
+        gameManager.getGameEntities().add(testPlayer);
         
         // Get the test workshop
         testWorkshop = gameManager.getGameEntities().getAllWorkshops().iterator().next();
@@ -167,9 +167,8 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
                 1.0
         );
         
-        gameManager.getGameEntities().addPowerUp(powerUp);
-        gameManager.getGameEntities().getWorld().addBody(powerUp.getBody());
-        
+        gameManager.getGameEntities().add(powerUp);
+
         // Initially power-up should exist
         assertEquals(1, gameManager.getGameEntities().getAllPowerUps().size());
         
@@ -207,8 +206,7 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
                     30.0,
                     1.0
             );
-            gameManager.getGameEntities().addPowerUp(powerUp);
-            gameManager.getGameEntities().getWorld().addBody(powerUp.getBody());
+            gameManager.getGameEntities().add(powerUp);
         }
         
         // Should be at capacity
@@ -235,8 +233,8 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
         Player player2 = new Player(2, "Player2", 0, 0, 1, 100.0);
         Player player3 = new Player(3, "Player3", 0, 0, 2, 100.0);
         
-        gameManager.getGameEntities().addPlayer(player2);
-        gameManager.getGameEntities().addPlayer(player3);
+        gameManager.getGameEntities().add(player2);
+        gameManager.getGameEntities().add(player3);
         
         // Position all players within workshop craft radius
         Vector2 workshopPos = testWorkshop.getPosition();

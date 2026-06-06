@@ -54,7 +54,7 @@ class WeaponSystemTest extends BaseTestClass {
         // Arrange
         Player player = createTestPlayer(1, 1);
         player.setAimDirection(new Vector2(1, 0)); // Aim right
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
 
         PlayerInput input = new PlayerInput();
         input.setLeft(true); // Fire weapon
@@ -74,7 +74,7 @@ class WeaponSystemTest extends BaseTestClass {
     void testNoProjectileWhenNotFiring() {
         // Arrange
         Player player = createTestPlayer(1, 1);
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
 
         PlayerInput input = new PlayerInput();
         input.setLeft(false); // Not firing
@@ -93,7 +93,7 @@ class WeaponSystemTest extends BaseTestClass {
         // Arrange
         Player player = createTestPlayer(1, 1);
         player.setAimDirection(new Vector2(1, 0));
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
 
         PlayerInput input = new PlayerInput();
         input.setLeft(true);
@@ -116,7 +116,7 @@ class WeaponSystemTest extends BaseTestClass {
         // Arrange
         Player player = createTestPlayer(1, 1);
         player.setAimDirection(new Vector2(1, 0));
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
 
         int initialAmmo = player.getCurrentWeapon().getCurrentAmmo();
 
@@ -141,7 +141,7 @@ class WeaponSystemTest extends BaseTestClass {
         // Arrange
         Player player = createTestPlayerWithBeamWeapon(1, 1);
         player.setAimDirection(new Vector2(1, 0));
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
 
         PlayerInput input = new PlayerInput();
         input.setLeft(true);
@@ -181,7 +181,7 @@ class WeaponSystemTest extends BaseTestClass {
         // Arrange
         Player player = createTestPlayer(1, 1);
         player.setAimDirection(new Vector2(1, 0));
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
 
         PlayerInput input = new PlayerInput();
         input.setLeft(true);

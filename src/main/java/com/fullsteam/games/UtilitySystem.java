@@ -13,6 +13,7 @@ import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.Turret;
+import com.fullsteam.physics.UtilityActivation;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.World;
@@ -44,8 +45,8 @@ public class UtilitySystem {
     /**
      * Process utility weapon activation and create appropriate effects.
      */
-    public void handleUtilityActivation(Player.UtilityActivation activation) {
-        UtilityWeapon utility = activation.utilityWeapon;
+    public void handleUtilityActivation(UtilityActivation activation) {
+        UtilityWeapon utility = activation.utilityWeapon();
         if (utility.isFieldEffectBased()) {
             createFieldEffectUtility(activation);
         } else if (utility.isEntityBased()) {
@@ -56,34 +57,33 @@ public class UtilitySystem {
     /**
      * Create a FieldEffect for utility weapons that use the field effect system.
      */
-    private void createFieldEffectUtility(Player.UtilityActivation activation) {
-        UtilityWeapon utility = activation.utilityWeapon;
+    private void createFieldEffectUtility(UtilityActivation activation) {
+        UtilityWeapon utility = activation.utilityWeapon();
         FieldEffectType effectType = utility.getFieldEffectType();
-        Vector2 targetPos = activation.position.copy();
+        Vector2 targetPos = activation.position().copy();
         if (utility.getRange() > 0) {
-            Vector2 offset = activation.direction.copy();
+            Vector2 offset = activation.direction().copy();
             offset.multiply(utility.getRange());
             targetPos.add(offset);
         }
         FieldEffect fieldEffect = new FieldEffect(
                 Config.nextEntityId(),
-                activation.playerId,
+                activation.playerId(),
                 effectType,
                 targetPos,
                 utility.getRadius(),
                 utility.getDamage(),
                 effectType.getDefaultDuration(),
-                activation.team
+                activation.team()
         );
-        gameEntities.addFieldEffect(fieldEffect);
-        world.addBody(fieldEffect.getBody());
+        gameEntities.add(fieldEffect);
     }
 
     /**
      * Create custom entities for utility weapons that need complex behavior.
      */
-    private void createEntityUtility(Player.UtilityActivation activation) {
-        UtilityWeapon utility = activation.utilityWeapon;
+    private void createEntityUtility(UtilityActivation activation) {
+        UtilityWeapon utility = activation.utilityWeapon();
         switch (utility) {
             case TURRET_CONSTRUCTOR:
                 createTurret(activation);
@@ -109,14 +109,14 @@ public class UtilitySystem {
     /**
      * Create a turret entity.
      */
-    private void createTurret(Player.UtilityActivation activation) {
-        Vector2 placement = activation.position.copy();
-        Vector2 offset = activation.direction.copy();
+    private void createTurret(UtilityActivation activation) {
+        Vector2 placement = activation.position().copy();
+        Vector2 offset = activation.direction().copy();
         offset.multiply(50.0); // Place 50 units in front
         placement.add(offset);
         double turretRadius = 15.0;
         if (!isPositionClearCheck.apply(placement, turretRadius)) {
-            Player player = gameEntities.getPlayer(activation.playerId);
+            Player player = gameEntities.getPlayer(activation.playerId());
             if (player != null) {
                 player.refundUtilityCooldown();
             }
@@ -124,65 +124,63 @@ public class UtilitySystem {
         }
         Turret turret = new Turret(
                 Config.nextEntityId(),
-                activation.playerId,
-                activation.team,
+                activation.playerId(),
+                activation.team(),
                 placement,
                 15.0
         );
-        gameEntities.addTurret(turret);
-        world.addBody(turret.getBody());
+        gameEntities.add(turret);
     }
 
     /**
      * Create a net projectile entity.
      */
-    private void createNetProjectile(Player.UtilityActivation activation) {
-        Vector2 velocity = activation.direction.copy();
+    private void createNetProjectile(UtilityActivation activation) {
+        Vector2 velocity = activation.direction().copy();
         velocity.multiply(300.0);
         NetProjectile netProjectile = new NetProjectile(
                 Config.nextEntityId(),
-                activation.playerId,
-                activation.team,
-                activation.position,
+                activation.playerId(),
+                activation.team(),
+                activation.position(),
                 velocity,
                 2.0
         );
-        gameEntities.addNetProjectile(netProjectile);
-        world.addBody(netProjectile.getBody());
+        gameEntities.add(netProjectile);
     }
 
     /**
      * Create a proximity mine entity.
      */
-    private void createProximityMine(Player.UtilityActivation activation) {
+    private void createProximityMine(UtilityActivation activation) {
         FieldEffect mine = new FieldEffect(
                 Config.nextEntityId(),
-                activation.playerId,
+                activation.playerId(),
                 FieldEffectType.PROXIMITY_MINE,
-                activation.position,
+                activation.position(),
                 45.0,
                 45.0,
                 1.0,
                 15.0,
                 System.currentTimeMillis() + 1000,
-                activation.team
+                activation.team()
         );
-        gameEntities.addFieldEffect(mine);
+        gameEntities.add(mine);
         world.addBody(mine.getBody());
     }
 
     /**
      * Create a defense laser entity.
      */
-    private void createDefenseLaser(Player.UtilityActivation activation) {
-        Vector2 placement = activation.position.copy();
-        Vector2 offset = activation.direction.copy();
+    private void createDefenseLaser(UtilityActivation activation) {
+        Vector2 placement = activation.position().copy();
+        Vector2 offset = activation.direction().copy();
         offset.multiply(60.0);
         placement.add(offset);
 
         double laserRadius = 20.0;
         if (!isPositionClearCheck.apply(placement, laserRadius)) {
-            Player player = gameEntities.getPlayer(activation.playerId);
+            Player player = gameEntities.getPlayer(activation.playerId());
             if (player != null) {
                 player.refundUtilityCooldown();
             }
@@ -190,17 +188,15 @@ public class UtilitySystem {
         }
         DefenseLaser defenseLaser = new DefenseLaser(
                 Config.nextEntityId(),
-                activation.playerId,
-                activation.team,
+                activation.playerId(),
+                activation.team(),
                 placement,
                 20.0,
                 world
         );
-        gameEntities.addDefenseLaser(defenseLaser);
-        world.addBody(defenseLaser.getBody());
+        gameEntities.add(defenseLaser);
         for (Beam beam : defenseLaser.getBeams()) {
-            gameEntities.addBeam(beam);
-            world.addBody(beam.getBody());
+            gameEntities.add(beam);
         }
     }
 
@@ -209,23 +205,22 @@ public class UtilitySystem {
      * and SMOKE bullet effect. The projectile arcs, slows, and detonates into a SMOKE
      * field effect via BulletEffectProcessor when dismissed.
      */
-    private void createSmokeProjectile(Player.UtilityActivation activation) {
-        Vector2 velocity = activation.direction.copy();
+    private void createSmokeProjectile(UtilityActivation activation) {
+        Vector2 velocity = activation.direction().copy();
         velocity.multiply(250.0);
         Projectile grenade = new Projectile(
-                activation.playerId,
-                activation.position.x,
-                activation.position.y,
+                activation.playerId(),
+                activation.position().x,
+                activation.position().y,
                 velocity.x,
                 velocity.y,
                 0.0,
-                activation.utilityWeapon.getRange(),
-                activation.team,
+                activation.utilityWeapon().getRange(),
+                activation.team(),
                 0.87,
                 Set.of(BulletEffect.SMOKE),
                 Ordinance.GRENADE
         );
-        gameEntities.addProjectile(grenade);
-        world.addBody(grenade.getBody());
+        gameEntities.add(grenade);
     }
 }

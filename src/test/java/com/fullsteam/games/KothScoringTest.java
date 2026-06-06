@@ -96,8 +96,8 @@ public class KothScoringTest extends BaseTestClass {
         // Create players from team 0 in the zone
         Player player1 = createTestPlayer(1, 0, zone.getBody().getTransform().getTranslationX(), zone.getBody().getTransform().getTranslationY());
         Player player2 = createTestPlayer(2, 0, zone.getBody().getTransform().getTranslationX() + 20, zone.getBody().getTransform().getTranslationY() + 20);
-        gameEntities.addPlayer(player1);
-        gameEntities.addPlayer(player2);
+        gameEntities.add(player1);
+        gameEntities.add(player2);
         
         // Simulate collision detection adding players to zone
         zone.addPlayer(player1);
@@ -124,8 +124,8 @@ public class KothScoringTest extends BaseTestClass {
         // Create players from both teams in the zone
         Player player1 = createTestPlayer(1, 0, zone.getBody().getTransform().getTranslationX(), zone.getBody().getTransform().getTranslationY());
         Player player2 = createTestPlayer(2, 1, zone.getBody().getTransform().getTranslationX() + 20, zone.getBody().getTransform().getTranslationY() + 20);
-        gameEntities.addPlayer(player1);
-        gameEntities.addPlayer(player2);
+        gameEntities.add(player1);
+        gameEntities.add(player2);
         
         // Simulate collision detection
         zone.addPlayer(player1);
@@ -150,7 +150,7 @@ public class KothScoringTest extends BaseTestClass {
         
         // Create player from team 1 in the zone
         Player player = createTestPlayer(1, 1, zone.getBody().getTransform().getTranslationX(), zone.getBody().getTransform().getTranslationY());
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
         
         // Simulate collision detection
         zone.addPlayer(player);
@@ -179,7 +179,7 @@ public class KothScoringTest extends BaseTestClass {
         
         // Create player from team 1 trying to capture team 0's zone
         Player player = createTestPlayer(1, 1, zone.getBody().getTransform().getTranslationX(), zone.getBody().getTransform().getTranslationY());
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
         
         // Simulate collision detection
         zone.addPlayer(player);
@@ -215,7 +215,7 @@ public class KothScoringTest extends BaseTestClass {
         
         // Create one player from team 1 in the zone
         Player player1 = createTestPlayer(1, 1, zone.getBody().getTransform().getTranslationX(), zone.getBody().getTransform().getTranslationY());
-        gameEntities.addPlayer(player1);
+        gameEntities.add(player1);
         
         // Simulate collision detection and capture the zone
         zone.addPlayer(player1);
@@ -263,8 +263,8 @@ public class KothScoringTest extends BaseTestClass {
         // Create players from team 1 in both zones
         Player player1 = createTestPlayer(1, 1, zones.get(0).getBody().getTransform().getTranslationX(), zones.get(0).getBody().getTransform().getTranslationY());
         Player player2 = createTestPlayer(2, 1, zones.get(1).getBody().getTransform().getTranslationX(), zones.get(1).getBody().getTransform().getTranslationY());
-        gameEntities.addPlayer(player1);
-        gameEntities.addPlayer(player2);
+        gameEntities.add(player1);
+        gameEntities.add(player2);
         
         // Set up both zones to be controlled by team 1 (3 seconds to capture from neutral)
         zones.get(0).addPlayer(player1);
@@ -310,8 +310,8 @@ public class KothScoringTest extends BaseTestClass {
         Player livingPlayer = createTestPlayer(1, 1, zone.getBody().getTransform().getTranslationX(), zone.getBody().getTransform().getTranslationY());
         Player deadPlayer = createTestPlayer(2, 1, zone.getBody().getTransform().getTranslationX() + 20, zone.getBody().getTransform().getTranslationY() + 20);
         deadPlayer.setHealth(0); // Kill the player
-        gameEntities.addPlayer(livingPlayer);
-        gameEntities.addPlayer(deadPlayer);
+        gameEntities.add(livingPlayer);
+        gameEntities.add(deadPlayer);
         
         // Simulate collision detection (dead player shouldn't be added)
         zone.addPlayer(livingPlayer);
@@ -342,7 +342,7 @@ public class KothScoringTest extends BaseTestClass {
         
         // Test NEUTRAL -> CAPTURING -> CONTROLLED
         Player player = createTestPlayer(1, 1, zone.getBody().getTransform().getTranslationX(), zone.getBody().getTransform().getTranslationY());
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
         
         // Start neutral
         assertEquals(KothZone.ZoneState.NEUTRAL, zone.getState());
@@ -397,10 +397,10 @@ public class KothScoringTest extends BaseTestClass {
         
         // Test scoring with different rates
         Player player = createTestPlayer(1, 1, 500, 500);
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
         
         // Add zone to game entities so collision processor can find it
-        gameEntities.addKothZone(zone1);
+        gameEntities.add(zone1);
         
         zone1.addPlayer(player);
         zone1.setControllingTeam(1);
