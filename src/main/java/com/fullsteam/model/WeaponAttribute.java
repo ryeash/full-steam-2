@@ -1,5 +1,8 @@
 package com.fullsteam.model;
 
+import lombok.Getter;
+
+@Getter
 public enum WeaponAttribute {
     // Damage: 10-50 (base 10 + 1 per point, max 40 points)
     DAMAGE(0, 40) {
@@ -58,7 +61,7 @@ public enum WeaponAttribute {
             return 300 + (points * 20);
         }
     },
-    // Bullets Per Shot: 1-6 bullets (base 1 + 1 per 7 points, max 35 points)
+    // Bullets Per Shot: 1-6 bullets (base 1 + 1 per 5 points, max 35 points)
     BULLETS_PER_SHOT(0, 35) {
         @Override
         public double compute(int points) {
@@ -82,14 +85,6 @@ public enum WeaponAttribute {
     WeaponAttribute(int min, int max) {
         this.min = min;
         this.max = max;
-    }
-
-    public int getMin() {
-        return min;
-    }
-
-    public int getMax() {
-        return max;
     }
 
     public void validate(int input) {

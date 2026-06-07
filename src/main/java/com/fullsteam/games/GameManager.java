@@ -1220,7 +1220,7 @@ public class GameManager {
 
         // Check if player lost their last life
         boolean wasEliminated = victim.loseLife();
-        log.info("Player {} died. Lives remaining: {}, Eliminated: {}",
+        log.debug("Player {} died. Lives remaining: {}, Eliminated: {}",
                 victim.getId(), victim.getLivesRemaining(), victim.isEliminated());
 
         if (wasEliminated) {

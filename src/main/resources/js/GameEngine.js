@@ -2841,6 +2841,9 @@ class GameEngine {
                 sprite.powerUpContainer.removeChild(child);
                 child.destroy({ children: true, texture: false, baseTexture: false });
             });
+            // Reset tracking arrays so the next activation starts fresh
+            sprite.powerUpContainer._auraGraphics = [];
+            sprite.powerUpContainer._badgeContainer = null;
         }
     }
     
@@ -2872,303 +2875,199 @@ class GameEngine {
         // Parse render hints: "effect_name:#COLOR:animation_type:show_icon:Display Name:params"
         const effects = activePowerUps.map(hint => {
             const parts = hint.split(':');
-            
             let params = {};
             if (parts.length > 5) {
-                try {
-                    const paramsString = parts.slice(5).join(':');
-                    params = JSON.parse(paramsString);
-                } catch (e) {
-                    // Legacy format without params
-                }
+                try { params = JSON.parse(parts.slice(5).join(':')); } catch (e) { /* legacy */ }
             }
-            
             return {
                 name: parts[0] || 'unknown',
                 color: parseInt(parts[1]?.replace('#', '') || 'FFFFFF', 16),
                 animation: parts[2] || 'pulse',
                 showIcon: parts[3] === 'true',
                 displayName: parts[4] || '',
-                params: params
+                params
             };
         });
-        
-        // When the set of active effects changes we need to adjust the number
-        // of Graphics children. Otherwise we just clear() and redraw them.
-        if (changed) {
-            // Remove excess children
-            while (container.children.length > effects.length) {
-                const child = container.children[container.children.length - 1];
-                container.removeChild(child);
-                child.destroy({ children: true, texture: false, baseTexture: false });
-            }
-            // Add missing children
-            while (container.children.length < effects.length) {
-                container.addChild(new PIXI.Graphics());
-            }
-        }
-        
-        // Redraw each effect into its reusable Graphics object
-        effects.forEach((effect, index) => {
-            const aura = container.children[index];
-            if (!aura) {
-                return;
-            }
 
-            // Draw aura based on effect type
+        // --- Aura layer management (separate from badge children) ---
+        // We keep aura Graphics in container._auraGraphics so badge children
+        // (stored in container._badgeContainer) never corrupt index-based access.
+        if (!container._auraGraphics) container._auraGraphics = [];
+
+        while (container._auraGraphics.length > effects.length) {
+            const g = container._auraGraphics.pop();
+            container.removeChild(g);
+            g.destroy({ children: true, texture: false, baseTexture: false });
+        }
+        while (container._auraGraphics.length < effects.length) {
+            const g = new PIXI.Graphics();
+            container.addChild(g);
+            container._auraGraphics.push(g);
+        }
+
+        // Redraw each effect — always clear first to avoid shape accumulation
+        effects.forEach((effect, index) => {
+            const aura = container._auraGraphics[index];
+            if (!(aura instanceof PIXI.Graphics)) return;
+            aura.clear();
+
+            const time = Date.now() * 0.003;
+            const p = effect.params || {};
+
             if (effect.animation === 'sparkle' || effect.animation === 'pulse') {
-                // Pulsing glow ring with rotating particles
-                const time = Date.now() * 0.003;
-                const params = effect.params || {};
-                const baseRadius = params.radius || 20;
-                const particleCount = params.particles || 8;
-                const particleDistance = params.particleDistance || 25;
-                const particleSize = params.particleSize || 2;
-                
+                const baseRadius = p.radius || 20;
+                const particleCount = p.particles || 8;
+                const particleDistance = p.particleDistance || 25;
+                const particleSize = p.particleSize || 2;
                 const pulseSize = baseRadius + Math.sin(time + index) * 5;
-                
+
                 aura.circle(0, 0, pulseSize).stroke({ width: 3, color: effect.color, alpha: 0.6 });
-                
-                // Add inner particles/sparkles
                 for (let i = 0; i < particleCount; i++) {
                     const angle = (i / particleCount) * Math.PI * 2 + time;
-                    const x = Math.cos(angle) * particleDistance;
-                    const y = Math.sin(angle) * particleDistance;
-                    
-                    aura.circle(x, y, particleSize).fill({ color: effect.color, alpha: 0.8 });
+                    aura.circle(Math.cos(angle) * particleDistance, Math.sin(angle) * particleDistance, particleSize)
+                        .fill({ color: effect.color, alpha: 0.8 });
                 }
+
             } else if (effect.animation === 'shield') {
-                // Hexagonal shield pattern
-                const time = Date.now() * 0.002;
-                const params = effect.params || {};
-                const baseSize = params.size || 22;
-                const sides = params.sides || 6;
-                
-                const size = baseSize + Math.sin(time) * 2;
-                
+                // Ring of nodes instead of polygon path — avoids moveTo/lineTo
+                const baseSize = p.size || 22;
+                const sides = p.sides || 6;
+                const size = baseSize + Math.sin(time * 0.67) * 2;
+                const t2 = Date.now() * 0.002;
+
+                aura.circle(0, 0, size).stroke({ width: 2, color: effect.color, alpha: 0.5 });
                 for (let i = 0; i < sides; i++) {
-                    const angle = (i / sides) * Math.PI * 2;
-                    const x = Math.cos(angle) * size;
-                    const y = Math.sin(angle) * size;
-                    if (i === 0) {
-                        aura.moveTo(x, y);
-                    } else {
-                        aura.lineTo(x, y);
-                    }
+                    const angle = (i / sides) * Math.PI * 2 + t2 * 0.3;
+                    aura.circle(Math.cos(angle) * size, Math.sin(angle) * size, 3)
+                        .fill({ color: effect.color, alpha: 0.9 });
                 }
-                aura.closePath();
-                aura.stroke({ width: 2, color: effect.color, alpha: 0.7 });
+
             } else if (effect.animation === 'slow') {
-                // Slow debuff - dripping effect
-                const time = Date.now() * 0.002;
-                const params = effect.params || {};
-                const dropCount = params.drops || 6;
-                const radius = params.radius || 18;
-                const dropSize = params.dropSize || 3;
-                const dripAmount = params.dripAmount || 3;
-                
+                const t2 = Date.now() * 0.002;
+                const dropCount = p.drops || 6;
+                const radius = p.radius || 18;
+                const dropSize = p.dropSize || 3;
+                const dripAmount = p.dripAmount || 3;
+
                 for (let i = 0; i < dropCount; i++) {
-                    const angle = (i / dropCount) * Math.PI * 2 + time;
+                    const angle = (i / dropCount) * Math.PI * 2 + t2;
                     const x = Math.cos(angle) * radius;
-                    const y = Math.sin(angle) * radius + Math.sin(time * 2 + i) * dripAmount;
+                    const y = Math.sin(angle) * radius + Math.sin(t2 * 2 + i) * dripAmount;
                     aura.circle(x, y, dropSize).fill({ color: effect.color, alpha: 0.5 });
                 }
+
             } else if (effect.animation === 'cloud') {
-                // Cloud effect - for poison (green pallor cloud)
-                const time = Date.now() * 0.001;
-                const params = effect.params || {};
-                const baseRadius = params.radius || 22;
-                const puffCount = params.puffs || 6;
-                const wispCount = params.wisps || 8;
-                
-                // Create multiple overlapping cloud puffs for organic shape
+                const t2 = Date.now() * 0.001;
+                const baseRadius = p.radius || 22;
+                const puffCount = p.puffs || 6;
+                const wispCount = p.wisps || 8;
+
                 for (let i = 0; i < puffCount; i++) {
-                    const angle = (i / puffCount) * Math.PI * 2 + time * 0.5;
+                    const angle = (i / puffCount) * Math.PI * 2 + t2 * 0.5;
                     const puffDistance = baseRadius * 0.6;
-                    const x = Math.cos(angle) * puffDistance;
-                    const y = Math.sin(angle) * puffDistance;
-                    const puffSize = baseRadius * (0.5 + Math.sin(time * 2 + i) * 0.1);
-                    
-                    aura.circle(x, y, puffSize).fill({ color: effect.color, alpha: 0.25 + Math.sin(time * 3 + i) * 0.1 });
+                    const puffSize = baseRadius * (0.5 + Math.sin(t2 * 2 + i) * 0.1);
+                    aura.circle(Math.cos(angle) * puffDistance, Math.sin(angle) * puffDistance, puffSize)
+                        .fill({ color: effect.color, alpha: 0.25 + Math.sin(t2 * 3 + i) * 0.1 });
                 }
-                
-                // Central cloud mass
-                const centralSize = baseRadius * (0.7 + Math.sin(time * 1.5) * 0.1);
-                aura.circle(0, 0, centralSize).fill({ color: effect.color, alpha: 0.3 });
-                
-                // Add smaller wispy details
+                aura.circle(0, 0, baseRadius * (0.7 + Math.sin(t2 * 1.5) * 0.1))
+                    .fill({ color: effect.color, alpha: 0.3 });
                 for (let i = 0; i < wispCount; i++) {
-                    const angle = (i / wispCount) * Math.PI * 2 + time * 1.5;
+                    const angle = (i / wispCount) * Math.PI * 2 + t2 * 1.5;
                     const distance = baseRadius * 0.8;
-                    const x = Math.cos(angle) * distance;
-                    const y = Math.sin(angle) * distance;
-                    const wispSize = 3 + Math.sin(time * 4 + i) * 1;
-                    
-                    aura.circle(x, y, wispSize).fill({ color: effect.color, alpha: 0.35 + Math.sin(time * 5 + i) * 0.15 });
+                    const wispSize = 3 + Math.sin(t2 * 4 + i) * 1;
+                    aura.circle(Math.cos(angle) * distance, Math.sin(angle) * distance, wispSize)
+                        .fill({ color: effect.color, alpha: 0.35 + Math.sin(t2 * 5 + i) * 0.15 });
                 }
+
             } else if (effect.animation === 'flame') {
-                // Flame effect - for burning (flickering fire particles)
-                const time = Date.now() * 0.004;
-                const params = effect.params || {};
-                const particleCount = params.count || 10;
-                const baseRadius = params.radius || 20;
-                const flameHeight = params.height || 8;
-                
-                // Create flickering flame particles
+                const t2 = Date.now() * 0.004;
+                const particleCount = p.count || 10;
+                const baseRadius = p.radius || 20;
+                const flameHeight = p.height || 8;
+
                 for (let i = 0; i < particleCount; i++) {
-                    const angle = (i / particleCount) * Math.PI * 2 + time * 2;
-                    const distance = baseRadius + Math.sin(time * 3 + i) * 5;
+                    const angle = (i / particleCount) * Math.PI * 2 + t2 * 2;
+                    const distance = baseRadius + Math.sin(t2 * 3 + i) * 5;
                     const x = Math.cos(angle) * distance;
-                    const y = Math.sin(angle) * distance - Math.abs(Math.sin(time * 4 + i)) * flameHeight;
-                    const size = 2 + Math.sin(time * 5 + i) * 1.5;
-                    const alpha = 0.4 + Math.sin(time * 6 + i) * 0.3;
-                    
-                    aura.circle(x, y, size).fill({ color: effect.color, alpha });
+                    const y = Math.sin(angle) * distance - Math.abs(Math.sin(t2 * 4 + i)) * flameHeight;
+                    const size = 2 + Math.sin(t2 * 5 + i) * 1.5;
+                    aura.circle(x, y, size).fill({ color: effect.color, alpha: 0.4 + Math.sin(t2 * 6 + i) * 0.3 });
                 }
-                
-                // Add inner glow
-                const glowSize = baseRadius * (0.6 + Math.sin(time * 3) * 0.15);
-                aura.circle(0, 0, glowSize).fill({ color: effect.color, alpha: 0.2 });
-                
-                // Add bright center
-                aura.circle(0, 0, baseRadius * 0.3).fill({ color: effect.color, alpha: 0.5 + Math.sin(time * 4) * 0.2 });
+                aura.circle(0, 0, baseRadius * (0.6 + Math.sin(t2 * 3) * 0.15))
+                    .fill({ color: effect.color, alpha: 0.2 });
+                aura.circle(0, 0, baseRadius * 0.3)
+                    .fill({ color: effect.color, alpha: 0.5 + Math.sin(t2 * 4) * 0.2 });
+
             } else if (effect.animation === 'star') {
-                // Star effect - orbiting stars for special status (ball carrier)
-                const time = Date.now() * 0.003;
-                const params = effect.params || {};
-                const starCount = params.count || 8;
-                const orbitRadius = params.radius || 30;
-                const starSize = params.size || 3;
-                
-                // Outer pulsing ring
+                // Orbiting dots instead of polygon stars — avoids moveTo/lineTo
+                const starCount = p.count || 8;
+                const orbitRadius = p.radius || 30;
+                const dotSize = (p.size || 3) * 1.2;
                 const pulseSize = 25 + Math.sin(time) * 3;
+
                 aura.circle(0, 0, pulseSize).stroke({ width: 2, color: effect.color, alpha: 0.6 });
-                
-                // Orbiting stars
                 for (let i = 0; i < starCount; i++) {
                     const angle = (i / starCount) * Math.PI * 2 + time * 2;
-                    const cx = Math.cos(angle) * orbitRadius;
-                    const cy = Math.sin(angle) * orbitRadius;
-                    
-                    // Draw a 5-point star
-                    const starPoints = 5;
-                    const outerR = starSize;
-                    const innerR = starSize * 0.4;
-                    for (let j = 0; j < starPoints * 2; j++) {
-                        const starAngle = (j / (starPoints * 2)) * Math.PI * 2 - Math.PI / 2;
-                        const radius = j % 2 === 0 ? outerR : innerR;
-                        const sx = cx + Math.cos(starAngle) * radius;
-                        const sy = cy + Math.sin(starAngle) * radius;
-                        if (j === 0) {
-                            aura.moveTo(sx, sy);
-                        } else {
-                            aura.lineTo(sx, sy);
-                        }
-                    }
-                    aura.closePath();
-                    aura.fill({ color: effect.color, alpha: 0.9 });
+                    aura.circle(Math.cos(angle) * orbitRadius, Math.sin(angle) * orbitRadius, dotSize)
+                        .fill({ color: effect.color, alpha: 0.9 });
                 }
-                
-                // Central star
-                const centerStarPoints = 5;
-                const centerOuterR = 8;
-                const centerInnerR = 3;
-                for (let j = 0; j < centerStarPoints * 2; j++) {
-                    const starAngle = (j / (centerStarPoints * 2)) * Math.PI * 2 - Math.PI / 2 + time;
-                    const radius = j % 2 === 0 ? centerOuterR : centerInnerR;
-                    const sx = Math.cos(starAngle) * radius;
-                    const sy = Math.sin(starAngle) * radius;
-                    if (j === 0) {
-                        aura.moveTo(sx, sy);
-                    } else {
-                        aura.lineTo(sx, sy);
-                    }
+                // Inner rotating ring of dots
+                const innerCount = 5;
+                const innerR = 10;
+                for (let i = 0; i < innerCount; i++) {
+                    const angle = (i / innerCount) * Math.PI * 2 + time * 3;
+                    aura.circle(Math.cos(angle) * innerR, Math.sin(angle) * innerR, 3)
+                        .fill({ color: effect.color, alpha: 0.8 });
                 }
-                aura.closePath();
-                aura.fill({ color: effect.color, alpha: 0.8 });
+
             } else if (effect.animation === 'crown') {
-                // VIP crown - special prominent indicator
-                const time = Date.now() * 0.003;
+                // Crown: golden ring with orbiting diamond-shaped dots — avoids moveTo/lineTo
                 const pulseSize = 25 + Math.sin(time) * 3;
-                
-                // Outer golden ring
                 aura.circle(0, 0, pulseSize).stroke({ width: 3, color: effect.color, alpha: 0.8 });
-                
-                // Inner star pattern
-                for (let i = 0; i < 5; i++) {
-                    const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
-                    const outerRadius = 30;
-                    const innerRadius = 15;
-                    
-                    const x1 = Math.cos(angle) * outerRadius;
-                    const y1 = Math.sin(angle) * outerRadius;
-                    const x2 = Math.cos(angle + Math.PI / 5) * innerRadius;
-                    const y2 = Math.sin(angle + Math.PI / 5) * innerRadius;
-                    
-                    if (i === 0) {
-                        aura.moveTo(x1, y1);
-                    } else {
-                        aura.lineTo(x1, y1);
-                    }
-                    aura.lineTo(x2, y2);
+
+                const crownPoints = 5;
+                const outerDist = 30;
+                const innerDist = 18;
+                for (let i = 0; i < crownPoints; i++) {
+                    const outerAngle = (i / crownPoints) * Math.PI * 2 - Math.PI / 2;
+                    aura.circle(Math.cos(outerAngle) * outerDist, Math.sin(outerAngle) * outerDist, 4)
+                        .fill({ color: effect.color, alpha: 0.9 });
+                    const innerAngle = outerAngle + Math.PI / crownPoints;
+                    aura.circle(Math.cos(innerAngle) * innerDist, Math.sin(innerAngle) * innerDist, 2.5)
+                        .fill({ color: effect.color, alpha: 0.7 });
                 }
-                aura.closePath();
-                aura.stroke({ width: 2, color: effect.color, alpha: 0.9 });
-                
-                // Rotating sparkles (small stars)
+                // Rotating sparkle ring
                 for (let i = 0; i < 8; i++) {
                     const angle = (i / 8) * Math.PI * 2 + time * 2;
-                    const distance = 35;
-                    const cx = Math.cos(angle) * distance;
-                    const cy = Math.sin(angle) * distance;
-                    
-                    // Draw a small star manually
-                    const starPoints = 4;
-                    const outerR = 3;
-                    const innerR = 1.5;
-                    for (let j = 0; j < starPoints * 2; j++) {
-                        const starAngle = (j / (starPoints * 2)) * Math.PI * 2 - Math.PI / 2;
-                        const radius = j % 2 === 0 ? outerR : innerR;
-                        const sx = cx + Math.cos(starAngle) * radius;
-                        const sy = cy + Math.sin(starAngle) * radius;
-                        if (j === 0) {
-                            aura.moveTo(sx, sy);
-                        } else {
-                            aura.lineTo(sx, sy);
-                        }
-                    }
-                    aura.closePath();
-                    aura.fill({ color: effect.color, alpha: 0.9 });
+                    aura.circle(Math.cos(angle) * 35, Math.sin(angle) * 35, 2.5)
+                        .fill({ color: effect.color, alpha: 0.9 });
                 }
+
             } else {
-                // Fallback for unknown animation types - simple pulsing circle
-                const time = Date.now() * 0.003;
                 const pulseSize = 20 + Math.sin(time) * 4;
-                
                 aura.circle(0, 0, pulseSize).stroke({ width: 2, color: effect.color, alpha: 0.6 });
                 aura.circle(0, 0, pulseSize * 0.7).fill({ color: effect.color, alpha: 0.3 });
             }
-            
-            aura.animationType = effect.animation;
-            aura.effectColor = effect.color;
-            aura.effectIndex = index;
         });
-        
-        // Rebuild badge overlays only when the effect set changes
+
+        // Badge overlays — kept in a dedicated sub-container, never mixed with aura Graphics
         if (changed) {
-            // Remove old badges (anything beyond the reusable aura slots)
-            while (container.children.length > effects.length) {
-                const child = container.children[container.children.length - 1];
-                container.removeChild(child);
-                child.destroy({ children: true, texture: false, baseTexture: false });
+            if (!container._badgeContainer) {
+                container._badgeContainer = new PIXI.Container();
+                container.addChild(container._badgeContainer);
             }
-            // Add icon badges for local player
-            effects.forEach((effect, index) => {
-                if (effect.showIcon && sprite.playerData.id === this.myPlayerId) {
-                    const badge = this.createPowerUpBadge(effect, index);
-                    container.addChild(badge);
-                }
+            const bc = container._badgeContainer;
+            [...bc.children].forEach(child => {
+                bc.removeChild(child);
+                child.destroy({ children: true, texture: false, baseTexture: false });
             });
+            if (sprite.playerData.id === this.myPlayerId) {
+                effects.forEach((effect, index) => {
+                    if (effect.showIcon) {
+                        bc.addChild(this.createPowerUpBadge(effect, index));
+                    }
+                });
+            }
         }
     }
     

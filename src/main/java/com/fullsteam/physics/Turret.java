@@ -35,7 +35,7 @@ public class Turret extends GameEntity {
         this.ownerId = ownerId;
         this.ownerTeam = ownerTeam;
         this.detectionRange = 400.0; // Detection range
-        this.fireRate = 1.5;
+        this.fireRate = 3.0;
         this.damage = 15.0; // Moderate damage
         this.projectileSpeed = 400.0; // Fast projectiles
         this.expires = (long) (System.currentTimeMillis() + (lifespan * 1000));

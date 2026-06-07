@@ -73,6 +73,9 @@ public class RuleSystem {
     // Oddball scoring tracking (playerId -> total points earned)
     private final Map<Integer, Double> oddballPlayerScores = new HashMap<>();
 
+    // FFA KOTH scoring tracking (playerId -> total zone-seconds held)
+    private final Map<Integer, Double> kothPlayerScores = new HashMap<>();
+
     // VIP kill tracking (team number -> VIP kills scored)
     private final Map<Integer, Integer> vipKillScores = new HashMap<>();
 
@@ -379,6 +382,7 @@ public class RuleSystem {
 
         bonusTeamPoints.clear();
         vipKillScores.clear();
+        kothPlayerScores.clear();
 
         gameEntities.getFlags().values().forEach(Flag::returnToHome);
         gameEntities.clearEntitiesFromWorld(gameEntities.getDefenseLasers());
@@ -764,18 +768,41 @@ public class RuleSystem {
         return oddballPlayerScores.getOrDefault(playerId, 0.0);
     }
 
+    /**
+     * Award KOTH zone points to an individual player (FFA mode only).
+     * Called by CollisionProcessor each physics tick when the player is the sole
+     * occupant of a zone.
+     */
+    public void awardKothPoints(int playerId, double points) {
+        if (playerId >= 0 && points > 0) {
+            kothPlayerScores.merge(playerId, points, Double::sum);
+            log.debug("Awarded {} KOTH points to player {}. Total: {}",
+                    points, playerId, kothPlayerScores.get(playerId));
+            checkVictoryConditions();
+        }
+    }
+
+    public double getKothScore(int playerId) {
+        return kothPlayerScores.getOrDefault(playerId, 0.0);
+    }
+
     private int getPlayerScore(Player player) {
         int capturePoints = player.getCaptures() * rules.getPointsPerFlagCapture();
         int score = switch (rules.getScoreStyle()) {
             case TOTAL_KILLS -> player.getKills();
-            case OBJECTIVE -> capturePoints; // Only captures for individual scoring; KOTH is team-based
+            case OBJECTIVE -> capturePoints;
             case TOTAL -> player.getKills() + capturePoints;
         };
 
         // Add oddball scores for this player
         if (rules.hasOddball()) {
-            double oddballScore = getOddballScore(player.getId());
-            score += (int) Math.round(oddballScore);
+            score += (int) Math.round(getOddballScore(player.getId()));
+        }
+
+        // Add FFA KOTH scores (team-mode KOTH points are summed in calculateTeamScores instead)
+        if (rules.hasKothZones()
+                && (rules.getScoreStyle() == ScoreStyle.OBJECTIVE || rules.getScoreStyle() == ScoreStyle.TOTAL)) {
+            score += (int) Math.round(getKothScore(player.getId()));
         }
 
         return score;

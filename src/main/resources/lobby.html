@@ -172,6 +172,48 @@
             background: linear-gradient(45deg, #ff6600, #ff4400);
             border-color: #ff6600;
         }
+
+        /* Split preset buttons — rendered as a single capsule */
+        .preset-btn-group {
+            display: flex;
+            border-radius: 25px;
+            overflow: hidden;   /* clips inner buttons to capsule shape */
+        }
+
+        /* Reset radius from unified.css so the group handles the capsule */
+        .preset-btn-main {
+            flex: 3;
+            border-radius: 0 !important;
+            border: none;
+            padding: 12px 20px;
+            cursor: pointer;
+            text-align: left;
+            transition: filter 0.2s;
+        }
+
+        .preset-btn-main:hover {
+            filter: brightness(1.18);
+        }
+
+        .preset-btn-customize {
+            flex: 0 0 42px;
+            background: rgba(0, 0, 0, 0.22);
+            border: none;
+            border-left: 1px solid rgba(255, 255, 255, 0.12);
+            color: #ffa500;
+            cursor: pointer;
+            font-size: 1.05em;
+            border-radius: 0;
+            transition: background 0.2s, color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .preset-btn-customize:hover {
+            background: rgba(255, 149, 0, 0.35);
+            color: #fff;
+        }
         
         .game-config-summary {
             margin-top: 10px;
@@ -668,58 +710,25 @@
 
         // Update "Create Game" buttons
         createButtons.innerHTML = '';
-        
-        // Add preset game buttons
-        const teamBattleButton = document.createElement('button');
-        teamBattleButton.textContent = '⚔️ Team Battle';
-        teamBattleButton.onclick = () => createPresetGame('team-battle');
-        createButtons.appendChild(teamBattleButton);
-        
-        const ffaButton = document.createElement('button');
-        ffaButton.textContent = '💥 Free For All';
-        ffaButton.onclick = () => createPresetGame('ffa');
-        createButtons.appendChild(ffaButton);
-        
-        const ctfButton = document.createElement('button');
-        ctfButton.textContent = '🚩 Capture The Flag';
-        ctfButton.onclick = () => createPresetGame('ctf');
-        createButtons.appendChild(ctfButton);
-        
-        const dominationButton = document.createElement('button');
-        dominationButton.textContent = '👑 Domination';
-        dominationButton.onclick = () => createPresetGame('domination');
-        createButtons.appendChild(dominationButton);
-        
-        const eliminationButton = document.createElement('button');
-        eliminationButton.textContent = '🎯 Battle Royale';
-        eliminationButton.onclick = () => createPresetGame('elimination');
-        createButtons.appendChild(eliminationButton);
-        
-        const stockBattleButton = document.createElement('button');
-        stockBattleButton.textContent = '❤️ Stock Battle';
-        stockBattleButton.onclick = () => createPresetGame('stock-battle');
-        createButtons.appendChild(stockBattleButton);
-        
-        const headquartersButton = document.createElement('button');
-        headquartersButton.textContent = '🏛️ Headquarters';
-        headquartersButton.onclick = () => createPresetGame('headquarters-assault');
-        createButtons.appendChild(headquartersButton);
-        
-        const chaosButton = document.createElement('button');
-        chaosButton.textContent = '🌋 Chaos Mode';
-        chaosButton.onclick = () => createPresetGame('chaos-mode');
-        createButtons.appendChild(chaosButton);
-        
-        const oddballButton = document.createElement('button');
-        oddballButton.textContent = '⭐ Oddball';
-        oddballButton.onclick = () => createPresetGame('oddball');
-        createButtons.appendChild(oddballButton);
-        
-        const vipButton = document.createElement('button');
-        vipButton.textContent = '👑 VIP';
-        vipButton.onclick = () => createPresetGame('vip-assassination');
-        createButtons.appendChild(vipButton);
-        
+
+        const presets = [
+            ['⚔️ Team Battle',      'team-battle'],
+            ['💥 Free For All',     'ffa'],
+            ['🚩 Capture The Flag', 'ctf'],
+            ['👑 Domination',       'domination'],
+            ['🎯 Battle Royale',    'elimination'],
+            ['❤️ Stock Battle',     'stock-battle'],
+            ['🏛️ Headquarters',     'headquarters-assault'],
+            ['🌋 Chaos Mode',       'chaos-mode'],
+            ['⭐ Oddball',          'oddball'],
+            ['🎖️ VIP',              'vip-assassination'],
+            ['👑 Kingpin',          'kingpin'],
+        ];
+
+        presets.forEach(([label, presetType]) => {
+            createButtons.appendChild(createPresetButton(label, presetType));
+        });
+
         // Add custom game button
         const customButton = document.createElement('button');
         customButton.textContent = '⚙️ Custom Game';
@@ -899,11 +908,29 @@
         window.location.href = `/game.html?gameId=${gameId}`;
     }
 
-    async function createPresetGame(presetType) {
-        let gameConfig;
-        
+    function createPresetButton(label, presetType) {
+        const group = document.createElement('div');
+        group.className = 'preset-btn-group';
+
+        const mainBtn = document.createElement('button');
+        mainBtn.className = 'preset-btn-main';
+        mainBtn.textContent = label;
+        mainBtn.onclick = () => createPresetGame(presetType);
+
+        const gearBtn = document.createElement('button');
+        gearBtn.className = 'preset-btn-customize';
+        gearBtn.textContent = '⚙';
+        gearBtn.title = `Customize ${label.replace(/^\S+\s/, '')} rules`;
+        gearBtn.onclick = () => openCustomGameModal(getPresetConfig(presetType));
+
+        group.appendChild(mainBtn);
+        group.appendChild(gearBtn);
+        return group;
+    }
+
+    function getPresetConfig(presetType) {
         if (presetType === 'team-battle') {
-            gameConfig = {
+            return {
                 maxPlayers: 20,
                 teamCount: 4,
                 worldWidth: 2500,
@@ -933,7 +960,7 @@
                 }
             };
         } else if (presetType === 'ffa') {
-            gameConfig = {
+            return {
                 maxPlayers: 10,
                 teamCount: 0,
                 worldWidth: 1500,
@@ -963,7 +990,7 @@
                 }
             };
         } else if (presetType === 'ctf') {
-            gameConfig = {
+            return {
                 maxPlayers: 24,                 // Increased for 3 teams
                 teamCount: 3,                   // 3-way CTF battle
                 worldWidth: 2500,               // Larger world for 3 teams
@@ -993,7 +1020,7 @@
                 }
             };
         } else if (presetType === 'domination') {
-            gameConfig = {
+            return {
                 maxPlayers: 15,
                 teamCount: 3,                   // 3-way battle for zones
                 worldWidth: 2200,
@@ -1019,7 +1046,7 @@
                 }
             };
         } else if (presetType === 'elimination') {
-            gameConfig = {
+            return {
                 maxPlayers: 50,                 // Battle royale scale - 50 players!
                 teamCount: 0,                   // Every player for themselves (FFA)
                 worldWidth: 4000,               // Much larger world for 50 players
@@ -1057,7 +1084,7 @@
                 }
             };
         } else if (presetType === 'stock-battle') {
-            gameConfig = {
+            return {
                 maxPlayers: 16,
                 teamCount: 4,                   // 4 teams, Smash Bros style
                 worldWidth: 1800,
@@ -1087,7 +1114,7 @@
                 }
             };
         } else if (presetType === 'headquarters-assault') {
-            gameConfig = {
+            return {
                 maxPlayers: 16,
                 teamCount: 2,                   // 2 teams competing for headquarters destruction
                 worldWidth: 4000,               // Wide battlefield
@@ -1122,10 +1149,10 @@
                 }
             };
         } else if (presetType === 'chaos-mode') {
-            gameConfig = {
+            return {
                 maxPlayers: 15,
                 teamCount: 3,                   // 3-way battle increases chaos
-                worldWidth: 2000,
+                worldWidth: 3000,
                 worldHeight: 2000,
                 playerMaxHealth: 100,
                 aiCheckIntervalMs: 10000,
@@ -1166,7 +1193,7 @@
                 }
             };
         } else if (presetType === 'oddball') {
-            gameConfig = {
+            return {
                 maxPlayers: 12,
                 teamCount: 4,                   // 4 teams competing for the ball
                 worldWidth: 1800,
@@ -1207,8 +1234,56 @@
                     oddballPointsPerSecond: 1.0 // 1 point per second for holding ball
                 }
             };
+        } else if (presetType === 'kingpin') {
+            return {
+                maxPlayers: 8,                  // Intimate FFA — every fight matters
+                teamCount: 0,                   // Free-for-all, no teams
+                worldWidth: 1600,
+                worldHeight: 1600,              // Compact world forces everyone toward the zone
+                playerMaxHealth: 100,
+                aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
+                rules: {
+                    roundDuration: 300,         // 5 minute rounds
+                    restDuration: 10,
+                    flagsPerTeam: 0,
+                    scoreStyle: 'OBJECTIVE',    // Only zone hold-time counts; kills are just harassment
+                    victoryCondition: 'SCORE_LIMIT',
+                    scoreLimit: 90,             // 90 pts ≈ 90 seconds of solo zone control
+                    timeLimit: 480,             // 8 minute hard cap
+                    suddenDeath: true,
+                    respawnMode: 'INSTANT',
+                    respawnDelay: 3,            // Fast respawn — dying just costs you the zone
+                    maxLives: -1,
+                    kothZones: 1,               // Single central zone — everyone converges here
+                    kothPointsPerSecond: 1.0,   // 1 pt/s held → 90 s to win
+                    addWorkshops: false,        // No workshops — power-up balance would skew 1v1s
+                    workshopCraftTime: 10,
+                    workshopCraftRadius: 90,
+                    maxPowerUpsPerWorkshop: 2,
+                    addHeadquarters: false,
+                    headquartersMaxHealth: 1000,
+                    headquartersPointsPerDamage: 0.1,
+                    headquartersDestructionBonus: 0,
+                    headquartersDestructionEndsGame: false,
+                    enableRandomEvents: true,   // Light environmental events keep the zone dynamic
+                    randomEventInterval: 60,
+                    eventWarningDuration: 4,
+                    meteorShowerDensity: 'SPARSE',
+                    supplyDropDensity: 'SPARSE',
+                    volcanicEruptionDensity: 'SPARSE',
+                    ionStormDensity: 'SPARSE',
+                    earthquakeDensity: 'SPARSE',
+                    blizzardDensity: 'SPARSE',
+                    enableOddball: false,
+                    oddballPointsPerSecond: 1.0,
+                    enableVip: false,
+                    obstacleDensity: 'DENSE',
+                    pointsPerFlagCapture: 1
+                }
+            };
         } else if (presetType === 'vip-assassination') {
-            gameConfig = {
+            return {
                 maxPlayers: 15,
                 teamCount: 3,                   // 3 teams - asymmetric VIP hunting
                 worldWidth: 2200,
@@ -1256,7 +1331,13 @@
                 }
             };
         }
-        
+        return null;
+    }
+
+    async function createPresetGame(presetType) {
+        const gameConfig = getPresetConfig(presetType);
+        if (!gameConfig) return;
+
         try {
             const response = await fetch('/api/games', {
                 method: 'POST',
@@ -1316,93 +1397,63 @@
     });
 
     // Custom Game Modal Functions
-    async function openCustomGameModal() {
+    async function openCustomGameModal(overrideConfig) {
         try {
             // Fetch default configuration from server
             const response = await fetch('/api/game-config/default');
             const defaultConfig = await response.json();
+
+            // Merge preset override if provided (gear-icon path)
+            const cfg = overrideConfig ? Object.assign({}, defaultConfig, overrideConfig, {
+                rules: Object.assign({}, defaultConfig.rules, overrideConfig.rules)
+            }) : defaultConfig;
             
-            // Populate form with default values
-            document.getElementById('maxPlayers').value = defaultConfig.maxPlayers;
-            document.getElementById('teamCount').value = defaultConfig.teamCount;
-            document.getElementById('worldWidth').value = defaultConfig.worldWidth;
-            document.getElementById('worldHeight').value = defaultConfig.worldHeight;
-            document.getElementById('playerMaxHealth').value = defaultConfig.playerMaxHealth;
-            document.getElementById('enableAIFilling').checked = defaultConfig.enableAIFilling;
+            // Populate form with values
+            document.getElementById('maxPlayers').value = cfg.maxPlayers;
+            document.getElementById('teamCount').value = cfg.teamCount;
+            document.getElementById('worldWidth').value = cfg.worldWidth;
+            document.getElementById('worldHeight').value = cfg.worldHeight;
+            document.getElementById('playerMaxHealth').value = cfg.playerMaxHealth;
+            document.getElementById('enableAIFilling').checked = cfg.enableAIFilling;
             
-            // Populate rules fields
-            if (defaultConfig.rules) {
-                document.getElementById('roundDuration').value = defaultConfig.rules.roundDuration || 0;
-                document.getElementById('restDuration').value = defaultConfig.rules.restDuration || 10;
-                document.getElementById('flagsPerTeam').value = defaultConfig.rules.flagsPerTeam || 0;
-                document.getElementById('pointsPerFlagCapture').value = defaultConfig.rules.pointsPerFlagCapture || 1;
-                document.getElementById('scoreStyle').value = defaultConfig.rules.scoreStyle || 'TOTAL_KILLS';
-                document.getElementById('victoryCondition').value = defaultConfig.rules.victoryCondition || 'ENDLESS';
-                document.getElementById('scoreLimit').value = defaultConfig.rules.scoreLimit || 50;
-                document.getElementById('timeLimit').value = defaultConfig.rules.timeLimit || 600;
-                document.getElementById('suddenDeath').checked = defaultConfig.rules.suddenDeath || false;
-                document.getElementById('lockGameAfterSeconds').value = defaultConfig.rules.lockGameAfterSeconds || 0;
-                document.getElementById('respawnMode').value = defaultConfig.rules.respawnMode || 'INSTANT';
-                document.getElementById('respawnDelay').value = defaultConfig.rules.respawnDelay || 5;
-                document.getElementById('waveRespawnInterval').value = defaultConfig.rules.waveRespawnInterval || 30;
-                document.getElementById('maxLives').value = defaultConfig.rules.maxLives || 3;
-                document.getElementById('kothZones').value = defaultConfig.rules.kothZones || 0;
-                document.getElementById('kothPointsPerSecond').value = defaultConfig.rules.kothPointsPerSecond || 1.0;
-                document.getElementById('enableOddball').checked = defaultConfig.rules.enableOddball || false;
-                document.getElementById('oddballPointsPerSecond').value = defaultConfig.rules.oddballPointsPerSecond || 1.0;
-                document.getElementById('enableVip').checked = defaultConfig.rules.enableVip || false;
-                document.getElementById('enableRandomWeapons').checked = defaultConfig.rules.enableRandomWeapons || false;
-                document.getElementById('randomWeaponInterval').value = defaultConfig.rules.randomWeaponInterval || 30;
-                document.getElementById('obstacleDensity').value = defaultConfig.rules.obstacleDensity || 'RANDOM';
-                document.getElementById('addWorkshops').checked = defaultConfig.rules.addWorkshops || false;
-                document.getElementById('workshopCraftTime').value = defaultConfig.rules.workshopCraftTime || 10;
-                document.getElementById('workshopCraftRadius').value = defaultConfig.rules.workshopCraftRadius || 80;
-                document.getElementById('maxPowerUpsPerWorkshop').value = defaultConfig.rules.maxPowerUpsPerWorkshop || 3;
-                document.getElementById('enableRandomEvents').checked = defaultConfig.rules.enableRandomEvents || false;
-                document.getElementById('randomEventInterval').value = defaultConfig.rules.randomEventInterval || 40;
-                document.getElementById('eventWarningDuration').value = defaultConfig.rules.eventWarningDuration || 3;
-                document.getElementById('meteorShowerDensity').value = defaultConfig.rules.meteorShowerDensity || 'DENSE';
-                document.getElementById('supplyDropDensity').value = defaultConfig.rules.supplyDropDensity || 'SPARSE';
-                document.getElementById('volcanicEruptionDensity').value = defaultConfig.rules.volcanicEruptionDensity || 'DENSE';
-                document.getElementById('ionStormDensity').value = defaultConfig.rules.ionStormDensity || 'DENSE';
-                document.getElementById('earthquakeDensity').value = defaultConfig.rules.earthquakeDensity || 'SPARSE';
-                document.getElementById('blizzardDensity').value = defaultConfig.rules.blizzardDensity || 'DENSE';
-            } else {
-                document.getElementById('roundDuration').value = 0;
-                document.getElementById('restDuration').value = 10;
-                document.getElementById('flagsPerTeam').value = 0;
-                document.getElementById('pointsPerFlagCapture').value = 1;
-                document.getElementById('scoreStyle').value = 'TOTAL_KILLS';
-                document.getElementById('victoryCondition').value = 'ENDLESS';
-                document.getElementById('scoreLimit').value = 50;
-                document.getElementById('timeLimit').value = 600;
-                document.getElementById('suddenDeath').checked = false;
-                document.getElementById('lockGameAfterSeconds').value = 0;
-                document.getElementById('respawnMode').value = 'INSTANT';
-                document.getElementById('respawnDelay').value = 5;
-                document.getElementById('kothZones').value = 0;
-                document.getElementById('kothPointsPerSecond').value = 1.0;
-                document.getElementById('enableOddball').checked = false;
-                document.getElementById('oddballPointsPerSecond').value = 1.0;
-                document.getElementById('enableVip').checked = false;
-                document.getElementById('enableRandomWeapons').checked = false;
-                document.getElementById('randomWeaponInterval').value = 30;
-                document.getElementById('obstacleDensity').value = 'RANDOM';
-                document.getElementById('waveRespawnInterval').value = 30;
-                document.getElementById('maxLives').value = 3;
-                document.getElementById('addWorkshops').checked = false;
-                document.getElementById('workshopCraftTime').value = 10;
-                document.getElementById('workshopCraftRadius').value = 80;
-                document.getElementById('maxPowerUpsPerWorkshop').value = 3;
-                document.getElementById('enableRandomEvents').checked = false;
-                document.getElementById('randomEventInterval').value = 40;
-                document.getElementById('eventWarningDuration').value = 3;
-                document.getElementById('meteorShowerDensity').value = 'DENSE';
-                document.getElementById('supplyDropDensity').value = 'SPARSE';
-                document.getElementById('volcanicEruptionDensity').value = 'DENSE';
-                document.getElementById('ionStormDensity').value = 'DENSE';
-                document.getElementById('earthquakeDensity').value = 'SPARSE';
-                document.getElementById('blizzardDensity').value = 'DENSE';
+            // Populate rules fields from merged config
+            const r = cfg.rules || {};
+            if (r) {
+                document.getElementById('roundDuration').value = r.roundDuration ?? 0;
+                document.getElementById('restDuration').value = r.restDuration ?? 10;
+                document.getElementById('flagsPerTeam').value = r.flagsPerTeam ?? 0;
+                document.getElementById('pointsPerFlagCapture').value = r.pointsPerFlagCapture ?? 1;
+                document.getElementById('scoreStyle').value = r.scoreStyle || 'TOTAL_KILLS';
+                document.getElementById('victoryCondition').value = r.victoryCondition || 'ENDLESS';
+                document.getElementById('scoreLimit').value = r.scoreLimit ?? 50;
+                document.getElementById('timeLimit').value = r.timeLimit ?? 600;
+                document.getElementById('suddenDeath').checked = r.suddenDeath ?? false;
+                document.getElementById('lockGameAfterSeconds').value = r.lockGameAfterSeconds ?? 0;
+                document.getElementById('respawnMode').value = r.respawnMode || 'INSTANT';
+                document.getElementById('respawnDelay').value = r.respawnDelay ?? 5;
+                document.getElementById('waveRespawnInterval').value = r.waveRespawnInterval ?? 30;
+                document.getElementById('maxLives').value = r.maxLives ?? 3;
+                document.getElementById('kothZones').value = r.kothZones ?? 0;
+                document.getElementById('kothPointsPerSecond').value = r.kothPointsPerSecond ?? 1.0;
+                document.getElementById('enableOddball').checked = r.enableOddball ?? false;
+                document.getElementById('oddballPointsPerSecond').value = r.oddballPointsPerSecond ?? 1.0;
+                document.getElementById('enableVip').checked = r.enableVip ?? false;
+                document.getElementById('enableRandomWeapons').checked = r.enableRandomWeapons ?? false;
+                document.getElementById('randomWeaponInterval').value = r.randomWeaponInterval ?? 30;
+                document.getElementById('obstacleDensity').value = r.obstacleDensity || 'RANDOM';
+                document.getElementById('addWorkshops').checked = r.addWorkshops ?? false;
+                document.getElementById('workshopCraftTime').value = r.workshopCraftTime ?? 10;
+                document.getElementById('workshopCraftRadius').value = r.workshopCraftRadius ?? 80;
+                document.getElementById('maxPowerUpsPerWorkshop').value = r.maxPowerUpsPerWorkshop ?? 3;
+                document.getElementById('enableRandomEvents').checked = r.enableRandomEvents ?? false;
+                document.getElementById('randomEventInterval').value = r.randomEventInterval ?? 40;
+                document.getElementById('eventWarningDuration').value = r.eventWarningDuration ?? 3;
+                document.getElementById('meteorShowerDensity').value = r.meteorShowerDensity || 'DENSE';
+                document.getElementById('supplyDropDensity').value = r.supplyDropDensity || 'SPARSE';
+                document.getElementById('volcanicEruptionDensity').value = r.volcanicEruptionDensity || 'DENSE';
+                document.getElementById('ionStormDensity').value = r.ionStormDensity || 'DENSE';
+                document.getElementById('earthquakeDensity').value = r.earthquakeDensity || 'SPARSE';
+                document.getElementById('blizzardDensity').value = r.blizzardDensity || 'DENSE';
             }
             
             // Update field visibility

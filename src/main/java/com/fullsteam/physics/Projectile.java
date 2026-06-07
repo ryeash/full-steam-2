@@ -17,6 +17,7 @@ public class Projectile extends GameEntity {
     private final int ownerId;
     private final int ownerTeam;
     private final double damage;
+    private final Vector2 initialPosition;
     private double timeToLive;
     private final double linearDamping;
     private final Set<BulletEffect> bulletEffects;
@@ -32,6 +33,7 @@ public class Projectile extends GameEntity {
     public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange,
                       int ownerTeam, double linearDamping, Set<BulletEffect> bulletEffects, Ordinance ordinance) {
         super(Config.nextEntityId(), createProjectileBody(x, y, vx, vy, linearDamping, ordinance, bulletEffects), 1.0);
+        this.initialPosition = new Vector2(x, y);
         this.ownerId = ownerId;
         this.ownerTeam = ownerTeam;
         this.damage = damage;

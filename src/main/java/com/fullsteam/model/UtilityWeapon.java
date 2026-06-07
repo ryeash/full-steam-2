@@ -16,7 +16,7 @@ public enum UtilityWeapon {
             FieldEffectType.SLOW_FIELD, null, 3.5, 75.0, 55.0, 10.0, UtilityCategory.CROWD_CONTROL),
 
     SHIELD_GENERATOR("Shield Generator", "Creates a protective barrier that absorbs damage",
-            FieldEffectType.SHIELD_BARRIER, null, 7.0, 0.0, 75.0, 0.0, UtilityCategory.SUPPORT),
+            FieldEffectType.SHIELD_BARRIER, null, 15.0, 0.0, 75.0, 0.0, UtilityCategory.SUPPORT),
 
     SPEED_BOOST_PAD("Speed Boost Pad", "Creates a zone that increases ally movement speed",
             FieldEffectType.SPEED_BOOST, null, 3.0, 65.0, 50.0, 0.0, UtilityCategory.SUPPORT),

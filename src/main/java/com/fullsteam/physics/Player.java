@@ -226,8 +226,8 @@ public class Player extends GameEntity {
 
             toFire.add(new Projectile(
                     id,
-                    pos.x + ((i > 0) ? ThreadLocalRandom.current().nextDouble(-3, 3) : 0),
-                    pos.y + ((i > 0) ? ThreadLocalRandom.current().nextDouble(-3, 3) : 0),
+                    pos.x + ((i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0),
+                    pos.y + ((i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0),
                     velocity.x,
                     velocity.y,
                     weapon.getDamagePerBullet(),

@@ -13,6 +13,7 @@ import org.dyn4j.world.World;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Defense Laser utility weapon that creates three rotating plasma beams
@@ -31,7 +32,7 @@ public class DefenseLaser extends GameEntity {
 
     // Three rotating beams
     private final List<Beam> beams = new ArrayList<>();
-    private double currentRotation = 0.0;
+    private double currentRotation = ThreadLocalRandom.current().nextDouble(2 * Math.PI);
     private final World<Body> world;
 
     public DefenseLaser(int ownerId, int ownerTeam, Vector2 position, double lifespan, World<Body> world) {
@@ -41,7 +42,7 @@ public class DefenseLaser extends GameEntity {
         this.detectionRange = 300.0;
         this.beamLength = 200.0;
         this.rotationSpeed = Math.PI / 2.0; // 90 degrees per second
-        this.damage = 40.0; // Moderate DOT damage
+        this.damage = 80.0; // Moderate DOT damage
         this.expires = (long) (System.currentTimeMillis() + (lifespan * 1000));
         this.world = world;
 

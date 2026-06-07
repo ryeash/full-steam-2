@@ -427,39 +427,11 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
     private boolean handleProjectileFieldEffectCollision(Projectile projectile, FieldEffect fieldEffect) {
         if (fieldEffect.getType() == FieldEffectType.SHIELD_BARRIER) {
-            // Only stop projectiles that are moving toward the shield center
-            // This allows players inside the shield to fire outward
-            Vector2 projectilePos = projectile.getPosition();
+            Vector2 projectilePos = projectile.getInitialPosition();
             Vector2 shieldCenter = fieldEffect.getPosition();
-            Vector2 projectileVelocity = projectile.getBody().getLinearVelocity();
-
-            // Calculate direction from projectile to shield center
-            Vector2 toShieldCenter = shieldCenter.copy().subtract(projectilePos);
-
-            // Check if projectile is moving toward the shield center
-            // Use dot product: if positive, projectile is moving toward center
-            if (toShieldCenter.getMagnitude() > 0 && projectileVelocity.getMagnitude() > 0) {
-                toShieldCenter.normalize();
-                Vector2 velocityDirection = projectileVelocity.copy();
-                velocityDirection.normalize();
-
-                double dotProduct = toShieldCenter.dot(velocityDirection);
-
-                // Only stop projectile if it's moving toward the shield center (dot product > 0)
-                if (dotProduct > 0) {
-                    projectile.setVelocity(Vector2.create(0, 0));
-                    return false; // Prevent physics resolution
-                }
+            if (shieldCenter.distance(projectilePos) > fieldEffect.getBody().getRotationDiscRadius()) {
+                projectile.setActive(false);
             }
-
-            // Projectile is moving away from shield center, let it pass through
-            return true;
-        } else if (fieldEffect.getType() == FieldEffectType.GRAVITY_WELL) {
-            Vector2 forceDirection = fieldEffect.getPosition()
-                    .subtract(projectile.getPosition())
-                    .getNormalized()
-                    .multiply(10000.0);
-            projectile.getBody().applyForce(forceDirection);
         }
         return true;
     }
@@ -961,7 +933,13 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             if (zone.shouldAwardPoints()) {
                 double points = zone.getPointsPerSecond() * deltaTime;
                 if (points > 0) {
-                    zone.awardPointsToTeam(zone.getControllingTeam(), points);
+                    if (zone.getControllingPlayerId() >= 0) {
+                        // FFA mode: accrue points to the individual player
+                        gameManager.getRuleSystem().awardKothPoints(zone.getControllingPlayerId(), points);
+                    } else {
+                        // Team mode: accrue points to the team bucket on the zone
+                        zone.awardPointsToTeam(zone.getControllingTeam(), points);
+                    }
                 }
             }
             zone.clearPlayers();

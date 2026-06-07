@@ -189,7 +189,7 @@ public class EntitySpawner {
      */
     public void createKothZones() {
         Rules rules = gameConfig.getRules();
-        if (!rules.hasKothZones() || !gameConfig.isTeamMode()) {
+        if (!rules.hasKothZones()) {
             return; // KOTH disabled
         }
 

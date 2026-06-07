@@ -269,7 +269,7 @@ h2::after {
 }
 
 /* === LOBBY BUTTONS === */
-.join-button, #create-buttons button {
+.join-button, #create-buttons > button, #create-buttons .preset-btn-main {
     font-family: 'Exo 2', sans-serif;
     font-size: 1em;
     font-weight: 500;

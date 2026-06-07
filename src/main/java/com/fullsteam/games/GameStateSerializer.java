@@ -37,6 +37,8 @@ import java.util.stream.Collectors;
  */
 public class GameStateSerializer {
 
+    private static final DecimalFormat DOUBLE_SHORTFORM = new DecimalFormat("#.##");
+
     private final GameConfig gameConfig;
     private final GameEntities gameEntities;
     private final RuleSystem ruleSystem;
@@ -76,14 +78,14 @@ public class GameStateSerializer {
         gameState.put("players", createPlayerStates());
 
         // Transient collections — omit when empty to trim the payload
-        putNonEmpty(gameState, "projectiles", createProjectileStates());
-        putNonEmpty(gameState, "fieldEffects", createFieldEffectStates());
-        putNonEmpty(gameState, "turrets", createTurretStates());
-        putNonEmpty(gameState, "nets", createNetStates());
-        putNonEmpty(gameState, "mines", createMineStates());
-        putNonEmpty(gameState, "defenseLasers", createDefenseLaserStates());
-        putNonEmpty(gameState, "beams", createBeamStates());
-        putNonEmpty(gameState, "powerUps", createPowerUpStates());
+        gameState.put("projectiles", createProjectileStates());
+        gameState.put("fieldEffects", createFieldEffectStates());
+        gameState.put("turrets", createTurretStates());
+        gameState.put("nets", createNetStates());
+        gameState.put("mines", createMineStates());
+        gameState.put("defenseLasers", createDefenseLaserStates());
+        gameState.put("beams", createBeamStates());
+        gameState.put("powerUps", createPowerUpStates());
 
         // Add optional game mode states
         if (gameConfig.getRules().hasKothZones()) {
@@ -99,7 +101,7 @@ public class GameStateSerializer {
         }
 
         if (gameConfig.getRules().hasFlags() || gameConfig.getRules().hasOddball()) {
-            putNonEmpty(gameState, "flags", createFlagStates());
+            gameState.put("flags", createFlagStates());
             gameState.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
         }
 
@@ -366,14 +368,6 @@ public class GameStateSerializer {
         return projectileStates;
     }
 
-    /** Add {@code list} to {@code map} only when it is non-empty. */
-    private static void putNonEmpty(Map<String, Object> map, String key, List<?> list) {
-        if (!list.isEmpty()) map.put(key, list);
-    }
-
-    // ========== Obstacle States ==========
-    private static final DecimalFormat DOUBLE_SHORTFORM = new DecimalFormat("#.##");
-
     private List<Map<String, Object>> createObstacleStates() {
         List<Map<String, Object>> obstacleStates = new ArrayList<>();
         for (Obstacle obstacle : gameEntities.getAllObstacles()) {
@@ -639,8 +633,9 @@ public class GameStateSerializer {
             zoneState.put("zoneNumber", zone.getZoneNumber());
             zoneState.put("x", pos.x);
             zoneState.put("y", pos.y);
-            zoneState.put("radius", 80.0); // ZONE_RADIUS from KothZone
+            zoneState.put("radius", zone.getBody().getRotationDiscRadius());
             zoneState.put("controllingTeam", zone.getControllingTeam());
+            zoneState.put("controllingPlayerId", zone.getControllingPlayerId());
             zoneState.put("state", zone.getState().name());
             zoneState.put("captureProgress", zone.getCaptureProgress());
             zoneState.put("playerCount", zone.getTotalPlayerCount());
@@ -674,11 +669,11 @@ public class GameStateSerializer {
         for (Headquarters hq : gameEntities.getAllHeadquarters()) {
             Vector2 pos = hq.getPosition();
             Map<String, Object> hqState = new HashMap<>();
-            hqState.put("id",     hq.getId());
-            hqState.put("type",   "HEADQUARTERS");
-            hqState.put("team",   hq.getTeamNumber());
-            hqState.put("x",      pos.x);
-            hqState.put("y",      pos.y);
+            hqState.put("id", hq.getId());
+            hqState.put("type", "HEADQUARTERS");
+            hqState.put("team", hq.getTeamNumber());
+            hqState.put("x", pos.x);
+            hqState.put("y", pos.y);
             hqState.put("health", hq.healthPercent());
             hqState.put("active", hq.isActive());
             hqState.put("shapes", verticesShorthand(hq.getBody()));
