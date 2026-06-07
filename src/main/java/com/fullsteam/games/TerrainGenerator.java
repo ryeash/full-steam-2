@@ -4,11 +4,8 @@ import com.fullsteam.model.EntityWorldDensity;
 import com.fullsteam.physics.Obstacle;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
-import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.geometry.Vector2;
-import org.dyn4j.world.DetectFilter;
 import org.dyn4j.world.World;
-import org.dyn4j.world.result.DetectResult;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -116,15 +113,12 @@ public class TerrainGenerator {
 
     public void moveToOpenPlace(Body bodyToPlace) {
         Vector2 initialPosition = bodyToPlace.getTransform().getTranslation();
-        List<DetectResult<Body, BodyFixture>> collisions = world.detect(bodyToPlace.createAABB(), bodyToPlace, new DetectFilter<>(true, true, null));
-        for (int i = 0; i < 20 && !collisions.isEmpty(); i++) {
+        boolean isPositionClear = isPositionClear(initialPosition, bodyToPlace.getRotationDiscRadius());
+        for (int i = 0; i < 20 && !isPositionClear; i++) {
             double offsetX = (Math.random() - 0.5) * (2 * bodyToPlace.getRotationDiscRadius());
             double offsetY = (Math.random() - 0.5) * (2 * bodyToPlace.getRotationDiscRadius());
             bodyToPlace.getTransform().setTranslation(initialPosition.copy().add(offsetX, offsetY));
-            collisions = world.detect(bodyToPlace.createAABB(), bodyToPlace, new DetectFilter<>(true, true, null));
-            if (collisions.isEmpty()) {
-                return;
-            }
+            isPositionClear = isPositionClear(initialPosition, bodyToPlace.getRotationDiscRadius());
         }
     }
 
@@ -160,24 +154,5 @@ public class TerrainGenerator {
         }
         // Fallback to center if no clear position found
         return new Vector2(0, 0);
-    }
-
-    /**
-     * Get terrain data for client rendering.
-     */
-    public Map<String, Object> getTerrainData() {
-        Map<String, Object> data = new HashMap<>();
-        List<Map<String, Object>> obstacles = new ArrayList<>();
-        for (Obstacle obstacle : generatedObstacles) {
-            Map<String, Object> obstacleData = new HashMap<>();
-            obstacleData.put("id", obstacle.getId());
-            obstacleData.put("x", obstacle.getPosition().x);
-            obstacleData.put("y", obstacle.getPosition().y);
-            obstacleData.put("radius", obstacle.getBoundingRadius());
-            obstacleData.put("type", obstacle.getType());
-            obstacles.add(obstacleData);
-        }
-        data.put("obstacles", obstacles);
-        return data;
     }
 }

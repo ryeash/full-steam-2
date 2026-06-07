@@ -837,10 +837,6 @@ class GameEngine {
             this.websocket = new WebSocket(wsUrl);
 
             this.websocket.onopen = () => {
-                // No client-initiated configChange here. For non-spectators the
-                // server will send `lobbyInit`; we wait for that and then show
-                // the customization modal. `readyToSpawn` is what spawns the
-                // player.
                 resolve();
             };
 
@@ -872,8 +868,6 @@ class GameEngine {
     }
     
     gameLoop() {
-        this.gameLoopCounter = (this.gameLoopCounter || 0) + 1;
-        
         const deltaTime = this.app.ticker.deltaMS / 1000;
         
         // Update spectator mode if active (spectator handles its own camera)
@@ -1075,13 +1069,9 @@ class GameEngine {
             this.teamMode = data.teamMode || false;
             this.teamCount = data.teamCount || 0;
             this.teamAreas = data.teamAreas || null;
-            this.terrainData = data.terrain || null;
 
             if (data.obstacles) {
                 data.obstacles.forEach(obstacle => this.createObstacle(obstacle));
-            }
-            if (this.terrainData) {
-                this.createProceduralTerrain();
             }
             if (this.teamMode && this.teamAreas) {
                 this.createTeamSpawnAreas();
@@ -1675,18 +1665,18 @@ class GameEngine {
     handleGameEvent(data) {
         this.displayGameEvent(data);
     }
-    
+
     displayGameEvent(event) {
         // Create the event display container if it doesn't exist
         if (!this.eventContainer) {
             this.createEventDisplay();
         }
-        
+
         // Create the event element
         const eventElement = document.createElement('div');
         eventElement.className = 'game-event';
         eventElement.style.color = event.color || '#FFFFFF';
-        
+
         // Parse and render colored text
         // Format: <color:#RRGGBB>Text</color>
         const coloredMessage = this.parseColoredMessage(event.message);
@@ -1695,15 +1685,15 @@ class GameEngine {
         } else {
             eventElement.textContent = event.message;
         }
-        
+
         // Add category-specific styling
         if (event.category) {
             eventElement.classList.add('event-' + event.category.toLowerCase());
         }
-        
+
         // Add to container (prepend so newest events appear at top)
         this.eventContainer.prepend(eventElement);
-        
+
         // Animate in from the right
         eventElement.style.opacity = '0';
         eventElement.style.transform = 'translateX(20px)';
@@ -1712,18 +1702,18 @@ class GameEngine {
             eventElement.style.opacity = '1';
             eventElement.style.transform = 'translateX(0)';
         });
-        
+
         // Auto-remove after display duration (or default 3 seconds)
         const displayDuration = event.displayDuration || 3000;
         this.safeSetTimeout(() => {
             this.removeGameEvent(eventElement);
         }, displayDuration);
-        
+
         // Limit the number of visible events
-        const maxEvents = 6;
+        const maxEvents = 10;
         const events = this.eventContainer.children;
-        if (events.length > maxEvents) {
-            for (let i = maxEvents; i < events.length; i++) {
+        if (events.length > this.maxEvents) {
+            for (let i = this.maxEvents; i < events.length; i++) {
                 this.removeGameEvent(events[i]);
             }
         }
@@ -6918,48 +6908,6 @@ class GameEngine {
             
             this.backgroundContainer.addChild(graphics);
         });
-    }
-    
-    /**
-     * Create simple dark background (terrain features disabled for better visibility).
-     */
-    createProceduralTerrain() {
-        if (!this.terrainData || !this.terrainData.metadata) return;
-        const metadata = this.terrainData.metadata;
-        this.updateBackgroundForTerrain(metadata);
-    }
-    
-    /**
-     * Update background to simple dark color for better visibility.
-     */
-    updateBackgroundForTerrain(metadata) {
-        const darkBackground = 0x1a1a1a; // Dark grey
-        this.app.renderer.backgroundColor = darkBackground;
-        this.createSimpleDarkBackground();
-    }
-    
-    /**
-     * Create simple dark background for better visibility.
-     */
-    createSimpleDarkBackground() {
-        // Properly destroy existing background children to prevent memory leak
-        const childrenToDestroy = [...this.backgroundContainer.children];
-        childrenToDestroy.forEach(child => {
-            if (child.clear && typeof child.clear === 'function') {
-                child.clear();
-            }
-            child.destroy({ children: true, texture: false, baseTexture: false });
-        });
-        this.backgroundContainer.removeChildren();
-        const graphics = new PIXI.Graphics();
-        graphics.rect(
-            -this.worldBounds.width / 2, 
-            -this.worldBounds.height / 2, 
-            this.worldBounds.width, 
-            this.worldBounds.height
-        ).fill(0x1a1a1a); // Dark grey
-        graphics.zIndex = -10; // Far background
-        this.backgroundContainer.addChild(graphics);
     }
     
     /**

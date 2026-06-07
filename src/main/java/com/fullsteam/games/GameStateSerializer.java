@@ -128,25 +128,13 @@ public class GameStateSerializer {
             state.put("teamAreas", teamSpawnManager.getTeamAreaInfo());
         }
 
-        // Add procedural terrain data
-        state.put("terrain", terrainGenerator.getTerrainData());
-
         // Add obstacles
         state.put("obstacles", createObstacleStates());
 
         if (gameConfig.getRules().hasFlags() || gameConfig.getRules().hasOddball()) {
             state.put("flags", createFlagStates());
-            if (gameConfig.getRules().hasFlags()) {
-                state.put("flagsPerTeam", gameConfig.getRules().getFlagsPerTeam());
-            }
             state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
         }
-
-        // Add VIP mode information if enabled
-        if (gameConfig.getRules().hasVip()) {
-            state.put("vipMode", true);
-        }
-
         return state;
     }
 
@@ -177,20 +165,12 @@ public class GameStateSerializer {
         if (teamSpawnManager.isTeamSpawningEnabled()) {
             state.put("teamAreas", teamSpawnManager.getTeamAreaInfo());
         }
-        state.put("terrain", terrainGenerator.getTerrainData());
         state.put("obstacles", createObstacleStates());
 
         if (gameConfig.getRules().hasFlags() || gameConfig.getRules().hasOddball()) {
             state.put("flags", createFlagStates());
-            if (gameConfig.getRules().hasFlags()) {
-                state.put("flagsPerTeam", gameConfig.getRules().getFlagsPerTeam());
-            }
             state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
         }
-        if (gameConfig.getRules().hasVip()) {
-            state.put("vipMode", true);
-        }
-
         return state;
     }
 
@@ -260,23 +240,12 @@ public class GameStateSerializer {
             state.put("teamAreas", teamSpawnManager.getTeamAreaInfo());
         }
 
-        // Add procedural terrain data
-        state.put("terrain", terrainGenerator.getTerrainData());
-
         // Add obstacles
         state.put("obstacles", createObstacleStates());
 
         if (gameConfig.getRules().hasFlags() || gameConfig.getRules().hasOddball()) {
             state.put("flags", createFlagStates());
-            if (gameConfig.getRules().hasFlags()) {
-                state.put("flagsPerTeam", gameConfig.getRules().getFlagsPerTeam());
-            }
             state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
-        }
-
-        // Add VIP mode information if enabled
-        if (gameConfig.getRules().hasVip()) {
-            state.put("vipMode", true);
         }
 
         // Spectator-specific data
