@@ -4,6 +4,7 @@ import com.fullsteam.RandomNames;
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.UtilityWeapon;
+import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
 import lombok.Getter;
@@ -164,14 +165,12 @@ public class AIPlayerManager {
         AIPlayer aiPlayer = new AIPlayer(id, RandomNames.randomName(), x, y, personality, team, maxHealth);
 
         // Assign weapons based on personality
-        com.fullsteam.model.WeaponConfig[] weapons = AIWeaponSelector.selectWeaponLoadoutForPersonality(personality);
+        WeaponConfig weapon = AIWeaponSelector.selectWeaponForPersonality(personality);
         UtilityWeapon utilityWeapon = AIWeaponSelector.selectUtilityWeaponForPersonality(personality);
-        aiPlayer.applyWeaponConfig(weapons[0], utilityWeapon);
-
+        aiPlayer.applyWeaponConfig(weapon, utilityWeapon);
         log.info("Assigned weapons to AI player {} ({}): Primary={}, Utility={}",
                 aiPlayer.getId(), aiPlayer.getPersonality().getPersonalityType(),
-                weapons[0].getType(), utilityWeapon.getDisplayName());
-
+                weapon.getType(), utilityWeapon.getDisplayName());
         return aiPlayer;
     }
 

@@ -183,19 +183,33 @@ class WeaponCustomizer {
     _q(selector) { return this.root.querySelector(selector); }
     _qa(selector) { return this.root.querySelectorAll(selector); }
 
+    /**
+     * Returns the human-readable display string for an attribute's point value.
+     * Most attributes show raw points; BULLETS_PER_SHOT shows the computed
+     * bullet count (1 + pts/5) so players see the actual game value.
+     */
+    _formatAttrValue(key, points) {
+        if (key === 'BULLETS_PER_SHOT') {
+            const bullets = 1 + Math.round(points / 5);
+            return `${bullets} bullet${bullets !== 1 ? 's' : ''}`;
+        }
+        return String(points);
+    }
+
     _createAttributeSliders() {
         const container = this._q('#attribute-sliders');
         container.innerHTML = '';
         Object.entries(this.weaponData.attributes).forEach(([key, attr]) => {
+            const step = key === 'BULLETS_PER_SHOT' ? 'step="5"' : '';
             const sliderDiv = document.createElement('div');
             sliderDiv.className = 'attribute-slider';
             sliderDiv.innerHTML = `
                 <label for="attr-${key}">${attr.displayName}</label>
                 <div class="slider-container">
                     <input type="range" id="attr-${key}" class="slider"
-                           min="${attr.min}" max="${attr.max}" value="0"
+                           min="${attr.min}" max="${attr.max}" value="0" ${step}
                            data-attribute="${key}">
-                    <span class="slider-value" id="value-${key}">0</span>
+                    <span class="slider-value" id="value-${key}">${this._formatAttrValue(key, 0)}</span>
                 </div>
             `;
             container.appendChild(sliderDiv);
@@ -203,7 +217,7 @@ class WeaponCustomizer {
             const valueSpan = sliderDiv.querySelector('.slider-value');
             slider.addEventListener('input', (e) => {
                 const value = parseInt(e.target.value, 10);
-                valueSpan.textContent = value;
+                valueSpan.textContent = this._formatAttrValue(key, value);
                 this.currentWeapon.attributes[key] = value;
                 this._updatePointDisplay();
             });
@@ -308,7 +322,7 @@ class WeaponCustomizer {
 
     _createPresetButtons() {
         const categories = {
-            basic: ['ASSAULT_RIFLE', 'HAND_CANNON', 'SNIPER_RIFLE', 'PLASMA_RIFLE', 'TWIN_SIXES', 'PRECISION_DART_GUN', 'FLAME_PROJECTOR', 'MINIGUN'],
+            basic: ['ASSAULT_RIFLE', 'HAND_CANNON', 'SNIPER_RIFLE', 'PLASMA_RIFLE', 'TWIN_SIXES', 'PRECISION_DART_GUN', 'SHOTGUN', 'MINIGUN'],
             effects: ['BOUNCY_SMG', 'PIERCING_RIFLE', 'INCENDIARY_SHOTGUN', 'SEEKER_DART', 'ARC_PISTOL', 'TOXIC_SPRAYER', 'ICE_CANNON', 'RICOCHET_RIFLE'],
             explosive: ['EXPLOSIVE_SNIPER', 'ROCKET_LAUNCHER', 'GRENADE_LAUNCHER', 'CLUSTER_MORTAR'],
             beam: ['LASER_RIFLE', 'PLASMA_CANNON', 'MEDIC_BEAM', 'RAIL_CANNON'],
@@ -345,12 +359,16 @@ class WeaponCustomizer {
     _applyPreset(preset) {
         this._resetToDefaults();
         Object.entries(preset.attributes).forEach(([key, value]) => {
-            this.currentWeapon.attributes[key] = value;
             const slider = this._q(`#attr-${key}`);
             const valueSpan = this._q(`#value-${key}`);
             if (slider && valueSpan) {
                 slider.value = value;
-                valueSpan.textContent = value;
+                // Read back the snapped value (browser clamps to step)
+                const snapped = parseInt(slider.value, 10);
+                this.currentWeapon.attributes[key] = snapped;
+                valueSpan.textContent = this._formatAttrValue(key, snapped);
+            } else {
+                this.currentWeapon.attributes[key] = value;
             }
         });
         this.currentWeapon.effects = [...preset.effects];
@@ -372,7 +390,7 @@ class WeaponCustomizer {
             const valueSpan = this._q(`#value-${key}`);
             if (slider && valueSpan) {
                 slider.value = 0;
-                valueSpan.textContent = 0;
+                valueSpan.textContent = this._formatAttrValue(key, 0);
             }
         });
         this.weaponData.effects.forEach(effect => {
@@ -488,7 +506,11 @@ class WeaponCustomizer {
             const valueSpan = this._q(`#value-${key}`);
             if (slider && valueSpan) {
                 slider.value = value;
-                valueSpan.textContent = value;
+                // Read back the snapped value so currentWeapon stays consistent
+                // with whatever the browser rounded to (relevant for BULLETS_PER_SHOT step=5)
+                const snapped = parseInt(slider.value, 10);
+                this.currentWeapon.attributes[key] = snapped;
+                valueSpan.textContent = this._formatAttrValue(key, snapped);
             }
         });
         this.weaponData.effects.forEach(effect => {

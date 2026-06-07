@@ -202,19 +202,19 @@ public class WeaponConfig {
     );
 
     // Flamethrower Ordinance Showcase - Short range, area denial
-    public static final WeaponConfig FLAME_PROJECTOR_PRESET = new WeaponConfig(
-            "Flame Projector",
+    public static final WeaponConfig SHOTGUN_PRESET = new WeaponConfig(
+            "Shotgun",
             21,     // Good damage
-            27,     // High fire rate
-            3,      // Very short range
+            1,     // low fire rate
+            10,      // Very short range
             -10,    // Poor accuracy (spread)
-            27,     // Large magazine
+            37,     // Large magazine
             5,      // Fast reload
-            8,      // Medium speed
-            10,     // Multiple streams
-            -5,     // Negative damping for spread
+            21,      // Medium speed
+            25,     // Multiple streams
+            -10,     // Negative damping for spread
             Set.of(),
-            Ordinance.FLAMETHROWER  // 14 points, total: 86 + 14 = 100
+            Ordinance.BULLET  // 14 points, total: 86 + 14 = 100
     );
 
     // Piercing Effect Showcase - Sniper that goes through enemies

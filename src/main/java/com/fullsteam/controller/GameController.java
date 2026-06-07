@@ -17,11 +17,9 @@ import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.Body;
-import io.micronaut.http.annotation.Consumes;
 import io.micronaut.http.annotation.Controller;
 import io.micronaut.http.annotation.Get;
 import io.micronaut.http.annotation.Post;
-import io.micronaut.http.annotation.Produces;
 import io.micronaut.http.exceptions.HttpStatusException;
 import io.micronaut.http.server.types.files.StreamedFile;
 import jakarta.inject.Inject;
@@ -141,7 +139,7 @@ public class GameController {
         // Preset weapons
         Map<String, Map<String, Object>> presets = new HashMap<>();
 
-        // ordinance showcases
+        // basics
         presets.put("ASSAULT_RIFLE", createPresetData(WeaponConfig.ASSAULT_RIFLE_PRESET));
         presets.put("HAND_CANNON", createPresetData(WeaponConfig.HAND_CANNON_PRESET));
         presets.put("SNIPER_RIFLE", createPresetData(WeaponConfig.SNIPER_RIFLE_PRESET));
@@ -149,7 +147,7 @@ public class GameController {
         presets.put("TWIN_SIXES", createPresetData(WeaponConfig.TWIN_SIXES_PRESET));
         presets.put("MINIGUN", createPresetData(WeaponConfig.MINIGUN_PRESET));
         presets.put("PRECISION_DART_GUN", createPresetData(WeaponConfig.PRECISION_DART_GUN_PRESET));
-        presets.put("FLAME_PROJECTOR", createPresetData(WeaponConfig.FLAME_PROJECTOR_PRESET));
+        presets.put("SHOTGUN", createPresetData(WeaponConfig.SHOTGUN_PRESET));
 
         // Explosive weapons (ordinance + effects)
         presets.put("EXPLOSIVE_SNIPER", createPresetData(WeaponConfig.EXPLOSIVE_SNIPER_PRESET));

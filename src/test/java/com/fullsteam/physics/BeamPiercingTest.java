@@ -14,7 +14,7 @@ public class BeamPiercingTest {
 
     @Test
     public void testLaserPiercingBehavior() {
-        Beam laser = new Beam(1, new Vector2(0, 0), new Vector2(1, 0), 100.0, 25.0, 1, 1, Ordinance.LASER, Set.of());
+        Beam laser = new Beam(new Vector2(0, 0), new Vector2(1, 0), 100.0, 25.0, 1, 1, Ordinance.LASER, Set.of());
         
         // Laser should pierce players but not obstacles
         assertTrue(laser.canPiercePlayers(), "Laser should pierce through players");
@@ -23,7 +23,7 @@ public class BeamPiercingTest {
 
     @Test
     public void testRailgunPiercingBehavior() {
-        Beam railgun = new Beam(2, new Vector2(0, 0), new Vector2(1, 0), 100.0, 30.0, 1, 1, Ordinance.RAILGUN, Set.of());
+        Beam railgun = new Beam(new Vector2(0, 0), new Vector2(1, 0), 100.0, 30.0, 1, 1, Ordinance.RAILGUN, Set.of());
         
         // Railgun should pierce everything
         assertTrue(railgun.canPiercePlayers(), "Railgun should pierce through players");
@@ -33,7 +33,7 @@ public class BeamPiercingTest {
 
     @Test
     public void testPlasmaBeamPiercingBehavior() {
-        Beam plasmaBeam = new Beam(4, new Vector2(0, 0), new Vector2(1, 0), 100.0, 20.0, 1, 1, Ordinance.PLASMA_BEAM, Set.of());
+        Beam plasmaBeam = new Beam(new Vector2(0, 0), new Vector2(1, 0), 100.0, 20.0, 1, 1, Ordinance.PLASMA_BEAM, Set.of());
         
         // Plasma beam should pierce players but not obstacles
         assertTrue(plasmaBeam.canPiercePlayers(), "Plasma beam should pierce through players");
@@ -42,7 +42,7 @@ public class BeamPiercingTest {
 
     @Test
     public void testHealBeamPiercingBehavior() {
-        Beam healBeam = new Beam(5, new Vector2(0, 0), new Vector2(1, 0), 100.0, 15.0, 1, 1, Ordinance.HEAL_BEAM, Set.of());
+        Beam healBeam = new Beam(new Vector2(0, 0), new Vector2(1, 0), 100.0, 15.0, 1, 1, Ordinance.HEAL_BEAM, Set.of());
         
         // Heal beam should pierce players to heal multiple teammates, but not obstacles or turrets
         assertTrue(healBeam.canPiercePlayers(), "Heal beam should pierce through players to heal multiple teammates");

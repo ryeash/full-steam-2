@@ -19,12 +19,12 @@ public class AIWeaponSelector {
             WeaponConfig.SNIPER_RIFLE_PRESET,
             WeaponConfig.PLASMA_RIFLE_PRESET,
             WeaponConfig.TWIN_SIXES_PRESET,
+            WeaponConfig.SHOTGUN_PRESET,
             WeaponConfig.MINIGUN_PRESET
     );
 
     private static final List<WeaponConfig> ORDINANCE_WEAPONS = List.of(
-            WeaponConfig.PRECISION_DART_GUN_PRESET,
-            WeaponConfig.FLAME_PROJECTOR_PRESET
+            WeaponConfig.PRECISION_DART_GUN_PRESET
     );
 
     private static final List<WeaponConfig> EFFECT_WEAPONS = List.of(
@@ -55,7 +55,7 @@ public class AIWeaponSelector {
 
             // Ordinance weapons
             WeaponConfig.PRECISION_DART_GUN_PRESET,
-            WeaponConfig.FLAME_PROJECTOR_PRESET,
+            WeaponConfig.SHOTGUN_PRESET,
 
             // Effect weapons
             WeaponConfig.BOUNCY_SMG_PRESET,
@@ -106,7 +106,7 @@ public class AIWeaponSelector {
     public static WeaponConfig selectRandomWeapon() {
         return ALL_WEAPONS.get(ThreadLocalRandom.current().nextInt(ALL_WEAPONS.size()));
     }
-    
+
     /**
      * Select a random weapon preset excluding healing weapons.
      * Used for random weapon rotation mode where healing weapons should not be assigned.
@@ -172,7 +172,7 @@ public class AIWeaponSelector {
                         WeaponConfig.MINIGUN_PRESET,
                         WeaponConfig.BOUNCY_SMG_PRESET,
                         WeaponConfig.INCENDIARY_SHOTGUN_PRESET,
-                        WeaponConfig.FLAME_PROJECTOR_PRESET,
+                        WeaponConfig.SHOTGUN_PRESET,
                         WeaponConfig.ARC_PISTOL_PRESET,
                         WeaponConfig.ASSAULT_RIFLE_PRESET,
                         WeaponConfig.TWIN_SIXES_PRESET,
@@ -248,7 +248,7 @@ public class AIWeaponSelector {
                     List<WeaponConfig> guardianWeapons = List.of(
                             WeaponConfig.TOXIC_SPRAYER_PRESET,
                             WeaponConfig.ICE_CANNON_PRESET,
-                            WeaponConfig.FLAME_PROJECTOR_PRESET
+                            WeaponConfig.SHOTGUN_PRESET
                     );
                     return guardianWeapons.get(random.nextInt(guardianWeapons.size()));
                 } else {
@@ -290,109 +290,6 @@ public class AIWeaponSelector {
         } while (primary.equals(secondary) && attempts < maxAttempts);
 
         return new WeaponConfig[]{primary, secondary};
-    }
-
-    /**
-     * Select weapons for a personality with diverse loadout.
-     *
-     * @param personality The AI personality
-     * @return Array with [primary, secondary] weapon configs
-     */
-    public static WeaponConfig[] selectWeaponLoadoutForPersonality(AIPersonality personality) {
-        WeaponConfig primary = selectWeaponForPersonality(personality);
-
-        // For secondary, either pick complementary weapon or random
-        WeaponConfig secondary;
-        if (ThreadLocalRandom.current().nextDouble() < 0.3) {
-            // 30% chance to pick a complementary weapon type
-            secondary = selectComplementaryWeapon(primary);
-        } else {
-            // 70% chance to pick any other weapon
-            secondary = selectRandomWeapon();
-            // Ensure they're different
-            if (primary.equals(secondary)) {
-                secondary = selectRandomWeapon();
-            }
-        }
-
-        return new WeaponConfig[]{primary, secondary};
-    }
-
-    /**
-     * Select a weapon that complements the given primary weapon.
-     *
-     * @param primary The primary weapon
-     * @return A complementary secondary weapon
-     */
-    private static WeaponConfig selectComplementaryWeapon(WeaponConfig primary) {
-        ThreadLocalRandom random = ThreadLocalRandom.current();
-
-        // If primary is long-range, pick short-range secondary
-        if (isLongRangeWeapon(primary)) {
-            List<WeaponConfig> shortRange = List.of(
-                    WeaponConfig.INCENDIARY_SHOTGUN_PRESET,
-                    WeaponConfig.FLAME_PROJECTOR_PRESET,
-                    WeaponConfig.TOXIC_SPRAYER_PRESET,
-                    WeaponConfig.BOUNCY_SMG_PRESET,
-                    WeaponConfig.ARC_PISTOL_PRESET,
-                    WeaponConfig.TWIN_SIXES_PRESET,
-                    // Combo short-range weapons
-                    WeaponConfig.CRYO_SHOTGUN_PRESET,
-                    WeaponConfig.WILDFIRE_SPRAYER_PRESET,
-                    WeaponConfig.STORM_CALLER_PRESET
-            );
-            return shortRange.get(random.nextInt(shortRange.size()));
-        }
-
-        // If primary is short-range, pick long-range secondary
-        if (isShortRangeWeapon(primary)) {
-            List<WeaponConfig> longRange = List.of(
-                    WeaponConfig.PIERCING_RIFLE_PRESET,
-                    WeaponConfig.EXPLOSIVE_SNIPER_PRESET,
-                    WeaponConfig.PRECISION_DART_GUN_PRESET,
-                    WeaponConfig.LASER_RIFLE_PRESET,
-                    WeaponConfig.RAIL_CANNON_PRESET,
-                    WeaponConfig.VENOM_NEEDLER_PRESET,
-                    WeaponConfig.FROST_LANCE_PRESET,
-                    WeaponConfig.RICOCHET_RIFLE_PRESET,
-                    WeaponConfig.THUNDERBOLT_CANNON_PRESET
-            );
-            return longRange.get(random.nextInt(longRange.size()));
-        }
-
-        // For medium-range weapons, pick anything different
-        return selectRandomWeapon();
-    }
-
-    private static boolean isLongRangeWeapon(WeaponConfig weapon) {
-        // Beam weapons are effectively long-range (instant hit)
-        if (isBeamWeapon(weapon)) {
-            return true;
-        }
-        return weapon.range >= 15 || weapon == WeaponConfig.PIERCING_RIFLE_PRESET
-               || weapon == WeaponConfig.EXPLOSIVE_SNIPER_PRESET
-               || weapon == WeaponConfig.SNIPER_RIFLE_PRESET;
-    }
-
-    private static boolean isShortRangeWeapon(WeaponConfig weapon) {
-        // Medic beam is medium range, not short
-        if (weapon == WeaponConfig.MEDIC_BEAM_PRESET) {
-            return false;
-        }
-        return weapon.range <= 6 || weapon == WeaponConfig.INCENDIARY_SHOTGUN_PRESET
-               || weapon == WeaponConfig.FLAME_PROJECTOR_PRESET
-               || weapon == WeaponConfig.TOXIC_SPRAYER_PRESET
-               || weapon == WeaponConfig.TWIN_SIXES_PRESET
-               || weapon == WeaponConfig.CRYO_SHOTGUN_PRESET
-               || weapon == WeaponConfig.MINIGUN_PRESET
-               || weapon == WeaponConfig.WILDFIRE_SPRAYER_PRESET;
-    }
-
-    private static boolean isBeamWeapon(WeaponConfig weapon) {
-        return weapon == WeaponConfig.LASER_RIFLE_PRESET
-               || weapon == WeaponConfig.PLASMA_CANNON_PRESET
-               || weapon == WeaponConfig.RAIL_CANNON_PRESET
-               || weapon == WeaponConfig.MEDIC_BEAM_PRESET;
     }
 
     /**
