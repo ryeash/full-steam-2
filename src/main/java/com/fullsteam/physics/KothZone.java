@@ -1,5 +1,6 @@
 package com.fullsteam.physics;
 
+import com.fullsteam.Config;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.dyn4j.dynamics.Body;
@@ -19,7 +20,16 @@ import java.util.Set;
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class KothZone extends GameEntity {
-    private static final double ZONE_RADIUS = 80.0; // Large enough for multiple players
+    /**
+     * Zone state enum
+     */
+    public enum ZoneState {
+        NEUTRAL,      // No team controls the zone
+        CONTROLLED,   // A team controls the zone (has majority)
+        CONTESTED     // Multiple teams fighting for control (tied)
+    }
+
+    private static final double ZONE_RADIUS = Config.PLAYER_RADIUS * 6; // Large enough for multiple players
 
     private final int zoneNumber; // 0-3 for up to 4 zones
     private final Vector2 homePosition; // Fixed position
@@ -30,10 +40,6 @@ public class KothZone extends GameEntity {
     private int controllingPlayerId = -1; // used in FFA mode instead of controllingTeam
     private ZoneState state = ZoneState.NEUTRAL;
 
-    /**
-     * -- GETTER --
-     * Get the players currently in the zone.
-     */
     // Player tracking
     private Set<Player> playersInZone = new HashSet<>();
     private final Map<Integer, Double> teamScores = new HashMap<>(); // teamNumber -> total points earned
@@ -163,14 +169,5 @@ public class KothZone extends GameEntity {
      */
     public Map<Integer, Double> getAllTeamScores() {
         return new HashMap<>(teamScores);
-    }
-
-    /**
-     * Zone state enum
-     */
-    public enum ZoneState {
-        NEUTRAL,      // No team controls the zone
-        CONTROLLED,   // A team controls the zone (has majority)
-        CONTESTED     // Multiple teams fighting for control (tied)
     }
 }

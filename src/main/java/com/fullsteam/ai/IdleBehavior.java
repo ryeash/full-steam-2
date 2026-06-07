@@ -1,6 +1,7 @@
 package com.fullsteam.ai;
 
 import com.fullsteam.model.PlayerInput;
+import com.fullsteam.model.UtilityCategory;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
@@ -300,7 +301,7 @@ public class IdleBehavior implements AIBehavior {
         }
         
         // Defensive personalities use defensive utilities more often
-        if (utility.getCategory() == UtilityWeapon.UtilityCategory.DEFENSIVE && 
+        if (utility.getCategory() == UtilityCategory.DEFENSIVE &&
             aiPlayer.getPersonality().getAggressiveness() < 0.4) {
             personalityMultiplier += 0.3;
         }
