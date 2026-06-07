@@ -1667,18 +1667,20 @@ class GameEngine {
     }
 
     displayGameEvent(event) {
-        // Create the event display container if it doesn't exist
         if (!this.eventContainer) {
             this.createEventDisplay();
         }
 
-        // Create the event element
         const eventElement = document.createElement('div');
         eventElement.className = 'game-event';
-        eventElement.style.color = event.color || '#FFFFFF';
 
-        // Parse and render colored text
-        // Format: <color:#RRGGBB>Text</color>
+        // Overall colour hint (may be overridden by colored-text spans inside)
+        if (event.color) eventElement.style.color = event.color;
+
+        if (event.category) {
+            eventElement.classList.add('event-' + event.category.toLowerCase());
+        }
+
         const coloredMessage = this.parseColoredMessage(event.message);
         if (coloredMessage) {
             eventElement.innerHTML = coloredMessage;
@@ -1686,36 +1688,16 @@ class GameEngine {
             eventElement.textContent = event.message;
         }
 
-        // Add category-specific styling
-        if (event.category) {
-            eventElement.classList.add('event-' + event.category.toLowerCase());
-        }
-
-        // Add to container (prepend so newest events appear at top)
         this.eventContainer.prepend(eventElement);
 
-        // Animate in from the right
-        eventElement.style.opacity = '0';
-        eventElement.style.transform = 'translateX(20px)';
-        requestAnimationFrame(() => {
-            eventElement.style.transition = 'all 0.3s ease-out';
-            eventElement.style.opacity = '1';
-            eventElement.style.transform = 'translateX(0)';
-        });
-
-        // Auto-remove after display duration (or default 3 seconds)
+        // Auto-remove after display duration
         const displayDuration = event.displayDuration || 3000;
-        this.safeSetTimeout(() => {
-            this.removeGameEvent(eventElement);
-        }, displayDuration);
+        this.safeSetTimeout(() => this.removeGameEvent(eventElement), displayDuration);
 
-        // Limit the number of visible events
-        const maxEvents = 10;
-        const events = this.eventContainer.children;
-        if (events.length > this.maxEvents) {
-            for (let i = this.maxEvents; i < events.length; i++) {
-                this.removeGameEvent(events[i]);
-            }
+        // Cap visible events (CSS animation plays on the evicted items too)
+        const MAX_EVENTS = 10;
+        while (this.eventContainer.children.length > MAX_EVENTS) {
+            this.removeGameEvent(this.eventContainer.lastElementChild);
         }
     }
     
@@ -1744,90 +1726,17 @@ class GameEngine {
     }
     
     createEventDisplay() {
-        // Create the event container
+        // All layout and styling lives in unified.css (#game-events, .game-event, etc.)
         this.eventContainer = document.createElement('div');
         this.eventContainer.id = 'game-events';
-        this.eventContainer.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 380px;
-            max-width: 35vw;
-            z-index: 1000;
-            pointer-events: none;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-        `;
-        
         document.body.appendChild(this.eventContainer);
-        
-        // Add CSS styles for events (only once — survives reconnects)
-        if (!document.getElementById('game-event-styles')) {
-            const style = document.createElement('style');
-            style.id = 'game-event-styles';
-            style.textContent = `
-                .game-event {
-                    background: rgba(0, 0, 0, 0.85);
-                    border: 1px solid rgba(255, 255, 255, 0.3);
-                    border-radius: 4px;
-                    padding: 6px 10px;
-                    margin-bottom: 4px;
-                    font-weight: 500;
-                    text-align: left;
-                    font-size: 12px;
-                    line-height: 1.3;
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-                    backdrop-filter: blur(3px);
-                    -webkit-backdrop-filter: blur(3px);
-                    max-width: 100%;
-                    word-wrap: break-word;
-                }
-                
-                .game-event.event-kill {
-                    border-left: 3px solid #FF4444;
-                    border-color: rgba(255, 68, 68, 0.6);
-                }
-                
-                .game-event.event-capture {
-                    border-left: 3px solid #00FF88;
-                    border-color: rgba(0, 255, 136, 0.6);
-                }
-                
-                .game-event.event-system {
-                    border-left: 3px solid #FFAA00;
-                    border-color: rgba(255, 170, 0, 0.6);
-                }
-                
-                .game-event.event-achievement {
-                    border-left: 3px solid #FFD700;
-                    border-color: rgba(255, 215, 0, 0.6);
-                    background: linear-gradient(135deg, rgba(255, 215, 0, 0.05), rgba(0, 0, 0, 0.85));
-                }
-                
-                .game-event.event-warning {
-                    border-left: 3px solid #FF8800;
-                    border-color: rgba(255, 136, 0, 0.6);
-                }
-                
-                .game-event.event-info {
-                    border-left: 3px solid #00AAFF;
-                    border-color: rgba(0, 170, 255, 0.6);
-                }
-            `;
-            document.head.appendChild(style);
-        }
     }
     
     removeGameEvent(eventElement) {
-        if (eventElement && eventElement.parentNode) {
-            eventElement.style.transition = 'all 0.3s ease-in';
-            eventElement.style.opacity = '0';
-            eventElement.style.transform = 'translateX(30px) scale(0.95)';
-            this.safeSetTimeout(() => {
-                if (eventElement.parentNode) {
-                    eventElement.parentNode.removeChild(eventElement);
-                }
-            }, 300);
-        }
+        if (!eventElement?.parentNode) return;
+        // CSS animation (.removing keyframe) plays the exit; remove from DOM after it finishes
+        eventElement.classList.add('removing');
+        this.safeSetTimeout(() => eventElement.parentNode?.removeChild(eventElement), 300);
     }
     
     /**
@@ -1848,271 +1757,152 @@ class GameEngine {
      * Show round end screen with scores
      */
     showRoundEndScreen(data) {
-        // Create or get round end overlay
         let overlay = document.getElementById('round-end-overlay');
         if (!overlay) {
             overlay = document.createElement('div');
             overlay.id = 'round-end-overlay';
-            overlay.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0, 0, 0, 0.85);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 10000;
-                backdrop-filter: blur(8px);
-                -webkit-backdrop-filter: blur(8px);
-            `;
             document.body.appendChild(overlay);
         }
-        
-        // Create content container
+
         const content = document.createElement('div');
-        content.style.cssText = `
-            background: linear-gradient(135deg, rgba(20, 20, 30, 0.95), rgba(40, 40, 60, 0.95));
-            border: 2px solid rgba(255, 170, 0, 0.6);
-            border-radius: 12px;
-            padding: 40px;
-            max-width: 800px;
-            width: 90%;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-        `;
-        
-        // Title
+        content.className = 'round-end-content';
+
         const title = document.createElement('h1');
+        title.className = 'round-end-title';
         title.textContent = `ROUND ${data.round} COMPLETE`;
-        title.style.cssText = `
-            color: #ffaa00;
-            text-align: center;
-            margin: 0 0 30px 0;
-            font-size: 36px;
-            text-shadow: 0 2px 10px rgba(255, 170, 0, 0.5);
-        `;
         content.appendChild(title);
-        
-        // Scores
-        if (data.scores && data.scores.length > 0) {
+
+        if (data.scores?.length > 0) {
             const scoresContainer = document.createElement('div');
-            scoresContainer.style.cssText = `
-                background: rgba(0, 0, 0, 0.3);
-                border-radius: 8px;
-                padding: 20px;
-                margin-bottom: 20px;
-            `;
-            
-            // Group by team if team mode
-            const hasTeams = data.scores.some(score => score.team > 0);
-            
+            scoresContainer.className = 'scores-container';
+
+            const hasTeams = data.scores.some(s => s.team > 0);
+
             if (hasTeams) {
-                // Team-based display
                 const teams = {};
                 const teamTotals = {};
-                
-                // Group players by team and calculate team totals
                 data.scores.forEach(score => {
-                    const teamNum = score.team || 0;
-                    if (!teams[teamNum]) {
-                        teams[teamNum] = [];
-                        teamTotals[teamNum] = { kills: 0, deaths: 0, captures: 0, bonusPoints: 0 };
+                    const t = score.team || 0;
+                    if (!teams[t]) {
+                        teams[t] = [];
+                        teamTotals[t] = { kills: 0, deaths: 0, captures: 0 };
                     }
-                    teams[teamNum].push(score);
-                    teamTotals[teamNum].kills += score.kills || 0;
-                    teamTotals[teamNum].deaths += score.deaths || 0;
-                    teamTotals[teamNum].captures += score.captures || 0;
-                    teamTotals[teamNum].bonusPoints += score.bonusPoints || 0;
+                    teams[t].push(score);
+                    teamTotals[t].kills   += score.kills   || 0;
+                    teamTotals[t].deaths  += score.deaths  || 0;
+                    teamTotals[t].captures += score.captures || 0;
                 });
-                
-                // Sort teams by total kills (descending) - winning team first
-                const sortedTeams = Object.entries(teams).sort((a, b) => {
-                    const teamA = parseInt(a[0]);
-                    const teamB = parseInt(b[0]);
-                    // No team (0) always goes last
-                    if (teamA === 0) return 1;
-                    if (teamB === 0) return -1;
-                    return teamTotals[teamB].kills - teamTotals[teamA].kills;
+
+                const sortedTeams = Object.entries(teams).sort(([a], [b]) => {
+                    const ta = parseInt(a), tb = parseInt(b);
+                    if (ta === 0) return 1;
+                    if (tb === 0) return -1;
+                    return teamTotals[b].kills - teamTotals[a].kills;
                 });
-                
+
                 sortedTeams.forEach(([teamNum, players]) => {
                     const teamNumInt = parseInt(teamNum);
                     const totals = teamTotals[teamNum];
-                    
-                    // Team header with totals
+                    const teamColor = this.getTeamColorCSS(teamNumInt);
+
                     const teamHeader = document.createElement('div');
-                    teamHeader.style.cssText = `
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        margin: 15px 0 10px 0;
-                        padding: 10px 15px;
-                        background: rgba(255, 255, 255, 0.05);
-                        border-radius: 6px;
-                        border-left: 4px solid ${this.getTeamColorCSS(teamNumInt)};
-                    `;
-                    
+                    teamHeader.className = 'team-header';
+                    teamHeader.style.borderLeftColor = teamColor;
+
                     const teamName = document.createElement('h3');
+                    teamName.className = 'team-header-name';
+                    teamName.style.color = teamColor;
                     teamName.textContent = teamNum == 0 ? 'No Team' : `Team ${teamNum}`;
-                    teamName.style.cssText = `
-                        color: ${this.getTeamColorCSS(teamNumInt)};
-                        margin: 0;
-                        font-size: 22px;
-                        font-weight: bold;
-                    `;
-                    
+
                     const teamStats = document.createElement('div');
-                    teamStats.style.cssText = `
-                        display: flex;
-                        gap: 20px;
-                        color: #cccccc;
-                        font-size: 16px;
-                        font-weight: bold;
-                    `;
-                    
-                    const teamKills = document.createElement('span');
-                    teamKills.style.color = '#4ade80';
-                    teamKills.textContent = `${totals.kills} K`;
-                    
-                    const teamDeaths = document.createElement('span');
-                    teamDeaths.style.color = '#f87171';
-                    teamDeaths.textContent = `${totals.deaths} D`;
-                    
-                    const teamKD = document.createElement('span');
-                    teamKD.style.color = '#fbbf24';
-                    teamKD.textContent = `${(totals.kills / Math.max(1, totals.deaths)).toFixed(2)} K/D`;
-                    
-                    teamStats.appendChild(teamKills);
-                    teamStats.appendChild(teamDeaths);
-                    
+                    teamStats.className = 'team-header-stats';
+
+                    const kEl = document.createElement('span');
+                    kEl.className = 'stat-kills';
+                    kEl.textContent = `${totals.kills} K`;
+
+                    const dEl = document.createElement('span');
+                    dEl.className = 'stat-deaths';
+                    dEl.textContent = `${totals.deaths} D`;
+
+                    const kdEl = document.createElement('span');
+                    kdEl.className = 'stat-kd';
+                    kdEl.textContent = `${(totals.kills / Math.max(1, totals.deaths)).toFixed(2)} K/D`;
+
+                    teamStats.append(kEl, dEl);
                     if (totals.captures > 0) {
-                        const teamCaptures = document.createElement('span');
-                        teamCaptures.style.color = '#FFD700';
-                        teamCaptures.textContent = `${totals.captures} 🚩`;
-                        teamStats.appendChild(teamCaptures);
+                        const cEl = document.createElement('span');
+                        cEl.className = 'stat-captures';
+                        cEl.textContent = `${totals.captures} 🚩`;
+                        teamStats.appendChild(cEl);
                     }
-                    
-                    teamStats.appendChild(teamKD);
-                    
-                    teamHeader.appendChild(teamName);
-                    teamHeader.appendChild(teamStats);
+                    teamStats.appendChild(kdEl);
+
+                    teamHeader.append(teamName, teamStats);
                     scoresContainer.appendChild(teamHeader);
-                    
-                    // Sort players within team by kills (descending)
-                    const sortedPlayers = [...players].sort((a, b) => (b.kills || 0) - (a.kills || 0));
-                    
-                    sortedPlayers.forEach(score => {
-                        scoresContainer.appendChild(this.createScoreRow(score));
-                    });
+
+                    [...players]
+                        .sort((a, b) => (b.kills || 0) - (a.kills || 0))
+                        .forEach(score => scoresContainer.appendChild(this.createScoreRow(score)));
                 });
             } else {
-                // FFA display - sort by kills with winner first
-                const sortedScores = [...data.scores].sort((a, b) => (b.kills || 0) - (a.kills || 0));
-                
-                sortedScores.forEach((score, index) => {
-                    scoresContainer.appendChild(this.createScoreRow(score, index + 1));
-                });
+                [...data.scores]
+                    .sort((a, b) => (b.kills || 0) - (a.kills || 0))
+                    .forEach((score, i) => scoresContainer.appendChild(this.createScoreRow(score, i + 1)));
             }
-            
+
             content.appendChild(scoresContainer);
         }
-        
-        // Next round info
+
         const nextRoundText = document.createElement('p');
-        nextRoundText.textContent = `Next round starts in ${Math.ceil(data.restDuration)} seconds...`;
-        nextRoundText.style.cssText = `
-            color: #ffaa00;
-            text-align: center;
-            font-size: 18px;
-            margin: 20px 0 0 0;
-            animation: pulse 2s ease-in-out infinite;
-        `;
+        nextRoundText.className = 'next-round-text';
+        nextRoundText.textContent = `Next round starts in ${Math.ceil(data.restDuration)} seconds…`;
         content.appendChild(nextRoundText);
-        
-        // Add pulse animation
-        if (!document.getElementById('round-end-styles')) {
-            const style = document.createElement('style');
-            style.id = 'round-end-styles';
-            style.textContent = `
-                @keyframes pulse {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0.6; }
-                }
-            `;
-            document.head.appendChild(style);
-        }
-        
+
         overlay.innerHTML = '';
         overlay.appendChild(content);
-        overlay.style.display = 'flex';
+        overlay.classList.add('visible');
     }
     
     /**
-     * Create a score row for a player
+     * Create a score row for a player (round-end scoreboard)
      */
     createScoreRow(score, rank = null) {
         const isLocalPlayer = score.playerId === this.myPlayerId;
-        
+
         const row = document.createElement('div');
-        row.style.cssText = `
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 15px;
-            margin: 5px 0;
-            background: ${isLocalPlayer ? 'rgba(255, 215, 0, 0.2)' : 'rgba(255, 255, 255, 0.05)'};
-            border-radius: 6px;
-            border-left: 3px solid ${this.getTeamColorCSS(score.team)};
-            ${isLocalPlayer ? 'box-shadow: 0 0 15px rgba(255, 215, 0, 0.4); border: 2px solid rgba(255, 215, 0, 0.6);' : ''}
-        `;
-        
+        row.className = 'score-row' + (isLocalPlayer ? ' local-player' : '');
+        row.style.borderLeftColor = this.getTeamColorCSS(score.team);
+
         const nameSection = document.createElement('div');
-        nameSection.style.cssText = `
-            flex: 1;
-            color: ${isLocalPlayer ? '#FFD700' : '#ffffff'};
-            font-size: 16px;
-            font-weight: bold;
-        `;
+        nameSection.className = 'score-row-name';
+        nameSection.style.color = isLocalPlayer ? '#FFD700' : '#ffffff';
         nameSection.textContent = (rank ? `#${rank} ` : '') + score.playerName;
-        
+
         const stats = document.createElement('div');
-        stats.style.cssText = `
-            display: flex;
-            gap: 20px;
-            color: #cccccc;
-            font-size: 14px;
-        `;
-        
+        stats.className = 'score-row-stats';
+
         const kills = document.createElement('span');
-        kills.style.color = '#4ade80';
+        kills.className = 'stat-kills';
         kills.textContent = `${score.kills || 0} K`;
-        
+
         const deaths = document.createElement('span');
-        deaths.style.color = '#f87171';
+        deaths.className = 'stat-deaths';
         deaths.textContent = `${score.deaths || 0} D`;
-        
-        // Add captures if player has any
-        if (score.captures && score.captures > 0) {
+
+        if (score.captures > 0) {
             const captures = document.createElement('span');
-            captures.style.color = '#FFD700';
-            captures.textContent = `${score.captures || 0} 🚩`;
+            captures.className = 'stat-captures';
+            captures.textContent = `${score.captures} 🚩`;
             stats.appendChild(captures);
         }
-        
+
         const kd = document.createElement('span');
-        kd.style.color = '#fbbf24';
-        kd.textContent = `${((score.kills || 0) / Math.max(1, (score.deaths || 0))).toFixed(2)} K/D`;
-        
-        stats.appendChild(kills);
-        stats.appendChild(deaths);
-        stats.appendChild(kd);
-        
-        row.appendChild(nameSection);
-        row.appendChild(stats);
-        
+        kd.className = 'stat-kd';
+        kd.textContent = `${((score.kills || 0) / Math.max(1, score.deaths || 0)).toFixed(2)} K/D`;
+
+        stats.append(kills, deaths, kd);
+        row.append(nameSection, stats);
         return row;
     }
     
@@ -2120,163 +1910,73 @@ class GameEngine {
      * Hide round end screen
      */
     hideRoundEndScreen() {
-        const overlay = document.getElementById('round-end-overlay');
-        if (overlay) {
-            overlay.style.display = 'none';
-        }
+        document.getElementById('round-end-overlay')?.classList.remove('visible');
     }
     
     /**
      * Show game over screen with final results
      */
     showGameOverScreen(data) {
-        // Create or get game over overlay
         let overlay = document.getElementById('game-over-overlay');
         if (!overlay) {
             overlay = document.createElement('div');
             overlay.id = 'game-over-overlay';
-            overlay.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0, 0, 0, 0.9);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 20000;
-                backdrop-filter: blur(10px);
-                -webkit-backdrop-filter: blur(10px);
-            `;
             document.body.appendChild(overlay);
         }
-        
-        // Create content container
+
         const content = document.createElement('div');
-        content.style.cssText = `
-            background: linear-gradient(135deg, rgba(30, 30, 40, 0.98), rgba(50, 50, 70, 0.98));
-            border: 3px solid #FFD700;
-            border-radius: 15px;
-            padding: 50px;
-            max-width: 900px;
-            width: 90%;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(255, 215, 0, 0.3);
-            text-align: center;
-        `;
-        
-        // Victory title
+        content.className = 'game-over-content';
+
         const title = document.createElement('h1');
+        title.className = 'game-over-title';
         title.textContent = '🏆 GAME OVER';
-        title.style.cssText = `
-            color: #FFD700;
-            font-size: 48px;
-            margin: 0 0 20px 0;
-            text-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
-            animation: pulse 2s ease-in-out infinite;
-        `;
         content.appendChild(title);
-        
-        // Victory message
+
         const message = document.createElement('p');
+        message.className = 'game-over-message';
         message.textContent = data.message || 'The battle has ended!';
-        message.style.cssText = `
-            color: #ffffff;
-            font-size: 24px;
-            margin: 20px 0 40px 0;
-            font-weight: bold;
-        `;
         content.appendChild(message);
-        
-        // Victory condition info
+
         const vcInfo = document.createElement('p');
-        const vcName = this.getVictoryConditionName(data.victoryCondition);
-        vcInfo.textContent = `Victory Condition: ${vcName}`;
-        vcInfo.style.cssText = `
-            color: #aaa;
-            font-size: 16px;
-            margin: 0 0 30px 0;
-        `;
+        vcInfo.className = 'game-over-vc-info';
+        vcInfo.textContent = `Victory Condition: ${this.getVictoryConditionName(data.victoryCondition)}`;
         content.appendChild(vcInfo);
-        
-        // Final scores
-        if (data.finalScores && data.finalScores.length > 0) {
+
+        if (data.finalScores?.length > 0) {
             const scoresTitle = document.createElement('h2');
+            scoresTitle.className = 'final-scores-title';
             scoresTitle.textContent = 'Final Scores';
-            scoresTitle.style.cssText = `
-                color: #FFD700;
-                font-size: 28px;
-                margin: 30px 0 20px 0;
-            `;
             content.appendChild(scoresTitle);
-            
+
             const scoresContainer = document.createElement('div');
-            scoresContainer.style.cssText = `
-                background: rgba(0, 0, 0, 0.4);
-                border-radius: 10px;
-                padding: 20px;
-                margin: 20px 0;
-            `;
-            
-            // Sort scores - in ELIMINATION mode, use placement; otherwise use score
+            scoresContainer.className = 'final-scores-container';
+
             const isEliminationMode = data.victoryCondition === 'ELIMINATION';
             const sortedScores = [...data.finalScores].sort((a, b) => {
                 if (isEliminationMode && a.placement && b.placement) {
-                    // Sort by placement (lower is better: 1st < 2nd < 3rd)
-                    if (a.placement !== b.placement) {
-                        return a.placement - b.placement;
-                    }
-                    // If placement is same, sort by kills
-                    if (b.kills !== a.kills) {
-                        return b.kills - a.kills;
-                    }
-                    // If kills are same, sort by elimination time (later is better)
+                    if (a.placement !== b.placement) return a.placement - b.placement;
+                    if (b.kills !== a.kills) return b.kills - a.kills;
                     return b.eliminationTime - a.eliminationTime;
                 }
-                // Default: sort by score
                 return b.score - a.score;
             });
-            
+
             sortedScores.forEach((score, index) => {
-                const scoreRow = this.createFinalScoreRow(score, index + 1, data, isEliminationMode);
-                scoresContainer.appendChild(scoreRow);
+                scoresContainer.appendChild(this.createFinalScoreRow(score, index + 1, data, isEliminationMode));
             });
-            
+
             content.appendChild(scoresContainer);
         }
-        
-        // Return to lobby button
+
         const lobbyButton = document.createElement('button');
+        lobbyButton.className = 'lobby-button';
         lobbyButton.textContent = '← Return to Lobby';
-        lobbyButton.style.cssText = `
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            padding: 15px 40px;
-            font-size: 18px;
-            border-radius: 8px;
-            cursor: pointer;
-            margin-top: 30px;
-            transition: transform 0.2s, box-shadow 0.2s;
-        `;
-        lobbyButton.onmouseover = () => {
-            lobbyButton.style.transform = 'scale(1.05)';
-            lobbyButton.style.boxShadow = '0 5px 20px rgba(102, 126, 234, 0.4)';
-        };
-        lobbyButton.onmouseout = () => {
-            lobbyButton.style.transform = 'scale(1)';
-            lobbyButton.style.boxShadow = 'none';
-        };
-        lobbyButton.onclick = () => {
-            window.location.href = '/lobby.html';
-        };
+        lobbyButton.onclick = () => { window.location.href = '/lobby.html'; };
         content.appendChild(lobbyButton);
-        
+
         overlay.innerHTML = '';
         overlay.appendChild(content);
-        overlay.style.display = 'flex';
+        overlay.classList.add('visible');
     }
     
     /**
@@ -2284,40 +1984,25 @@ class GameEngine {
      */
     createFinalScoreRow(score, rank, gameOverData, isEliminationMode = false) {
         const isLocalPlayer = score.playerId === this.myPlayerId;
-        
-        const row = document.createElement('div');
-        row.style.cssText = `
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 20px;
-            margin: 8px 0;
-            background: ${isLocalPlayer ? 'rgba(255, 215, 0, 0.25)' : (rank === 1 ? 'rgba(255, 215, 0, 0.15)' : 'rgba(255, 255, 255, 0.05)')};
-            border-radius: 8px;
-            border-left: 4px solid ${this.getRankColor(rank)};
-            ${isLocalPlayer ? 'box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); border: 2px solid rgba(255, 215, 0, 0.7);' : ''}
-        `;
-        
-        // Rank and name
-        const nameSection = document.createElement('div');
-        nameSection.style.cssText = `
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            flex: 1;
-        `;
-        
-        const rankBadge = document.createElement('span');
-        // In elimination mode, use actual placement if available
         const displayRank = isEliminationMode && score.placement ? score.placement : rank;
+
+        const row = document.createElement('div');
+        const classes = ['final-score-row'];
+        if (isLocalPlayer) classes.push('local-player');
+        else if (rank === 1) classes.push('rank-1');
+        row.className = classes.join(' ');
+        row.style.borderLeftColor = this.getRankColor(displayRank);
+
+        const nameSection = document.createElement('div');
+        nameSection.className = 'final-score-name-section';
+
+        const rankBadge = document.createElement('span');
+        rankBadge.className = 'rank-badge';
         rankBadge.textContent = this.getRankBadge(displayRank);
-        rankBadge.style.cssText = `
-            font-size: 24px;
-            min-width: 40px;
-        `;
         nameSection.appendChild(rankBadge);
-        
+
         const nameText = document.createElement('span');
+        nameText.className = 'final-score-name';
         if (score.team !== undefined) {
             nameText.textContent = `Team ${score.team}`;
             nameText.style.color = this.getTeamColorCSS(score.team);
@@ -2325,59 +2010,42 @@ class GameEngine {
             nameText.textContent = score.playerName || `Player ${score.playerId}`;
             nameText.style.color = isLocalPlayer ? '#FFD700' : '#ffffff';
         }
-        nameText.style.cssText += `
-            font-size: 20px;
-            font-weight: bold;
-        `;
         nameSection.appendChild(nameText);
-        
         row.appendChild(nameSection);
-        
-        // Stats
+
         const stats = document.createElement('div');
-        stats.style.cssText = `
-            display: flex;
-            gap: 25px;
-            color: #cccccc;
-            font-size: 16px;
-        `;
-        
-        // In elimination mode, show placement more prominently
+        stats.className = 'final-score-stats';
+
         if (isEliminationMode && score.placement) {
             const placementSpan = document.createElement('span');
-            placementSpan.style.color = displayRank <= 3 ? '#FFD700' : '#cccccc';
-            placementSpan.style.fontWeight = 'bold';
-            placementSpan.style.fontSize = '18px';
+            placementSpan.className = displayRank <= 3 ? 'stat-placement' : '';
             placementSpan.textContent = `#${score.placement}`;
             stats.appendChild(placementSpan);
         } else {
             const scoreSpan = document.createElement('span');
-            scoreSpan.style.color = '#FFD700';
-            scoreSpan.style.fontWeight = 'bold';
-            scoreSpan.style.fontSize = '20px';
+            scoreSpan.className = 'stat-score';
             scoreSpan.textContent = `${score.score} pts`;
             stats.appendChild(scoreSpan);
         }
-        
+
         const killsSpan = document.createElement('span');
-        killsSpan.style.color = '#4ade80';
+        killsSpan.className = 'stat-kills';
         killsSpan.textContent = `${score.kills} K`;
-        stats.appendChild(killsSpan);
-        
+
         const deathsSpan = document.createElement('span');
-        deathsSpan.style.color = '#f87171';
+        deathsSpan.className = 'stat-deaths';
         deathsSpan.textContent = `${score.deaths} D`;
-        stats.appendChild(deathsSpan);
-        
+
+        stats.append(killsSpan, deathsSpan);
+
         if (score.captures > 0) {
             const capturesSpan = document.createElement('span');
-            capturesSpan.style.color = '#FFD700';
+            capturesSpan.className = 'stat-captures';
             capturesSpan.textContent = `${score.captures} 🚩`;
             stats.appendChild(capturesSpan);
         }
-        
+
         row.appendChild(stats);
-        
         return row;
     }
     
