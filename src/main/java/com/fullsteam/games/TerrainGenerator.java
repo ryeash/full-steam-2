@@ -126,22 +126,6 @@ public class TerrainGenerator {
                 return;
             }
         }
-
-//        Vector2 finalPosition = initialPosition;
-//        // Ensure zone position is clear of obstacles
-//        if (!isPositionClear(finalPosition, bodyToPlace.getRotationDiscRadius() + buffer)) {
-//            // Try to find a nearby clear position
-//            for (int attempt = 0; attempt < 20; attempt++) {
-//                double offsetX = (Math.random() - 0.5) * (2 * bodyToPlace.getRotationDiscRadius());
-//                double offsetY = (Math.random() - 0.5) * (2 * bodyToPlace.getRotationDiscRadius());
-//                Vector2 candidate = new Vector2(finalPosition.x + offsetX, finalPosition.y + offsetY);
-//                if (isPositionClear(candidate, bodyToPlace.getRotationDiscRadius() + buffer)) {
-//                    finalPosition = candidate;
-//                    break;
-//                }
-//            }
-//        }
-//        bodyToPlace.translate(finalPosition);
     }
 
     /**
