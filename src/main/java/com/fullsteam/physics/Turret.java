@@ -157,24 +157,24 @@ public class Turret extends GameEntity {
         Vector2 velocity = fireDirection.multiply(projectileSpeed);
 
         // Add slight inaccuracy to make it less overpowered
-        double inaccuracy = 0.1; // 10% inaccuracy
+        double inaccuracy = 0.05; // 10% inaccuracy
         double angleOffset = (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * inaccuracy;
         double currentAngle = Math.atan2(velocity.y, velocity.x);
         double newAngle = currentAngle + angleOffset;
         velocity = new Vector2(Math.cos(newAngle) * projectileSpeed, Math.sin(newAngle) * projectileSpeed);
 
         return new Projectile(
-                ownerId, // Use owner's ID for kill attribution
+                ownerId,
                 turretPos.x,
                 turretPos.y,
                 velocity.x,
                 velocity.y,
                 damage,
-                detectionRange + 100, // Use detection range as projectile range
+                detectionRange * 1.1,
                 ownerTeam,
-                0.02, // Slight linear damping
-                Set.of(), // No special bullet effects
-                Ordinance.BULLET  // Standard bullet ordinance
+                0.02,
+                Set.of(),
+                Ordinance.BULLET
         );
     }
 
