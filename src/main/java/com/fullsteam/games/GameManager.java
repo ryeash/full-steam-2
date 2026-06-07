@@ -551,49 +551,56 @@ public class GameManager {
 
     /**
      * Assign a player to the team with the fewest members.
+     * Ties are broken randomly so teams fill in a balanced, non-deterministic order.
      *
      * @return Team number (0 for FFA, 1+ for team modes)
      */
     private int assignPlayerToTeam() {
         if (gameConfig.isFreeForAll()) {
-            return 0; // FFA mode
+            return 0;
         }
 
-        // Count players on each team
-        int[] teamCounts = new int[gameConfig.getTeamCount() + 1]; // +1 for index alignment
+        int teamCount = gameConfig.getTeamCount();
+        // Index 0 unused; indices 1..teamCount hold per-team headcounts.
+        int[] teamCounts = new int[teamCount + 1];
         for (Player player : gameEntities.getAllPlayers()) {
             int team = player.getTeam();
-            if (team > 0 && team <= gameConfig.getTeamCount()) {
+            if (team >= 1 && team <= teamCount) {
                 teamCounts[team]++;
             }
         }
 
-        // Find team with fewest players
-        int bestTeam = ThreadLocalRandom.current().nextInt(1, gameConfig.getTeamCount() + 1);
-        int minCount = teamCounts[1];
-        for (int team = 2; team <= gameConfig.getTeamCount(); team++) {
-            if (teamCounts[team] < minCount) {
-                minCount = teamCounts[team];
-                bestTeam = team;
+        // Find the minimum headcount across all teams.
+        int minCount = Integer.MAX_VALUE;
+        for (int t = 1; t <= teamCount; t++) {
+            if (teamCounts[t] < minCount) {
+                minCount = teamCounts[t];
             }
         }
 
-        // Debug logging for team assignment
-        log.info("Team assignment - Game has {} teams. Team counts: {}",
-                gameConfig.getTeamCount(),
-                Arrays.toString(teamCounts));
-        log.info("Assigning player to team {} (counts: T1={}, T2={}, T3={}, T4={})",
-                bestTeam,
-                teamCounts[1],
-                teamCounts.length > 2 ? teamCounts[2] : 0,
-                teamCounts.length > 3 ? teamCounts[3] : 0,
-                teamCounts.length > 4 ? teamCounts[4] : 0);
+        // Collect every team tied at the minimum so tie-breaking is uniformly random.
+        List<Integer> candidates = new ArrayList<>();
+        for (int t = 1; t <= teamCount; t++) {
+            if (teamCounts[t] == minCount) {
+                candidates.add(t);
+            }
+        }
+        int bestTeam = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
 
+        log.debug("Team assignment – counts: {} → assigning to team {} (min={})",
+                Arrays.toString(teamCounts), bestTeam, minCount);
         return bestTeam;
     }
 
     /**
      * Manually trigger AI player adjustment based on current settings.
+     * <p>
+     * This does three things in order:
+     * <ol>
+     *   <li>Adjust the <em>total</em> AI count so the lobby stays at {@code maxPlayers}.</li>
+     *   <li>For team modes, rebalance AI across teams so no team is more than one
+     *       player larger than another.</li>
+     * </ol>
      */
     public void adjustAIPlayers() {
         if (!gameConfig.isEnableAIFilling()) {
@@ -603,46 +610,116 @@ public class GameManager {
         int totalPlayers = gameEntities.getAllPlayers().size();
         int humanPlayers = totalPlayers - getAIPlayerCount();
 
-        // Calculate target player count
-        // If we have very few human players, fill up to minimum
+        // Step 1 – adjust total count.
         if (totalPlayers < getMaxPlayers()) {
             int aiToAdd = getMaxPlayers() - totalPlayers;
             int added = AIGameHelper.addMixedAIPlayers(this, aiToAdd);
             if (added > 0) {
-                log.info("Auto-filled {} AI players to reach minimum activity level (total: {})", added, totalPlayers + added);
+                log.info("Auto-filled {} AI players (total: {})", added, totalPlayers + added);
             }
-        }
-        // If we have too many AI players compared to humans, remove some
-        else if (humanPlayers > 0 && totalPlayers > getMaxPlayers()) {
+        } else if (humanPlayers > 0 && totalPlayers > getMaxPlayers()) {
             int aiToRemove = totalPlayers - getMaxPlayers();
             int removed = removeExcessAIPlayers(aiToRemove);
             if (removed > 0) {
-                log.info("Removed {} excess AI players (total remaining: {})",
-                        removed, totalPlayers - removed);
+                log.info("Removed {} excess AI players (total remaining: {})", removed, totalPlayers - removed);
             }
+        }
+
+        // Step 2 – rebalance teams (no-op in FFA).
+        if (!gameConfig.isFreeForAll()) {
+            rebalanceAITeams();
         }
     }
 
     /**
-     * Remove a specified number of AI players, prioritizing idle ones.
+     * Redistribute AI players between teams so that each team's headcount is
+     * within one of every other team's headcount.
+     *
+     * The algorithm iterates until stable: it finds the most- and least-populated
+     * teams and, if the gap is ≥ 2, removes one AI from the over-full team and
+     * immediately adds a new one (which {@link #assignPlayerToTeam()} will place
+     * on the under-full team).
+     */
+    private void rebalanceAITeams() {
+        int teamCount = gameConfig.getTeamCount();
+        if (teamCount < 2) return;
+
+        for (int iteration = 0; iteration < teamCount * 2; iteration++) {
+            // Build a fresh per-team headcount each pass.
+            int[] teamCounts = new int[teamCount + 1];
+            Map<Integer, List<Integer>> aiByTeam = new HashMap<>();
+            for (Player p : gameEntities.getAllPlayers()) {
+                int t = p.getTeam();
+                if (t < 1 || t > teamCount) continue;
+                teamCounts[t]++;
+                if (isAIPlayer(p.getId())) {
+                    aiByTeam.computeIfAbsent(t, k -> new ArrayList<>()).add(p.getId());
+                }
+            }
+
+            // Find most- and least-populated teams.
+            int maxTeam = 1, minTeam = 1;
+            for (int t = 2; t <= teamCount; t++) {
+                if (teamCounts[t] > teamCounts[maxTeam]) maxTeam = t;
+                if (teamCounts[t] < teamCounts[minTeam]) minTeam = t;
+            }
+
+            // Already balanced (gap ≤ 1) — done.
+            if (teamCounts[maxTeam] - teamCounts[minTeam] <= 1) break;
+
+            // Can only fix the imbalance if the over-full team has a removable AI.
+            List<Integer> aiOnMaxTeam = aiByTeam.getOrDefault(maxTeam, List.of());
+            if (aiOnMaxTeam.isEmpty()) break; // all excess players on that team are human — can't move
+
+            int aiToMove = aiOnMaxTeam.get(0);
+            removeAIPlayer(aiToMove);
+            // assignPlayerToTeam() will now direct the replacement to minTeam.
+            AIGameHelper.addMixedAIPlayers(this, 1);
+            log.info("Rebalanced AI: moved one player from team {} ({}) to team {} ({})",
+                    maxTeam, teamCounts[maxTeam], minTeam, teamCounts[minTeam]);
+        }
+    }
+
+    /**
+     * Remove {@code count} AI players, always pulling from the most-populated
+     * team first so that removal keeps (or improves) team balance.
      */
     private int removeExcessAIPlayers(int count) {
         int removed = 0;
-        List<Integer> aiPlayerIds = new ArrayList<>();
-
-        // Collect all AI player IDs
-        for (Player player : gameEntities.getAllPlayers()) {
-            if (isAIPlayer(player.getId())) {
-                aiPlayerIds.add(player.getId());
+        for (int i = 0; i < count; i++) {
+            // Re-scan each iteration because team counts change as we remove.
+            int teamCount = gameConfig.getTeamCount();
+            int[] teamCounts = new int[Math.max(teamCount + 1, 1)];
+            // In FFA there are no teams; just pick any AI.
+            for (Player p : gameEntities.getAllPlayers()) {
+                int t = p.getTeam();
+                if (t >= 1 && t < teamCounts.length) teamCounts[t]++;
             }
-        }
 
-        // Remove AI players, up to the requested count
-        for (int i = 0; i < Math.min(count, aiPlayerIds.size()); i++) {
-            removeAIPlayer(aiPlayerIds.get(i));
-            removed++;
-        }
+            // Find the team with the most total players (AI or human).
+            int targetTeam = 0; // 0 = FFA / don't filter by team
+            if (!gameConfig.isFreeForAll()) {
+                int maxCount = -1;
+                for (int t = 1; t <= teamCount; t++) {
+                    if (teamCounts[t] > maxCount) {
+                        maxCount = teamCounts[t];
+                        targetTeam = t;
+                    }
+                }
+            }
 
+            // Remove one AI from that team (or any AI in FFA).
+            boolean found = false;
+            for (Player p : gameEntities.getAllPlayers()) {
+                if (!isAIPlayer(p.getId())) continue;
+                if (targetTeam != 0 && p.getTeam() != targetTeam) continue;
+                removeAIPlayer(p.getId());
+                removed++;
+                found = true;
+                break;
+            }
+            if (!found) break; // no more AI to remove
+        }
         return removed;
     }
 
