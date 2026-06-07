@@ -89,7 +89,6 @@ class WeaponBalanceSimulationTest {
         Map<String, Double> dpsMap = new LinkedHashMap<>();
 
         for (var entry : ALL_PRESETS.entrySet()) {
-            if (isNonCombatWeapon(entry.getValue())) continue;
             Weapon w = entry.getValue().buildWeapon();
             double dps = calculateSustainedDPS(w);
             dpsList.add(dps);
@@ -111,7 +110,6 @@ class WeaponBalanceSimulationTest {
     @DisplayName("Composite power score max/min ratio stays below " + MAX_POWER_SCORE_RATIO + "x")
     void allWeaponPowerScoresWithinBalanceRange() {
         List<WeaponMetrics> metrics = computeAllMetrics();
-        metrics.removeIf(m -> isNonCombatWeapon(m.config));
         normalizeMetrics(metrics);
 
         DoubleSummaryStatistics stats = metrics.stream()
@@ -129,10 +127,7 @@ class WeaponBalanceSimulationTest {
     void printWeaponBalanceReport() {
         List<WeaponMetrics> allMetrics = computeAllMetrics();
 
-        List<WeaponMetrics> combatMetrics = new ArrayList<>(allMetrics.stream()
-                .filter(m -> !isNonCombatWeapon(m.config)).toList());
-        List<WeaponMetrics> supportMetrics = allMetrics.stream()
-                .filter(m -> isNonCombatWeapon(m.config)).toList();
+        List<WeaponMetrics> combatMetrics = new ArrayList<>(allMetrics.stream().toList());
 
         normalizeMetrics(combatMetrics);
         combatMetrics.sort(Comparator.comparingDouble((WeaponMetrics m) -> m.powerScore).reversed());
@@ -187,14 +182,6 @@ class WeaponBalanceSimulationTest {
                         && m.weapon.getBulletEffects().stream().anyMatch(e -> e.getBaseRadius() > 0));
         printCategoryBreakdown(combatMetrics, "Kinetic weapons (no effects)",
                 m -> m.weapon.getBulletEffects().isEmpty() && !m.weapon.getOrdinance().isBeamType());
-
-        if (!supportMetrics.isEmpty()) {
-            System.out.println();
-            System.out.println("  Non-combat weapons (excluded from balance assertions):");
-            for (WeaponMetrics m : supportMetrics) {
-                System.out.printf("    %-26s  DPS=%.1f  Range=%.1f%n", m.name, m.rawDPS, m.rawRange);
-            }
-        }
 
         System.out.println("=".repeat(105));
         System.out.println();
@@ -359,14 +346,6 @@ class WeaponBalanceSimulationTest {
             score += w.getOrdinance().getPointCost() * 0.5;
         }
         return score;
-    }
-
-    // ====================================================================
-    // Helpers
-    // ====================================================================
-
-    private static boolean isNonCombatWeapon(WeaponConfig config) {
-        return config.getOrdinance() == Ordinance.HEAL_BEAM;
     }
 
     private static FieldEffectType effectToFieldType(BulletEffect effect) {

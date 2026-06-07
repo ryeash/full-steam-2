@@ -1,5 +1,6 @@
 package com.fullsteam.games;
 
+import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.DamageApplicationType;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
@@ -7,10 +8,12 @@ import com.fullsteam.model.PlayerInput;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.BulletEffectProcessor;
 import com.fullsteam.physics.GameEntities;
+import com.fullsteam.physics.GameEntity;
 import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Projectile;
+import com.fullsteam.physics.Turret;
 import lombok.Setter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
@@ -22,6 +25,7 @@ import org.dyn4j.world.result.RaycastResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.function.BiConsumer;
 
@@ -194,34 +198,29 @@ public class WeaponSystem {
      * Check if an entity should block a beam based on the beam's piercing behavior.
      */
     private boolean shouldEntityBlockBeam(Beam beam, Object entity) {
-        if (entity instanceof Obstacle) {
-            return !beam.canPierceObstacles();
-        } else if (entity instanceof Player) {
-            return !beam.canPiercePlayers();
-        } else if (entity instanceof Projectile) {
+        return switch (entity) {
             // Projectiles should never block beams - they're small, fast-moving objects
-            return false;
-        } else if (entity instanceof NetProjectile) {
             // Net projectiles should never block beams
-            return false;
-        } else if (entity instanceof FieldEffect fieldEffect) {
-            // Handle shield barriers - block non-piercing beams
-            if (fieldEffect.getType() == FieldEffectType.SHIELD_BARRIER) {
-                // Shield barriers block non-piercing beams (LASER, PLASMA_BEAM) 
-                // but allow piercing beams (RAILGUN) to pass through
-                return !beam.canPierceObstacles();
+            case Player _, Projectile _, NetProjectile _, Turret _ -> false;
+            case null -> false;
+            case Obstacle _ -> !beam.getBulletEffects().contains(BulletEffect.PIERCING);
+            case FieldEffect fieldEffect -> {
+                // Handle shield barriers - block non-piercing beams
+                if (fieldEffect.getType() == FieldEffectType.SHIELD_BARRIER) {
+                    // Shield barriers block non-piercing beams
+                    // but allow piercing beams to pass through
+                    yield !beam.getBulletEffects().contains(BulletEffect.PIERCING);
+                }
+                // Other field effects don't block beams
+                yield false;
+                // Other field effects don't block beams
             }
-            // Other field effects don't block beams
-            return false;
-        } else if (entity.getClass().getSimpleName().equals("Turret")) {
-            return !beam.canPiercePlayers();
-        }
-        // Default: block unknown entities
-        return true;
+            default -> true;
+        };
     }
 
     /**
-     * Process standard beam hits (laser, railgun, etc.)
+     * Process standard beam hits (laser, etc.)
      */
     public void processStandardBeamHit(Beam beam) {
         Vector2 startPoint = beam.getStartPoint();
@@ -244,7 +243,7 @@ public class WeaponSystem {
         }
 
         // Sort results by distance for proper piercing order
-        results.sort((r1, r2) -> Double.compare(r1.getRaycast().getDistance(), r2.getRaycast().getDistance()));
+        results.sort(Comparator.comparingDouble(r -> r.getRaycast().getDistance()));
 
         // Process each hit based on beam piercing behavior
         for (RaycastResult<Body, ?> result : results) {
@@ -253,21 +252,15 @@ public class WeaponSystem {
 
             if (userData instanceof Player player) {
                 if (beam.canAffectPlayer(player)) {
-                    applyBeamDamageToPlayer(beam, player);
-
-                    // Stop at first player if beam doesn't pierce players
-                    if (!beam.canPiercePlayers()) {
-                        break;
-                    }
+                    applyBeamDamage(beam, player);
+                }
+            } else if (userData instanceof Turret turret) {
+                if (turret.isActive()) {
+                    applyBeamDamage(beam, turret);
                 }
             } else if (userData instanceof Obstacle) {
                 // Stop at obstacle if beam doesn't pierce obstacles
-                if (!beam.canPierceObstacles()) {
-                    break;
-                }
-            } else if (userData.getClass().getSimpleName().equals("Turret")) {
-                // Stop at turret if beam doesn't pierce turrets
-                if (!beam.canPiercePlayers()) {
+                if (!beam.getBulletEffects().contains(BulletEffect.PIERCING)) {
                     break;
                 }
             }
@@ -277,21 +270,16 @@ public class WeaponSystem {
     /**
      * Apply beam damage to a player
      */
-    private void applyBeamDamageToPlayer(Beam beam, Player player) {
-        beam.getAffectedPlayers().add(player.getId());
-        boolean killed = player.takeDamage(beam.getDamage());
-
+    private void applyBeamDamage(Beam beam, GameEntity entity) {
+        beam.getAffectedPlayers().add(entity.getId());
+        boolean killed = entity.takeDamage(beam.getDamage());
         // Process AOE bullet effects for beam weapons
-        bulletEffectProcessor.processBeamEffectHit(beam, player.getPosition());
-
+        bulletEffectProcessor.processBeamEffectHit(beam, entity.getPosition());
         // Handle kill if player died
-        if (killed && killCallback != null) {
+        if (entity instanceof Player p && killed && killCallback != null) {
             Player killer = gameEntities.getPlayer(beam.getOwnerId());
-            killCallback.accept(player, killer);
+            killCallback.accept(p, killer);
         }
-
-        log.debug("Beam {} hit player {} for {} damage (killed: {})",
-                beam.getId(), player.getId(), beam.getDamage(), killed);
     }
 
 }

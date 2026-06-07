@@ -64,11 +64,8 @@ public final class WeaponFormatter {
             case GRENADE -> "Grenade";
             case PLASMA -> "Plasma";
             case DART -> "Dart";
-            case FLAMETHROWER -> "Flamethrower";
             case LASER -> "Laser";
             case PLASMA_BEAM -> "Plasma Beam";
-            case HEAL_BEAM -> "Heal Beam";
-            case RAILGUN -> "Railgun";
         };
     }
 

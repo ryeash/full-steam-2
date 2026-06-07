@@ -167,8 +167,6 @@ public class GameController {
         // Beam weapon presets
         presets.put("LASER_RIFLE", createPresetData(WeaponConfig.LASER_RIFLE_PRESET));
         presets.put("PLASMA_CANNON", createPresetData(WeaponConfig.PLASMA_CANNON_PRESET));
-        presets.put("MEDIC_BEAM", createPresetData(WeaponConfig.MEDIC_BEAM_PRESET));
-        presets.put("RAIL_CANNON", createPresetData(WeaponConfig.RAIL_CANNON_PRESET));
 
         // Advanced combination weapons
         presets.put("STORM_CALLER", createPresetData(WeaponConfig.STORM_CALLER_PRESET));

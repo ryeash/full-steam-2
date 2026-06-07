@@ -9,13 +9,10 @@ public enum Ordinance {
     GRENADE(10, "Arcing explosive projectile", 3.0, 0.6, true, 1.2, 20.0, null, 0.0, 0.0),
     PLASMA(15, "Energy-based projectile", 2.5, 1.1, false, 0.8, 40.0, null, 0.0, 0.0),
     DART(5, "Small, fast projectile", 1.5, 1.4, false, 0.1, 50.0, null, 0.0, 0.0),
-    @Deprecated FLAMETHROWER(14, "Short-range fire stream", 3.5, 0.8, false, 0.4, 10.0, null, 0.0, 0.0),
-    
+
     // Beam-based ordinance
-    LASER(50, "Instant-hit beam weapon", 1.0, 2.0, false, 0.8, 0.0, DamageApplicationType.INSTANT, 0.0, 0.3),
-    PLASMA_BEAM(45, "Continuous damage beam", 1.5, 1.5, false, 1.0, 0.0, DamageApplicationType.DAMAGE_OVER_TIME, 0.1, 0.8),
-    HEAL_BEAM(35, "Continuous healing beam", 1.0, 1.0, false, 1.2, 0.0, DamageApplicationType.DAMAGE_OVER_TIME, 0.05, 1.0),
-    RAILGUN(48, "Piercing instant beam", 0.5, 2.0, false, 0.5, 0.0, DamageApplicationType.INSTANT, 0.0, 0.2);
+    LASER(50, "Instant-hit beam weapon", 3.0, 2.0, false, 0.8, 0.0, DamageApplicationType.INSTANT, 0.0, 0.3),
+    PLASMA_BEAM(45, "Continuous damage beam", 5, 1.5, false, 1.0, 0.0, DamageApplicationType.DAMAGE_OVER_TIME, 0.1, 0.8);
 
     @Getter
     private final int pointCost;

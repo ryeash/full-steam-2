@@ -338,7 +338,9 @@ public class GameStateSerializer {
         if (!stripPowerUps) {
             for (AttributeModification mod : player.getAttributeModifications()) {
                 String hint = mod.renderHint();
-                if (hint != null && !hint.isEmpty()) activePowerUps.add(hint);
+                if (hint != null && !hint.isEmpty()) {
+                    activePowerUps.add(hint);
+                }
             }
         }
         s.put("activePowerUps", activePowerUps);
@@ -522,6 +524,8 @@ public class GameStateSerializer {
             Vector2 effectiveEndPos = beam.getEffectiveEndPoint();
             Map<String, Object> beamState = new HashMap<>();
             beamState.put("id", beam.getId());
+            beamState.put("ordinance", beam.getOrdinance());
+            beamState.put("size", beam.getOrdinance().getSize());
             beamState.put("startX", startPos.x);
             beamState.put("startY", startPos.y);
             beamState.put("endX", effectiveEndPos.x);
@@ -531,9 +535,6 @@ public class GameStateSerializer {
             beamState.put("damage", beam.getDamage());
             beamState.put("damageType", beam.getDamageApplicationType().name());
             beamState.put("durationPercent", beam.getDurationPercent());
-            beamState.put("isHealingBeam", beam.isHealingBeam());
-            beamState.put("canPiercePlayers", beam.canPiercePlayers());
-            beamState.put("canPierceObstacles", beam.canPierceObstacles());
             beamStates.add(beamState);
         }
         return beamStates;
@@ -545,16 +546,15 @@ public class GameStateSerializer {
             Vector2 pos = powerUp.getPosition();
             Map<String, Object> powerUpState = new HashMap<>();
             powerUpState.put("id", powerUp.getId());
-            powerUpState.put("type", "POWERUP"); // Frontend expects this to identify as utility entity
-            powerUpState.put("powerUpType", powerUp.getType().name()); // Store the actual power-up type
+            powerUpState.put("type", "POWERUP");
+            powerUpState.put("powerUpType", powerUp.getType().name());
             powerUpState.put("displayName", powerUp.getType().getDisplayName());
             powerUpState.put("renderHint", powerUp.getType().getRenderHint());
             powerUpState.put("x", pos.x);
             powerUpState.put("y", pos.y);
+            powerUpState.put("radius", powerUp.getBody().getRotationDiscRadius());
             powerUpState.put("workshopId", powerUp.getWorkshopId());
             powerUpState.put("duration", powerUp.getDuration());
-            powerUpState.put("effectStrength", powerUp.getEffectStrength());
-            powerUpState.put("radius", powerUp.getBody().getRotationDiscRadius());
             powerUpStates.add(powerUpState);
         }
         return powerUpStates;

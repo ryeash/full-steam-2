@@ -201,7 +201,6 @@ public class WeaponConfig {
             Ordinance.DART  // 5 points, total: 95 + 5 = 100
     );
 
-    // Flamethrower Ordinance Showcase - Short range, area denial
     public static final WeaponConfig SHOTGUN_PRESET = new WeaponConfig(
             "Shotgun",
             21,     // Good damage
@@ -377,38 +376,6 @@ public class WeaponConfig {
             Ordinance.PLASMA_BEAM
     );
 
-    // Medic Beam - Healing support weapon
-    public static final WeaponConfig MEDIC_BEAM_PRESET = new WeaponConfig(
-            "Medic Beam",
-            20,     // Low damage (healing focused)
-            15,     // Medium fire rate
-            12,     // Medium range
-            0,      // Perfect accuracy
-            20,     // Large magazine for sustained healing
-            8,      // Very fast reload
-            0,      // Not used for beams
-            0,      // Single beam
-            -10,      // Not used for beams
-            Set.of(),  // No effects
-            Ordinance.HEAL_BEAM
-    );
-
-    // Rail Cannon - Piercing instant beam weapon
-    public static final WeaponConfig RAIL_CANNON_PRESET = new WeaponConfig(
-            "Rail Cannon",
-            19,     // High damage
-            4,      // Slow fire rate
-            18,     // Very long range
-            0,      // Perfect accuracy
-            6,      // Small magazine
-            15,     // Long reload
-            0,      // Not used for beams
-            0,      // Single beam
-            -10,    // Not used for beams
-            Set.of(),  // No effects
-            Ordinance.RAILGUN  // 48 points, total: 52 + 48 = 100
-    );
-
     // ===== ADVANCED COMBINATION WEAPONS =====
 
     // Storm Caller - Electric + Homing rapid-fire seeking electric projectiles
@@ -530,13 +497,13 @@ public class WeaponConfig {
             17,     // High fire rate
             4,      // Very short range
             -10,    // Poor accuracy
-            16,     // Large magazine
+            30,     // Large magazine
             8,      // Fast reload
             9,      // Medium speed
             10,     // Many streams
             -10,    // High negative damping
             Set.of(BulletEffect.INCENDIARY, BulletEffect.BOUNCY),  // 18 + 15 = 33 points
-            Ordinance.FLAMETHROWER  // 14 points, total: 53 + 33 + 14 = 100
+            Ordinance.BULLET  // 14 points, total: 53 + 33 + 14 = 100
     );
 
     // Frost Lance - Freezing + Piercing ice beam that slows all in line

@@ -75,10 +75,6 @@ public class AIWeaponSelector {
             // Beam weapons
             WeaponConfig.LASER_RIFLE_PRESET,
             WeaponConfig.PLASMA_CANNON_PRESET,
-            WeaponConfig.RAIL_CANNON_PRESET,
-
-            // Support weapons
-            WeaponConfig.MEDIC_BEAM_PRESET,
 
             // Combo weapons
             WeaponConfig.STORM_CALLER_PRESET,
@@ -105,19 +101,6 @@ public class AIWeaponSelector {
      */
     public static WeaponConfig selectRandomWeapon() {
         return ALL_WEAPONS.get(ThreadLocalRandom.current().nextInt(ALL_WEAPONS.size()));
-    }
-
-    /**
-     * Select a random weapon preset excluding healing weapons.
-     * Used for random weapon rotation mode where healing weapons should not be assigned.
-     *
-     * @return Random non-healing weapon preset
-     */
-    public static WeaponConfig selectRandomNonHealingWeapon() {
-        List<WeaponConfig> nonHealing = ALL_WEAPONS.stream()
-                .filter(w -> w != WeaponConfig.MEDIC_BEAM_PRESET)
-                .toList();
-        return nonHealing.get(ThreadLocalRandom.current().nextInt(nonHealing.size()));
     }
 
     /**
@@ -158,7 +141,6 @@ public class AIWeaponSelector {
                         WeaponConfig.EXPLOSIVE_SNIPER_PRESET,
                         WeaponConfig.PRECISION_DART_GUN_PRESET,
                         WeaponConfig.LASER_RIFLE_PRESET,
-                        WeaponConfig.RAIL_CANNON_PRESET,
                         WeaponConfig.SNIPER_RIFLE_PRESET,
                         WeaponConfig.VENOM_NEEDLER_PRESET,
                         WeaponConfig.FROST_LANCE_PRESET,
@@ -212,10 +194,7 @@ public class AIWeaponSelector {
             case "Support":
                 // Support AIs prefer utility weapons, area effects, and healing
                 double supportRoll = random.nextDouble();
-                if (supportRoll < 0.25) {
-                    // Healing beam for team support
-                    return WeaponConfig.MEDIC_BEAM_PRESET;
-                } else if (supportRoll < 0.55) {
+                if (supportRoll < 0.55) {
                     // Area denial and utility weapons
                     List<WeaponConfig> supportWeapons = List.of(
                             WeaponConfig.TOXIC_SPRAYER_PRESET,

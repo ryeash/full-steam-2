@@ -962,6 +962,9 @@ public class RuleSystem {
 
     // ===== RANDOM WEAPON ROTATION =====
 
+    private WeaponConfig newWeapon = AIWeaponSelector.selectRandomWeapon();
+    private UtilityWeapon newUtility = AIWeaponSelector.selectRandomUtilityWeapon();
+
     /**
      * Schedule the next weapon rotation.
      */
@@ -982,6 +985,14 @@ public class RuleSystem {
         }
     }
 
+    public void assignPlayerRandomWeapons(Player player) {
+        if (rules.hasRandomWeapons()) {
+            player.applyWeaponConfig(newWeapon, newUtility);
+            player.getCurrentWeapon().setCurrentAmmo(0); // force everyone to reload
+            player.setLastUtilityUseTime(System.currentTimeMillis());
+        }
+    }
+
     /**
      * Rotate all active players to new random weapons.
      * Excludes healing weapons to maintain combat focus.
@@ -989,22 +1000,15 @@ public class RuleSystem {
     private void rotateAllPlayerWeapons() {
         int rotatedCount = 0;
 
+        newWeapon = AIWeaponSelector.selectRandomWeapon();
+        newUtility = AIWeaponSelector.selectRandomUtilityWeapon();
+
         for (Player player : gameEntities.getAllPlayers()) {
-            if (player.isActive()) {
-                WeaponConfig newWeapon = AIWeaponSelector.selectRandomNonHealingWeapon();
-                UtilityWeapon newUtility = AIWeaponSelector.selectRandomUtilityWeapon();
-
-                // Notify player of their new loadout
-                String message = String.format("🔀 New Loadout: %s + %s", newWeapon.getType(), newUtility.getDisplayName());
-                gameEventManager.broadcastToPlayer(message, player.getId(), GameEvent.EventCategory.INFO);
-
-                player.applyWeaponConfig(newWeapon, newUtility);
-                rotatedCount++;
-
-                log.debug("Player {} ({}) assigned new weapons: {}, {}",
-                        player.getId(), player.getPlayerName(),
-                        newWeapon.getType(), newUtility.getDisplayName());
-            }
+            // Notify player of their new loadout
+            String message = String.format("🔀 New Loadout: %s + %s", newWeapon.getType(), newUtility.getDisplayName());
+            gameEventManager.broadcastToPlayer(message, player.getId(), GameEvent.EventCategory.INFO);
+            assignPlayerRandomWeapons(player);
+            rotatedCount++;
         }
 
         if (rotatedCount > 0) {

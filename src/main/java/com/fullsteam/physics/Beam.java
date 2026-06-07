@@ -15,6 +15,7 @@ import org.dyn4j.geometry.Vector2;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -123,24 +124,16 @@ public class Beam extends GameEntity {
         }
 
         // Can't affect the owner (unless it's a heal beam)
-        if (player.getId() == ownerId && !isHealingBeam()) {
+        if (player.getId() == ownerId) {
             return false;
         }
 
         // Team-based logic
-        if (isHealingBeam()) {
-            // Healing beams only affect allies (or self in FFA)
-            if (ownerTeam == 0 || player.getTeam() == 0) {
-                return player.getId() == ownerId; // Only heal self in FFA
-            }
-            return ownerTeam == player.getTeam(); // Heal teammates
-        } else {
-            // Damage beams affect enemies
-            if (ownerTeam == 0 || player.getTeam() == 0) {
-                return player.getId() != ownerId; // Damage anyone except self in FFA
-            }
-            return ownerTeam != player.getTeam(); // Damage enemies
+        // Damage beams affect enemies
+        if (ownerTeam == 0 || player.getTeam() == 0) {
+            return true; // Damage anyone except self in FFA
         }
+        return ownerTeam != player.getTeam(); // Damage enemies
     }
 
     /**
@@ -151,37 +144,10 @@ public class Beam extends GameEntity {
         if (!canAffectPlayer(player)) {
             return 0.0;
         }
-        return switch (ordinance) {
-            case PLASMA_BEAM -> damage * deltaTime;
-            case HEAL_BEAM -> -(damage * deltaTime);
-            default -> 0.0;
-        };
-    }
-
-
-    /**
-     * Check if this is a healing beam
-     */
-    public boolean isHealingBeam() {
-        return ordinance == Ordinance.HEAL_BEAM;
-    }
-
-    /**
-     * Check if this beam can pierce through players
-     */
-    public boolean canPiercePlayers() {
-        return switch (ordinance) {
-            case LASER, RAILGUN, PLASMA_BEAM, HEAL_BEAM ->
-                    true; // Laser, Railgun, Plasma beam, and Heal beam pierce through players
-            default -> false; // Other beams stop at first player hit
-        };
-    }
-
-    /**
-     * Check if this beam can pierce through obstacles
-     */
-    public boolean canPierceObstacles() {
-        return ordinance == Ordinance.RAILGUN;
+        if (Objects.requireNonNull(ordinance) == Ordinance.PLASMA_BEAM) {
+            return damage * deltaTime;
+        }
+        return 0.0;
     }
 
     /**

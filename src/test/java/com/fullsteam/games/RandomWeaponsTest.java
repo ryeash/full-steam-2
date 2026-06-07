@@ -10,9 +10,7 @@ import org.dyn4j.world.World;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -115,7 +113,7 @@ class RandomWeaponsTest extends BaseTestClass {
         Set<String> assignedWeapons = new HashSet<>();
 
         for (int i = 0; i < 100; i++) {
-            WeaponConfig weapon = com.fullsteam.ai.AIWeaponSelector.selectRandomNonHealingWeapon();
+            WeaponConfig weapon = com.fullsteam.ai.AIWeaponSelector.selectRandomWeapon();
             assignedWeapons.add(weapon.getType());
         }
 

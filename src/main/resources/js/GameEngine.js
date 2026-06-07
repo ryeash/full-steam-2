@@ -3411,10 +3411,6 @@ class GameEngine {
                 sprite.scale.set(0.5);
                 sprite.tint = 0xffaa44; // Orange for darts
                 break;
-            case 'FLAMETHROWER':
-                sprite.scale.set(1.8);
-                sprite.tint = 0xff8844; // Fire orange
-                break;
             case 'BULLET':
             default:
                 sprite.scale.set(1.0);
@@ -4284,28 +4280,12 @@ class GameEngine {
     }
     
     drawBeamGraphics(graphics, beamData, length) {
-        let beamType = 'LASER';
-        if (beamData.isHealingBeam) {
-            beamType = 'HEAL_BEAM';
-        } else if (beamData.damageType === 'DAMAGE_OVER_TIME') {
-            beamType = 'PLASMA_BEAM';
-        } else if (beamData.canPierceObstacles) {
-            beamType = 'RAILGUN';
-        } else if (beamData.canPiercePlayers) {
-            beamType = 'LASER';
-        }
-        
+        let beamType = beamData.ordinance || 'LASER';
         switch (beamType) {
             case 'LASER':
                 this.createLaserGraphics(graphics, length, beamData); break;
             case 'PLASMA_BEAM':
                 this.createPlasmaBeamGraphics(graphics, length, beamData); break;
-            case 'HEAL_BEAM':
-                this.createHealBeamGraphics(graphics, length, beamData); break;
-            case 'RAILGUN':
-                this.createRailgunGraphics(graphics, length, beamData); break;
-            default:
-                this.createGenericBeamGraphics(graphics, length, beamData); break;
         }
     }
     
@@ -4316,17 +4296,17 @@ class GameEngine {
         // Main laser beam - bright magenta/red
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
-        graphics.stroke({ width: 4, color: 0xff44ff, alpha: 0.9 });
+        graphics.stroke({ width: beamData.size, color: 0xff44ff, alpha: 0.9 });
         
         // Inner core - white hot
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
-        graphics.stroke({ width: 2, color: 0xffffff });
+        graphics.stroke({ width: beamData.size / 2, color: 0xffffff });
         
         // Outer glow effect
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
-        graphics.stroke({ width: 8, color: 0xff44ff, alpha: 0.3 });
+        graphics.stroke({ width: beamData.size * 1.5, color: 0xff44ff, alpha: 0.3 });
         
         return graphics;
     }
@@ -4338,17 +4318,17 @@ class GameEngine {
         // Main plasma beam - electric blue
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
-        graphics.stroke({ width: 6, color: 0x4488ff, alpha: 0.8 });
+        graphics.stroke({ width: beamData.size, color: 0x4488ff, alpha: 0.8 });
         
         // Plasma core - bright white
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
-        graphics.stroke({ width: 3, color: 0xaaffff });
+        graphics.stroke({ width: beamData.size / 2, color: 0xaaffff });
         
         // Crackling energy effect
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
-        graphics.stroke({ width: 10, color: 0x4488ff, alpha: 0.2 });
+        graphics.stroke({ width: beamData.size * 2, color: 0x4488ff, alpha: 0.2 });
         
         // Add plasma instability (random segments)
         for (let i = 0; i < length; i += 20) {
@@ -4357,83 +4337,8 @@ class GameEngine {
             
             graphics.moveTo(i, 0);
             graphics.lineTo(segmentEnd, offset);
-            graphics.stroke({ width: 2, color: 0x88aaff, alpha: 0.6 });
+            graphics.stroke({ width: beamData.size / 2, color: 0x88aaff, alpha: 0.6 });
         }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create heal beam graphics
-     */
-    createHealBeamGraphics(graphics, length, beamData) {
-        // Main healing beam - soft green
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        graphics.stroke({ width: 5, color: 0x2ecc71, alpha: 0.7 });
-        
-        // Healing core - bright green
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        graphics.stroke({ width: 2, color: 0x58d68d });
-        
-        // Healing aura
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        graphics.stroke({ width: 12, color: 0x2ecc71, alpha: 0.2 });
-        
-        // Add healing particles along the beam
-        for (let i = 10; i < length; i += 15) {
-            const offset = (Math.random() - 0.5) * 6;
-            graphics.circle(i, offset, 1.5).fill({ color: 0x58d68d, alpha: 0.8 });
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create railgun beam graphics
-     */
-    createRailgunGraphics(graphics, length, beamData) {
-        // Main railgun beam - bright white/blue
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        graphics.stroke({ width: 3, color: 0xaaffff });
-        
-        // Railgun core - pure white
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        graphics.stroke({ width: 1, color: 0xffffff });
-        
-        // Electromagnetic field
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        graphics.stroke({ width: 8, color: 0x88ccff, alpha: 0.4 });
-        
-        // Add electromagnetic distortion lines
-        for (let i = 0; i < length; i += 25) {
-            const distortionLength = 8 + Math.random() * 6;
-            graphics.moveTo(i, -distortionLength/2);
-            graphics.lineTo(i, distortionLength/2);
-        }
-        graphics.stroke({ width: 1, color: 0xaaffff, alpha: 0.5 });
-        
-        return graphics;
-    }
-    
-    /**
-     * Create generic beam graphics
-     */
-    createGenericBeamGraphics(graphics, length, beamData) {
-        // Generic beam - white
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        graphics.stroke({ width: 3, color: 0xffffff, alpha: 0.8 });
-        
-        // Core
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        graphics.stroke({ width: 1, color: 0xffffff });
         
         return graphics;
     }

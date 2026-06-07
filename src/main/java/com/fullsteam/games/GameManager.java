@@ -1,6 +1,7 @@
 package com.fullsteam.games;
 
 import com.fullsteam.Config;
+import com.fullsteam.GameLobby;
 import com.fullsteam.RandomNames;
 import com.fullsteam.ai.AIGameHelper;
 import com.fullsteam.ai.AIPlayer;
@@ -54,6 +55,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -321,6 +323,7 @@ public class GameManager {
         if (playerSession == null) {
             return;
         }
+        Player player = gameEntities.getPlayer(playerId);
 
         WeaponConfig weaponConfig = request != null ? request.getWeaponConfig() : null;
         UtilityWeapon utilityWeapon = null;
@@ -472,6 +475,7 @@ public class GameManager {
 
         // Initialize lives based on respawn mode (delegated to RuleSystem)
         ruleSystem.initializePlayerLives(aiPlayer);
+        ruleSystem.assignPlayerRandomWeapons(aiPlayer);
 
         // Apply spawn invincibility to give AI player time to get their bearings
         StatusEffectManager.applySpawnInvincibility(aiPlayer);
@@ -539,7 +543,7 @@ public class GameManager {
     /**
      * Check if the game has any human player sessions occupying a slot
      * (LOBBY or PLAYING). Spectators are intentionally excluded so the
-     * AI-only cleanup sweep ({@link com.fullsteam.GameLobby#cleanupAIOnlyGames})
+     * AI-only cleanup sweep ({@link GameLobby#cleanupAIOnlyGames()})
      * can reap a game that has nothing but spectators hanging around.
      */
     public boolean hasHumanPlayers() {
@@ -559,6 +563,9 @@ public class GameManager {
         // Count players on each team
         int[] teamCounts = new int[gameConfig.getTeamCount() + 1]; // +1 for index alignment
         for (Player player : gameEntities.getAllPlayers()) {
+            if (player instanceof AIPlayer) {
+                continue; // skip AI
+            }
             int team = player.getTeam();
             if (team > 0 && team <= gameConfig.getTeamCount()) {
                 teamCounts[team]++;
@@ -566,7 +573,7 @@ public class GameManager {
         }
 
         // Find team with fewest players
-        int bestTeam = 1;
+        int bestTeam = ThreadLocalRandom.current().nextInt(1, gameConfig.getTeamCount() + 1);
         int minCount = teamCounts[1];
         for (int team = 2; team <= gameConfig.getTeamCount(); team++) {
             if (teamCounts[team] < minCount) {
@@ -799,8 +806,8 @@ public class GameManager {
         switch (playerSession.getState()) {
             case SPECTATOR -> onSpectatorJoined(playerSession);
             case LOBBY -> onLobbyJoined(playerSession);
-            case PLAYING -> log.warn("Session {} entered onPlayerJoined already in PLAYING state; ignoring.",
-                    playerSession.getPlayerId());
+            case PLAYING ->
+                    log.warn("Session {} entered onPlayerJoined already in PLAYING state; ignoring.", playerSession.getPlayerId());
         }
     }
 
@@ -860,16 +867,12 @@ public class GameManager {
             player.applyWeaponConfig(primary, utility);
         }
 
-        // Initialize lives based on respawn mode
-        if (gameConfig.getRules().hasLimitedLives()) {
-            player.initializeLives(gameConfig.getRules().getMaxLives());
-            log.info("Player {} initialized with {} lives", player.getId(), gameConfig.getRules().getMaxLives());
-        }
-
         // Apply spawn invincibility to give player time to get their bearings
-        StatusEffectManager.applySpawnInvincibility(player);
 
         gameEntities.add(player);
+        ruleSystem.initializePlayerLives(player);
+        ruleSystem.assignPlayerRandomWeapons(player);
+        ruleSystem.ensureVipForTeam(assignedTeam);
 
         playerSession.setState(PlayerSessionState.PLAYING);
         send(playerSession.getSession(), createInitialGameState(player));
@@ -880,10 +883,7 @@ public class GameManager {
         // Broadcast player join event with team color
         gameEventManager.broadcastPlayerJoin(playerSession.getPlayerName(), assignedTeam);
 
-        // Ensure VIP is assigned for this team if VIP mode is enabled
-        if (gameConfig.getRules().hasVip()) {
-            ruleSystem.ensureVipForTeam(assignedTeam);
-        }
+        StatusEffectManager.applySpawnInvincibility(player);
 
         // Adjust AI players when a human player spawns
         adjustAIPlayers();
@@ -976,11 +976,6 @@ public class GameManager {
             double dist2 = beamStart.distanceSquared(p2.getPosition());
             return Double.compare(dist1, dist2);
         });
-
-        // For beams that don't pierce players, only return the first player
-        if (!beam.canPiercePlayers() && !playersInPath.isEmpty()) {
-            return List.of(playersInPath.get(0));
-        }
 
         return playersInPath;
     }
