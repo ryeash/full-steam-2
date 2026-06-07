@@ -74,6 +74,7 @@ public class AIWeaponSelector {
 
             // Beam weapons
             WeaponConfig.LASER_RIFLE_PRESET,
+            WeaponConfig.PRISM_GUN_PRESET,
             WeaponConfig.PLASMA_CANNON_PRESET,
 
             // Combo weapons
@@ -155,6 +156,7 @@ public class AIWeaponSelector {
                         WeaponConfig.BOUNCY_SMG_PRESET,
                         WeaponConfig.INCENDIARY_SHOTGUN_PRESET,
                         WeaponConfig.SHOTGUN_PRESET,
+                        WeaponConfig.PRISM_GUN_PRESET,
                         WeaponConfig.ARC_PISTOL_PRESET,
                         WeaponConfig.ASSAULT_RIFLE_PRESET,
                         WeaponConfig.TWIN_SIXES_PRESET,

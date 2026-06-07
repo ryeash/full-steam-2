@@ -360,6 +360,21 @@ public class WeaponConfig {
             Ordinance.LASER
     );
 
+    public static final WeaponConfig PRISM_GUN_PRESET = new WeaponConfig(
+            "Prism Gun",
+            20,     // High damage
+            6,      // Medium fire rate
+            12,     // Long range
+            -10,      // scatter
+            15,     // Medium magazine
+            7,      // Fast reload
+            0,      // Not used for beams
+            10,      // Single beam
+            -10,      // Not used for beams
+            Set.of(),  // No effects
+            Ordinance.LASER
+    );
+
     // Plasma Cannon - Continuous damage beam weapon
     public static final WeaponConfig PLASMA_CANNON_PRESET = new WeaponConfig(
             "Plasma Cannon",

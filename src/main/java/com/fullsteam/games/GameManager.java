@@ -51,6 +51,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -323,8 +324,6 @@ public class GameManager {
         if (playerSession == null) {
             return;
         }
-        Player player = gameEntities.getPlayer(playerId);
-
         WeaponConfig weaponConfig = request != null ? request.getWeaponConfig() : null;
         UtilityWeapon utilityWeapon = null;
         if (request != null && request.getUtilityWeapon() != null) {
@@ -563,9 +562,6 @@ public class GameManager {
         // Count players on each team
         int[] teamCounts = new int[gameConfig.getTeamCount() + 1]; // +1 for index alignment
         for (Player player : gameEntities.getAllPlayers()) {
-            if (player instanceof AIPlayer) {
-                continue; // skip AI
-            }
             int team = player.getTeam();
             if (team > 0 && team <= gameConfig.getTeamCount()) {
                 teamCounts[team]++;

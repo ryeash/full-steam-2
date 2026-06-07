@@ -53,6 +53,7 @@ public class Turret extends GameEntity {
 
     @Override
     public void update(double deltaTime) {
+        super.update(deltaTime);
         if (!active) {
             return;
         }
@@ -67,8 +68,6 @@ public class Turret extends GameEntity {
         if (currentTarget != null && (!currentTarget.isActive() || !isValidTarget(currentTarget))) {
             currentTarget = null;
         }
-
-        lastUpdateTime = System.currentTimeMillis();
     }
 
     /**
