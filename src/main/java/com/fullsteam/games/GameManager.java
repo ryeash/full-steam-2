@@ -1158,6 +1158,7 @@ public class GameManager {
         player.setActive(true);
         player.setHealth(gameConfig.getPlayerMaxHealth());
         player.setRespawnTime(0);
+        player.getWeapon().reload();
 
         // Move to spawn point
         Vector2 spawnPoint = spawnPointManager.findVariedSpawnPointForTeam(player.getTeam());
