@@ -4293,10 +4293,12 @@ class GameEngine {
      * Create laser beam graphics
      */
     createLaserGraphics(graphics, length, beamData) {
+        const color = this.getTeamColor(beamData.ownerTeam)
+
         // Main laser beam - bright magenta/red
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
-        graphics.stroke({ width: beamData.size, color: 0xff44ff, alpha: 0.9 });
+        graphics.stroke({ width: beamData.size, color: color, alpha: 0.9 });
         
         // Inner core - white hot
         graphics.moveTo(0, 0);
@@ -4306,7 +4308,7 @@ class GameEngine {
         // Outer glow effect
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
-        graphics.stroke({ width: beamData.size * 1.5, color: 0xff44ff, alpha: 0.3 });
+        graphics.stroke({ width: beamData.size * 1.5, color: color, alpha: 0.3 });
         
         return graphics;
     }
@@ -4315,10 +4317,12 @@ class GameEngine {
      * Create plasma beam graphics
      */
     createPlasmaBeamGraphics(graphics, length, beamData) {
+        const color = this.getTeamColor(beamData.ownerTeam)
+
         // Main plasma beam - electric blue
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
-        graphics.stroke({ width: beamData.size, color: 0x4488ff, alpha: 0.8 });
+        graphics.stroke({ width: beamData.size, color: color, alpha: 0.8 });
         
         // Plasma core - bright white
         graphics.moveTo(0, 0);
@@ -4328,7 +4332,7 @@ class GameEngine {
         // Crackling energy effect
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
-        graphics.stroke({ width: beamData.size * 2, color: 0x4488ff, alpha: 0.2 });
+        graphics.stroke({ width: beamData.size * 2, color: color, alpha: 0.2 });
         
         // Add plasma instability (random segments)
         for (let i = 0; i < length; i += 20) {

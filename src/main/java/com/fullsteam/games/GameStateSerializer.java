@@ -289,9 +289,6 @@ public class GameStateSerializer {
         return state;
     }
 
-
-    // ========== Player States ==========
-
     private List<Map<String, Object>> createPlayerStates() {
         List<Map<String, Object>> playerStates = new ArrayList<>();
         for (Player player : gameEntities.getAllPlayers()) {
@@ -346,8 +343,6 @@ public class GameStateSerializer {
         s.put("activePowerUps", activePowerUps);
         return s;
     }
-
-    // ========== Projectile States ==========
 
     private List<Map<String, Object>> createProjectileStates() {
         List<Map<String, Object>> projectileStates = new ArrayList<>();
@@ -413,8 +408,6 @@ public class GameStateSerializer {
         return outer.toString();
     }
 
-    // ========== Field Effect States ==========
-
     private List<Map<String, Object>> createFieldEffectStates() {
         List<Map<String, Object>> fieldEffectStates = new ArrayList<>();
         for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
@@ -434,8 +427,6 @@ public class GameStateSerializer {
         }
         return fieldEffectStates;
     }
-
-    // ========== Utility Entity States ==========
 
     private List<Map<String, Object>> createTurretStates() {
         List<Map<String, Object>> turretStates = new ArrayList<>();
@@ -560,8 +551,6 @@ public class GameStateSerializer {
         return powerUpStates;
     }
 
-    // ========== Blinded Game State ==========
-
     /**
      * Create a restricted game state for a player whose vision is obscured by smoke.
      * Only includes the player's own data and smoke field effects; all other entity
@@ -614,15 +603,11 @@ public class GameStateSerializer {
             }
         }
         state.put("fieldEffects", smokeEffects);
-
         // Omit all other transient collections — absent field == empty array on the client.
         // Obstacles are excluded entirely: they're static and already on the client
         // from the initial-state payload.
-
         return state;
     }
-
-    // ========== Game Mode Specific States ==========
 
     private List<Map<String, Object>> createKothZoneStates() {
         List<Map<String, Object>> zoneStates = new ArrayList<>();
@@ -701,6 +686,5 @@ public class GameStateSerializer {
         }
         return flagStates;
     }
-
 }
 
