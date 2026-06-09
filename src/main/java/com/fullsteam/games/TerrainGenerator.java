@@ -114,7 +114,7 @@ public class TerrainGenerator {
     private boolean isQuadrantObstaclePositionClear(Obstacle obstacle) {
         Vector2 position = obstacle.getPosition();
         double radius = obstacle.getBoundingRadius();
-        double spacing = Math.max(10.0, radius * 0.2);
+        double spacing = Math.max(10.0, radius * 0.1);
         double axisClearance = radius + spacing;
         if (Math.abs(position.x) < axisClearance || Math.abs(position.y) < axisClearance) {
             return false; // Too close to an axis; would overlap its mirror image
@@ -362,7 +362,8 @@ public class TerrainGenerator {
         double size = random.nextDouble(35, 180);
         Rectangle lower = Geometry.createRectangle(size, size / 4);
         lower.translate(size / 2, 0);
-        Rectangle upper = Geometry.createRectangle(size / 4, size);
+        int multiplier = random.nextInt(1, 3);
+        Rectangle upper = Geometry.createRectangle(size / 4, size / multiplier);
         upper.translate(0, size / 2);
         return List.of(upper, lower);
     }
