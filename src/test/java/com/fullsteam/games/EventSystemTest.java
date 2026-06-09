@@ -46,7 +46,7 @@ class EventSystemTest extends BaseTestClass {
         GameEntities gameEntities = new GameEntities(config, world);
         GameEventManager eventManager = new GameEventManager(gameEntities, (session, msg) -> {
         });
-        TerrainGenerator terrainGenerator = new TerrainGenerator(world, 2000, 2000, false, EntityWorldDensity.RANDOM);
+        TerrainGenerator terrainGenerator = new TerrainGenerator(world, config);
 
         EventSystem eventSystem = new EventSystem(
                 "test-game",
@@ -209,7 +209,7 @@ class EventSystemTest extends BaseTestClass {
         GameEntities gameEntities = new GameEntities(config, world);
         GameEventManager eventManager = new GameEventManager(gameEntities, (session, msg) -> {
         });
-        TerrainGenerator terrainGenerator = new TerrainGenerator(world,  2000, 2000, false, EntityWorldDensity.RANDOM);
+        TerrainGenerator terrainGenerator = new TerrainGenerator(world, config);
 
         EventSystem eventSystem = new EventSystem(
                 "test-game",
@@ -225,42 +225,42 @@ class EventSystemTest extends BaseTestClass {
         assertNotNull(eventData);
         assertEquals(0, eventData.size(), "Should be empty when no events active");
     }
-    
+
     @Test
     void testEventDensityMultipliers() {
         // Test SPARSE density range
         for (int i = 0; i < 10; i++) {
             double multiplier = EntityWorldDensity.SPARSE.getMultiplier();
-            assertTrue(multiplier >= 0.6 && multiplier <= 0.9, 
+            assertTrue(multiplier >= 0.6 && multiplier <= 0.9,
                     "SPARSE multiplier should be between 0.6 and 0.9, got: " + multiplier);
         }
-        
+
         // Test DENSE density range
         for (int i = 0; i < 10; i++) {
             double multiplier = EntityWorldDensity.DENSE.getMultiplier();
-            assertTrue(multiplier >= 1.2 && multiplier <= 1.8, 
+            assertTrue(multiplier >= 1.2 && multiplier <= 1.8,
                     "DENSE multiplier should be between 1.2 and 1.8, got: " + multiplier);
         }
-        
+
         // Test CHOKED density range
         for (int i = 0; i < 10; i++) {
             double multiplier = EntityWorldDensity.CHOKED.getMultiplier();
-            assertTrue(multiplier >= 2.0 && multiplier <= 3.0, 
+            assertTrue(multiplier >= 2.0 && multiplier <= 3.0,
                     "CHOKED multiplier should be between 2.0 and 3.0, got: " + multiplier);
         }
-        
+
         // Test RANDOM density (should return values from any of the above ranges)
         for (int i = 0; i < 10; i++) {
             double multiplier = EntityWorldDensity.RANDOM.getMultiplier();
-            assertTrue(multiplier >= 0.6 && multiplier <= 3.0, 
+            assertTrue(multiplier >= 0.6 && multiplier <= 3.0,
                     "RANDOM multiplier should be between 0.6 and 3.0, got: " + multiplier);
         }
     }
-    
+
     @Test
     void testEventDensityDefaultValues() {
         Rules rules = Rules.builder().build();
-        
+
         // Check default density values
         assertEquals(EntityWorldDensity.DENSE, rules.getMeteorShowerDensity());
         assertEquals(EntityWorldDensity.SPARSE, rules.getSupplyDropDensity());

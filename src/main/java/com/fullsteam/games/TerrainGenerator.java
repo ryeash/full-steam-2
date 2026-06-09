@@ -3,14 +3,13 @@ package com.fullsteam.games;
 import com.fullsteam.model.EntityWorldDensity;
 import com.fullsteam.physics.Obstacle;
 import lombok.Getter;
+import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.World;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -27,12 +26,12 @@ public class TerrainGenerator {
     private final EntityWorldDensity configuredDensity;
     private final List<Obstacle> generatedObstacles = new ArrayList<>();
 
-    public TerrainGenerator(World<Body> world, double worldWidth, double worldHeight, boolean reserveCenterForOddball, EntityWorldDensity configuredDensity) {
+    public TerrainGenerator(World<Body> world, GameConfig gameConfig) {
         this.world = world;
-        this.worldWidth = worldWidth;
-        this.worldHeight = worldHeight;
-        this.reserveCenterForOddball = reserveCenterForOddball;
-        this.configuredDensity = configuredDensity;
+        this.worldWidth = ((AxisAlignedBounds) world.getBounds()).getWidth();
+        this.worldHeight = ((AxisAlignedBounds) world.getBounds()).getHeight();
+        this.reserveCenterForOddball = gameConfig.getRules().hasOddball();
+        this.configuredDensity = gameConfig.getRules().getObstacleDensity();
         generateObstacles();
     }
 
@@ -123,23 +122,6 @@ public class TerrainGenerator {
     }
 
     /**
-     * Check if a position is suitable for placing objects (avoids terrain features).
-     */
-    public boolean isPositionClear(Vector2 position, double radius) {
-        double spacing = Math.max(5.0, radius * 0.1); // At least 5 units or 10% of radius
-        double totalRadius = radius + spacing;
-        for (Obstacle obstacle : generatedObstacles) {
-            double distance = position.distance(obstacle.getPosition());
-            double obstacleRadius = obstacle.getBoundingRadius(); // Use the proper bounding radius
-            double obstacleSpacing = Math.max(5.0, obstacleRadius * 0.1);
-            if (distance < obstacleRadius + totalRadius + obstacleSpacing) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
      * Get a safe spawn position that avoids terrain features.
      */
     public Vector2 getSafeSpawnPosition(double radius) {
@@ -154,5 +136,22 @@ public class TerrainGenerator {
         }
         // Fallback to center if no clear position found
         return new Vector2(0, 0);
+    }
+
+    /**
+     * Check if a position is suitable for placing objects (avoids terrain features).
+     */
+    public boolean isPositionClear(Vector2 position, double radius) {
+        double spacing = Math.max(5.0, radius * 0.1); // At least 5 units or 10% of radius
+        double totalRadius = radius + spacing;
+        for (Obstacle obstacle : generatedObstacles) {
+            double distance = position.distance(obstacle.getPosition());
+            double obstacleRadius = obstacle.getBoundingRadius(); // Use the proper bounding radius
+            double obstacleSpacing = Math.max(5.0, obstacleRadius * 0.1);
+            if (distance < obstacleRadius + totalRadius + obstacleSpacing) {
+                return false;
+            }
+        }
+        return true;
     }
 }

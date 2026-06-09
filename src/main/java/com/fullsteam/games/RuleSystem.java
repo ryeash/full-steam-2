@@ -1,7 +1,6 @@
 package com.fullsteam.games;
 
 import com.fullsteam.ai.AIWeaponSelector;
-import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.GameState;
 import com.fullsteam.model.RespawnMode;
@@ -15,7 +14,6 @@ import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.KothZone;
 import com.fullsteam.physics.Player;
-import com.fullsteam.physics.PowerUp;
 import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -116,10 +114,7 @@ public class RuleSystem {
      * Initialize the event system if enabled.
      * Must be called after construction with the required dependencies.
      */
-    public void initializeEventSystem(TerrainGenerator terrainGenerator,
-                                      Consumer<FieldEffect> fieldEffectSpawner,
-                                      Consumer<PowerUp> powerUpSpawner,
-                                      double worldWidth, double worldHeight) {
+    public void initializeEventSystem(TerrainGenerator terrainGenerator, double worldWidth, double worldHeight) {
         if (rules.isEnableRandomEvents() && eventSystem == null) {
             this.eventSystem = new EventSystem(
                     gameId,
@@ -166,7 +161,7 @@ public class RuleSystem {
         }
 
         // Select first player as VIP (could be randomized or based on score)
-        Player vip = teamPlayers.get(0);
+        Player vip = teamPlayers.getFirst();
         setPlayerAsVip(vip);
 
         log.info("Player {} ({}) selected as VIP for team {}",
@@ -969,10 +964,7 @@ public class RuleSystem {
      * Schedule the next weapon rotation.
      */
     private void scheduleNextWeaponRotation() {
-        nextWeaponRotationTime = (long) (System.currentTimeMillis() +
-                (rules.getRandomWeaponInterval() * 1000));
-        log.debug("Next weapon rotation scheduled for game {} in {} seconds",
-                gameId, rules.getRandomWeaponInterval());
+        nextWeaponRotationTime = (long) (System.currentTimeMillis() + (rules.getRandomWeaponInterval() * 1000));
     }
 
     /**

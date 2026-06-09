@@ -51,7 +51,6 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -158,13 +157,7 @@ public class GameManager {
         // Set kill callback for beam weapons
         this.weaponSystem.setKillCallback(this::killPlayer);
 
-        this.terrainGenerator = new TerrainGenerator(
-                world,
-                gameConfig.getWorldWidth(),
-                gameConfig.getWorldHeight(),
-                hasOddball,
-                obstacleDensity
-        );
+        this.terrainGenerator = new TerrainGenerator(world, gameConfig);
 
         // Initialize utility system
         this.utilitySystem = new UtilitySystem(
@@ -211,8 +204,6 @@ public class GameManager {
         // Initialize event system if enabled (must be after terrain generation)
         ruleSystem.initializeEventSystem(
                 terrainGenerator,
-                this::addFieldEffectToWorld,
-                this::addPowerUpToWorld,
                 gameConfig.getWorldWidth(),
                 gameConfig.getWorldHeight()
         );
@@ -634,7 +625,7 @@ public class GameManager {
     /**
      * Redistribute AI players between teams so that each team's headcount is
      * within one of every other team's headcount.
-     *
+     * <p>
      * The algorithm iterates until stable: it finds the most- and least-populated
      * teams and, if the gap is ≥ 2, removes one AI from the over-full team and
      * immediately adds a new one (which {@link #assignPlayerToTeam()} will place
@@ -671,7 +662,7 @@ public class GameManager {
             List<Integer> aiOnMaxTeam = aiByTeam.getOrDefault(maxTeam, List.of());
             if (aiOnMaxTeam.isEmpty()) break; // all excess players on that team are human — can't move
 
-            int aiToMove = aiOnMaxTeam.get(0);
+            int aiToMove = aiOnMaxTeam.getFirst();
             removeAIPlayer(aiToMove);
             // assignPlayerToTeam() will now direct the replacement to minTeam.
             AIGameHelper.addMixedAIPlayers(this, 1);
@@ -921,9 +912,9 @@ public class GameManager {
      * eligible (e.g. that a slot is available when transitioning a SPECTATOR
      * to PLAYING).
      */
-    protected Player spawnPlayerFromSession(PlayerSession playerSession,
-                                            WeaponConfig weaponConfig,
-                                            UtilityWeapon utilityWeapon) {
+    protected void spawnPlayerFromSession(PlayerSession playerSession,
+                                          WeaponConfig weaponConfig,
+                                          UtilityWeapon utilityWeapon) {
         int assignedTeam = assignPlayerToTeam();
         Vector2 spawnPoint = spawnPointManager.findVariedSpawnPointForTeam(assignedTeam);
         log.info("Player {} spawning in game {} at spawn point ({}, {}) on team {}",
@@ -960,7 +951,6 @@ public class GameManager {
 
         // Adjust AI players when a human player spawns
         adjustAIPlayers();
-        return player;
     }
 
     protected void onPlayerLeft(PlayerSession playerSession) {
@@ -1396,14 +1386,6 @@ public class GameManager {
                 0      // No team
         );
         gameEntities.add(explosion);
-    }
-
-    /**
-     * Add a field effect to the game world (used by event system).
-     */
-    @Deprecated
-    private void addFieldEffectToWorld(FieldEffect fieldEffect) {
-        gameEntities.add(fieldEffect);
     }
 
     /**
