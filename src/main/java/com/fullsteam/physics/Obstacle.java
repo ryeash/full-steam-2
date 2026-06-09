@@ -10,7 +10,7 @@ import org.dyn4j.geometry.MassType;
 @Getter
 public class Obstacle extends GameEntity {
     public enum ObstacleType {
-        BOULDER,           // Circular rocks
+        BOULDER,          // Circular rocks
         HOUSE,            // Rectangular buildings
         WALL_SEGMENT,     // Linear barriers
         TRIANGLE_ROCK,    // Triangular stone formations

@@ -14,7 +14,7 @@ import lombok.extern.jackson.Jacksonized;
 @Introspected
 public class GameConfig {
     @Min(2)
-    @Max(100)
+    @Max(50)
     @Builder.Default
     private int maxPlayers = 10;
     
@@ -24,12 +24,12 @@ public class GameConfig {
     private int teamCount = 2; // 0 = FFA, 1 = invalid, 2-4 = team modes
     
     @DecimalMin("800.0")
-    @DecimalMax("10000.0")
+    @DecimalMax("7000.0")
     @Builder.Default
     private double worldWidth = 2000.0;
     
     @DecimalMin("800.0")
-    @DecimalMax("10000.0")
+    @DecimalMax("7000.0")
     @Builder.Default
     private double worldHeight = 2000.0;
     

@@ -11,7 +11,9 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.Convex;
 import org.dyn4j.geometry.Geometry;
 import org.dyn4j.geometry.MassType;
+import org.dyn4j.geometry.Polygon;
 import org.dyn4j.geometry.Rectangle;
+import org.dyn4j.geometry.Transform;
 import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.World;
 
@@ -44,18 +46,34 @@ public class TerrainGenerator {
 
     /**
      * Generate obstacles appropriate for the terrain type.
+     *
+     * <p>Obstacles are only placed within a single (positive) world quadrant and
+     * then mirrored across the x-axis, the y-axis, and both axes. The result is a
+     * world with four-fold (90-degree) symmetry so that every team faces an
+     * identical layout. Because each placed base obstacle yields four obstacles,
+     * the per-quadrant target is scaled down accordingly.
      */
     private void generateObstacles() {
         int targetObstacleCount = calculateObstacleCountForWorldSize(configuredDensity);
+        int quadrantTarget = Math.max(1, targetObstacleCount / 4);
         int attemptsPerObstacle = 50;
-        int successfulPlacements = 0;
-        for (int i = 0; i < targetObstacleCount && successfulPlacements < targetObstacleCount; i++) {
-            Obstacle obstacle = generateObstacleWithCollisionCheck(attemptsPerObstacle);
-            if (obstacle != null) {
-                generatedObstacles.add(obstacle);
-                successfulPlacements++;
+        for (int i = 0; i < quadrantTarget; i++) {
+            Obstacle base = generateQuadrantObstacleWithCollisionCheck(attemptsPerObstacle);
+            if (base != null) {
+                addObstacleWithSymmetricMirrors(base);
             }
         }
+    }
+
+    /**
+     * Add a base obstacle along with its three mirror images, producing a set of
+     * four obstacles that are symmetric across both world axes.
+     */
+    private void addObstacleWithSymmetricMirrors(Obstacle base) {
+        generatedObstacles.add(base);
+        generatedObstacles.add(createMirroredObstacle(base, true, false));  // across the x-axis
+        generatedObstacles.add(createMirroredObstacle(base, false, true));  // across the y-axis
+        generatedObstacles.add(createMirroredObstacle(base, true, true));   // across both axes
     }
 
     private int calculateObstacleCountForWorldSize(EntityWorldDensity density) {
@@ -69,18 +87,39 @@ public class TerrainGenerator {
     }
 
     /**
-     * Generate an obstacle with collision checking to prevent overlaps.
+     * Generate a base obstacle within a single quadrant, with collision checking
+     * to prevent overlaps once the obstacle is mirrored into the other quadrants.
      */
-    private Obstacle generateObstacleWithCollisionCheck(int maxAttempts) {
+    private Obstacle generateQuadrantObstacleWithCollisionCheck(int maxAttempts) {
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
-            double x = (ThreadLocalRandom.current().nextDouble() - 0.5) * (worldWidth - 100);
-            double y = (ThreadLocalRandom.current().nextDouble() - 0.5) * (worldHeight - 100);
+            double x = ThreadLocalRandom.current().nextDouble() * (worldWidth / 2.0 - 50);
+            double y = ThreadLocalRandom.current().nextDouble() * (worldHeight / 2.0 - 50);
             Obstacle candidate = createChaoticObstacle(x, y);
-            if (isObstaclePositionClear(candidate)) {
+            if (isQuadrantObstaclePositionClear(candidate)) {
                 return candidate;
             }
         }
         return null;
+    }
+
+    /**
+     * Check that a base obstacle is a valid placement for a symmetric world.
+     *
+     * <p>In addition to the normal overlap checks, the obstacle must stay clear of
+     * both axes by at least its radius plus spacing so that its own mirror images
+     * (reflected across each axis) do not overlap it. Because the existing
+     * obstacle set is always kept symmetric, validating the base candidate alone
+     * guarantees that all of its mirrors are clear as well.
+     */
+    private boolean isQuadrantObstaclePositionClear(Obstacle obstacle) {
+        Vector2 position = obstacle.getPosition();
+        double radius = obstacle.getBoundingRadius();
+        double spacing = Math.max(10.0, radius * 0.2);
+        double axisClearance = radius + spacing;
+        if (Math.abs(position.x) < axisClearance || Math.abs(position.y) < axisClearance) {
+            return false; // Too close to an axis; would overlap its mirror image
+        }
+        return isObstaclePositionClear(obstacle);
     }
 
     /**
@@ -115,6 +154,77 @@ public class TerrainGenerator {
             }
         }
         return true;
+    }
+
+    /**
+     * Create a mirror image of the given obstacle by reflecting its geometry and
+     * position across the x-axis, the y-axis, or both.
+     *
+     * <p>The source body's rotation and the reflection are baked directly into the
+     * mirrored fixture vertices, so the resulting body needs no transform rotation
+     * of its own. This keeps the four symmetric copies perfectly congruent.
+     *
+     * @param flipX reflect across the x-axis (negate the y coordinate)
+     * @param flipY reflect across the y-axis (negate the x coordinate)
+     */
+    private Obstacle createMirroredObstacle(Obstacle source, boolean flipX, boolean flipY) {
+        Body sourceBody = source.getBody();
+        Transform transform = sourceBody.getTransform();
+        Vector2 sourcePos = transform.getTranslation();
+        double newX = flipY ? -sourcePos.x : sourcePos.x;
+        double newY = flipX ? -sourcePos.y : sourcePos.y;
+        Vector2 newPos = new Vector2(newX, newY);
+
+        Body mirroredBody = new Body();
+        for (int i = 0; i < sourceBody.getFixtureCount(); i++) {
+            Convex mirroredShape = mirrorShape(sourceBody.getFixture(i).getShape(), transform, flipX, flipY, newPos);
+            BodyFixture fixture = mirroredBody.addFixture(mirroredShape);
+            fixture.setRestitution(0.6);
+        }
+        mirroredBody.setMass(MassType.INFINITE);
+        return new Obstacle(Config.nextEntityId(), newX, newY, source.getType(), mirroredBody);
+    }
+
+    /**
+     * Reflect a single convex shape from the source body's frame into the mirrored
+     * body's local frame.
+     *
+     * <p>The source body transform (rotation + translation) is applied first to move
+     * the shape into world space, the reflection is performed about the world origin
+     * using dyn4j's {@link Geometry} flip helpers (which also correct the winding
+     * order), and finally the shape is shifted into the mirrored body's local frame
+     * (whose origin sits at {@code newPos}).
+     */
+    private Convex mirrorShape(Convex shape, Transform transform, boolean flipX, boolean flipY, Vector2 newPos) {
+        if (shape instanceof Polygon polygon) {
+            Vector2[] localVertices = polygon.getVertices();
+            Vector2[] worldVertices = new Vector2[localVertices.length];
+            for (int i = 0; i < localVertices.length; i++) {
+                worldVertices[i] = transform.getTransformed(localVertices[i]);
+            }
+            Polygon mirrored = new Polygon(worldVertices);
+            Vector2 origin = new Vector2(0, 0);
+            if (flipX) {
+                mirrored = Geometry.flipAlongTheXAxis(mirrored, origin);
+            }
+            if (flipY) {
+                mirrored = Geometry.flipAlongTheYAxis(mirrored, origin);
+            }
+            mirrored.translate(-newPos.x, -newPos.y);
+            return mirrored;
+        } else if (shape instanceof Circle circle) {
+            Vector2 worldCenter = transform.getTransformed(circle.getCenter());
+            if (flipY) {
+                worldCenter.x = -worldCenter.x;
+            }
+            if (flipX) {
+                worldCenter.y = -worldCenter.y;
+            }
+            Circle mirrored = new Circle(circle.getRadius());
+            mirrored.translate(worldCenter.x - newPos.x, worldCenter.y - newPos.y);
+            return mirrored;
+        }
+        throw new IllegalArgumentException("Cannot mirror unsupported shape type: " + shape.getClass().getName());
     }
 
     public void moveToOpenPlace(Body bodyToPlace) {
