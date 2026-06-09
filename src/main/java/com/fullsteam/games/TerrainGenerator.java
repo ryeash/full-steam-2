@@ -1,10 +1,17 @@
 package com.fullsteam.games;
 
+import com.fullsteam.Config;
 import com.fullsteam.model.EntityWorldDensity;
 import com.fullsteam.physics.Obstacle;
 import lombok.Getter;
 import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
+import org.dyn4j.dynamics.BodyFixture;
+import org.dyn4j.geometry.Circle;
+import org.dyn4j.geometry.Convex;
+import org.dyn4j.geometry.Geometry;
+import org.dyn4j.geometry.MassType;
+import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.World;
 
@@ -68,7 +75,7 @@ public class TerrainGenerator {
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
             double x = (ThreadLocalRandom.current().nextDouble() - 0.5) * (worldWidth - 100);
             double y = (ThreadLocalRandom.current().nextDouble() - 0.5) * (worldHeight - 100);
-            Obstacle candidate = Obstacle.createChaoticObstacle(x, y);
+            Obstacle candidate = createChaoticObstacle(x, y);
             if (isObstaclePositionClear(candidate)) {
                 return candidate;
             }
@@ -153,5 +160,118 @@ public class TerrainGenerator {
             }
         }
         return true;
+    }
+
+    /**
+     * Create a physics body for the obstacle based on its type.
+     */
+    public static Body createObstacleBody(Obstacle.ObstacleType type) {
+        Body body = new Body();
+        List<Convex> shapes = createShapeForType(type);
+        for (Convex shape : shapes) {
+            BodyFixture bodyFixture = body.addFixture(shape);
+            bodyFixture.setRestitution(0.6);
+        }
+        body.setMass(MassType.INFINITE);
+        double rotation = ThreadLocalRandom.current().nextDouble(0, Math.PI * 2);
+        body.getTransform().setRotation(rotation);
+        return body;
+    }
+
+    /**
+     * Create the appropriate shape based on obstacle type.
+     */
+    private static List<Convex> createShapeForType(Obstacle.ObstacleType type) {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        return switch (type) {
+            case BOULDER -> List.of(createCircularShape(random));
+            case HOUSE -> List.of(createRectangularShape(random));
+            case WALL_SEGMENT -> List.of(createWallShape(random));
+            case TRIANGLE_ROCK -> List.of(createTriangularShape(random));
+            case POLYGON_DEBRIS -> List.of(createIrregularPolygon(random));
+            case HEXAGON_CRYSTAL -> List.of(createRegularPolygon(ThreadLocalRandom.current().nextInt(4, 9), random));
+            case DIAMOND_STONE -> List.of(createDiamondShape(random));
+            case L_SHAPED_WALL -> createLShape(random);
+            case CROSS_BARRIER -> createCrossShape(random);
+        };
+    }
+
+    private static Convex createCircularShape(ThreadLocalRandom random) {
+        double radius = random.nextDouble(25, 100);
+        return new Circle(radius);
+    }
+
+    private static Convex createRectangularShape(ThreadLocalRandom random) {
+        double width = random.nextDouble(80, 240);
+        double height = random.nextDouble(60, 200);
+        return new Rectangle(width, height);
+    }
+
+    private static Convex createWallShape(ThreadLocalRandom random) {
+        double length = random.nextDouble(80, 180);
+        double thickness = random.nextDouble(16, 35);
+        return Geometry.createRectangle(length, thickness);
+    }
+
+    private static Convex createTriangularShape(ThreadLocalRandom random) {
+        double baseSize = random.nextDouble(45, 180);
+        double type = random.nextDouble();
+        if (type < .33) {
+            return Geometry.createEquilateralTriangle(baseSize);
+        } else if (type < .66) {
+            return Geometry.createIsoscelesTriangle(baseSize, baseSize / 2);
+        } else {
+            return Geometry.createRightTriangle(baseSize, baseSize / 2, random.nextBoolean());
+        }
+    }
+
+    private static Convex createIrregularPolygon(ThreadLocalRandom random) {
+        double size = random.nextDouble(45, 130);
+        double choice = random.nextDouble();
+        if (choice < .33) {
+            return Geometry.createPolygonalEllipse(10, size, size / 3);
+        } else if (choice < .66) {
+            return Geometry.createPolygonalHalfEllipse(5, size, size / 2);
+        } else {
+            return Geometry.createPolygonalCapsule(2, size, size / 2);
+        }
+    }
+
+    private static Convex createRegularPolygon(int sides, ThreadLocalRandom random) {
+        double radius = random.nextDouble(50, 150);
+        return Geometry.createPolygonalCircle(sides, radius);
+    }
+
+    private static Convex createDiamondShape(ThreadLocalRandom random) {
+        double width = random.nextDouble(35, 150);
+        double height = random.nextDouble(35, 150);
+        return Geometry.createPolygonalEllipse(4, width, height);
+    }
+
+    private static List<Convex> createLShape(ThreadLocalRandom random) {
+        double size = random.nextDouble(35, 180);
+        Rectangle lower = Geometry.createRectangle(size, size / 4);
+        lower.translate(size / 2, 0);
+        Rectangle upper = Geometry.createRectangle(size / 4, size);
+        upper.translate(0, size / 2);
+        return List.of(upper, lower);
+    }
+
+    private static List<Convex> createCrossShape(ThreadLocalRandom random) {
+        double size = random.nextDouble(50, 120);
+        return List.of(
+                Geometry.createRectangle(size, size / 4),
+                Geometry.createRectangle(size / 4, size));
+    }
+
+    /**
+     * Factory method to create extra chaotic obstacles with maximum randomization.
+     */
+    public static Obstacle createChaoticObstacle(double x, double y) {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        Obstacle.ObstacleType type = Obstacle.ObstacleType.values()[ThreadLocalRandom.current().nextInt(Obstacle.ObstacleType.values().length)];
+        double xOffset = random.nextGaussian() * 15;
+        double yOffset = random.nextGaussian() * 15;
+        return new Obstacle(Config.nextEntityId(), x + xOffset, y + yOffset, type, createObstacleBody(type));
     }
 }

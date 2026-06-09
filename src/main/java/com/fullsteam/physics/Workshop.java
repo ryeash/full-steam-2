@@ -1,6 +1,7 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.Config;
+import com.fullsteam.games.TerrainGenerator;
 import lombok.Getter;
 import lombok.Setter;
 import org.dyn4j.dynamics.Body;
@@ -27,7 +28,7 @@ public class Workshop extends Obstacle {
     private final Map<Integer, Double> playerProgress = new HashMap<>();
 
     public Workshop(int id, Vector2 position, double craftTime, int maxPowerUps) {
-        super(id, position.x, position.y, ObstacleType.HOUSE);
+        super(id, position.x, position.y, ObstacleType.HOUSE, TerrainGenerator.createObstacleBody(ObstacleType.HOUSE));
         this.craftTime = craftTime;
         this.maxPowerUps = maxPowerUps;
 
