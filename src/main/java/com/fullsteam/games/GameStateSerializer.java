@@ -646,10 +646,6 @@ public class GameStateSerializer {
             flagState.put("y", pos.y);
             flagState.put("ownerTeam", flag.getOwnerTeam());
             flagState.put("state", flag.getState().name());
-            flagState.put("carriedBy", flag.getCarriedByPlayerId());
-            flagState.put("homeX", flag.getHomePosition().x);
-            flagState.put("homeY", flag.getHomePosition().y);
-            flagState.put("captureCount", flag.getCaptureCount());
             flagState.put("isOddball", flag.isOddball());
             flagStates.add(flagState);
         }

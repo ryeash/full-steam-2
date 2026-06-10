@@ -208,7 +208,7 @@ public class IdleBehavior implements AIBehavior {
             
             // Skip friendly turrets - only target enemies
             AITargetWrapper turretWrapper = AITargetWrapper.fromTurret(turret);
-            if (isTeammate(aiPlayer, turretWrapper)) {
+            if (turretWrapper.isTeammateOf(aiPlayer)) {
                 continue;
             }
 
@@ -220,21 +220,6 @@ public class IdleBehavior implements AIBehavior {
         }
 
         return nearest;
-    }
-    
-    private boolean isTeammate(AIPlayer aiPlayer, AITargetWrapper target) {
-        // In FFA mode (team 0), check if it's the AI's own turret
-        if (aiPlayer.getTeam() == 0) {
-            // Don't attack your own turrets in FFA
-            if (target.isTurret() && target.getOwnerId() == aiPlayer.getId()) {
-                return true;
-            }
-            // Everyone else is an enemy in FFA
-            return false;
-        }
-        
-        // In team mode, check if they're on the same team
-        return aiPlayer.getTeam() == target.getTeam();
     }
     
     /**

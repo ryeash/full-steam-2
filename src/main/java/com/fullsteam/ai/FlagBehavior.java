@@ -123,7 +123,6 @@ public class FlagBehavior implements AIBehavior {
      */
     private void executeAttackerBehavior(AIPlayer aiPlayer, GameEntities gameEntities, PlayerInput input, double deltaTime) {
         Vector2 myPos = aiPlayer.getPosition();
-        int myTeam = aiPlayer.getTeam();
 
         // Check if we're carrying a flag
         Flag carriedFlag = getCarriedFlag(aiPlayer, gameEntities);
@@ -411,20 +410,6 @@ public class FlagBehavior implements AIBehavior {
             if (nearestDistance < weaponRange * 0.8 && aiPlayer.canShoot()) {
                 input.setLeft(true);
             }
-        }
-    }
-
-    /**
-     * Smart reload - only reload when safe.
-     */
-    private void smartReload(AIPlayer aiPlayer, PlayerInput input, boolean isSafe) {
-        int currentAmmo = aiPlayer.getCurrentWeapon().getCurrentAmmo();
-        int magazineSize = aiPlayer.getCurrentWeapon().getMagazineSize();
-
-        if (currentAmmo == 0) {
-            input.setReload(true);
-        } else if (isSafe && currentAmmo < magazineSize * 0.3) {
-            input.setReload(true);
         }
     }
 

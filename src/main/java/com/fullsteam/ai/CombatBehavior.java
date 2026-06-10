@@ -361,7 +361,7 @@ public class CombatBehavior implements AIBehavior {
         // First, try to maintain current target if valid
         if (targetId != -1) {
             AITargetWrapper currentTarget = findTargetById(gameEntities, targetId, targetIsPlayer);
-            if (currentTarget != null && currentTarget.isActive() && !isTeammate(aiPlayer, currentTarget)) {
+            if (currentTarget != null && currentTarget.isActive() && !currentTarget.isTeammateOf(aiPlayer)) {
                 double distance = aiPlayer.getPosition().distance(currentTarget.getPosition());
                 if (distance <= 800) { // Increased persistence range
                     return currentTarget;
@@ -388,15 +388,21 @@ public class CombatBehavior implements AIBehavior {
 
         // Add all enemy players
         for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() != aiPlayer.getId() && player.isActive() && !isTeammate(aiPlayer, AITargetWrapper.fromPlayer(player))) {
-                allTargets.add(AITargetWrapper.fromPlayer(player));
+            if (player.getId() != aiPlayer.getId() && player.isActive()) {
+                AITargetWrapper wrapper = AITargetWrapper.fromPlayer(player);
+                if (!wrapper.isTeammateOf(aiPlayer)) {
+                    allTargets.add(wrapper);
+                }
             }
         }
 
         // Add all enemy turrets
         for (Turret turret : gameEntities.getAllTurrets()) {
-            if (turret.isActive() && !isTeammate(aiPlayer, AITargetWrapper.fromTurret(turret))) {
-                allTargets.add(AITargetWrapper.fromTurret(turret));
+            if (turret.isActive()) {
+                AITargetWrapper wrapper = AITargetWrapper.fromTurret(turret);
+                if (!wrapper.isTeammateOf(aiPlayer)) {
+                    allTargets.add(wrapper);
+                }
             }
         }
 
@@ -458,21 +464,6 @@ public class CombatBehavior implements AIBehavior {
             }
         }
         return null;
-    }
-
-    private boolean isTeammate(AIPlayer aiPlayer, AITargetWrapper target) {
-        // In FFA mode (team 0), check if it's the AI's own turret
-        if (aiPlayer.getTeam() == 0) {
-            // Don't attack your own turrets in FFA
-            if (target.isTurret() && target.getOwnerId() == aiPlayer.getId()) {
-                return true;
-            }
-            // Everyone else is an enemy in FFA
-            return false;
-        }
-
-        // In team mode, check if they're on the same team
-        return aiPlayer.getTeam() == target.getTeam();
     }
 
     private double calculateWeaponEffectiveness(AIPlayer aiPlayer, double distance) {

@@ -98,8 +98,7 @@ public class OddballBehavior implements AIBehavior {
         
         if (nearestEnemy != null && nearestEnemy.isActive()) {
             Vector2 enemyPos = nearestEnemy.getPosition();
-            double distanceToEnemy = myPos.distance(enemyPos);
-            
+
             // EVADE - run away from enemies
             Vector2 awayFromEnemy = myPos.difference(enemyPos);
             awayFromEnemy.normalize();

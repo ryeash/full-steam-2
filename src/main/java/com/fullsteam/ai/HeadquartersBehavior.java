@@ -395,20 +395,6 @@ public class HeadquartersBehavior implements AIBehavior {
         return bestThreat;
     }
 
-    /**
-     * Smart reload - only reload when safe.
-     */
-    private void smartReload(AIPlayer aiPlayer, PlayerInput input, boolean isSafe) {
-        int currentAmmo = aiPlayer.getCurrentWeapon().getCurrentAmmo();
-        int magazineSize = aiPlayer.getCurrentWeapon().getMagazineSize();
-
-        if (currentAmmo == 0) {
-            input.setReload(true);
-        } else if (isSafe && currentAmmo < magazineSize * 0.3) {
-            input.setReload(true);
-        }
-    }
-
     @Override
     public void onEnter(AIPlayer aiPlayer) {
         currentRole = HQRole.DEFENDER;

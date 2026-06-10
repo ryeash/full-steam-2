@@ -55,9 +55,6 @@ public class KothBehavior implements AIBehavior {
      * Evaluate and select the best zone to target based on strategic value.
      */
     private void evaluateTargetZone(AIPlayer aiPlayer, GameEntities gameEntities) {
-        Vector2 myPos = aiPlayer.getPosition();
-        int myTeam = aiPlayer.getTeam();
-
         KothZone bestZone = null;
         double bestScore = -1;
 
@@ -317,20 +314,6 @@ public class KothBehavior implements AIBehavior {
             if (aiPlayer.canUseUtility() && countEnemiesInZone(aiPlayer, zone, gameEntities) >= 2) {
                 input.setAltFire(true);
             }
-        }
-    }
-
-    /**
-     * Smart reload - only reload when safe.
-     */
-    private void smartReload(AIPlayer aiPlayer, PlayerInput input, boolean isSafe) {
-        int currentAmmo = aiPlayer.getCurrentWeapon().getCurrentAmmo();
-        int magazineSize = aiPlayer.getCurrentWeapon().getMagazineSize();
-
-        if (currentAmmo == 0) {
-            input.setReload(true);
-        } else if (isSafe && currentAmmo < magazineSize * 0.3) {
-            input.setReload(true);
         }
     }
 

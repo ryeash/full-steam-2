@@ -1,5 +1,6 @@
 package com.fullsteam.ai;
 
+import com.fullsteam.Config;
 import com.fullsteam.RandomNames;
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.model.PlayerInput;
@@ -17,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Supplier;
 
 /**
  * Central manager for all AI players in a game.
@@ -26,20 +28,24 @@ import java.util.concurrent.ThreadLocalRandom;
 public class AIPlayerManager {
     private static final Logger log = LoggerFactory.getLogger(AIPlayerManager.class);
 
+    // How far ahead of an obstacle's surface the AI starts steering around it.
+    private static final double OBSTACLE_LOOK_AHEAD = 70.0;
+
     private final Map<Integer, AIPlayer> aiPlayers = new HashMap<>();
     private final Map<Integer, List<AIBehavior>> availableBehaviors = new HashMap<>();
     private final Map<Integer, PlayerInput> generatedInputs = new HashMap<>();
 
-    // Available behavior types
-    private final List<AIBehavior> behaviorTemplates = List.of(
-            new IdleBehavior(),
-            new CombatBehavior(),
-            new FlagBehavior(),
-            new KothBehavior(),
-            new HeadquartersBehavior(),
-            new OddballBehavior(),
-            new VipBehavior(),
-            new PowerUpBehavior()
+    // Factories for the behaviors each AI can choose between. Each AI gets its own
+    // fresh instances so behavior state (targets, timers, etc.) is independent.
+    private static final List<Supplier<AIBehavior>> BEHAVIOR_FACTORIES = List.of(
+            IdleBehavior::new,
+            CombatBehavior::new,
+            FlagBehavior::new,
+            KothBehavior::new,
+            HeadquartersBehavior::new,
+            OddballBehavior::new,
+            VipBehavior::new,
+            PowerUpBehavior::new
     );
 
     private final GameConfig gameConfig;
@@ -54,10 +60,10 @@ public class AIPlayerManager {
     public void addAIPlayer(AIPlayer aiPlayer) {
         aiPlayers.put(aiPlayer.getId(), aiPlayer);
 
-        // Initialize available behaviors for this AI
+        // Initialize a fresh set of behaviors for this AI
         List<AIBehavior> behaviors = new ArrayList<>();
-        for (AIBehavior template : behaviorTemplates) {
-            behaviors.add(createBehaviorInstance(template));
+        for (Supplier<AIBehavior> factory : BEHAVIOR_FACTORIES) {
+            behaviors.add(factory.get());
         }
         availableBehaviors.put(aiPlayer.getId(), behaviors);
 
@@ -104,6 +110,10 @@ public class AIPlayerManager {
                     applyUnstickMovement(aiPlayer, input, gameEntities);
                 }
 
+                // Steer around solid map obstacles. Applied here (after behavior and
+                // unstick logic) so every movement path benefits, then smoothed.
+                applyObstacleAvoidance(aiPlayer, input, gameEntities);
+
                 // Apply movement smoothing for continuous motion
                 aiPlayer.smoothMovement(input);
                 generatedInputs.put(aiPlayer.getId(), input);
@@ -134,6 +144,25 @@ public class AIPlayerManager {
 
         input.setMoveX(escapeDirection.x);
         input.setMoveY(escapeDirection.y);
+    }
+
+    /**
+     * Steer the AI's movement around nearby physical obstacles while preserving the
+     * intended movement intensity (speed) that the behavior encoded in the vector length.
+     */
+    private void applyObstacleAvoidance(AIPlayer aiPlayer, PlayerInput input, GameEntities gameEntities) {
+        Vector2 desired = new Vector2(input.getMoveX(), input.getMoveY());
+        double intensity = desired.getMagnitude();
+        if (intensity < 0.01) {
+            return; // not trying to move, nothing to steer around
+        }
+
+        Vector2 steered = ObstacleAvoidance.steer(
+                aiPlayer.getPosition(), desired, gameEntities,
+                OBSTACLE_LOOK_AHEAD, Config.PLAYER_RADIUS);
+
+        input.setMoveX(steered.x * intensity);
+        input.setMoveY(steered.y * intensity);
     }
 
     /**
@@ -285,26 +314,4 @@ public class AIPlayerManager {
         // Could add input delays based on reaction speed trait
     }
 
-    private AIBehavior createBehaviorInstance(AIBehavior template) {
-        // Create new instances of behaviors for each AI
-        // This allows each AI to have independent behavior state
-        if (template instanceof IdleBehavior) {
-            return new IdleBehavior();
-        } else if (template instanceof CombatBehavior) {
-            return new CombatBehavior();
-        } else if (template instanceof FlagBehavior) {
-            return new FlagBehavior();
-        } else if (template instanceof KothBehavior) {
-            return new KothBehavior();
-        } else if (template instanceof HeadquartersBehavior) {
-            return new HeadquartersBehavior();
-        } else if (template instanceof OddballBehavior) {
-            return new OddballBehavior();
-        } else if (template instanceof VipBehavior) {
-            return new VipBehavior();
-        } else if (template instanceof PowerUpBehavior) {
-            return new PowerUpBehavior();
-        }
-        return new IdleBehavior(); // Fallback
-    }
 }

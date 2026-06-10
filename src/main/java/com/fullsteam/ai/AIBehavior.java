@@ -64,4 +64,23 @@ public interface AIBehavior {
      * Get a human-readable name for this behavior (useful for debugging).
      */
     String getName();
+
+    /**
+     * Shared reload helper used by objective behaviors. Always reloads when the magazine is
+     * empty, and reloads below 30% capacity when the situation is considered safe.
+     *
+     * @param aiPlayer The AI player
+     * @param input    The input to populate
+     * @param isSafe   Whether it is currently safe to reload (e.g. no nearby threats)
+     */
+    default void smartReload(AIPlayer aiPlayer, PlayerInput input, boolean isSafe) {
+        int currentAmmo = aiPlayer.getCurrentWeapon().getCurrentAmmo();
+        int magazineSize = aiPlayer.getCurrentWeapon().getMagazineSize();
+
+        if (currentAmmo == 0) {
+            input.setReload(true);
+        } else if (isSafe && currentAmmo < magazineSize * 0.3) {
+            input.setReload(true);
+        }
+    }
 }

@@ -63,12 +63,9 @@ public class AITargetWrapper {
     }
     
     public double getMaxHealth() {
-        if (entity instanceof Player) {
-            return 100.0; // Players have 100 HP
-        } else if (entity instanceof Turret) {
-            return 50.0; // Turrets have 50 HP
-        }
-        return entity.getHealth(); // Fallback
+        double maxHealth = entity.getMaxHealth();
+        // Guard against divide-by-zero in callers that compute health ratios
+        return maxHealth > 0 ? maxHealth : entity.getHealth();
     }
     
     public int getOwnerId() {
@@ -109,6 +106,18 @@ public class AITargetWrapper {
         return entity;
     }
     
+    /**
+     * Check whether this target is a teammate of (i.e. should NOT be attacked by) the given AI.
+     * In FFA mode (team 0) the only "teammate" is the AI's own turret; everyone else is fair game.
+     * In team mode, targets on the same team are teammates.
+     */
+    public boolean isTeammateOf(AIPlayer aiPlayer) {
+        if (aiPlayer.getTeam() == 0) {
+            return isTurret() && getOwnerId() == aiPlayer.getId();
+        }
+        return aiPlayer.getTeam() == getTeam();
+    }
+
     /**
      * Check if this wrapper represents a player
      */

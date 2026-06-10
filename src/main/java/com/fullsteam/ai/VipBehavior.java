@@ -148,7 +148,6 @@ public class VipBehavior implements AIBehavior {
 
         if (nearestEnemy != null && nearestEnemy.isActive()) {
             Vector2 enemyPos = nearestEnemy.getPosition();
-            double distEnemyToVip = enemyPos.distance(vipPos);
             double distToEnemy = myPos.distance(enemyPos);
 
             // Position between VIP and the threat

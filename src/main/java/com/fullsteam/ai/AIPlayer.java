@@ -47,12 +47,11 @@ public class AIPlayer extends Player {
     public void update(double deltaTime) {
         super.update(deltaTime);
 
-        // Update AI decision making
+        // Accumulate time toward the next decision. The actual decision is made by
+        // AIPlayerManager, which checks needsNewDecision() and calls resetDecisionTimer().
+        // (Previously this method also reset the timer here, which raced with the manager
+        // and could prevent decisions from ever being triggered.)
         lastDecisionTime += deltaTime;
-        if (lastDecisionTime >= decisionCooldown && isActive()) {
-            // AI decision making will be handled by AIPlayerManager
-            lastDecisionTime = 0;
-        }
 
         // Update stuck detection
         updateStuckDetection(deltaTime);
@@ -162,55 +161,5 @@ public class AIPlayer extends Player {
      */
     public Vector2 getCurrentMovementDirection() {
         return lastMoveDirection.copy();
-    }
-
-    /**
-     * Set movement smoothing factor (0.0 = no smoothing, 1.0 = maximum smoothing).
-     */
-    public void setMovementSmoothingFactor(double factor) {
-        this.movementSmoothingFactor = Math.max(0.0, Math.min(1.0, factor));
-    }
-
-    public double getTimeSinceLastDecision() {
-        return lastDecisionTime;
-    }
-
-    /**
-     * Evaluate if AI should switch weapons based on tactical situation.
-     * Returns true if weapon switch would be beneficial.
-     *
-     * @param targetDistance Distance to current target
-     * @return true if should switch weapons
-     */
-    public boolean shouldSwitchWeapon(double targetDistance) {
-        // Check if out of ammo
-        if (getCurrentWeapon().getCurrentAmmo() == 0 && isReloading()) {
-            return true; // Switch to avoid reload time
-        }
-
-        // Check if weapon is ineffective at current range
-        double weaponRange = getCurrentWeapon().getRange();
-
-        // Too far for current weapon
-        if (targetDistance > weaponRange * 0.9) {
-            return true;
-        }
-
-        // Very low ammo and enemy is close
-        int currentAmmo = getCurrentWeapon().getCurrentAmmo();
-        int magazineSize = getCurrentWeapon().getMagazineSize();
-        if (currentAmmo < magazineSize * 0.15 && targetDistance < 150) {
-            return true; // Switch instead of reload in close combat
-        }
-
-        return false;
-    }
-
-    /**
-     * Get preferred weapon range based on personality.
-     * Used to select appropriate weapon for situation.
-     */
-    public double getPreferredCombatRange() {
-        return personality.getPreferredCombatRange();
     }
 }
