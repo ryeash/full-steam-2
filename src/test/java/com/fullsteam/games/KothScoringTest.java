@@ -93,9 +93,11 @@ public class KothScoringTest extends BaseTestClass {
         assertFalse(zones.isEmpty(), "GameManager should have created KOTH zones");
         KothZone zone = zones.get(0);
         
-        // Create players from team 0 in the zone
-        Player player1 = createTestPlayer(1, 0, zone.getBody().getTransform().getTranslationX(), zone.getBody().getTransform().getTranslationY());
-        Player player2 = createTestPlayer(2, 0, zone.getBody().getTransform().getTranslationX() + 20, zone.getBody().getTransform().getTranslationY() + 20);
+        // Create two players from the same team (team 1) in the zone. Team 0 is
+        // treated as free-for-all, where multiple occupants contest the zone, so a
+        // genuine "single team dominance" scenario needs a real team.
+        Player player1 = createTestPlayer(1, 1, zone.getBody().getTransform().getTranslationX(), zone.getBody().getTransform().getTranslationY());
+        Player player2 = createTestPlayer(2, 1, zone.getBody().getTransform().getTranslationX() + 20, zone.getBody().getTransform().getTranslationY() + 20);
         gameEntities.add(player1);
         gameEntities.add(player2);
         
@@ -106,8 +108,8 @@ public class KothScoringTest extends BaseTestClass {
         // Update zone control for enough time to capture (3 seconds for neutral)
         zone.update(3.0);
         
-        // Verify zone is controlled by team 0
-        assertEquals(0, zone.getControllingTeam());
+        // Verify zone is controlled by team 1
+        assertEquals(1, zone.getControllingTeam());
         assertEquals(KothZone.ZoneState.CONTROLLED, zone.getState());
         assertEquals(1.0, zone.getCaptureProgress(), 0.01);
         assertTrue(zone.shouldAwardPoints());
@@ -226,7 +228,7 @@ public class KothScoringTest extends BaseTestClass {
         assertEquals(1, zone.getControllingTeam()); // Zone should be controlled by team 1
         
         // Test different delta times for same total duration
-        double initialTeamScore = zone.getTeamScore(1);
+        double initialScore = player1.getScoring().getKingOfTheHillPoints();
         
         // Simulate 2 seconds of scoring with different frame rates
         // High frame rate: 60 FPS (0.0167s per frame)
@@ -242,8 +244,8 @@ public class KothScoringTest extends BaseTestClass {
         }
         
         // Both should award same total points: 5 points/second * 2 seconds = 10 points
-        double expectedTeamScore = initialTeamScore + 10.0; // 10 points total
-        assertEquals(expectedTeamScore, zone.getTeamScore(1), 0.1); // Allow small floating point differences
+        double expectedScore = initialScore + 10.0; // 10 points total
+        assertEquals(expectedScore, player1.getScoring().getKingOfTheHillPoints(), 0.1); // Allow small floating point differences
     }
 
     @Test
@@ -277,8 +279,8 @@ public class KothScoringTest extends BaseTestClass {
         assertTrue(zones.get(0).shouldAwardPoints());
         assertTrue(zones.get(1).shouldAwardPoints());
         
-        double initialTeamScore1 = zones.get(0).getTeamScore(1);
-        double initialTeamScore2 = zones.get(1).getTeamScore(1);
+        double initialScore1 = player1.getScoring().getKingOfTheHillPoints();
+        double initialScore2 = player2.getScoring().getKingOfTheHillPoints();
         
         // Award points for 1 second
         // Ensure players are still in zones when awarding points
@@ -286,9 +288,9 @@ public class KothScoringTest extends BaseTestClass {
         zones.get(1).addPlayer(player2);
         collisionProcessor.updateKothZones(1.0);
         
-        // Each zone awards 5 points/second, so each zone should have 5 points
-        assertEquals(initialTeamScore1 + 5.0, zones.get(0).getTeamScore(1), 0.1);
-        assertEquals(initialTeamScore2 + 5.0, zones.get(1).getTeamScore(1), 0.1);
+        // Each zone awards 5 points/second, credited to its sole holder
+        assertEquals(initialScore1 + 5.0, player1.getScoring().getKingOfTheHillPoints(), 0.1);
+        assertEquals(initialScore2 + 5.0, player2.getScoring().getKingOfTheHillPoints(), 0.1);
     }
 
     @Test
@@ -321,15 +323,15 @@ public class KothScoringTest extends BaseTestClass {
         zone.update(3.0);
         assertTrue(zone.shouldAwardPoints());
         
-        double initialTeamScore = zone.getTeamScore(1);
+        double initialScore = livingPlayer.getScoring().getKingOfTheHillPoints();
         
         // Award points - ensure players are in zone
         zone.addPlayer(livingPlayer);
         collisionProcessor.updateKothZones(1.0);
         
-        // Team should get points regardless of individual player health
-        // (The zone scoring is based on team control, not individual player health)
-        assertEquals(initialTeamScore + 5.0, zone.getTeamScore(1), 0.1);
+        // Points go only to the living holder; the dead player earns nothing.
+        assertEquals(initialScore + 5.0, livingPlayer.getScoring().getKingOfTheHillPoints(), 0.1);
+        assertEquals(0.0, deadPlayer.getScoring().getKingOfTheHillPoints(), 0.1);
     }
 
     @Test
@@ -406,13 +408,13 @@ public class KothScoringTest extends BaseTestClass {
         zone1.setControllingTeam(1);
         zone1.setState(KothZone.ZoneState.CONTROLLED);
         
-        double initialTeamScore = zone1.getTeamScore(1);
+        double initialScore = player.getScoring().getKingOfTheHillPoints();
         
         // Award points for 1 second
         zone1.addPlayer(player);
         collisionProcessor.updateKothZones(1.0);
         
-        assertEquals(initialTeamScore + 2.0, zone1.getTeamScore(1), 0.1); // 2 points per second
+        assertEquals(initialScore + 2.0, player.getScoring().getKingOfTheHillPoints(), 0.1); // 2 points per second
     }
 
     private Player createTestPlayer(int id, int team, double x, double y) {

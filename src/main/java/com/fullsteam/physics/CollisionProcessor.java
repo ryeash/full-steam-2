@@ -933,16 +933,39 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             if (zone.shouldAwardPoints()) {
                 double points = zone.getPointsPerSecond() * deltaTime;
                 if (points > 0) {
-                    if (zone.getControllingPlayerId() >= 0) {
-                        // FFA mode: accrue points to the individual player
-                        gameManager.getRuleSystem().awardKothPoints(zone.getControllingPlayerId(), points);
-                    } else {
-                        // Team mode: accrue points to the team bucket on the zone
-                        zone.awardPointsToTeam(zone.getControllingTeam(), points);
-                    }
+                    awardZonePoints(zone, points);
                 }
             }
             zone.clearPlayers();
+        }
+    }
+
+    /**
+     * Credit a controlled zone's points to the player(s) who earned them.
+     * FFA: the sole controlling player. Team mode: split equally among the living
+     * controlling-team players in the zone, so the team total still equals the
+     * zone's points-per-second.
+     */
+    private void awardZonePoints(KothZone zone, double points) {
+        if (zone.getControllingPlayerId() >= 0) {
+            Player controller = gameEntities.getPlayer(zone.getControllingPlayerId());
+            if (controller != null) {
+                controller.getScoring().addKingOfTheHillPoints(points);
+            }
+            return;
+        }
+
+        if (zone.getControllingTeam() >= 0) {
+            var holders = zone.getPlayersInZone().stream()
+                    .filter(p -> p.isActive() && p.getHealth() > 0)
+                    .filter(p -> p.getTeam() == zone.getControllingTeam())
+                    .toList();
+            if (!holders.isEmpty()) {
+                double share = points / holders.size();
+                for (Player holder : holders) {
+                    holder.getScoring().addKingOfTheHillPoints(share);
+                }
+            }
         }
     }
 
@@ -957,10 +980,10 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 Player carrier = gameEntities.getPlayer(carrierId);
 
                 if (carrier != null && carrier.isActive()) {
-                    // Award points based on configured rate via RuleSystem
+                    // Award points based on configured rate directly to the carrier
                     double points = gameManager.getGameConfig().getRules().getOddballPointsPerSecond() * deltaTime;
                     if (points > 0) {
-                        gameManager.getRuleSystem().awardOddballPoints(carrierId, points);
+                        carrier.getScoring().addOddball(points);
                     }
                 }
             }

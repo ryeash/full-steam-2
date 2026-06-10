@@ -4,6 +4,7 @@ import com.fullsteam.Config;
 import com.fullsteam.model.AttributeModification;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerInput;
+import com.fullsteam.model.Scoring;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.Weapon;
 import com.fullsteam.model.WeaponConfig;
@@ -32,9 +33,7 @@ public class Player extends GameEntity {
     private Vector2 aimDirection = new Vector2(1, 0);
     private long lastShotTime = 0;
     private long lastUtilityUseTime = 0;
-    private int kills = 0;
-    private int deaths = 0;
-    private int captures = 0; // Flag captures in CTF mode
+    private Scoring scoring = new Scoring();
     private long respawnTime = 0;
     private Vector2 respawnPoint;
     private double maxSpeed = Config.PLAYER_SPEED;
@@ -315,7 +314,7 @@ public class Player extends GameEntity {
 
     public void die() {
         active = false;
-        deaths++;
+        scoring.addDeath();
         health = 0;
         attributeModifications.removeIf(am -> {
             am.revert(this);
@@ -324,11 +323,38 @@ public class Player extends GameEntity {
     }
 
     public void addKill() {
-        kills++;
+        scoring.addKill();
     }
 
     public void addCapture() {
-        captures++;
+        scoring.addCapture();
+    }
+
+    // --- Convenience delegators so existing call sites keep working while all
+    //     scoring state lives in the Scoring object. ---
+
+    public int getKills() {
+        return scoring.getKills();
+    }
+
+    public void setKills(int kills) {
+        scoring.setKills(kills);
+    }
+
+    public int getDeaths() {
+        return scoring.getDeaths();
+    }
+
+    public void setDeaths(int deaths) {
+        scoring.setDeaths(deaths);
+    }
+
+    public int getCaptures() {
+        return scoring.getFlagCaptures();
+    }
+
+    public void setCaptures(int captures) {
+        scoring.setFlagCaptures(captures);
     }
 
     /**

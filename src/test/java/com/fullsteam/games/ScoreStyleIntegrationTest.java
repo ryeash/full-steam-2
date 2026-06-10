@@ -3,7 +3,6 @@ package com.fullsteam.games;
 import com.fullsteam.model.Rules;
 import com.fullsteam.model.ScoreStyle;
 import com.fullsteam.physics.GameEntities;
-import com.fullsteam.physics.KothZone;
 import com.fullsteam.physics.Player;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.world.World;
@@ -71,18 +70,9 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         gameEntities.add(player1);
         gameEntities.add(player2);
 
-        // Create KOTH zones with scores
-        KothZone zone1 = new KothZone(101, 0, 0, 0, 5.0);
-        KothZone zone2 = new KothZone(102, 1, 100, 100, 5.0);
-        
-        // Team 1 controls zone 1 (5 points)
-        zone1.awardPointsToTeam(1, 5.0);
-        
-        // Team 2 controls zone 2 (10 points)
-        zone2.awardPointsToTeam(2, 10.0);
-        
-        gameEntities.add(zone1);
-        gameEntities.add(zone2);
+        // KOTH points are credited per player; team 1 earns 5, team 2 earns 10.
+        player1.getScoring().addKingOfTheHillPoints(5.0);
+        player2.getScoring().addKingOfTheHillPoints(10.0);
 
         // Calculate team scores
         Map<String, Object> stateData = ruleSystem.getStateData();
@@ -120,18 +110,9 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         gameEntities.add(player1);
         gameEntities.add(player2);
 
-        // Create KOTH zones with scores
-        KothZone zone1 = new KothZone(101, 0, 0, 0, 5.0);
-        KothZone zone2 = new KothZone(102, 1, 100, 100, 5.0);
-        
-        // Team 1 controls zone 1 (5 points)
-        zone1.awardPointsToTeam(1, 5.0);
-        
-        // Team 2 controls zone 2 (10 points)
-        zone2.awardPointsToTeam(2, 10.0);
-        
-        gameEntities.add(zone1);
-        gameEntities.add(zone2);
+        // KOTH points are credited per player; team 1 earns 5, team 2 earns 10.
+        player1.getScoring().addKingOfTheHillPoints(5.0);
+        player2.getScoring().addKingOfTheHillPoints(10.0);
 
         // Calculate team scores
         Map<String, Object> stateData = ruleSystem.getStateData();
@@ -170,18 +151,9 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         gameEntities.add(player1);
         gameEntities.add(player2);
 
-        // Create KOTH zones with scores
-        KothZone zone1 = new KothZone(101, 0, 0, 0, 5.0);
-        KothZone zone2 = new KothZone(102, 1, 100, 100, 5.0);
-        
-        // Team 1 controls zone 1 (5 points, should be ignored)
-        zone1.awardPointsToTeam(1, 5.0);
-        
-        // Team 2 controls zone 2 (10 points, should be ignored)
-        zone2.awardPointsToTeam(2, 10.0);
-        
-        gameEntities.add(zone1);
-        gameEntities.add(zone2);
+        // KOTH points credited per player but should be ignored under TOTAL_KILLS.
+        player1.getScoring().addKingOfTheHillPoints(5.0);
+        player2.getScoring().addKingOfTheHillPoints(10.0);
 
         // Calculate team scores
         Map<String, Object> stateData = ruleSystem.getStateData();

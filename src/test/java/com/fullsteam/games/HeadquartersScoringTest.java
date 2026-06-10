@@ -292,17 +292,22 @@ public class HeadquartersScoringTest extends BaseTestClass {
     }
 
     @Test
-    @DisplayName("RuleSystem addTeamPoints integration")
-    void testAddTeamPointsMethod() {
-        RuleSystem ruleSystem = gameManager.getRuleSystem();
+    @DisplayName("HQ damage and destruction credit the attacker's scoring")
+    void testHeadquartersScoringCreditsAttacker() {
+        // Team 2 damages Team 1's HQ
+        team1HQ.takeDamage(200.0);
+        gameManager.handleHeadquartersDamage(team1HQ, team2Player, 200.0, false);
 
-        // Directly add bonus points to team 2
-        ruleSystem.addTeamPoints(2, 50);
+        assertEquals(200.0, team2Player.getScoring().getHeadquarterDamage(), 0.001);
+        assertEquals(0, team2Player.getScoring().getHeadquartersDestroyed());
 
-        // Points should be reflected in team score calculations
-        // (We can't directly verify the internal map, but the method should not throw)
-        assertDoesNotThrow(() -> ruleSystem.addTeamPoints(1, 25));
-        assertDoesNotThrow(() -> ruleSystem.addTeamPoints(2, 75));
+        // Now destroy it
+        boolean destroyed = team1HQ.takeDamage(800.0);
+        assertTrue(destroyed);
+        gameManager.handleHeadquartersDamage(team1HQ, team2Player, 800.0, true);
+
+        assertEquals(1000.0, team2Player.getScoring().getHeadquarterDamage(), 0.001);
+        assertEquals(1, team2Player.getScoring().getHeadquartersDestroyed());
     }
 }
 

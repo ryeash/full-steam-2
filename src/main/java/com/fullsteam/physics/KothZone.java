@@ -8,9 +8,7 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -42,7 +40,6 @@ public class KothZone extends GameEntity {
 
     // Player tracking
     private Set<Player> playersInZone = new HashSet<>();
-    private final Map<Integer, Double> teamScores = new HashMap<>(); // teamNumber -> total points earned
 
     public KothZone(int id, int zoneNumber, double x, double y, double pointsPerSecond) {
         super(id, createZoneBody(x, y), Double.POSITIVE_INFINITY); // Zones are indestructible
@@ -140,34 +137,5 @@ public class KothZone extends GameEntity {
      */
     public double getCaptureProgress() {
         return state == ZoneState.CONTROLLED ? 1.0 : 0.0;
-    }
-
-    /**
-     * Award points to a team for controlling this zone.
-     *
-     * @param team   The team number to award points to
-     * @param points The number of points to award
-     */
-    public void awardPointsToTeam(int team, double points) {
-        teamScores.put(team, teamScores.getOrDefault(team, 0.0) + points);
-    }
-
-    /**
-     * Get the total points earned by a team from this zone.
-     *
-     * @param team The team number
-     * @return The total points earned by this team
-     */
-    public double getTeamScore(int team) {
-        return teamScores.getOrDefault(team, 0.0);
-    }
-
-    /**
-     * Get all team scores for this zone.
-     *
-     * @return A map of team number to total points earned
-     */
-    public Map<Integer, Double> getAllTeamScores() {
-        return new HashMap<>(teamScores);
     }
 }

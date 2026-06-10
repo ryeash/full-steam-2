@@ -6,13 +6,11 @@ import com.fullsteam.model.GameState;
 import com.fullsteam.model.RespawnMode;
 import com.fullsteam.model.RoundScore;
 import com.fullsteam.model.Rules;
-import com.fullsteam.model.ScoreStyle;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.VictoryCondition;
 import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
-import com.fullsteam.physics.KothZone;
 import com.fullsteam.physics.Player;
 import lombok.Getter;
 import org.slf4j.Logger;
@@ -65,17 +63,9 @@ public class RuleSystem {
     @Getter
     private long waveRespawnTime = 0;
 
-    // Bonus points tracking (for HQ damage, objectives, etc.)
-    private final Map<Integer, Integer> bonusTeamPoints = new HashMap<>();
-
-    // Oddball scoring tracking (playerId -> total points earned)
-    private final Map<Integer, Double> oddballPlayerScores = new HashMap<>();
-
-    // FFA KOTH scoring tracking (playerId -> total zone-seconds held)
-    private final Map<Integer, Double> kothPlayerScores = new HashMap<>();
-
-    // VIP kill tracking (team number -> VIP kills scored)
-    private final Map<Integer, Integer> vipKillScores = new HashMap<>();
+    // All scoring (kills, captures, KOTH, oddball, HQ damage, VIP kills, etc.) is
+    // tracked per player in Player.getScoring(); team/FFA totals are derived by
+    // summing Scoring.total(rules). See com.fullsteam.model.Scoring.
 
     // VIP validation timer (check every 2 seconds)
     private long lastVipCheckTime = 0;
@@ -236,23 +226,6 @@ public class RuleSystem {
     }
 
     /**
-     * Award points for a VIP kill.
-     * Only VIP kills count towards objective scoring in VIP mode.
-     */
-    public void awardVipKill(int killerTeam) {
-        if (!rules.hasVip() || killerTeam <= 0) {
-            return;
-        }
-
-        vipKillScores.merge(killerTeam, 1, Integer::sum);
-        log.info("Team {} scored VIP kill. Total VIP kills: {} (Score Style: {})",
-                killerTeam, vipKillScores.get(killerTeam), rules.getScoreStyle());
-
-        // Check victory conditions after VIP kill
-        checkVictoryConditions();
-    }
-
-    /**
      * Update all rule systems with the given time delta.
      */
     public void update(double deltaTime) {
@@ -317,9 +290,6 @@ public class RuleSystem {
         // Capture current scores
         roundScores.clear();
         for (Player player : gameEntities.getAllPlayers()) {
-            // Get team bonus points for this player's team
-            int teamBonus = bonusTeamPoints.getOrDefault(player.getTeam(), 0);
-
             RoundScore score = RoundScore.builder()
                     .playerId(player.getId())
                     .playerName(player.getPlayerName())
@@ -327,7 +297,8 @@ public class RuleSystem {
                     .kills(player.getKills())
                     .deaths(player.getDeaths())
                     .captures(player.getCaptures())
-                    .bonusPoints(teamBonus)
+                    // Objective/bonus points (KOTH, oddball, VIP, HQ) earned by this player.
+                    .bonusPoints(player.getScoring().bonusPoints(rules))
                     .build();
             roundScores.put(player.getId(), score);
         }
@@ -370,14 +341,9 @@ public class RuleSystem {
             // force a respawn of all players
             p.setActive(false);
             p.setRespawnTime(1L);
-            // reset scoring
-            p.setKills(0);
-            p.setDeaths(0);
+            // reset all scoring for the new round
+            p.getScoring().reset();
         });
-
-        bonusTeamPoints.clear();
-        vipKillScores.clear();
-        kothPlayerScores.clear();
 
         gameEntities.getFlags().values().forEach(Flag::returnToHome);
         gameEntities.clearEntitiesFromWorld(gameEntities.getDefenseLasers());
@@ -682,125 +648,17 @@ public class RuleSystem {
     private Map<Integer, Integer> calculateTeamScores() {
         Map<Integer, Integer> teamScores = new HashMap<>();
 
-        // Per-player scoring (kills / captures*multiplier / oddball) is computed
-        // once via getPlayerScore so the ScoreStyle and pointsPerFlagCapture
-        // rules apply exactly the same way for team and FFA mode, and so
-        // captures/oddball can't be double-counted by also appearing below.
+        // Every scoring mechanism is now credited to the player who earned it, so
+        // team (and FFA) totals are simply the sum of each player's Scoring.total().
         for (Player player : gameEntities.getAllPlayers()) {
-            int score = getPlayerScore(player);
-            teamScores.merge(player.getTeam(), score, Integer::sum);
-        }
-
-        // Team-level objective scores (KOTH zones, VIP kills) are added on top
-        // when objectives count. They are not part of getPlayerScore because
-        // they aren't attributable to a single player.
-        if (rules.getScoreStyle() == ScoreStyle.OBJECTIVE
-                || rules.getScoreStyle() == ScoreStyle.TOTAL) {
-            for (KothZone zone : gameEntities.getAllKothZones()) {
-                Map<Integer, Double> zoneTeamScores = zone.getAllTeamScores();
-                for (Map.Entry<Integer, Double> entry : zoneTeamScores.entrySet()) {
-                    int team = entry.getKey();
-                    int kothScore = (int) Math.round(entry.getValue());
-                    teamScores.merge(team, kothScore, Integer::sum);
-                }
-            }
-
-            if (rules.hasVip()) {
-                for (Map.Entry<Integer, Integer> entry : vipKillScores.entrySet()) {
-                    teamScores.merge(entry.getKey(), entry.getValue(), Integer::sum);
-                }
-            }
-        }
-
-        // Bonus points (HQ damage, headquarters destruction, etc.) - always included
-        for (Map.Entry<Integer, Integer> entry : bonusTeamPoints.entrySet()) {
-            teamScores.merge(entry.getKey(), entry.getValue(), Integer::sum);
+            teamScores.merge(player.getTeam(), getPlayerScore(player), Integer::sum);
         }
 
         return teamScores;
     }
 
-    /**
-     * Add bonus points to a team's score (for HQ damage, objectives, etc.).
-     * These points are always added regardless of ScoreStyle.
-     */
-    public void addTeamPoints(int team, int points) {
-        if (team > 0 && points > 0) {
-            bonusTeamPoints.merge(team, points, Integer::sum);
-            log.debug("Added {} bonus points to team {}. Total bonus: {}",
-                    points, team, bonusTeamPoints.get(team));
-
-            // Check victory conditions after adding points
-            checkVictoryConditions();
-        }
-    }
-
-    /**
-     * Award oddball points to a player for holding the ball.
-     * This method is called by CollisionProcessor during gameplay.
-     *
-     * @param playerId The player ID to award points to
-     * @param points   The number of points to award
-     */
-    public void awardOddballPoints(int playerId, double points) {
-        if (playerId >= 0 && points > 0) {
-            oddballPlayerScores.merge(playerId, points, Double::sum);
-            log.debug("Awarded {} oddball points to player {}. Total: {}",
-                    points, playerId, oddballPlayerScores.get(playerId));
-
-            // Check victory conditions after adding points
-            checkVictoryConditions();
-        }
-    }
-
-    /**
-     * Get the oddball score for a specific player.
-     *
-     * @param playerId The player ID
-     * @return The total oddball points earned by this player
-     */
-    public double getOddballScore(int playerId) {
-        return oddballPlayerScores.getOrDefault(playerId, 0.0);
-    }
-
-    /**
-     * Award KOTH zone points to an individual player (FFA mode only).
-     * Called by CollisionProcessor each physics tick when the player is the sole
-     * occupant of a zone.
-     */
-    public void awardKothPoints(int playerId, double points) {
-        if (playerId >= 0 && points > 0) {
-            kothPlayerScores.merge(playerId, points, Double::sum);
-            log.debug("Awarded {} KOTH points to player {}. Total: {}",
-                    points, playerId, kothPlayerScores.get(playerId));
-            checkVictoryConditions();
-        }
-    }
-
-    public double getKothScore(int playerId) {
-        return kothPlayerScores.getOrDefault(playerId, 0.0);
-    }
-
     private int getPlayerScore(Player player) {
-        int capturePoints = player.getCaptures() * rules.getPointsPerFlagCapture();
-        int score = switch (rules.getScoreStyle()) {
-            case TOTAL_KILLS -> player.getKills();
-            case OBJECTIVE -> capturePoints;
-            case TOTAL -> player.getKills() + capturePoints;
-        };
-
-        // Add oddball scores for this player
-        if (rules.hasOddball()) {
-            score += (int) Math.round(getOddballScore(player.getId()));
-        }
-
-        // Add FFA KOTH scores (team-mode KOTH points are summed in calculateTeamScores instead)
-        if (rules.hasKothZones()
-                && (rules.getScoreStyle() == ScoreStyle.OBJECTIVE || rules.getScoreStyle() == ScoreStyle.TOTAL)) {
-            score += (int) Math.round(getKothScore(player.getId()));
-        }
-
-        return score;
+        return player.getScoring().total(rules);
     }
 
     private String getScoreTypeName() {

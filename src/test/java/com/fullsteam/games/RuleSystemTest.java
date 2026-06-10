@@ -449,10 +449,10 @@ class RuleSystemTest extends BaseTestClass {
                 vipConfig.getTeamCount()
         );
 
-        // Act - Award VIP kill to team 1
-        vipRuleSystem.awardVipKill(1);
-        vipRuleSystem.awardVipKill(1);
-        vipRuleSystem.awardVipKill(2);
+        // Act - Credit VIP kills to players (team 1 gets 2, team 2 gets 1)
+        team1Player.getScoring().addVipKill();
+        team1Player.getScoring().addVipKill();
+        team2Player.getScoring().addVipKill();
 
         // Assert - Check team scores include VIP kills
         Map<String, Object> stateData = vipRuleSystem.getStateData();

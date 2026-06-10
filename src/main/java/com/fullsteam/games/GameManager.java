@@ -1264,8 +1264,8 @@ public class GameManager {
 
         // Award points if this was a VIP kill
         if (wasVip) {
-            if (shooter != null && shooter.getTeam() != victim.getTeam()) {
-                ruleSystem.awardVipKill(shooter.getTeam());
+            if (shooter != null && shooter.getTeam() != victim.getTeam() && shooter.getTeam() > 0) {
+                shooter.getScoring().addVipKill();
 
                 // Broadcast VIP kill event
                 gameEventManager.broadcastSystemMessage(
@@ -1331,28 +1331,25 @@ public class GameManager {
     public void handleHeadquartersDamage(Headquarters hq, Player attacker, double damage, boolean destroyed) {
         Rules rules = gameConfig.getRules();
 
-        // Award points for damage dealt
-        double pointsPerDamage = rules.getHeadquartersPointsPerDamage();
-        int points = (int) (damage * pointsPerDamage);
-
-        if (points > 0 && attacker != null) {
-            ruleSystem.addTeamPoints(attacker.getTeam(), points);
-            log.debug("Team {} scored {} points for damaging team {} headquarters (damage: {})",
-                    attacker.getTeam(), points, hq.getTeamNumber(), damage);
+        // Credit the attacker for the raw damage dealt; the point value is derived
+        // from this in Scoring.total() using the configured points-per-damage.
+        if (attacker != null) {
+            attacker.getScoring().addHeadquarterDamage(damage);
+            log.debug("Player {} (team {}) dealt {} damage to team {} headquarters",
+                    attacker.getId(), attacker.getTeam(), damage, hq.getTeamNumber());
         }
 
         // Handle destruction
         if (destroyed) {
-            int destructionBonus = rules.getHeadquartersDestructionBonus();
             if (attacker != null) {
-                ruleSystem.addTeamPoints(attacker.getTeam(), destructionBonus);
+                attacker.getScoring().addHeadquartersDestroyed();
             }
 
             // Create destruction effect
             createHeadquartersDestructionEffect(hq);
 
-            log.info("Team {} headquarters destroyed by team {}! Bonus: {} points",
-                    hq.getTeamNumber(), attacker != null ? attacker.getTeam() : "?", destructionBonus);
+            log.info("Team {} headquarters destroyed by team {}!",
+                    hq.getTeamNumber(), attacker != null ? attacker.getTeam() : "?");
 
             // Broadcast HQ destruction event
             if (attacker != null) {

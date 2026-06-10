@@ -3,6 +3,8 @@ package com.fullsteam.games;
 import com.fullsteam.model.AttributeModification;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
+import com.fullsteam.model.Rules;
+import com.fullsteam.model.Scoring;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.Flag;
@@ -289,9 +291,26 @@ public class GameStateSerializer {
         s.put("maxAmmo", player.getCurrentWeapon().getMagazineSize());
         s.put("reloading", player.isReloading());
         s.put("weaponRange", player.getCurrentWeapon().getRange());
-        s.put("kills", player.getKills());
-        s.put("deaths", player.getDeaths());
-        s.put("captures", player.getCaptures());
+
+        Scoring scoring = player.getScoring();
+        Rules rules = gameConfig.getRules();
+        Map<String, Object> scoreData = new HashMap<>();
+        scoreData.put("kills", scoring.getKills());
+        scoreData.put("deaths", scoring.getDeaths());
+        scoreData.put("captures", scoring.getFlagCaptures());
+        scoreData.put("koth", scoring.getKingOfTheHillPoints());
+        scoreData.put("oddball", scoring.getOddball());
+        scoreData.put("hqDamage", scoring.getHeadquarterDamage());
+        scoreData.put("hqDestroyed", scoring.getHeadquartersDestroyed());
+        scoreData.put("vipKills", scoring.getVipKills());
+        scoreData.put("bonus", scoring.bonusPoints(rules));
+        scoreData.put("total", scoring.total(rules));
+        s.put("score", scoreData);
+
+        // Top-level kills/deaths/captures retained for frontend backward compatibility.
+        s.put("kills", scoring.getKills());
+        s.put("deaths", scoring.getDeaths());
+        s.put("captures", scoring.getFlagCaptures());
         s.put("respawnTime", Math.max(0, ((double) player.getRespawnTime() - System.currentTimeMillis()) / 1000));
         s.put("livesRemaining", player.getLivesRemaining());
         s.put("eliminated", player.isEliminated());
