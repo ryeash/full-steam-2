@@ -130,7 +130,7 @@ public class GameController {
                     ordData.put("description", ord.getDescription());
                     ordData.put("size", ord.getSize());
                     ordData.put("speedMultiplier", ord.getSpeedMultiplier());
-                    ordData.put("hasTrail", ord.hasTrail());
+                    ordData.put("hasTrail", ord.isHasTrail());
                     return ordData;
                 })
                 .collect(Collectors.toList());

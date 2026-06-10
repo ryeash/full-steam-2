@@ -59,14 +59,11 @@ public class AIPlayerManager {
      */
     public void addAIPlayer(AIPlayer aiPlayer) {
         aiPlayers.put(aiPlayer.getId(), aiPlayer);
-
-        // Initialize a fresh set of behaviors for this AI
         List<AIBehavior> behaviors = new ArrayList<>();
         for (Supplier<AIBehavior> factory : BEHAVIOR_FACTORIES) {
             behaviors.add(factory.get());
         }
         availableBehaviors.put(aiPlayer.getId(), behaviors);
-
         log.info("Added AI player {} ({}) with personality type: {}",
                 aiPlayer.getId(), aiPlayer.getPlayerName(), aiPlayer.getPersonality().getPersonalityType());
     }

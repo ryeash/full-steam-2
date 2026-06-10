@@ -4450,11 +4450,21 @@ class GameEngine {
         // Derive dimensions from the compact shapes string; fall back to
         // sensible defaults so the renderer never breaks on missing data.
         const shapes = this.parseObstacleShapes(entityData.shapes);
+
+        // The physics body is composed of wall polygon(s) plus one circle fixture
+        // per corner turret. Honor that data directly rather than synthesizing
+        // decorations at guessed positions.
+        const wallShapes = shapes.filter(s => s.type === 'polygon');
+        const turretShapes = shapes.filter(s => s.type === 'circle');
+
+        // The wall bounding box drives the HQ proportions (outline, command
+        // center, health bar). Turret circles extend beyond it.
         let halfWidth = 40;
         let halfHeight = 30;
-        if (shapes.length > 0 && shapes[0].type === 'polygon') {
-            const xs = shapes[0].points.map(([x]) => x);
-            const ys = shapes[0].points.map(([, y]) => y);
+        const wallPoints = wallShapes.flatMap(s => s.points);
+        if (wallPoints.length > 0) {
+            const xs = wallPoints.map(([x]) => x);
+            const ys = wallPoints.map(([, y]) => y);
             halfWidth  = (Math.max(...xs) - Math.min(...xs)) / 2;
             halfHeight = (Math.max(...ys) - Math.min(...ys)) / 2;
         }
@@ -4464,64 +4474,53 @@ class GameEngine {
 
         // Get team color
         const teamColor = this.getTeamColor(team);
+        const darkerTeamColor = this.darkenColor(teamColor);
 
         // Health is already sent as a percentage (0.0 - 1.0) from backend
         const healthPct = entityData.health || 1.0;
+        const damageAlpha = healthPct < 1.0 ? (1.0 - healthPct) * 0.6 : 0;
 
-        // Draw the HQ body using the exact polygon from the physics body, then
-        // overlay all the decorative details using the derived bounding box.
-        if (shapes.length > 0) {
-            for (const shape of shapes) {
-                if (shape.type === 'circle') {
-                    graphics.circle(shape.cx, shape.cy, shape.r);
-                } else {
-                    graphics.poly(shape.points.flatMap(([x, y]) => [x, y]));
+        // Re-issue the wall path(s) so they can be filled, damage-overlaid, and stroked.
+        const traceWalls = () => {
+            if (wallShapes.length > 0) {
+                for (const wall of wallShapes) {
+                    graphics.poly(wall.points.flatMap(([x, y]) => [x, y]));
                 }
+            } else {
+                graphics.rect(-halfWidth, -halfHeight, width, height);
             }
-        } else {
-            graphics.rect(-halfWidth, -halfHeight, width, height);
-        }
+        };
+
+        // Walls: team-colored fill, damage overlay, fortified white outline.
+        traceWalls();
         graphics.fill({ color: teamColor, alpha: 0.9 });
-        
-        // Damage overlay (darker as health decreases)
-        if (healthPct < 1.0) {
-            const damageAlpha = (1.0 - healthPct) * 0.6;
-            graphics.rect(-halfWidth, -halfHeight, width, height).fill({ color: 0x000000, alpha: damageAlpha });
+        if (damageAlpha > 0) {
+            traceWalls();
+            graphics.fill({ color: 0x000000, alpha: damageAlpha });
         }
-        
-        // HQ fortified outline (thicker than normal obstacles)
-        graphics.rect(-halfWidth, -halfHeight, width, height).stroke({ width: 4, color: 0xFFFFFF, alpha: 0.9 });
-        
-        // Castle turrets at each corner
-        const turretRadius = 12;
-        const turretPositions = [
-            { x: -halfWidth, y: -halfHeight },  // Top-left
-            { x: halfWidth, y: -halfHeight },   // Top-right
-            { x: halfWidth, y: halfHeight },    // Bottom-right
-            { x: -halfWidth, y: halfHeight }    // Bottom-left
-        ];
-        
-        turretPositions.forEach(pos => {
+        traceWalls();
+        graphics.stroke({ width: 4, color: 0xFFFFFF, alpha: 0.9 });
+
+        const turrets = turretShapes.map(c => ({ x: c.cx, y: c.cy, r: c.r }))
+        turrets.forEach(turret => {
             // Turret base (darker shade of team color)
-            const darkerTeamColor = this.darkenColor(teamColor);
-            graphics.circle(pos.x, pos.y, turretRadius).fill({ color: darkerTeamColor, alpha: 0.95 });
-            
+            graphics.circle(turret.x, turret.y, turret.r).fill({ color: darkerTeamColor, alpha: 0.95 });
+
             // Damage overlay on turrets
-            if (healthPct < 1.0) {
-                const damageAlpha = (1.0 - healthPct) * 0.6;
-                graphics.circle(pos.x, pos.y, turretRadius).fill({ color: 0x000000, alpha: damageAlpha });
+            if (damageAlpha > 0) {
+                graphics.circle(turret.x, turret.y, turret.r).fill({ color: 0x000000, alpha: damageAlpha });
             }
-            
+
             // Turret outline
-            graphics.circle(pos.x, pos.y, turretRadius).stroke({ width: 3, color: 0xFFFFFF, alpha: 0.95 });
-            
+            graphics.circle(turret.x, turret.y, turret.r).stroke({ width: 3, color: 0xFFFFFF, alpha: 0.95 });
+
             // Inner turret detail (smaller circle)
-            graphics.circle(pos.x, pos.y, turretRadius * 0.6).stroke({ width: 2, color: 0xFFFFFF, alpha: 0.7 });
-            
+            graphics.circle(turret.x, turret.y, turret.r * 0.6).stroke({ width: 2, color: 0xFFFFFF, alpha: 0.7 });
+
             // Turret top accent
-            graphics.circle(pos.x, pos.y, turretRadius * 0.3).fill({ color: 0xFFFFFF, alpha: 0.4 });
+            graphics.circle(turret.x, turret.y, turret.r * 0.3).fill({ color: 0xFFFFFF, alpha: 0.4 });
         });
-        
+
         // Central command center design
         const centerSize = Math.min(halfWidth, halfHeight) * 0.5;
         graphics.circle(0, 0, centerSize).fill({ color: teamColor, alpha: 0.5 });

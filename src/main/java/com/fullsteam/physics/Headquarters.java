@@ -3,6 +3,7 @@ package com.fullsteam.physics;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.dyn4j.dynamics.Body;
+import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
@@ -20,6 +21,7 @@ import java.util.Map;
 public class Headquarters extends GameEntity {
     private static final double HQ_WIDTH = 80.0;
     private static final double HQ_HEIGHT = 60.0;
+    private static final double HQ_TURRET_RADIUS = 12.0;
 
     private final int teamNumber;
     private final Vector2 homePosition;
@@ -37,6 +39,20 @@ public class Headquarters extends GameEntity {
         Body body = new Body();
         Rectangle rect = new Rectangle(HQ_WIDTH, HQ_HEIGHT);
         body.addFixture(rect);
+        double halfWidth = HQ_WIDTH / 2.0;
+        double halfHeight = HQ_HEIGHT / 2.0;
+        double[][] turretCorners = {
+                {-halfWidth, -halfHeight}, // Top-left
+                { halfWidth, -halfHeight}, // Top-right
+                { halfWidth,  halfHeight}, // Bottom-right
+                {-halfWidth,  halfHeight}  // Bottom-left
+        };
+        for (double[] corner : turretCorners) {
+            Circle turret = new Circle(HQ_TURRET_RADIUS);
+            turret.translate(corner[0], corner[1]);
+            body.addFixture(turret);
+        }
+
         body.setMass(MassType.INFINITE); // Static structure
         body.getTransform().setTranslation(x, y);
         return body;
