@@ -342,7 +342,7 @@ class GameEngine {
                     container.colorBar.clear();
                 }
                 this.roundTimerContainer.removeChild(container);
-                container.destroy({ children: true, texture: false, baseTexture: false });
+                container.destroy({ children: true, texture: false, baseTexture: false, context: true });
                 this.teamScoreContainers.delete(teamId);
             }
         }
@@ -785,19 +785,19 @@ class GameEngine {
         // Generate texture - PIXI will auto-calculate bounds
         // The texture will include the full visual (circle + triangle)
         this.playerTexture = this.app.renderer.generateTexture(playerGraphics);
-        playerGraphics.destroy(); // Clean up after generating texture
+        playerGraphics.destroy({ context: true }); // Clean up after generating texture
         
         // Projectile - simple bullet
         const projectileGraphics = new PIXI.Graphics();
         projectileGraphics.circle(0, 0, 3).fill(0xf39c12);
         this.projectileTexture = this.app.renderer.generateTexture(projectileGraphics);
-        projectileGraphics.destroy(); // Clean up graphics after generating texture
+        projectileGraphics.destroy({ context: true }); // Clean up graphics after generating texture
 
         // Obstacle - boulder
         const boulderGraphics = new PIXI.Graphics();
         boulderGraphics.circle(0, 0, 20).fill(0x808080);
         this.boulderTexture = this.app.renderer.generateTexture(boulderGraphics);
-        boulderGraphics.destroy(); // Clean up graphics after generating texture
+        boulderGraphics.destroy({ context: true }); // Clean up graphics after generating texture
         
         // Death marker - tombstone/X
         const deathGraphics = new PIXI.Graphics();
@@ -811,7 +811,7 @@ class GameEngine {
         deathGraphics.lineTo(-15, 15);
         deathGraphics.stroke({ width: 4, color: 0xff4444 });
         this.deathTexture = this.app.renderer.generateTexture(deathGraphics);
-        deathGraphics.destroy(); // Clean up graphics after generating texture
+        deathGraphics.destroy({ context: true }); // Clean up graphics after generating texture
     }
     
     async connectToServer() {
@@ -1592,7 +1592,7 @@ class GameEngine {
             this.smokeOverlay.visible = true;
         } else if (!isObscured && this.smokeOverlay) {
             this.gameContainer.removeChild(this.smokeOverlay);
-            this.smokeOverlay.destroy();
+            this.smokeOverlay.destroy({ children: true, context: true });
             this.smokeOverlay = null;
         }
     }
@@ -2221,7 +2221,7 @@ class GameEngine {
             if (sprite.nameLabel.parent) {
                 sprite.nameLabel.parent.removeChild(sprite.nameLabel);
             }
-            sprite.nameLabel.destroy();
+            sprite.nameLabel.destroy({ context: true });
             sprite.nameLabel = null;
         }
         
@@ -2232,12 +2232,12 @@ class GameEngine {
             }
             // Clean up health bar components
             if (sprite.healthBar.healthBg) {
-                sprite.healthBar.healthBg.destroy();
+                sprite.healthBar.healthBg.destroy({ context: true });
             }
             if (sprite.healthBar.healthFill) {
-                sprite.healthBar.healthFill.destroy();
+                sprite.healthBar.healthFill.destroy({ context: true });
             }
-            sprite.healthBar.destroy({ children: true });
+            sprite.healthBar.destroy({ children: true, context: true });
             sprite.healthBar = null;
         }
         
@@ -2248,12 +2248,12 @@ class GameEngine {
             }
             // Clean up reload indicator components
             if (sprite.reloadIndicator.background) {
-                sprite.reloadIndicator.background.destroy();
+                sprite.reloadIndicator.background.destroy({ context: true });
             }
             if (sprite.reloadIndicator.reloadText) {
-                sprite.reloadIndicator.reloadText.destroy();
+                sprite.reloadIndicator.reloadText.destroy({ context: true });
             }
-            sprite.reloadIndicator.destroy({ children: true });
+            sprite.reloadIndicator.destroy({ children: true, context: true });
             sprite.reloadIndicator = null;
         }
         
@@ -2262,7 +2262,7 @@ class GameEngine {
             if (sprite.deathMarker.parent) {
                 sprite.deathMarker.parent.removeChild(sprite.deathMarker);
             }
-            sprite.deathMarker.destroy();
+            sprite.deathMarker.destroy({ context: true });
             sprite.deathMarker = null;
         }
         
@@ -2271,15 +2271,15 @@ class GameEngine {
             if (sprite.powerUpContainer.parent) {
                 sprite.powerUpContainer.parent.removeChild(sprite.powerUpContainer);
             }
-            sprite.powerUpContainer.destroy({ children: true });
+            sprite.powerUpContainer.destroy({ children: true, context: true });
             sprite.powerUpContainer = null;
         }
         
         // Clear player data reference
         sprite.playerData = null;
         
-        // Destroy the main sprite
-        sprite.destroy();
+        // Destroy the main sprite (texture is shared, so keep it; free child geometry)
+        sprite.destroy({ children: true, texture: false, context: true });
     }
     
     /**
@@ -2348,10 +2348,9 @@ class GameEngine {
         const isDamaged = healthPercent < 1.0;
         healthBarContainer.visible = entityData.active && (config.showWhenFull || isDamaged);
         
-        if (!healthBarContainer.visible) return;
-        
-        // Update health bar fill
-        healthBarContainer.healthFill.clear();
+        if (!healthBarContainer.visible) {
+            return;
+        }
         
         // Color based on health level (for players)
         let healthColor = config.fillColor;
@@ -2360,8 +2359,20 @@ class GameEngine {
         } else if (config.dynamicColor && healthPercent < 0.6) {
             healthColor = 0xf39c12; // Orange
         }
-        
-        healthBarContainer.healthFill.roundRect(
+
+        // Only rebuild the fill geometry when it actually changes. Rebuilding a
+        // Graphics every frame (clear + redraw) for every entity is the PixiJS
+        // anti-pattern that churns GPU geometry; health rarely changes, so this
+        // skips the vast majority of redraws.
+        const fill = healthBarContainer.healthFill;
+        if (fill._lastHealthPercent === healthPercent && fill._lastHealthColor === healthColor) {
+            return;
+        }
+        fill._lastHealthPercent = healthPercent;
+        fill._lastHealthColor = healthColor;
+
+        fill.clear();
+        fill.roundRect(
             -config.width/2, 0, 
             config.width * healthPercent, 
             config.height, 
@@ -2497,7 +2508,7 @@ class GameEngine {
             const toDestroy = [...sprite.powerUpContainer.children];
             toDestroy.forEach(child => {
                 sprite.powerUpContainer.removeChild(child);
-                child.destroy({ children: true, texture: false, baseTexture: false });
+                child.destroy({ children: true, texture: false, baseTexture: false, context: true });
             });
             // Reset tracking arrays so the next activation starts fresh
             sprite.powerUpContainer._auraGraphics = [];
@@ -2555,7 +2566,7 @@ class GameEngine {
         while (container._auraGraphics.length > effects.length) {
             const g = container._auraGraphics.pop();
             container.removeChild(g);
-            g.destroy({ children: true, texture: false, baseTexture: false });
+            g.destroy({ children: true, texture: false, baseTexture: false, context: true });
         }
         while (container._auraGraphics.length < effects.length) {
             const g = new PIXI.Graphics();
@@ -2717,7 +2728,7 @@ class GameEngine {
             const bc = container._badgeContainer;
             [...bc.children].forEach(child => {
                 bc.removeChild(child);
-                child.destroy({ children: true, texture: false, baseTexture: false });
+                child.destroy({ children: true, texture: false, baseTexture: false, context: true });
             });
             if (sprite.playerData.id === this.myPlayerId) {
                 effects.forEach((effect, index) => {
@@ -3005,7 +3016,9 @@ class GameEngine {
      * Update projectile trail graphics
      */
     updateProjectileTrail(projectileContainer) {
-        if (!projectileContainer.trail || !projectileContainer.trailPoints) return;
+        if (!projectileContainer.trail || !projectileContainer.trailPoints) {
+            return;
+        }
         
         const trail = projectileContainer.trail;
         const points = projectileContainer.trailPoints;
@@ -3158,25 +3171,25 @@ class GameEngine {
                 if (effects.outerGlow.parent) {
                     effects.outerGlow.parent.removeChild(effects.outerGlow);
                 }
-                effects.outerGlow.destroy();
+                effects.outerGlow.destroy({ context: true });
             }
             if (effects.middleGlow) {
                 if (effects.middleGlow.parent) {
                     effects.middleGlow.parent.removeChild(effects.middleGlow);
                 }
-                effects.middleGlow.destroy();
+                effects.middleGlow.destroy({ context: true });
             }
             if (effects.innerGlow) {
                 if (effects.innerGlow.parent) {
                     effects.innerGlow.parent.removeChild(effects.innerGlow);
                 }
-                effects.innerGlow.destroy();
+                effects.innerGlow.destroy({ context: true });
             }
             if (effects.electricArcs) {
                 if (effects.electricArcs.parent) {
                     effects.electricArcs.parent.removeChild(effects.electricArcs);
                 }
-                effects.electricArcs.destroy();
+                effects.electricArcs.destroy({ context: true });
             }
             
             // Clear references
@@ -3188,7 +3201,7 @@ class GameEngine {
             if (projectileContainer.trail.parent) {
                 projectileContainer.trail.parent.removeChild(projectileContainer.trail);
             }
-            projectileContainer.trail.destroy();
+            projectileContainer.trail.destroy({ context: true });
             projectileContainer.trail = null;
         }
         
@@ -3214,7 +3227,7 @@ class GameEngine {
         projectileContainer.maxTrailLength = null;
         
         // Destroy the container itself (children already manually destroyed above)
-        projectileContainer.destroy({ children: true, texture: false, baseTexture: false });
+        projectileContainer.destroy({ children: true, texture: false, baseTexture: false, context: true });
     }
 
     createObstacle(obstacleData) {
@@ -3321,7 +3334,7 @@ class GameEngine {
             
             // Clear references
             sprite.obstacleData = null;
-            sprite.destroy();
+            sprite.destroy({ children: true, context: true });
         }
     }
     
@@ -3393,18 +3406,26 @@ class GameEngine {
     removeFieldEffect(effectId) {
         const effectContainer = this.fieldEffects.get(effectId);
         if (effectContainer) {
+            this.fieldEffects.delete(effectId);
+
+            // Guard against tearing down the same container twice.
+            if (effectContainer._removing) {
+                return;
+            }
+            effectContainer._removing = true;
+
             // Clean up animation ticker first
             if (effectContainer.animationFunction) {
                 this.removeTickerCallback(effectContainer.animationFunction);
                 effectContainer.animationFunction = null;
             }
             
-            // Add fade-out animation before removal
+            // Add fade-out animation before final teardown (frees GPU geometry).
             this.fadeOutEffect(effectContainer, () => {
-                // Final cleanup
                 this.cleanupFieldEffectContainer(effectContainer);
-                this.gameContainer.removeChild(effectContainer);
-                this.fieldEffects.delete(effectId);
+                if (effectContainer.parent) {
+                    effectContainer.parent.removeChild(effectContainer);
+                }
             });
         }
     }
@@ -3725,7 +3746,7 @@ class GameEngine {
     removeFlag(flagId) {
         const flagContainer = this.flags.get(flagId);
         if (flagContainer) {
-            flagContainer.destroy({ children: true });
+            flagContainer.destroy({ children: true, context: true });
             this.gameContainer.removeChild(flagContainer);
             this.flags.delete(flagId);
         }
@@ -3922,7 +3943,7 @@ class GameEngine {
     removeKothZone(zoneId) {
         const zoneContainer = this.kothZones.get(zoneId);
         if (zoneContainer) {
-            zoneContainer.destroy({ children: true });
+            zoneContainer.destroy({ children: true, context: true });
             this.gameContainer.removeChild(zoneContainer);
             this.kothZones.delete(zoneId);
         }
@@ -4593,7 +4614,7 @@ class GameEngine {
             while (graphics.children.length > 0) {
                 const child = graphics.children[0];
                 graphics.removeChild(child);
-                child.destroy({ children: true, texture: false, baseTexture: false });
+                child.destroy({ children: true, texture: false, baseTexture: false, context: true });
             }
             this.createHeadquartersGraphics(graphics, entityData);
         }
@@ -4768,7 +4789,7 @@ class GameEngine {
         // Recreate graphics if arming status changed
         if (container.lastArmedState !== entityData.isArmed) {
             container.removeChild(container.entityGraphics);
-            container.entityGraphics.destroy();
+            container.entityGraphics.destroy({ context: true });
             
             const newGraphics = this.createMineGraphics(new PIXI.Graphics(), entityData);
             container.addChild(newGraphics);
@@ -4829,7 +4850,7 @@ class GameEngine {
                 const progressBar = container.progressBars.get(playerId);
                 if (progressBar && progressBar.parent) {
                     container.removeChild(progressBar);
-                    progressBar.destroy();
+                    progressBar.destroy({ context: true });
                 }
                 container.progressBars.delete(playerId);
             }
@@ -4980,13 +5001,13 @@ class GameEngine {
     cleanupUtilityEntityContainer(container) {
         // Clean up graphics
         if (container.entityGraphics) {
-            container.entityGraphics.destroy();
+            container.entityGraphics.destroy({ context: true });
             container.entityGraphics = null;
         }
         
         // Clean up health bar
         if (container.healthBar) {
-            container.healthBar.destroy();
+            container.healthBar.destroy({ children: true, context: true });
         }
         
         // Clear references
@@ -4994,7 +5015,7 @@ class GameEngine {
         container.lastArmedState = null;
         
         // Destroy container
-        container.destroy({ children: true, texture: false, baseTexture: false });
+        container.destroy({ children: true, texture: false, baseTexture: false, context: true });
     }
     
     /**
@@ -5003,13 +5024,13 @@ class GameEngine {
     cleanupBeamContainer(beamContainer) {
         // Clean up beam graphics
         if (beamContainer.beamGraphics) {
-            beamContainer.beamGraphics.destroy();
+            beamContainer.beamGraphics.destroy({ context: true });
             beamContainer.beamGraphics = null;
         }
         
         // Clean up energy effects
         if (beamContainer.energyEffect) {
-            beamContainer.energyEffect.destroy();
+            beamContainer.energyEffect.destroy({ context: true });
             beamContainer.energyEffect = null;
         }
         
@@ -5019,7 +5040,7 @@ class GameEngine {
         beamContainer.beamAngle = null;
         
         // Destroy the container
-        beamContainer.destroy({ children: true, texture: false, baseTexture: false });
+        beamContainer.destroy({ children: true, texture: false, baseTexture: false, context: true });
     }
     
     /**
@@ -5043,7 +5064,7 @@ class GameEngine {
             if (effectContainer.effectGraphics.parent) {
                 effectContainer.effectGraphics.parent.removeChild(effectContainer.effectGraphics);
             }
-            effectContainer.effectGraphics.destroy();
+            effectContainer.effectGraphics.destroy({ context: true });
             effectContainer.effectGraphics = null;
         }
         
@@ -5053,7 +5074,7 @@ class GameEngine {
             if (child.parent) {
                 child.parent.removeChild(child);
             }
-            child.destroy();
+            child.destroy({ children: true, context: true });
         });
         
         // Clear all custom properties
@@ -5065,7 +5086,7 @@ class GameEngine {
         effectContainer.originalY = null;
         
         // Destroy the container itself
-        effectContainer.destroy({ children: true, texture: false, baseTexture: false });
+        effectContainer.destroy({ children: true, texture: false, baseTexture: false, context: true });
     }
     
     /**
@@ -6225,16 +6246,22 @@ class GameEngine {
     }
     
     updateFFAScoreboard(content, players) {
-        const sortedPlayers = [...players].sort((a, b) => (b.kills || 0) - (a.kills || 0));
+        // The server-computed total (kills/captures/KOTH/oddball/HQ by score style)
+        // is the authoritative ranking; fall back to kills for older payloads.
+        const totalOf = p => (p.score && typeof p.score.total === 'number') ? p.score.total : (p.kills || 0);
+        const sortedPlayers = [...players].sort((a, b) => totalOf(b) - totalOf(a));
         
         // Check if any player has captures (CTF mode)
         const hasCaptures = players.some(p => (p.captures || 0) > 0);
+        // Only show the Score column when objective scoring makes it differ from kills.
+        const hasObjectiveScore = players.some(p => totalOf(p) !== (p.kills || 0));
         
         content.innerHTML = `
             <table style="width: 100%; color: white;">
                 <thead>
                     <tr>
                         <th>Player</th>
+                        ${hasObjectiveScore ? '<th>Score</th>' : ''}
                         <th>Kills</th>
                         <th>Deaths</th>
                         ${hasCaptures ? '<th>Captures</th>' : ''}
@@ -6247,6 +6274,7 @@ class GameEngine {
                         return `
                         <tr style="${player.id === this.myPlayerId ? 'background: rgba(46, 204, 113, 0.2);' : ''}">
                             <td><span style="color: ${this.getTeamColorCSS(player.team || 0)}">●</span> ${player.name || `Player ${player.id}`}${vipIndicator}</td>
+                            ${hasObjectiveScore ? `<td style="font-weight: bold;">${totalOf(player)}</td>` : ''}
                             <td>${player.kills || 0}</td>
                             <td>${player.deaths || 0}</td>
                             ${hasCaptures ? `<td style="color: #FFD700;">${player.captures || 0} 🚩</td>` : ''}
@@ -6688,7 +6716,7 @@ class GameEngine {
             console.log(`Memory usage: ${(memInfo.usedJSHeapSize / 1024 / 1024).toFixed(2)}MB / ${(memInfo.totalJSHeapSize / 1024 / 1024).toFixed(2)}MB`);
         }
     }
-    
+
     /**
      * Clean up all resources when the game engine is destroyed
      */
@@ -6779,19 +6807,19 @@ class GameEngine {
         // Clean up obstacles
         this.obstacles.forEach(obstacle => {
             obstacle.obstacleData = null;
-            obstacle.destroy();
+            obstacle.destroy({ children: true, context: true });
         });
         this.obstacles.clear();
         
         // Clean up flags
         this.flags.forEach(flag => {
-            flag.destroy({ children: true });
+            flag.destroy({ children: true, context: true });
         });
         this.flags.clear();
         
         // Clean up KOTH zones
         this.kothZones.forEach(zone => {
-            zone.destroy({ children: true });
+            zone.destroy({ children: true, context: true });
         });
         this.kothZones.clear();
         
