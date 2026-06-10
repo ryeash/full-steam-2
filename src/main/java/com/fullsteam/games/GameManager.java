@@ -1053,7 +1053,12 @@ public class GameManager {
                 primaryConfig = request.getWeaponConfig();
             }
             if (request.getUtilityWeapon() != null) {
-                utilityConfig = UtilityWeapon.valueOf(request.getUtilityWeapon());
+                try {
+                    utilityConfig = UtilityWeapon.valueOf(request.getUtilityWeapon());
+                } catch (IllegalArgumentException e) {
+                    log.warn("Unknown utility weapon '{}' in config change for player {}, keeping default",
+                            request.getUtilityWeapon(), playerSession.getPlayerId());
+                }
             }
             player.applyWeaponConfig(primaryConfig, utilityConfig);
             player.setPlayerName(playerSession.getPlayerName());
@@ -1277,8 +1282,7 @@ public class GameManager {
             // This will be handled in ensureVipForTeam during respawn
         }
 
-        // Check if player lost their last life
-        boolean wasEliminated = victim.loseLife();
+        boolean wasEliminated = victim.loseLife() || victim.isEliminated();
         log.debug("Player {} died. Lives remaining: {}, Eliminated: {}",
                 victim.getId(), victim.getLivesRemaining(), victim.isEliminated());
 

@@ -342,7 +342,8 @@ class GameEngine {
                     container.colorBar.clear();
                 }
                 this.roundTimerContainer.removeChild(container);
-                container.destroy({ children: true, texture: false, baseTexture: false, context: true });
+                // children:true + default texture frees the scoreText Text's texture.
+                container.destroy({ children: true, context: true });
                 this.teamScoreContainers.delete(teamId);
             }
         }
@@ -793,11 +794,40 @@ class GameEngine {
         this.projectileTexture = this.app.renderer.generateTexture(projectileGraphics);
         projectileGraphics.destroy({ context: true }); // Clean up graphics after generating texture
 
-        // Obstacle - boulder
-        const boulderGraphics = new PIXI.Graphics();
-        boulderGraphics.circle(0, 0, 20).fill(0x808080);
-        this.boulderTexture = this.app.renderer.generateTexture(boulderGraphics);
-        boulderGraphics.destroy({ context: true }); // Clean up graphics after generating texture
+        // Shared soft-glow circle. This is the single reusable base texture for
+        // ALL field effects, power-up auras, and particle-style visuals. Instead
+        // of rebuilding per-instance Graphics geometry every frame, we render a
+        // tinted/scaled Sprite of this texture, which lets PIXI batch them into a
+        // handful of draw calls with zero per-frame geometry churn.
+        this.glowTextureRadius = 64;
+        const glowGraphics = new PIXI.Graphics();
+        const glowSteps = 2;
+        for (let i = glowSteps; i >= 1; i--) {
+            const r = this.glowTextureRadius * (i / glowSteps);
+            const a = Math.pow(1 - (i - 1) / glowSteps, 2) * 0.18;
+            glowGraphics.circle(0, 0, r).fill({ color: 0xffffff, alpha: a });
+        }
+        glowGraphics.circle(0, 0, this.glowTextureRadius * 0.35).fill({ color: 0xffffff, alpha: 0.85 });
+        this.glowTexture = this.app.renderer.generateTexture(glowGraphics);
+        glowGraphics.destroy({ context: true });
+
+        // Field-effect disc. Unlike the glow texture (small bright core + wide
+        // faint halo), this fills its full extent: dense toward the centre,
+        // fading only at the very rim. Field effects scale this so the rim lands
+        // exactly on the gameplay radius — the render never exceeds the physics
+        // radius, keeping the visual boundary honest for players.
+        this.fieldTextureRadius = 64;
+        const fieldGraphics = new PIXI.Graphics();
+        const fieldSteps = 16;
+        for (let i = fieldSteps; i >= 1; i--) {
+            const r = this.fieldTextureRadius * (i / fieldSteps);
+            // Painter's stacking concentrates opacity toward the centre; soften
+            // only the outermost ring so the disc reads as filled with a soft edge.
+            const rimFade = i >= fieldSteps ? 0.4 : 1.0;
+            fieldGraphics.circle(0, 0, r).fill({ color: 0xffffff, alpha: 0.11 * rimFade });
+        }
+        this.fieldTexture = this.app.renderer.generateTexture(fieldGraphics);
+        fieldGraphics.destroy({ context: true });
         
         // Death marker - tombstone/X
         const deathGraphics = new PIXI.Graphics();
@@ -2221,7 +2251,8 @@ class GameEngine {
             if (sprite.nameLabel.parent) {
                 sprite.nameLabel.parent.removeChild(sprite.nameLabel);
             }
-            sprite.nameLabel.destroy({ context: true });
+            // Text owns an auto-generated GPU texture; let destroy() free it.
+            sprite.nameLabel.destroy();
             sprite.nameLabel = null;
         }
         
@@ -2251,7 +2282,7 @@ class GameEngine {
                 sprite.reloadIndicator.background.destroy({ context: true });
             }
             if (sprite.reloadIndicator.reloadText) {
-                sprite.reloadIndicator.reloadText.destroy({ context: true });
+                sprite.reloadIndicator.reloadText.destroy(); // free Text's GPU texture
             }
             sprite.reloadIndicator.destroy({ children: true, context: true });
             sprite.reloadIndicator = null;
@@ -2511,7 +2542,7 @@ class GameEngine {
                 child.destroy({ children: true, texture: false, baseTexture: false, context: true });
             });
             // Reset tracking arrays so the next activation starts fresh
-            sprite.powerUpContainer._auraGraphics = [];
+            sprite.powerUpContainer._auraSprites = [];
             sprite.powerUpContainer._badgeContainer = null;
         }
     }
@@ -2558,164 +2589,54 @@ class GameEngine {
             };
         });
 
-        // --- Aura layer management (separate from badge children) ---
-        // We keep aura Graphics in container._auraGraphics so badge children
-        // (stored in container._badgeContainer) never corrupt index-based access.
-        if (!container._auraGraphics) container._auraGraphics = [];
+        // --- Aura layer: one tinted glow Sprite per active effect ---
+        // Sprites share the single glow texture, so they batch into ~1 draw call
+        // and allocate no geometry. We only rebuild the sprite set when the effect
+        // set changes; per-frame work is cheap transform updates (no clear/redraw).
+        if (!container._auraSprites) container._auraSprites = [];
 
-        while (container._auraGraphics.length > effects.length) {
-            const g = container._auraGraphics.pop();
-            container.removeChild(g);
-            g.destroy({ children: true, texture: false, baseTexture: false, context: true });
+        if (changed) {
+            container._auraSprites.forEach(s => {
+                container.removeChild(s);
+                s.destroy({ children: true, texture: false, baseTexture: false });
+            });
+            container._auraSprites = effects.map(effect => {
+                const s = new PIXI.Sprite(this.glowTexture);
+                s.anchor.set(0.5);
+                s.tint = effect.color;
+                const p = effect.params || {};
+                const baseRadius = p.radius || p.size || 22;
+                s._baseScale = (baseRadius * 1.6) / (this.glowTextureRadius || 64);
+                s._animation = effect.animation;
+                container.addChildAt(s, 0); // keep auras beneath badge overlays
+                return s;
+            });
         }
-        while (container._auraGraphics.length < effects.length) {
-            const g = new PIXI.Graphics();
-            container.addChild(g);
-            container._auraGraphics.push(g);
-        }
 
-        // Redraw each effect — always clear first to avoid shape accumulation
-        effects.forEach((effect, index) => {
-            const aura = container._auraGraphics[index];
-            if (!(aura instanceof PIXI.Graphics)) return;
-            aura.clear();
-
-            const time = Date.now() * 0.003;
-            const p = effect.params || {};
-
-            if (effect.animation === 'sparkle' || effect.animation === 'pulse') {
-                const baseRadius = p.radius || 20;
-                const particleCount = p.particles || 8;
-                const particleDistance = p.particleDistance || 25;
-                const particleSize = p.particleSize || 2;
-                const pulseSize = baseRadius + Math.sin(time + index) * 5;
-
-                aura.circle(0, 0, pulseSize).stroke({ width: 3, color: effect.color, alpha: 0.6 });
-                for (let i = 0; i < particleCount; i++) {
-                    const angle = (i / particleCount) * Math.PI * 2 + time;
-                    aura.circle(Math.cos(angle) * particleDistance, Math.sin(angle) * particleDistance, particleSize)
-                        .fill({ color: effect.color, alpha: 0.8 });
-                }
-
-            } else if (effect.animation === 'shield') {
-                // Ring of nodes instead of polygon path — avoids moveTo/lineTo
-                const baseSize = p.size || 22;
-                const sides = p.sides || 6;
-                const size = baseSize + Math.sin(time * 0.67) * 2;
-                const t2 = Date.now() * 0.002;
-
-                aura.circle(0, 0, size).stroke({ width: 2, color: effect.color, alpha: 0.5 });
-                for (let i = 0; i < sides; i++) {
-                    const angle = (i / sides) * Math.PI * 2 + t2 * 0.3;
-                    aura.circle(Math.cos(angle) * size, Math.sin(angle) * size, 3)
-                        .fill({ color: effect.color, alpha: 0.9 });
-                }
-
-            } else if (effect.animation === 'slow') {
-                const t2 = Date.now() * 0.002;
-                const dropCount = p.drops || 6;
-                const radius = p.radius || 18;
-                const dropSize = p.dropSize || 3;
-                const dripAmount = p.dripAmount || 3;
-
-                for (let i = 0; i < dropCount; i++) {
-                    const angle = (i / dropCount) * Math.PI * 2 + t2;
-                    const x = Math.cos(angle) * radius;
-                    const y = Math.sin(angle) * radius + Math.sin(t2 * 2 + i) * dripAmount;
-                    aura.circle(x, y, dropSize).fill({ color: effect.color, alpha: 0.5 });
-                }
-
-            } else if (effect.animation === 'cloud') {
-                const t2 = Date.now() * 0.001;
-                const baseRadius = p.radius || 22;
-                const puffCount = p.puffs || 6;
-                const wispCount = p.wisps || 8;
-
-                for (let i = 0; i < puffCount; i++) {
-                    const angle = (i / puffCount) * Math.PI * 2 + t2 * 0.5;
-                    const puffDistance = baseRadius * 0.6;
-                    const puffSize = baseRadius * (0.5 + Math.sin(t2 * 2 + i) * 0.1);
-                    aura.circle(Math.cos(angle) * puffDistance, Math.sin(angle) * puffDistance, puffSize)
-                        .fill({ color: effect.color, alpha: 0.25 + Math.sin(t2 * 3 + i) * 0.1 });
-                }
-                aura.circle(0, 0, baseRadius * (0.7 + Math.sin(t2 * 1.5) * 0.1))
-                    .fill({ color: effect.color, alpha: 0.3 });
-                for (let i = 0; i < wispCount; i++) {
-                    const angle = (i / wispCount) * Math.PI * 2 + t2 * 1.5;
-                    const distance = baseRadius * 0.8;
-                    const wispSize = 3 + Math.sin(t2 * 4 + i) * 1;
-                    aura.circle(Math.cos(angle) * distance, Math.sin(angle) * distance, wispSize)
-                        .fill({ color: effect.color, alpha: 0.35 + Math.sin(t2 * 5 + i) * 0.15 });
-                }
-
-            } else if (effect.animation === 'flame') {
-                const t2 = Date.now() * 0.004;
-                const particleCount = p.count || 10;
-                const baseRadius = p.radius || 20;
-                const flameHeight = p.height || 8;
-
-                for (let i = 0; i < particleCount; i++) {
-                    const angle = (i / particleCount) * Math.PI * 2 + t2 * 2;
-                    const distance = baseRadius + Math.sin(t2 * 3 + i) * 5;
-                    const x = Math.cos(angle) * distance;
-                    const y = Math.sin(angle) * distance - Math.abs(Math.sin(t2 * 4 + i)) * flameHeight;
-                    const size = 2 + Math.sin(t2 * 5 + i) * 1.5;
-                    aura.circle(x, y, size).fill({ color: effect.color, alpha: 0.4 + Math.sin(t2 * 6 + i) * 0.3 });
-                }
-                aura.circle(0, 0, baseRadius * (0.6 + Math.sin(t2 * 3) * 0.15))
-                    .fill({ color: effect.color, alpha: 0.2 });
-                aura.circle(0, 0, baseRadius * 0.3)
-                    .fill({ color: effect.color, alpha: 0.5 + Math.sin(t2 * 4) * 0.2 });
-
-            } else if (effect.animation === 'star') {
-                // Orbiting dots instead of polygon stars — avoids moveTo/lineTo
-                const starCount = p.count || 8;
-                const orbitRadius = p.radius || 30;
-                const dotSize = (p.size || 3) * 1.2;
-                const pulseSize = 25 + Math.sin(time) * 3;
-
-                aura.circle(0, 0, pulseSize).stroke({ width: 2, color: effect.color, alpha: 0.6 });
-                for (let i = 0; i < starCount; i++) {
-                    const angle = (i / starCount) * Math.PI * 2 + time * 2;
-                    aura.circle(Math.cos(angle) * orbitRadius, Math.sin(angle) * orbitRadius, dotSize)
-                        .fill({ color: effect.color, alpha: 0.9 });
-                }
-                // Inner rotating ring of dots
-                const innerCount = 5;
-                const innerR = 10;
-                for (let i = 0; i < innerCount; i++) {
-                    const angle = (i / innerCount) * Math.PI * 2 + time * 3;
-                    aura.circle(Math.cos(angle) * innerR, Math.sin(angle) * innerR, 3)
-                        .fill({ color: effect.color, alpha: 0.8 });
-                }
-
-            } else if (effect.animation === 'crown') {
-                // Crown: golden ring with orbiting diamond-shaped dots — avoids moveTo/lineTo
-                const pulseSize = 25 + Math.sin(time) * 3;
-                aura.circle(0, 0, pulseSize).stroke({ width: 3, color: effect.color, alpha: 0.8 });
-
-                const crownPoints = 5;
-                const outerDist = 30;
-                const innerDist = 18;
-                for (let i = 0; i < crownPoints; i++) {
-                    const outerAngle = (i / crownPoints) * Math.PI * 2 - Math.PI / 2;
-                    aura.circle(Math.cos(outerAngle) * outerDist, Math.sin(outerAngle) * outerDist, 4)
-                        .fill({ color: effect.color, alpha: 0.9 });
-                    const innerAngle = outerAngle + Math.PI / crownPoints;
-                    aura.circle(Math.cos(innerAngle) * innerDist, Math.sin(innerAngle) * innerDist, 2.5)
-                        .fill({ color: effect.color, alpha: 0.7 });
-                }
-                // Rotating sparkle ring
-                for (let i = 0; i < 8; i++) {
-                    const angle = (i / 8) * Math.PI * 2 + time * 2;
-                    aura.circle(Math.cos(angle) * 35, Math.sin(angle) * 35, 2.5)
-                        .fill({ color: effect.color, alpha: 0.9 });
-                }
-
-            } else {
-                const pulseSize = 20 + Math.sin(time) * 4;
-                aura.circle(0, 0, pulseSize).stroke({ width: 2, color: effect.color, alpha: 0.6 });
-                aura.circle(0, 0, pulseSize * 0.7).fill({ color: effect.color, alpha: 0.3 });
+        // Animate each aura sprite via transform only (rotation/scale/alpha).
+        const now = Date.now();
+        container._auraSprites.forEach((s, index) => {
+            const time = now * 0.003 + index;
+            const pulse = 0.9 + Math.sin(time) * 0.12;
+            s.scale.set(s._baseScale * pulse);
+            switch (s._animation) {
+                case 'flame':
+                case 'speed':
+                    s.alpha = 0.55 + Math.sin(time * 3) * 0.2;
+                    s.rotation = now * 0.002;
+                    break;
+                case 'star':
+                case 'crown':
+                    s.alpha = 0.7;
+                    s.rotation = now * 0.0015;
+                    break;
+                case 'cloud':
+                    s.alpha = 0.45 + Math.sin(time * 1.2) * 0.1;
+                    s.rotation = now * 0.0003;
+                    break;
+                default:
+                    s.alpha = 0.5 + Math.sin(time * 2) * 0.12;
+                    s.rotation = now * 0.0008;
             }
         });
 
@@ -2728,7 +2649,8 @@ class GameEngine {
             const bc = container._badgeContainer;
             [...bc.children].forEach(child => {
                 bc.removeChild(child);
-                child.destroy({ children: true, texture: false, baseTexture: false, context: true });
+                // Badges contain Text (auto-generated texture); free it on destroy.
+                child.destroy({ children: true, context: true });
             });
             if (sprite.playerData.id === this.myPlayerId) {
                 effects.forEach((effect, index) => {
@@ -2889,127 +2811,34 @@ class GameEngine {
      * Create plasma effects for super-heated buzzing/glowing appearance
      */
     createPlasmaEffects(projectileContainer, sprite) {
-        // Create multiple layers for plasma effect
-        
-        // Outer electric field
-        const outerGlow = new PIXI.Graphics();
-        outerGlow.circle(0, 0, 8).fill({ color: 0x4444ff, alpha: 0.3 });
-        outerGlow.zIndex = -2;
-        projectileContainer.addChild(outerGlow);
-        
-        // Middle energy field with pulsing
-        const middleGlow = new PIXI.Graphics();
-        middleGlow.circle(0, 0, 5).fill({ color: 0x6666ff, alpha: 0.5 });
-        middleGlow.zIndex = -1;
-        projectileContainer.addChild(middleGlow);
-        
-        // Inner core glow
-        const innerGlow = new PIXI.Graphics();
-        innerGlow.circle(0, 0, 3).fill({ color: 0xaaaaff, alpha: 0.7 });
-        innerGlow.zIndex = 0;
-        projectileContainer.addChild(innerGlow);
-        
-        // Electric arcs around the plasma
-        const electricArcs = new PIXI.Graphics();
-        electricArcs.zIndex = 1;
-        projectileContainer.addChild(electricArcs);
-        
-        // Store references for animation
-        projectileContainer.plasmaEffects = {
-            outerGlow: outerGlow,
-            middleGlow: middleGlow,
-            innerGlow: innerGlow,
-            electricArcs: electricArcs,
-            animationTime: 0,
-            arcUpdateTimer: 0
-        };
-        
-        // Mark for plasma animation
+        // Single reusable glow sprite instead of 3 layered Graphics + per-frame
+        // electric-arc geometry rebuilds. Pulsed via transform only.
+        const glow = new PIXI.Sprite(this.glowTexture);
+        glow.anchor.set(0.5);
+        glow.tint = 0x6688ff;
+        glow._baseScale = 14 / (this.glowTextureRadius || 64);
+        glow.scale.set(glow._baseScale);
+        glow.zIndex = -1;
+        projectileContainer.addChildAt(glow, 0);
+
+        projectileContainer.plasmaGlow = glow;
+        projectileContainer.plasmaTime = 0;
         projectileContainer.isPlasma = true;
     }
     
     /**
-     * Animate plasma effects for buzzing/glowing appearance
+     * Animate plasma glow (transform-only pulse, no geometry).
      */
     animatePlasmaEffects(projectileContainer, deltaTime) {
-        if (!projectileContainer.plasmaEffects) return;
-        
-        const effects = projectileContainer.plasmaEffects;
-        effects.animationTime += deltaTime * 0.05; // Slow down animation speed
-        effects.arcUpdateTimer += deltaTime;
-        
-        const time = effects.animationTime;
-        
-        // Pulsing glow effects
-        const pulseOuter = 0.8 + Math.sin(time * 8) * 0.3; // Fast pulse
-        const pulseMiddle = 0.9 + Math.sin(time * 12) * 0.2; // Faster pulse
-        const pulseInner = 0.95 + Math.sin(time * 15) * 0.1; // Very fast pulse
-        
-        effects.outerGlow.alpha = pulseOuter * 0.3;
-        effects.middleGlow.alpha = pulseMiddle * 0.5;
-        effects.innerGlow.alpha = pulseInner * 0.7;
-        
-        // Scale pulsing for energy field effect
-        const scaleOuter = 1.0 + Math.sin(time * 6) * 0.2;
-        const scaleMiddle = 1.0 + Math.sin(time * 10) * 0.15;
-        const scaleInner = 1.0 + Math.sin(time * 14) * 0.1;
-        
-        effects.outerGlow.scale.set(scaleOuter);
-        effects.middleGlow.scale.set(scaleMiddle);
-        effects.innerGlow.scale.set(scaleInner);
-        
-        // Update electric arcs every few frames for buzzing effect
-        if (effects.arcUpdateTimer > 0.1) { // Update every 100ms for buzzing
-            this.updatePlasmaArcs(effects.electricArcs);
-            effects.arcUpdateTimer = 0;
-        }
-        
-        // Slight rotation for dynamic feel
-        effects.outerGlow.rotation = time * 2;
-        effects.middleGlow.rotation = -time * 3;
-        effects.innerGlow.rotation = time * 4;
-    }
-    
-    /**
-     * Update electric arcs around plasma for buzzing effect
-     */
-    updatePlasmaArcs(electricArcs) {
-        electricArcs.clear();
-        
-        // Draw 3-5 random electric arcs
-        const numArcs = 3 + Math.floor(Math.random() * 3);
-        
-        for (let i = 0; i < numArcs; i++) {
-            const startAngle = Math.random() * Math.PI * 2;
-            const arcLength = Math.PI * 0.3 + Math.random() * Math.PI * 0.4; // 54-126 degrees
-            const radius = 6 + Math.random() * 4; // 6-10 pixel radius
-            
-            // Create zigzag electric arc
-            const steps = 5 + Math.floor(Math.random() * 3); // 5-7 steps
-            let currentAngle = startAngle;
-            const angleStep = arcLength / steps;
-            
-            let lastX = Math.cos(currentAngle) * radius;
-            let lastY = Math.sin(currentAngle) * radius;
-            
-            for (let j = 1; j <= steps; j++) {
-                currentAngle += angleStep;
-                
-                // Add random jitter for electric effect
-                const jitterRadius = radius + (Math.random() - 0.5) * 3;
-                const jitterAngle = currentAngle + (Math.random() - 0.5) * 0.3;
-                
-                const x = Math.cos(jitterAngle) * jitterRadius;
-                const y = Math.sin(jitterAngle) * jitterRadius;
-                
-                electricArcs.moveTo(lastX, lastY);
-                electricArcs.lineTo(x, y);
-                
-                lastX = x;
-                lastY = y;
-            }
-        }
-        electricArcs.stroke({ width: 1, color: 0xaaaaff, alpha: 0.8 });
+        const glow = projectileContainer.plasmaGlow;
+        if (!glow) return;
+
+        projectileContainer.plasmaTime += deltaTime * 0.05;
+        const t = projectileContainer.plasmaTime;
+
+        const pulse = 1.0 + Math.sin(t * 10) * 0.25;
+        glow.scale.set(glow._baseScale * pulse);
+        glow.alpha = 0.55 + Math.sin(t * 8) * 0.2;
     }
     
     /**
@@ -3028,28 +2857,13 @@ class GameEngine {
         
         if (points.length < 2) return;
         
-        // Draw trail as a series of connected lines with decreasing width and alpha
+        // Single tapered polyline: one moveTo/lineTo chain and a single stroke()
+        // call, instead of N per-segment strokes. Far less geometry churn.
+        trail.moveTo(points[0].x, points[0].y);
         for (let i = 1; i < points.length; i++) {
-            const progress = i / points.length; // 0 = oldest, 1 = newest
-            const prevPoint = points[i - 1];
-            const currentPoint = points[i];
-            
-            // Calculate trail properties based on progress
-            const width = trail.trailWidth * (0.2 + 0.8 * progress); // Wider at front
-            const alpha = trail.trailAlpha * progress; // More opaque at front
-            
-            // Use gradient effect by drawing multiple lines
-            trail.moveTo(prevPoint.x, prevPoint.y);
-            trail.lineTo(currentPoint.x, currentPoint.y);
-            trail.stroke({ width, color: trail.trailColor, alpha });
-            
-            // Add inner bright core for rocket trails
-            if (projectileContainer.projectileData.ordinance === 'ROCKET' && progress > 0.7) {
-                trail.moveTo(prevPoint.x, prevPoint.y);
-                trail.lineTo(currentPoint.x, currentPoint.y);
-                trail.stroke({ width: width * 0.4, color: trail.trailSecondaryColor, alpha: alpha * 0.8 });
-            }
+            trail.lineTo(points[i].x, points[i].y);
         }
+        trail.stroke({ width: trail.trailWidth, color: trail.trailColor, alpha: trail.trailAlpha });
     }
     
     /**
@@ -3162,38 +2976,13 @@ class GameEngine {
      * Thoroughly clean up a projectile container to prevent memory leaks
      */
     cleanupProjectileContainer(projectileContainer) {
-        // Clean up plasma effects if they exist
-        if (projectileContainer.plasmaEffects) {
-            const effects = projectileContainer.plasmaEffects;
-            
-            // Remove and destroy all plasma effect children
-            if (effects.outerGlow) {
-                if (effects.outerGlow.parent) {
-                    effects.outerGlow.parent.removeChild(effects.outerGlow);
-                }
-                effects.outerGlow.destroy({ context: true });
+        // Clean up plasma glow sprite if it exists (shared texture preserved)
+        if (projectileContainer.plasmaGlow) {
+            if (projectileContainer.plasmaGlow.parent) {
+                projectileContainer.plasmaGlow.parent.removeChild(projectileContainer.plasmaGlow);
             }
-            if (effects.middleGlow) {
-                if (effects.middleGlow.parent) {
-                    effects.middleGlow.parent.removeChild(effects.middleGlow);
-                }
-                effects.middleGlow.destroy({ context: true });
-            }
-            if (effects.innerGlow) {
-                if (effects.innerGlow.parent) {
-                    effects.innerGlow.parent.removeChild(effects.innerGlow);
-                }
-                effects.innerGlow.destroy({ context: true });
-            }
-            if (effects.electricArcs) {
-                if (effects.electricArcs.parent) {
-                    effects.electricArcs.parent.removeChild(effects.electricArcs);
-                }
-                effects.electricArcs.destroy({ context: true });
-            }
-            
-            // Clear references
-            projectileContainer.plasmaEffects = null;
+            projectileContainer.plasmaGlow.destroy({ texture: false, baseTexture: false });
+            projectileContainer.plasmaGlow = null;
         }
         
         // Clean up trail if it exists
@@ -3377,21 +3166,10 @@ class GameEngine {
         // Update position (in case effect moves)
         effectContainer.position.set(effectData.x, effectData.y);
         
-        // Handle growing effects (like ERUPTION)
-        if (!effectContainer.initialRadius) {
-            effectContainer.initialRadius = effectData.radius;
-            effectContainer.currentRadius = effectData.radius;
-        }
-        
-        // Smoothly scale to match server radius for growing effects
-        if (effectData.type === 'FIRE' && effectData.radius !== effectContainer.currentRadius) {
-            effectContainer.currentRadius = effectData.radius;
-            const scaleFactor = effectData.radius / effectContainer.initialRadius;
-            
-            // Apply base scale to the graphics (animation will pulse on top of this)
-            if (effectContainer.effectGraphics) {
-                effectContainer.effectGraphics.scale.set(scaleFactor);
-            }
+        // Growing effects (e.g. FIRE/ERUPTION): rescale the shared glow sprite to
+        // match the server radius. The animate*() container pulse multiplies on top.
+        if (effectData.type === 'FIRE' && effectContainer.effectGraphics) {
+            effectContainer.effectGraphics.scale.set(effectData.radius / (this.fieldTextureRadius || 64));
         }
         
         // Update visual based on effect progress/intensity
@@ -3848,30 +3626,29 @@ class GameEngine {
         // Get colors based on state
         const colors = this.getKothZoneColors(zoneData);
         const radius = zoneData.radius || 80;
-        
-        // Redraw base circle
-        const baseCircle = zoneContainer.baseCircle;
-        baseCircle.clear();
-        baseCircle.circle(0, 0, radius).fill({ color: colors.fill, alpha: 0.2 });
-        baseCircle.circle(0, 0, radius).stroke({ width: 3, color: colors.border });
-        
-        // Draw capture progress ring (no longer needed - removed capture time)
-        const progressRing = zoneContainer.progressRing;
-        progressRing.clear();
-        // No progress ring since zones are controlled immediately
-        
-        // Draw inner glow
-        const glow = zoneContainer.glow;
-        glow.clear();
-        glow.circle(0, 0, radius * 0.7).fill({ color: colors.glow, alpha: 0.3 });
-        
-        // Update zone number color
-        zoneContainer.zoneText.style.fill = colors.text;
-        
-        // Update status text
-        const statusText = zoneContainer.statusText;
-        statusText.text = this.getKothZoneStatusText(zoneData);
-        statusText.style.fill = colors.statusText;
+
+        // Only rebuild the circle/glow geometry when the visual state actually
+        // changes (state, controlling team, or radius). Redrawing every tick is
+        // the GPU-geometry-churn anti-pattern; zone state changes rarely.
+        const renderKey = `${zoneData.state}|${zoneData.controllingTeam}|${radius}`;
+        if (zoneContainer._renderKey !== renderKey) {
+            zoneContainer._renderKey = renderKey;
+
+            const baseCircle = zoneContainer.baseCircle;
+            baseCircle.clear();
+            baseCircle.circle(0, 0, radius).fill({ color: colors.fill, alpha: 0.2 });
+            baseCircle.circle(0, 0, radius).stroke({ width: 3, color: colors.border });
+
+            const glow = zoneContainer.glow;
+            glow.clear();
+            glow.circle(0, 0, radius * 0.7).fill({ color: colors.glow, alpha: 0.3 });
+
+            zoneContainer.zoneText.style.fill = colors.text;
+
+            const statusText = zoneContainer.statusText;
+            statusText.text = this.getKothZoneStatusText(zoneData);
+            statusText.style.fill = colors.statusText;
+        }
         
         // Update player count
         const playerCountText = zoneContainer.playerCountText;
@@ -3974,21 +3751,15 @@ class GameEngine {
     createLaserGraphics(graphics, length, beamData) {
         const color = this.getTeamColor(beamData.ownerTeam)
 
-        // Main laser beam - bright magenta/red
+        // Soft outer glow + bright white core. Two strokes instead of three.
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
-        graphics.stroke({ width: beamData.size, color: color, alpha: 0.9 });
-        
-        // Inner core - white hot
+        graphics.stroke({ width: beamData.size * 1.5, color: color, alpha: 0.35 });
+
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
         graphics.stroke({ width: beamData.size / 2, color: 0xffffff });
-        
-        // Outer glow effect
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        graphics.stroke({ width: beamData.size * 1.5, color: color, alpha: 0.3 });
-        
+
         return graphics;
     }
     
@@ -3998,31 +3769,16 @@ class GameEngine {
     createPlasmaBeamGraphics(graphics, length, beamData) {
         const color = this.getTeamColor(beamData.ownerTeam)
 
-        // Main plasma beam - electric blue
+        // Colored body + bright core. Dropped the per-segment instability loop
+        // (lots of tiny strokes) in favor of two clean strokes.
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
         graphics.stroke({ width: beamData.size, color: color, alpha: 0.8 });
-        
-        // Plasma core - bright white
+
         graphics.moveTo(0, 0);
         graphics.lineTo(length, 0);
         graphics.stroke({ width: beamData.size / 2, color: 0xaaffff });
-        
-        // Crackling energy effect
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        graphics.stroke({ width: beamData.size * 2, color: color, alpha: 0.2 });
-        
-        // Add plasma instability (random segments)
-        for (let i = 0; i < length; i += 20) {
-            const segmentEnd = Math.min(i + 15 + Math.random() * 10, length);
-            const offset = (Math.random() - 0.5) * 4;
-            
-            graphics.moveTo(i, 0);
-            graphics.lineTo(segmentEnd, offset);
-            graphics.stroke({ width: beamData.size / 2, color: 0x88aaff, alpha: 0.6 });
-        }
-        
+
         return graphics;
     }
     
@@ -4453,18 +4209,6 @@ class GameEngine {
     }
     
     /**
-     * Update workshop visual to show crafting progress changes
-     */
-    updateWorkshopVisual(container, entityData) {
-        // Clear and redraw with updated progress
-        const graphics = container.getChildAt(0);
-        if (graphics) {
-            graphics.clear();
-            this.createWorkshopGraphics(graphics, entityData);
-        }
-    }
-    
-    /**
      * Create headquarters graphics
      */
     createHeadquartersGraphics(graphics, entityData) {
@@ -4606,18 +4350,25 @@ class GameEngine {
      * Update headquarters visual to show health changes
      */
     updateHeadquartersVisual(container, entityData) {
-        // Clear and redraw with updated health
         const graphics = container.getChildAt(0);
-        if (graphics) {
-            graphics.clear();
-            // Remove and destroy old text children to prevent memory leak
-            while (graphics.children.length > 0) {
-                const child = graphics.children[0];
-                graphics.removeChild(child);
-                child.destroy({ children: true, texture: false, baseTexture: false, context: true });
-            }
-            this.createHeadquartersGraphics(graphics, entityData);
+        if (!graphics) return;
+
+        // Only rebuild when health or team changes. The HQ is otherwise static,
+        // and a rebuild allocates two PIXI.Text objects (each owns a GPU texture),
+        // so redrawing every tick churned both geometry and textures.
+        const renderKey = `${entityData.health}|${entityData.team}`;
+        if (container._hqRenderKey === renderKey) return;
+        container._hqRenderKey = renderKey;
+
+        graphics.clear();
+        // Fully destroy old children. Text owns an auto-generated GPU texture, so
+        // we must let destroy() free it — passing texture:false here leaks it.
+        while (graphics.children.length > 0) {
+            const child = graphics.children[0];
+            graphics.removeChild(child);
+            child.destroy({ children: true });
         }
+        this.createHeadquartersGraphics(graphics, entityData);
     }
     
     /**
@@ -5093,587 +4844,46 @@ class GameEngine {
      * Create the main graphics for a field effect based on its type
      */
     createEffectGraphics(effectData) {
-        const graphics = new PIXI.Graphics();
+        // Every field effect is now a single tinted Sprite of the shared glow
+        // texture. The existing animate*() methods drive scale/alpha/rotation on
+        // the parent container, so we keep all motion with zero geometry churn.
         const radius = effectData.radius || 50;
-        
-        switch (effectData.type) {
-            case 'EXPLOSION':
-                return this.createExplosionGraphics(graphics, radius, effectData);
-            case 'FIRE':
-                return this.createFireGraphics(graphics, radius, effectData);
-            case 'ELECTRIC':
-                return this.createElectricGraphics(graphics, radius, effectData);
-            case 'FREEZE':
-                return this.createFreezeGraphics(graphics, radius, effectData);
-            case 'FRAGMENTATION':
-                return this.createFragmentationGraphics(graphics, radius, effectData);
-            case 'POISON':
-                return this.createPoisonGraphics(graphics, radius, effectData);
-            // Utility effect types
-            case 'HEAL_ZONE':
-                return this.createHealZoneGraphics(graphics, radius, effectData);
-            case 'SLOW_FIELD':
-                return this.createSlowFieldGraphics(graphics, radius, effectData);
-            case 'SHIELD_BARRIER':
-                return this.createShieldBarrierGraphics(graphics, radius, effectData);
-            case 'GRAVITY_WELL':
-                return this.createGravityWellGraphics(graphics, radius, effectData);
-            case 'SPEED_BOOST':
-                return this.createSpeedBoostGraphics(graphics, radius, effectData);
-            case 'SMOKE':
-                return this.createSmokeGraphics(graphics, radius, effectData);
-            // Environmental event effects
-            case 'WARNING_ZONE':
-                return this.createWarningZoneGraphics(graphics, radius, effectData);
-            case 'EARTHQUAKE':
-                return this.createEarthquakeGraphics(graphics, radius, effectData);
-            default:
-                return this.createGenericEffectGraphics(graphics, radius, effectData);
-        }
-    }
-    
-    /**
-     * Create explosion effect graphics
-     */
-    createExplosionGraphics(graphics, radius, effectData) {
-        // Outer blast ring
-        graphics.circle(0, 0, radius).fill({ color: 0xff4444, alpha: 0.6 });
-        
-        // Inner core
-        graphics.circle(0, 0, radius * 0.6).fill({ color: 0xffaa44, alpha: 0.8 });
-        
-        // Bright center
-        graphics.circle(0, 0, radius * 0.3).fill({ color: 0xffffff, alpha: 0.9 });
-        
-        return graphics;
-    }
-    
-    /**
-     * Create fire effect graphics
-     */
-    createFireGraphics(graphics, radius, effectData) {
-        // Base fire area
-        graphics.circle(0, 0, radius).fill({ color: 0xff4444, alpha: 0.4 });
-        
-        // Inner flames
-        graphics.circle(0, 0, radius * 0.7).fill({ color: 0xff8844, alpha: 0.6 });
-        
-        // Hot center
-        graphics.circle(0, 0, radius * 0.4).fill({ color: 0xffaa44, alpha: 0.8 });
-        
-        // Add flame particles
-        for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2;
-            const distance = radius * (0.6 + Math.random() * 0.4);
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const size = 3 + Math.random() * 5;
-            
-            graphics.circle(x, y, size).fill({ color: 0xff6644, alpha: 0.7 });
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create electric effect graphics
-     */
-    createElectricGraphics(graphics, radius, effectData) {
-        // Electric field base
-        graphics.circle(0, 0, radius).fill({ color: 0x4444ff, alpha: 0.3 });
-        
-        // Electric arcs
-        for (let i = 0; i < 6; i++) {
-            const startAngle = (i / 6) * Math.PI * 2;
-            const endAngle = startAngle + (Math.random() - 0.5) * Math.PI;
-            
-            const startX = Math.cos(startAngle) * radius * 0.2;
-            const startY = Math.sin(startAngle) * radius * 0.2;
-            const endX = Math.cos(endAngle) * radius * 0.9;
-            const endY = Math.sin(endAngle) * radius * 0.9;
-            
-            // Draw zigzag lightning
-            graphics.moveTo(startX, startY);
-            
-            const steps = 5;
-            for (let j = 1; j <= steps; j++) {
-                const t = j / steps;
-                const x = startX + (endX - startX) * t + (Math.random() - 0.5) * 10;
-                const y = startY + (endY - startY) * t + (Math.random() - 0.5) * 10;
-                graphics.lineTo(x, y);
-            }
-        }
-        graphics.stroke({ width: 2, color: 0x88aaff, alpha: 0.8 });
-        
-        // Bright electric center
-        graphics.circle(0, 0, radius * 0.2).fill({ color: 0xaaffff, alpha: 0.9 });
-        
-        return graphics;
-    }
-    
-    /**
-     * Create freeze effect graphics
-     */
-    createFreezeGraphics(graphics, radius, effectData) {
-        // Freeze field base
-        graphics.circle(0, 0, radius).fill({ color: 0x88ccff, alpha: 0.4 });
-        
-        // Ice crystals
-        for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2;
-            const length = radius * (0.6 + Math.random() * 0.3);
-            
-            // Main crystal line
-            graphics.moveTo(0, 0);
-            graphics.lineTo(Math.cos(angle) * length, Math.sin(angle) * length);
-            
-            // Crystal branches
-            const branchLength = length * 0.3;
-            const branchX = Math.cos(angle) * length * 0.7;
-            const branchY = Math.sin(angle) * length * 0.7;
-            
-            graphics.moveTo(branchX, branchY);
-            graphics.lineTo(
-                branchX + Math.cos(angle + Math.PI/4) * branchLength,
-                branchY + Math.sin(angle + Math.PI/4) * branchLength
-            );
-            
-            graphics.moveTo(branchX, branchY);
-            graphics.lineTo(
-                branchX + Math.cos(angle - Math.PI/4) * branchLength,
-                branchY + Math.sin(angle - Math.PI/4) * branchLength
-            );
-        }
-        graphics.stroke({ width: 2, color: 0xaaffff, alpha: 0.8 });
-        
-        // Frozen center
-        graphics.circle(0, 0, radius * 0.2).fill({ color: 0xffffff, alpha: 0.7 });
-        
-        return graphics;
-    }
-    
-    /**
-     * Create fragmentation effect graphics
-     */
-    createFragmentationGraphics(graphics, radius, effectData) {
-        // Fragmentation burst
-        graphics.circle(0, 0, radius).fill({ color: 0xffaa44, alpha: 0.5 });
-        
-        // Fragment trails
-        for (let i = 0; i < 12; i++) {
-            const angle = (i / 12) * Math.PI * 2 + Math.random() * 0.2;
-            const length = radius * (0.8 + Math.random() * 0.4);
-            
-            graphics.moveTo(0, 0);
-            graphics.lineTo(Math.cos(angle) * length, Math.sin(angle) * length);
-        }
-        graphics.stroke({ width: 2, color: 0xff8844, alpha: 0.7 });
-        
-        // Fragments at end of trails
-        for (let i = 0; i < 12; i++) {
-            const angle = (i / 12) * Math.PI * 2 + Math.random() * 0.2;
-            const length = radius * (0.8 + Math.random() * 0.4);
-            graphics.circle(Math.cos(angle) * length, Math.sin(angle) * length, 2).fill({ color: 0xffcc44, alpha: 0.8 });
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create poison effect graphics
-     */
-    createPoisonGraphics(graphics, radius, effectData) {
-        // Create a pallor-like green cloud effect with multiple overlapping soft circles
-        // to simulate a misty, toxic gas cloud
-        
-        // Outer diffuse cloud - very pale sickly green
-        graphics.circle(0, 0, radius).fill({ color: 0x9ccc65, alpha: 0.15 });
-        
-        // Create multiple overlapping cloud puffs for organic cloud shape
-        const numPuffs = 8;
-        for (let i = 0; i < numPuffs; i++) {
-            const angle = (i / numPuffs) * Math.PI * 2;
-            const puffDistance = radius * 0.4;
-            const x = Math.cos(angle) * puffDistance;
-            const y = Math.sin(angle) * puffDistance;
-            const puffSize = radius * (0.5 + Math.random() * 0.2);
-            
-            // Sickly pale green with varying opacity
-            graphics.circle(x, y, puffSize).fill({ color: 0x8bc34a, alpha: 0.2 + Math.random() * 0.15 });
-        }
-        
-        // Middle layer - more concentrated pallor
-        graphics.circle(0, 0, radius * 0.65).fill({ color: 0x7cb342, alpha: 0.25 });
-        
-        // Add smaller wispy cloud details
-        for (let i = 0; i < 12; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * radius * 0.7;
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const wispSize = radius * (0.15 + Math.random() * 0.15);
-            
-            // Varying shades of sickly green
-            const wispColors = [0x9ccc65, 0x8bc34a, 0x7cb342, 0x689f38];
-            const wispColor = wispColors[Math.floor(Math.random() * wispColors.length)];
-            
-            graphics.circle(x, y, wispSize).fill({ color: wispColor, alpha: 0.2 + Math.random() * 0.15 });
-        }
-        
-        // Central denser cloud
-        graphics.circle(0, 0, radius * 0.35).fill({ color: 0x689f38, alpha: 0.3 });
-        
-        // Add a few darker spots for depth
-        for (let i = 0; i < 5; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * radius * 0.4;
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const spotSize = radius * (0.08 + Math.random() * 0.1);
-            
-            graphics.circle(x, y, spotSize).fill({ color: 0x558b2f, alpha: 0.25 });
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create heal zone effect graphics - classic medical red cross design
-     */
-    createHealZoneGraphics(graphics, radius, effectData) {
-        // Outer soft glow - subtle white aura
-        graphics.circle(0, 0, radius).fill({ color: 0xf0f0f0, alpha: 0.15 });
-        
-        // Main background - greyish white circle
-        graphics.circle(0, 0, radius * 0.75).fill({ color: 0xe8e8e8, alpha: 0.7 });
-        
-        // Inner background - lighter center
-        graphics.circle(0, 0, radius * 0.65).fill({ color: 0xf5f5f5, alpha: 0.8 });
-        
-        // Create the classic red cross symbol
-        const crossSize = radius * 0.45;
-        const crossThickness = radius * 0.15;
-        
-        // Red cross color
-        const redCross = 0xdc143c; // Crimson red
-        
-        // Vertical bar of the cross
-        graphics.rect(-crossThickness / 2, -crossSize, crossThickness, crossSize * 2).fill({ color: redCross, alpha: 0.9 });
-        
-        // Horizontal bar of the cross
-        graphics.rect(-crossSize, -crossThickness / 2, crossSize * 2, crossThickness).fill({ color: redCross, alpha: 0.9 });
-        
-        // Add subtle border to the main circle
-        graphics.circle(0, 0, radius * 0.75).stroke({ width: 2, color: 0xcccccc, alpha: 0.5 });
-        
-        // Add small healing sparkles around the edge
-        for (let i = 0; i < 12; i++) {
-            const angle = (i / 12) * Math.PI * 2;
-            const distance = radius * 0.85;
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const size = 2;
-            
-            graphics.circle(x, y, size).fill({ color: 0xffffff, alpha: 0.6 });
-        }
-        
-        return graphics;
-    }
-    
-    
-    /**
-     * Create slow field effect graphics
-     */
-    createSlowFieldGraphics(graphics, radius, effectData) {
-        // Outer slow field - purple/blue
-        graphics.circle(0, 0, radius).fill({ color: 0x8e44ad, alpha: 0.3 });
-        
-        // Middle field - darker purple
-        graphics.circle(0, 0, radius * 0.7).fill({ color: 0x663399, alpha: 0.4 });
-        
-        // Inner core - deep purple
-        graphics.circle(0, 0, radius * 0.4).fill({ color: 0x4a235a, alpha: 0.5 });
-        
-        // Add slow effect ripples
-        for (let i = 1; i <= 4; i++) {
-            const rippleRadius = radius * (i / 5);
-            graphics.circle(0, 0, rippleRadius).stroke({ width: 2, color: 0x9b59b6, alpha: 0.6 });
-        }
-        
-        // Add slow particles (moving inward)
-        for (let i = 0; i < 12; i++) {
-            const angle = (i / 12) * Math.PI * 2;
-            const distance = radius * (0.6 + Math.random() * 0.3);
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const size = 1.5 + Math.random() * 2;
-            
-            graphics.circle(x, y, size).fill({ color: 0xbb8fce, alpha: 0.8 });
-            
-            // Add inward-pointing arrows
-            const arrowSize = 4;
-            graphics.moveTo(x + Math.cos(angle) * arrowSize, y + Math.sin(angle) * arrowSize);
-            graphics.lineTo(x - Math.cos(angle) * arrowSize, y - Math.sin(angle) * arrowSize);
-            graphics.stroke({ width: 1, color: 0xbb8fce, alpha: 0.7 });
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create shield barrier effect graphics
-     */
-    createShieldBarrierGraphics(graphics, radius, effectData) {
-        // Outer shield energy field - cyan/blue
-        graphics.circle(0, 0, radius).fill({ color: 0x3498db, alpha: 0.2 });
-        
-        // Shield barrier ring
-        graphics.circle(0, 0, radius * 0.8).stroke({ width: 4, color: 0x2980b9, alpha: 0.8 });
-        
-        // Inner shield core
-        graphics.circle(0, 0, radius * 0.3).fill({ color: 0x5dade2, alpha: 0.4 });
-        
-        // Add hexagonal shield pattern
-        const hexRadius = radius * 0.6;
-        const hexPoints = [];
-        for (let i = 0; i < 6; i++) {
-            const angle = (i / 6) * Math.PI * 2;
-            hexPoints.push(Math.cos(angle) * hexRadius);
-            hexPoints.push(Math.sin(angle) * hexRadius);
-        }
-        graphics.poly(hexPoints).stroke({ width: 2, color: 0x85c1e9, alpha: 0.6 });
-        
-        // Add shield energy sparks
-        for (let i = 0; i < 16; i++) {
-            const angle = (i / 16) * Math.PI * 2;
-            const distance = radius * 0.8;
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const sparkSize = 1 + Math.random() * 2;
-            
-            graphics.circle(x, y, sparkSize).fill({ color: 0xaed6f1, alpha: 0.9 });
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create gravity well effect graphics
-     */
-    createGravityWellGraphics(graphics, radius, effectData) {
-        // Outer gravity field - dark purple/black
-        graphics.circle(0, 0, radius).fill({ color: 0x1a1a2e, alpha: 0.4 });
-        
-        // Gravity distortion rings
-        for (let i = 1; i <= 6; i++) {
-            const ringRadius = radius * (i / 7);
-            graphics.circle(0, 0, ringRadius).stroke({ width: 2, color: 0x6c5ce7, alpha: 0.5 });
-        }
-        
-        // Central singularity
-        graphics.circle(0, 0, radius * 0.15).fill({ color: 0x0f0f23, alpha: 0.9 });
-        
-        // Event horizon glow
-        graphics.circle(0, 0, radius * 0.25).fill({ color: 0x6c5ce7, alpha: 0.6 });
-        
-        // Add gravitational particles (spiraling inward)
-        for (let i = 0; i < 20; i++) {
-            const angle = (i / 20) * Math.PI * 2;
-            const spiralOffset = (i / 20) * Math.PI * 4; // Multiple spirals
-            const distance = radius * (0.4 + Math.random() * 0.5);
-            const x = Math.cos(angle + spiralOffset) * distance;
-            const y = Math.sin(angle + spiralOffset) * distance;
-            const size = 1 + Math.random() * 1.5;
-            
-            graphics.circle(x, y, size).fill({ color: 0xa29bfe, alpha: 0.7 });
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create speed boost effect graphics
-     */
-    createSpeedBoostGraphics(graphics, radius, effectData) {
-        // Outer speed field - bright green/lime
-        graphics.circle(0, 0, radius).fill({ color: 0x2ecc71, alpha: 0.2 });
-        
-        // Middle boost ring
-        graphics.circle(0, 0, radius * 0.7).fill({ color: 0x27ae60, alpha: 0.3 });
-        
-        // Inner speed core
-        graphics.circle(0, 0, radius * 0.3).fill({ color: 0x00ff88, alpha: 0.5 });
-        
-        // Add speed boost arrows pointing outward
-        for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2;
-            const innerRadius = radius * 0.4;
-            const outerRadius = radius * 0.8;
-            const arrowSize = radius * 0.1;
-            
-            // Main arrow line
-            const startX = Math.cos(angle) * innerRadius;
-            const startY = Math.sin(angle) * innerRadius;
-            const endX = Math.cos(angle) * outerRadius;
-            const endY = Math.sin(angle) * outerRadius;
-            
-            graphics.moveTo(startX, startY);
-            graphics.lineTo(endX, endY);
-            
-            // Arrow head
-            const headAngle1 = angle + Math.PI * 0.8;
-            const headAngle2 = angle - Math.PI * 0.8;
-            
-            graphics.moveTo(endX, endY);
-            graphics.lineTo(
-                endX + Math.cos(headAngle1) * arrowSize,
-                endY + Math.sin(headAngle1) * arrowSize
-            );
-            
-            graphics.moveTo(endX, endY);
-            graphics.lineTo(
-                endX + Math.cos(headAngle2) * arrowSize,
-                endY + Math.sin(headAngle2) * arrowSize
-            );
-        }
-        graphics.stroke({ width: 3, color: 0x00ff88, alpha: 0.8 });
-        
-        // Add speed particles (moving outward)
-        for (let i = 0; i < 16; i++) {
-            const angle = (i / 16) * Math.PI * 2;
-            const distance = radius * (0.3 + Math.random() * 0.4);
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const size = 1 + Math.random() * 2;
-            
-            graphics.circle(x, y, size).fill({ color: 0x58d68d, alpha: 0.9 });
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create warning zone graphics (pulsing red/yellow indicator)
-     */
-    createWarningZoneGraphics(graphics, radius, effectData) {
-        // Outer warning ring (red)
-        graphics.circle(0, 0, radius).stroke({ width: 4, color: 0xff4444, alpha: 0.8 });
-        
-        // Middle warning ring (yellow)
-        graphics.circle(0, 0, radius * 0.85).stroke({ width: 3, color: 0xffaa00, alpha: 0.6 });
-        
-        // Inner warning area (semi-transparent red)
-        graphics.circle(0, 0, radius).fill({ color: 0xff4444, alpha: 0.15 });
-        
-        // Add warning stripes
-        const stripeCount = 12;
-        for (let i = 0; i < stripeCount; i++) {
-            const angle = (i / stripeCount) * Math.PI * 2;
-            const x1 = Math.cos(angle) * radius * 0.7;
-            const y1 = Math.sin(angle) * radius * 0.7;
-            const x2 = Math.cos(angle) * radius * 0.95;
-            const y2 = Math.sin(angle) * radius * 0.95;
-            
-            graphics.moveTo(x1, y1);
-            graphics.lineTo(x2, y2);
-        }
-        graphics.stroke({ width: 2, color: 0xffaa00, alpha: 0.7 });
-        
-        // Center warning symbol (exclamation mark)
-        // Exclamation body
-        graphics.rect(-3, -15, 6, 20).fill({ color: 0xff4444, alpha: 0.9 });
-        // Exclamation dot
-        graphics.circle(0, 10, 4).fill({ color: 0xff4444, alpha: 0.9 });
-        
-        return graphics;
-    }
-    
-    /**
-     * Create earthquake effect graphics (ground shake with cracks)
-     */
-    createEarthquakeGraphics(graphics, radius, effectData) {
-        // Base ground disturbance (brown/gray)
-        graphics.circle(0, 0, radius).fill({ color: 0x8b7355, alpha: 0.4 });
-        
-        // Inner shake zone (darker)
-        graphics.circle(0, 0, radius * 0.7).fill({ color: 0x654321, alpha: 0.5 });
-        
-        // Add crack lines radiating from center
-        const crackCount = 8;
-        for (let i = 0; i < crackCount; i++) {
-            const angle = (i / crackCount) * Math.PI * 2 + Math.random() * 0.3;
-            const length = radius * (0.6 + Math.random() * 0.4);
-            
-            // Main crack
-            graphics.moveTo(0, 0);
-            
-            // Jagged crack path
-            const segments = 5;
-            for (let j = 1; j <= segments; j++) {
-                const t = j / segments;
-                const x = Math.cos(angle) * length * t + (Math.random() - 0.5) * 10;
-                const y = Math.sin(angle) * length * t + (Math.random() - 0.5) * 10;
-                graphics.lineTo(x, y);
-            }
-        }
-        graphics.stroke({ width: 3, color: 0x3d2817, alpha: 0.8 });
-        
-        // Add dust/debris particles
-        for (let i = 0; i < 15; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * radius * 0.8;
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const size = 2 + Math.random() * 4;
-            
-            graphics.circle(x, y, size).fill({ color: 0xa0826d, alpha: 0.6 });
-        }
-        
-        // Add shockwave rings
-        graphics.circle(0, 0, radius * 0.4).stroke({ width: 2, color: 0x8b7355, alpha: 0.5 });
-        graphics.circle(0, 0, radius * 0.6).stroke({ width: 2, color: 0x8b7355, alpha: 0.3 });
-        
-        return graphics;
-    }
-    
-    /**
-     * Create smoke cloud graphics (grey/white swirling cloud)
-     */
-    createSmokeGraphics(graphics, radius, effectData) {
-        // Outer smoke haze
-        graphics.circle(0, 0, radius).fill({ color: 0x888888, alpha: 0.5 });
+        const style = this.getFieldEffectStyle(effectData.type);
 
-        // Mid-layer denser smoke
-        graphics.circle(0, 0, radius * 0.75).fill({ color: 0xaaaaaa, alpha: 0.55 });
-
-        // Inner dense core
-        graphics.circle(0, 0, radius * 0.45).fill({ color: 0xcccccc, alpha: 0.6 });
-
-        // Scattered smoke puffs for organic feel
-        for (let i = 0; i < 12; i++) {
-            const angle = (i / 12) * Math.PI * 2;
-            const distance = radius * (0.3 + Math.random() * 0.55);
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const size = 6 + Math.random() * 10;
-
-            const grey = 0x999999 + Math.floor(Math.random() * 0x333333);
-            graphics.circle(x, y, size).fill({ color: grey, alpha: 0.4 + Math.random() * 0.2 });
-        }
-
-        return graphics;
+        const sprite = new PIXI.Sprite(this.fieldTexture);
+        sprite.anchor.set(0.5);
+        sprite.tint = style.color;
+        sprite.alpha = style.alpha;
+        // Map the texture's full extent onto the physics radius so the disc fills
+        // its area but never renders larger than the real radius.
+        sprite.scale.set(radius / (this.fieldTextureRadius || 64));
+        return sprite;
     }
 
     /**
-     * Create generic effect graphics
+     * Tint + base opacity for each field effect type. Color is the only
+     * per-type differentiator now that all effects share one glow sprite.
      */
-    createGenericEffectGraphics(graphics, radius, effectData) {
-        graphics.circle(0, 0, radius).fill({ color: 0x888888, alpha: 0.5 });
-        
-        graphics.circle(0, 0, radius * 0.5).fill({ color: 0xcccccc, alpha: 0.7 });
-        
-        return graphics;
+    getFieldEffectStyle(type) {
+        switch (type) {
+            case 'EXPLOSION':      return { color: 0xffaa44, alpha: 0.9 };
+            case 'FIRE':           return { color: 0xff5522, alpha: 0.7 };
+            case 'ELECTRIC':       return { color: 0x88aaff, alpha: 0.85 };
+            case 'FREEZE':         return { color: 0x88ccff, alpha: 0.7 };
+            case 'FRAGMENTATION':  return { color: 0xffcc66, alpha: 0.9 };
+            case 'POISON':         return { color: 0x88cc44, alpha: 0.6 };
+            case 'HEAL_ZONE':      return { color: 0x44ff88, alpha: 0.5 };
+            case 'SLOW_FIELD':     return { color: 0x66aaff, alpha: 0.5 };
+            case 'SHIELD_BARRIER': return { color: 0x66ccff, alpha: 0.5 };
+            case 'GRAVITY_WELL':   return { color: 0x9966ff, alpha: 0.7 };
+            case 'SPEED_BOOST':    return { color: 0xffee66, alpha: 0.6 };
+            case 'SMOKE':          return { color: 0x888888, alpha: 0.6 };
+            case 'WARNING_ZONE':   return { color: 0xff4444, alpha: 0.5 };
+            case 'EARTHQUAKE':     return { color: 0xaa7744, alpha: 0.6 };
+            default:               return { color: 0xffffff, alpha: 0.6 };
+        }
     }
+    
     
     /**
      * Add animation to field effects
@@ -5767,9 +4977,9 @@ class GameEngine {
         // Rapid expansion in first 0.1 seconds, then shrink slightly
         let scale;
         if (time < 0.1) {
-            scale = 0.3 + (time / 0.1) * 1.2; // Expand from 0.3 to 1.5
+            scale = 0.3 + (time / 0.1) * 0.7; // Expand from 0.3 up to the physics radius (1.0)
         } else {
-            scale = 1.5 - progress * 0.3; // Shrink based on server progress
+            scale = 1.0 - progress * 0.3; // Shrink based on server progress
         }
         container.scale.set(Math.max(0.1, scale));
         
@@ -5846,8 +5056,8 @@ class GameEngine {
         const time = container.animationTime;
         const progress = container.effectData.progress || 0;
         
-        // Rapid expansion throughout the effect
-        const scale = 0.3 + progress * 1.2;
+        // Rapid expansion up to the physics radius, never beyond
+        const scale = 0.3 + progress * 0.7;
         container.scale.set(scale);
         
         // Quick fade after brief visibility
@@ -5871,7 +5081,8 @@ class GameEngine {
         const billow1 = Math.sin(time * 1.2) * 0.04;
         const billow2 = Math.sin(time * 1.8) * 0.03;
         const billow3 = Math.sin(time * 2.3) * 0.02;
-        const totalBillow = 1.0 + billow1 + billow2 + billow3;
+        // Bias below 1.0 so the billow peaks at the physics radius, never over it
+        const totalBillow = 0.91 + billow1 + billow2 + billow3;
         container.scale.set(totalBillow);
         
         // Very slow rotation to simulate cloud swirling
@@ -6037,8 +5248,8 @@ class GameEngine {
         // Slow rotation for swirling effect
         container.rotation = Math.sin(time * 0.7) * 0.15;
 
-        // Gentle pulsing scale
-        const pulse = 1.0 + Math.sin(time * 1.2) * 0.04;
+        // Gentle pulsing scale (biased below 1.0 so it never exceeds the radius)
+        const pulse = 0.96 + Math.sin(time * 1.2) * 0.04;
         container.scale.set(pulse);
 
         // Alpha fluctuation to simulate drifting density
