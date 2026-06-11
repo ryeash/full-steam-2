@@ -2633,20 +2633,20 @@ class GameEngine {
             switch (s._animation) {
                 case 'flame':
                 case 'speed':
-                    s.alpha = 0.55 + Math.sin(time * 3) * 0.2;
+                    s.alpha = 0.9 + Math.sin(time * 3) * 0.1;
                     s.rotation = now * 0.002;
                     break;
                 case 'star':
                 case 'crown':
-                    s.alpha = 0.7;
+                    s.alpha = 0.95;
                     s.rotation = now * 0.0015;
                     break;
                 case 'cloud':
-                    s.alpha = 0.45 + Math.sin(time * 1.2) * 0.1;
+                    s.alpha = 0.8 + Math.sin(time * 1.2) * 0.1;
                     s.rotation = now * 0.0003;
                     break;
                 default:
-                    s.alpha = 0.5 + Math.sin(time * 2) * 0.12;
+                    s.alpha = 0.85 + Math.sin(time * 2) * 0.1;
                     s.rotation = now * 0.0008;
             }
         });
@@ -3194,6 +3194,15 @@ class GameEngine {
         if (icon) {
             effectContainer.addChild(icon);
             effectContainer.iconOverlay = icon;
+        }
+
+        // Electric fields get arcing lightning bolts redrawn on a throttle by
+        // animateElectric() — a dedicated Graphics child so the flicker doesn't
+        // touch the shared fill sprite.
+        if (effectData.type === 'ELECTRIC') {
+            const lightning = new PIXI.Graphics();
+            effectContainer.addChild(lightning);
+            effectContainer.lightning = lightning;
         }
 
         // Add animated elements for certain effects
@@ -4777,6 +4786,7 @@ class GameEngine {
         effectContainer.originalY = null;
         effectContainer.barrierRing = null; // destroyed via the child loop above
         effectContainer.iconOverlay = null; // destroyed via the child loop above
+        effectContainer.lightning = null;   // destroyed via the child loop above
         
         // Destroy the container itself
         effectContainer.destroy({ children: true, texture: false, baseTexture: false, context: true });
@@ -4886,6 +4896,22 @@ class GameEngine {
                 }
                 return g;
             }
+            case 'WARNING_ZONE': {
+                // Exclamation mark — something is imminent. "!" is not vertically
+                // symmetric, so cancel the Y-flipped gameContainer and draw in
+                // natural screen coords (y increases downward).
+                g.scale.y = -1;
+                const s = Math.min(radius * 0.5, 20);
+                const stemW = s * 0.34;
+                const outline = { width: Math.max(1.5, s * 0.12), color: 0x1a1a1a, alpha: 0.9 };
+                // Stem (top) — slight taper handled by rounded corners.
+                g.roundRect(-stemW / 2, -s, stemW, s * 1.25, stemW * 0.4).fill(0xffffff);
+                g.roundRect(-stemW / 2, -s, stemW, s * 1.25, stemW * 0.4).stroke(outline);
+                // Dot (bottom).
+                g.circle(0, s * 0.72, stemW * 0.62).fill(0xffffff);
+                g.circle(0, s * 0.72, stemW * 0.62).stroke(outline);
+                return g;
+            }
             case 'SLOW_FIELD': {
                 // Hourglass — reads as time/slowed.
                 const w = Math.min(radius * 0.42, 15);  // half-width
@@ -4963,13 +4989,11 @@ class GameEngine {
                 break;
             // Utility effect animations
             case 'HEAL_ZONE':
-                this.animateHealZone(container);
                 break;
             case 'SLOW_FIELD':
                 this.animateSlowField(container);
                 break;
             case 'SHIELD_BARRIER':
-                this.animateShieldBarrier(container);
                 break;
             case 'GRAVITY_WELL':
                 this.animateGravityWell(container);
@@ -5012,9 +5036,6 @@ class GameEngine {
         } else {
             container.alpha = Math.max(0, 1.0 - progress); // Fade based on server progress
         }
-        
-        // Slight rotation for dynamic feel
-        container.rotation = time * 2.0;
     }
     
     /**
@@ -5030,9 +5051,6 @@ class GameEngine {
         // Gentle scale variation (slowed down from 8 to 3)
         const scale = 0.9 + Math.sin(time * 3) * 0.1;
         container.scale.set(scale);
-        
-        // Very subtle rotation (slowed down from 3 to 1)
-        container.rotation = Math.sin(time * 1) * 0.1;
     }
     
     /**
@@ -5040,18 +5058,68 @@ class GameEngine {
      */
     animateElectric(container) {
         const time = container.animationTime;
-        
+
         // Rapid flickering
         const flicker = Math.random() > 0.3 ? 1.0 : 0.6;
         container.alpha = flicker;
-        
+
         // Electrical pulsing
         const pulse = 0.9 + Math.sin(time * 20) * 0.1;
         container.scale.set(pulse);
-        
+
         // Random rotation for chaotic effect
         if (Math.random() > 0.9) {
             container.rotation = Math.random() * Math.PI * 2;
+        }
+
+        // Regenerate arcing lightning bolts on a throttle (~12Hz) so they flicker
+        // and crawl without redrawing geometry every single frame.
+        const lightning = container.lightning;
+        if (lightning) {
+            const now = Date.now();
+            if (!container._lastBoltTime || now - container._lastBoltTime > 80) {
+                container._lastBoltTime = now;
+                this.drawElectricBolts(lightning, (container.effectData && container.effectData.radius) || 50);
+            }
+        }
+    }
+
+    /**
+     * Redraw a fresh set of jagged lightning bolts radiating from the centre of
+     * an electric field out toward its rim. Each bolt is stroked twice: a wide
+     * dim glow plus a thin bright core, for an arcing electric look.
+     */
+    drawElectricBolts(g, radius) {
+        g.clear();
+        const boltCount = 4;
+        const segments = 5;
+        const glowWidth = Math.max(3, radius * 0.06);
+        const coreWidth = Math.max(1.5, radius * 0.025);
+
+        for (let b = 0; b < boltCount; b++) {
+            const angle = Math.random() * Math.PI * 2;
+            const reach = radius * (0.55 + Math.random() * 0.45);
+            const fx = Math.cos(angle), fy = Math.sin(angle); // forward unit
+            const nx = -fy, ny = fx;                          // perpendicular unit
+
+            const pts = [{ x: 0, y: 0 }];
+            for (let i = 1; i <= segments; i++) {
+                const t = i / segments;
+                const dist = reach * t;
+                // Zigzag jitter perpendicular to the bolt; tip lands on the path.
+                const jitter = (i === segments) ? 0 : (Math.random() - 0.5) * radius * 0.3;
+                pts.push({ x: fx * dist + nx * jitter, y: fy * dist + ny * jitter });
+            }
+
+            // Outer glow pass.
+            g.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+            g.stroke({ width: glowWidth, color: 0x66ccff, alpha: 0.35, cap: 'round', join: 'round' });
+
+            // Inner bright core pass.
+            g.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+            g.stroke({ width: coreWidth, color: 0xffffff, alpha: 0.95, cap: 'round', join: 'round' });
         }
     }
     
@@ -5060,16 +5128,8 @@ class GameEngine {
      */
     animateFreeze(container) {
         const time = container.animationTime;
-        
-        // Slow, steady pulse
         const pulse = 0.95 + Math.sin(time * 5) * 0.05;
         container.scale.set(pulse);
-        
-        // Gradual rotation
-        container.rotation = time * 0.2;
-        
-        // Stable alpha
-        container.alpha = 0.8;
     }
     
     /**
@@ -5089,9 +5149,6 @@ class GameEngine {
         } else {
             container.alpha = Math.max(0, 1.0 - progress); // Fade based on server progress
         }
-        
-        // Fast spinning fragments
-        container.rotation = time * 8;
     }
     
     /**
@@ -5107,9 +5164,6 @@ class GameEngine {
         // Bias below 1.0 so the billow peaks at the physics radius, never over it
         const totalBillow = 0.91 + billow1 + billow2 + billow3;
         container.scale.set(totalBillow);
-        
-        // Very slow rotation to simulate cloud swirling
-        container.rotation = time * 0.15;
         
         // Pulsing alpha to simulate cloud density changes - more subtle for pallor effect
         const pulse1 = Math.sin(time * 1.5) * 0.06;
@@ -5128,37 +5182,12 @@ class GameEngine {
     }
     
     /**
-     * Animate heal zone effects
-     */
-    animateHealZone(container) {
-    }
-
-    /**
      * Animate slow field effects
      */
     animateSlowField(container) {
         const time = container.animationTime;
-        
-        // Slow ripple effect
-        const ripple = 0.95 + Math.sin(time * 3) * 0.05;
-        container.scale.set(ripple);
-        
-        // Pulsing alpha to show field strength
         const pulse = 0.7 + Math.sin(time * 2.5) * 0.2;
         container.alpha = pulse;
-
-        // No rotation — keep the hourglass icon upright and readable.
-    }
-    
-    /**
-     * Animate shield barrier effects
-     */
-    animateShieldBarrier(container) {
-        // Shield barriers render as a steady, solid shell — no scale/alpha
-        // oscillation or rotation.
-        container.scale.set(1.0);
-        container.alpha = 1.0;
-        container.rotation = 0;
     }
     
     /**
@@ -5166,16 +5195,8 @@ class GameEngine {
      */
     animateGravityWell(container) {
         const time = container.animationTime;
-        
-        // Gravitational distortion - slight scale variation
         const distortion = 0.98 + Math.sin(time * 5) * 0.02;
         container.scale.set(distortion);
-        
-        // Stable but ominous presence
-        container.alpha = 0.9;
-        
-        // Slow rotation suggesting gravitational forces
-        container.rotation = time * 0.8;
     }
     
     /**
@@ -5183,16 +5204,8 @@ class GameEngine {
      */
     animateSpeedBoost(container) {
         const time = container.animationTime;
-        
-        // Energetic pulsing
         const energy = 0.9 + Math.sin(time * 10) * 0.1;
         container.scale.set(energy);
-        
-        // Bright, active alpha
-        const active = 0.8 + Math.sin(time * 7) * 0.15;
-        container.alpha = active;
-
-        // No rotation — keep the ">>" chevron icon upright and readable.
     }
     
     /**
@@ -5200,17 +5213,8 @@ class GameEngine {
      */
     animateWarningZone(container) {
         const time = container.animationTime;
-        
-        // Rapid pulsing to draw attention
-        const pulse = 0.85 + Math.sin(time * 15) * 0.15;
-        container.scale.set(pulse);
-        
-        // Flashing alpha for urgency
         const flash = 0.6 + Math.sin(time * 12) * 0.3;
         container.alpha = flash;
-        
-        // Slow rotation
-        container.rotation = time * 0.5;
     }
     
     /**
@@ -5245,16 +5249,8 @@ class GameEngine {
      */
     animateSmoke(container) {
         const time = container.animationTime;
-
-        // Slow rotation for swirling effect
-        container.rotation = Math.sin(time * 0.7) * 0.15;
-
-        // Gentle pulsing scale (biased below 1.0 so it never exceeds the radius)
         const pulse = 0.96 + Math.sin(time * 1.2) * 0.04;
         container.scale.set(pulse);
-
-        // Alpha fluctuation to simulate drifting density
-        container.alpha = 0.65 + Math.sin(time * 0.9) * 0.1 + Math.sin(time * 2.1) * 0.05;
     }
 
     /**
