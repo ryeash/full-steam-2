@@ -165,6 +165,13 @@ class GameEngine {
         // Enable sorting for proper z-index handling
         this.app.stage.sortableChildren = true;
 
+        // All input is handled via DOM listeners (keyboard/gamepad/HTML buttons);
+        // nothing uses Pixi pointer events. Disabling the event system stops the
+        // renderer from walking the whole scene graph for hit-testing on every
+        // pointer move. (PixiJS perf guide: "Event Handling".)
+        this.app.stage.eventMode = 'none';
+        this.app.stage.interactiveChildren = false;
+
         // Handle window resize - store handler for cleanup
         this.eventHandlers.resize = () => {
             this.handleResize();
@@ -313,7 +320,7 @@ class GameEngine {
             const minutes = Math.floor(Math.max(0, timeRemaining) / 60);
             const seconds = Math.floor(Math.max(0, timeRemaining) % 60);
             this.roundTimerText.text = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            this.roundTimerText.style.fill = timerColor;
+            this.setTextFill(this.roundTimerText, timerColor);
         } else {
             // Hide round/timer info if rounds are disabled
             this.roundNumberText.visible = false;
@@ -1721,10 +1728,16 @@ class GameEngine {
         const displayDuration = event.displayDuration || 3000;
         this.safeSetTimeout(() => this.removeGameEvent(eventElement), displayDuration);
 
-        // Cap visible events (CSS animation plays on the evicted items too)
+        // Cap visible events. Evict overflow SYNCHRONOUSLY: removeGameEvent() only
+        // schedules an animated removal 300ms later, so using it here would never
+        // change children.length and this while-loop would spin forever (tab
+        // freeze) — which is exactly what high event-rate modes (CTF/oddball)
+        // triggered. The break guard ensures we can never loop without progress.
         const MAX_EVENTS = 10;
         while (this.eventContainer.children.length > MAX_EVENTS) {
-            this.removeGameEvent(this.eventContainer.lastElementChild);
+            const oldest = this.eventContainer.lastElementChild;
+            if (!oldest) break;
+            this.eventContainer.removeChild(oldest);
         }
     }
     
@@ -2194,7 +2207,6 @@ class GameEngine {
         if (sprite.deathMarker) {
             sprite.deathMarker.visible = isDead;
             if (isDead) {
-                // Position death marker at death location
                 sprite.deathMarker.position.set(sprite.x, sprite.y);
             }
         }
@@ -3160,7 +3172,9 @@ class GameEngine {
      */
     updateFieldEffect(effectData) {
         const effectContainer = this.fieldEffects.get(effectData.id);
-        if (!effectContainer) return;
+        if (!effectContainer) {
+            return;
+        }
         
         // Update position (in case effect moves)
         effectContainer.position.set(effectData.x, effectData.y);
@@ -3177,8 +3191,6 @@ class GameEngine {
         effectContainer.effectData = effectData;
     }
     
-    /**
-     * Remove a field effect
      */
     removeFieldEffect(effectId) {
         const effectContainer = this.fieldEffects.get(effectId);
@@ -3292,9 +3304,6 @@ class GameEngine {
         beamContainer.beamData = beamData;
     }
     
-    /**
-     * Remove a beam weapon effect
-     */
     removeBeam(beamId) {
         const beamContainer = this.beams.get(beamId);
         if (beamContainer) {
@@ -3305,10 +3314,7 @@ class GameEngine {
     }
     
     // ===== Flag Management (CTF Mode) =====
-    
-    /**
-     * Create a flag for capture-the-flag mode or oddball
-     */
+
     createFlag(flagData) {
         const flagContainer = new PIXI.Container();
         flagContainer.position.set(flagData.x, flagData.y);
@@ -3324,32 +3330,20 @@ class GameEngine {
         this.flags.set(flagData.id, flagContainer);
         this.gameContainer.addChild(flagContainer);
     }
-    
-    /**
-     * Create oddball graphics (yellow ball with star design)
-     */
+
     createOddballGraphics(flagContainer, flagData) {
-        // Create yellow sphere
         const ball = new PIXI.Graphics();
-        
-        // Draw main yellow ball
-        const ballColor = 0xFFFF00; // Bright yellow
+        const ballColor = 0xFFFF00;
         ball.circle(0, 0, 20).fill(ballColor);
-        
-        // Add darker yellow/gold outline
         ball.circle(0, 0, 20).stroke({ width: 2, color: 0xFFAA00 });
-        
-        // Draw star pattern in the center
         const starPoints = 3;
         const outerRadius = 12;
         const innerRadius = 5;
-        
         for (let i = 0; i < starPoints * 2; i++) {
             const radius = i % 2 === 0 ? outerRadius : innerRadius;
             const angle = (i * Math.PI) / starPoints - Math.PI / 2;
             const x = Math.cos(angle) * radius;
             const y = Math.sin(angle) * radius;
-            
             if (i === 0) {
                 ball.moveTo(x, y);
             } else {
@@ -3357,8 +3351,7 @@ class GameEngine {
             }
         }
         ball.closePath();
-        ball.fill({ color: 0xFFFFFF, alpha: 0.9 }); // White star
-        
+        ball.fill({ color: 0xFFFFFF, alpha: 0.9 });
         for (let i = 0; i < starPoints * 2; i++) {
             const radius = i % 2 === 0 ? outerRadius : innerRadius;
             const angle = (i * Math.PI) / starPoints - Math.PI / 2;
@@ -3378,9 +3371,6 @@ class GameEngine {
         flagContainer.ballSprite = ball;
     }
     
-    /**
-     * Create CTF flag graphics (traditional flag)
-     */
     createCTFFlagGraphics(flagContainer, flagData) {
         // Create flag pole (extends upward from base)
         const pole = new PIXI.Graphics();
@@ -3401,15 +3391,13 @@ class GameEngine {
         flag.moveTo(0, 30);
         flag.lineTo(20, 20);
         flag.lineTo(0, 10);
+        flag.closePath();
         flag.stroke({ width: 1, color: 0x000000 });
         
         flagContainer.addChild(flag);
         flagContainer.flagSprite = flag;
     }
     
-    /**
-     * Update a flag's position and state
-     */
     updateFlag(flagData) {
         const flagContainer = this.flags.get(flagData.id);
         if (!flagContainer) {
@@ -3439,9 +3427,6 @@ class GameEngine {
         flagContainer.flagData = flagData;
     }
     
-    /**
-     * Remove a flag
-     */
     removeFlag(flagId) {
         const flagContainer = this.flags.get(flagId);
         if (flagContainer) {
@@ -3451,11 +3436,6 @@ class GameEngine {
         }
     }
     
-    // ===== KOTH Zone Management =====
-    
-    /**
-     * Create a KOTH zone
-     */
     createKothZone(zoneData) {
         const zoneContainer = new PIXI.Container();
         
@@ -5304,6 +5284,18 @@ class GameEngine {
     }
     
     /**
+     * Assign a Text's fill colour only when it actually changes. Reassigning a
+     * TextStyle property forces the text to re-rasterise on the next render even
+     * if the value is identical, so guarding it avoids needless per-frame glyph
+     * rebuilds in the HUD. (PixiJS perf guide: "Text — avoid changing every frame".)
+     */
+    setTextFill(textObj, color) {
+        if (!textObj || textObj._lastFill === color) return;
+        textObj._lastFill = color;
+        textObj.style.fill = color;
+    }
+
+    /**
      * Update the consolidated HUD with player information.
      */
     updateConsolidatedHUD(myPlayer) {
@@ -5331,21 +5323,21 @@ class GameEngine {
             const teamNumber = myPlayer.team || 0;
             if (teamNumber === 0) {
                 this.hudTeamText.text = 'FFA';
-                this.hudTeamText.style.fill = 0x808080; // Gray for FFA
+                this.setTextFill(this.hudTeamText, 0x808080); // Gray for FFA
             } else {
                 this.hudTeamText.text = teamNumber.toString();
-                this.hudTeamText.style.fill = this.getTeamColor(teamNumber); // Team color
+                this.setTextFill(this.hudTeamText, this.getTeamColor(teamNumber)); // Team color
             }
         }
-        
+
         // Update input source info
         if (this.hudInputText && this.inputManager) {
             if (this.inputManager.gamepad.connected && this.inputManager.inputSource === 'gamepad') {
                 this.hudInputText.text = 'Gamepad';
-                this.hudInputText.style.fill = 0x44ff44; // Green for gamepad
+                this.setTextFill(this.hudInputText, 0x44ff44); // Green for gamepad
             } else {
                 this.hudInputText.text = 'Keyboard';
-                this.hudInputText.style.fill = 0xffffff; // White for keyboard
+                this.setTextFill(this.hudInputText, 0xffffff); // White for keyboard
             }
         }
         
@@ -5364,11 +5356,11 @@ class GameEngine {
                 if (livesRemaining === 0) {
                     // Eliminated
                     this.hudLivesText.text = 'ELIM';
-                    this.hudLivesText.style.fill = 0xff4444; // Red for eliminated
+                    this.setTextFill(this.hudLivesText, 0xff4444); // Red for eliminated
                 } else {
                     // Limited lives (stock mode)
                     this.hudLivesText.text = livesRemaining.toString();
-                    this.hudLivesText.style.fill = 0xffaa00; // Orange for limited lives
+                    this.setTextFill(this.hudLivesText, 0xffaa00); // Orange for limited lives
                 }
             }
         }
