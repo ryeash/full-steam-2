@@ -153,6 +153,7 @@ class GameEngine {
         // Set up proper z-ordering
         this.backgroundContainer.zIndex = 0;
         this.gameContainer.zIndex = 1;
+        this.gameContainer.sortableChildren = true
         this.nameContainer.zIndex = 50; // Above game objects but below UI
         this.uiContainer.zIndex = 100;
 
@@ -1616,7 +1617,6 @@ class GameEngine {
             ).fill({ color: 0x888888, alpha: 0.75 });
             this.smokeOverlay.zIndex = 45; // Above game objects, below HUD
             this.gameContainer.addChild(this.smokeOverlay);
-            this.gameContainer.sortableChildren = true;
         } else if (isObscured && this.smokeOverlay) {
             // Keep it visible, follow camera
             this.smokeOverlay.visible = true;
@@ -1653,9 +1653,6 @@ class GameEngine {
         entityContainer.entityGraphics = entityGraphics;
         this.utilityEntities.set(entityData.id, entityContainer);
         this.gameContainer.addChild(entityContainer);
-        
-        // Enable sorting
-        this.gameContainer.sortableChildren = true;
     }
     
     /**
@@ -2179,9 +2176,6 @@ class GameEngine {
         sprite.playerData = playerData;
         this.players.set(playerData.id, sprite);
         this.gameContainer.addChild(sprite);
-        
-        // Enable sorting for this container
-        this.gameContainer.sortableChildren = true;
     }
     
     updatePlayer(playerData) {
@@ -3142,7 +3136,15 @@ class GameEngine {
         // Create the main effect visual based on type
         const effectGraphics = this.createEffectGraphics(effectData);
         effectContainer.addChild(effectGraphics);
-        
+
+        // Shield barriers get a solid shell ring on top of the fill so they read
+        // as a hard barrier rather than just another tinted field (e.g. ice).
+        if (effectData.type === 'SHIELD_BARRIER') {
+            const ring = this.createShieldBarrierRing(effectData.radius || 50);
+            effectContainer.addChild(ring);
+            effectContainer.barrierRing = ring;
+        }
+
         // Add animated elements for certain effects
         this.addEffectAnimation(effectContainer, effectData);
         
@@ -3151,9 +3153,6 @@ class GameEngine {
         effectContainer.effectGraphics = effectGraphics;
         this.fieldEffects.set(effectData.id, effectContainer);
         this.gameContainer.addChild(effectContainer);
-        
-        // Enable sorting for proper z-index handling
-        this.gameContainer.sortableChildren = true;
     }
     
     /**
@@ -3242,9 +3241,6 @@ class GameEngine {
         beamContainer.beamAngle = angle;
         this.beams.set(beamData.id, beamContainer);
         this.gameContainer.addChild(beamContainer);
-        
-        // Enable sorting for proper z-index handling
-        this.gameContainer.sortableChildren = true;
     }
     
     /**
@@ -3315,31 +3311,18 @@ class GameEngine {
      */
     createFlag(flagData) {
         const flagContainer = new PIXI.Container();
-        
         flagContainer.position.set(flagData.x, flagData.y);
-        
-        // Check if this is an oddball (ownerTeam === 0)
-        const isOddball = flagData.ownerTeam === 0 || flagData.isOddball;
-        
-        if (isOddball) {
-            // Create ODDBALL - basketball style
+        const oddball = flagData.oddball;
+        if (oddball) {
             this.createOddballGraphics(flagContainer, flagData);
         } else {
-            // Create regular CTF flag
             this.createCTFFlagGraphics(flagContainer, flagData);
         }
-        
-        // Set z-index (above players for visibility when carried)
         flagContainer.zIndex = 11;
-        
-        // Store flag data
         flagContainer.flagData = flagData;
-        flagContainer.isOddball = isOddball;
+        flagContainer.oddball = oddball;
         this.flags.set(flagData.id, flagContainer);
         this.gameContainer.addChild(flagContainer);
-        
-        // Enable sorting for proper z-index handling
-        this.gameContainer.sortableChildren = true;
     }
     
     /**
@@ -3357,8 +3340,7 @@ class GameEngine {
         ball.circle(0, 0, 20).stroke({ width: 2, color: 0xFFAA00 });
         
         // Draw star pattern in the center
-        // Draw a 5-pointed star
-        const starPoints = 5;
+        const starPoints = 3;
         const outerRadius = 12;
         const innerRadius = 5;
         
@@ -3377,7 +3359,6 @@ class GameEngine {
         ball.closePath();
         ball.fill({ color: 0xFFFFFF, alpha: 0.9 }); // White star
         
-        // Add star outline
         for (let i = 0; i < starPoints * 2; i++) {
             const radius = i % 2 === 0 ? outerRadius : innerRadius;
             const angle = (i * Math.PI) / starPoints - Math.PI / 2;
@@ -3395,29 +3376,6 @@ class GameEngine {
         
         flagContainer.addChild(ball);
         flagContainer.ballSprite = ball;
-        
-        // Add golden glow for oddball
-        const glow = new PIXI.Graphics();
-        glow.circle(0, 0, 30).fill({ color: 0xFFFF00, alpha: 0.4 }); // Yellow glow
-        flagContainer.addChildAt(glow, 0); // Behind ball
-        flagContainer.glow = glow;
-        
-        // Add "ODDBALL" label
-        const label = new PIXI.Text('⭐ ODDBALL', {
-            fontSize: 10,
-            fill: 0xFFFFFF,
-            fontWeight: 'bold',
-            stroke: 0x000000,
-            strokeThickness: 3
-        });
-        label.anchor.set(0.5);
-        label.scale.y = -1; // Flip Y-axis back
-        label.position.set(0, 35);
-        flagContainer.addChild(label);
-        flagContainer.label = label;
-        
-        // Animate glow pulsing
-        flagContainer.glowPhase = 0;
     }
     
     /**
@@ -3447,15 +3405,6 @@ class GameEngine {
         
         flagContainer.addChild(flag);
         flagContainer.flagSprite = flag;
-        
-        // Add glow effect for visibility
-        const glow = new PIXI.Graphics();
-        glow.circle(0, 15, 25).fill({ color: teamColor, alpha: 0.3 });
-        flagContainer.addChildAt(glow, 0); // Behind everything else
-        flagContainer.glow = glow;
-        
-        // Animate glow
-        flagContainer.glowPhase = 0;
     }
     
     /**
@@ -3463,58 +3412,30 @@ class GameEngine {
      */
     updateFlag(flagData) {
         const flagContainer = this.flags.get(flagData.id);
-        if (!flagContainer) return;
+        if (!flagContainer) {
+            return;
+        }
         
         // Update position (important for carried flags)
         flagContainer.position.set(flagData.x, flagData.y);
         
         // Update visual state based on flag state
         const state = flagData.state;
-        const isOddball = flagContainer.isOddball;
-        
+        const oddball = flagContainer.oddball;
+
         if (state === 'CARRIED') {
             // Flag/ball is being carried - make it bob and pulse
             flagContainer.alpha = 0.9;
             flagContainer.scale.set(0.8);
-            
-            // Extra spin animation for oddball
-            if (isOddball && flagContainer.ballSprite) {
-                flagContainer.ballSprite.rotation += 0.05;
-            }
         } else if (state === 'DROPPED') {
             // Flag/ball is dropped - pulse slowly
             flagContainer.alpha = 0.8 + Math.sin(Date.now() / 500) * 0.2;
             flagContainer.scale.set(1.0);
-            
-            // Bounce animation for oddball
-            if (isOddball && flagContainer.ballSprite) {
-                const bounce = Math.abs(Math.sin(Date.now() / 300)) * 5;
-                flagContainer.ballSprite.position.y = -bounce;
-            }
         } else {
             // Flag/ball is at home - full opacity
             flagContainer.alpha = 1.0;
             flagContainer.scale.set(1.0);
-            
-            // Gentle float for oddball at home
-            if (isOddball && flagContainer.ballSprite) {
-                const float = Math.sin(Date.now() / 800) * 3;
-                flagContainer.ballSprite.position.y = float;
-            }
         }
-        
-        // Animate glow
-        flagContainer.glowPhase += 0.05;
-        if (flagContainer.glow) {
-            if (isOddball) {
-                // Oddball has more intense golden glow pulse
-                flagContainer.glow.alpha = 0.3 + Math.sin(flagContainer.glowPhase) * 0.2;
-            } else {
-                // CTF flag has subtle glow
-                flagContainer.glow.alpha = 0.2 + Math.sin(flagContainer.glowPhase) * 0.1;
-            }
-        }
-        
         flagContainer.flagData = flagData;
     }
     
@@ -4835,6 +4756,7 @@ class GameEngine {
         effectContainer.originalScale = null;
         effectContainer.originalX = null;
         effectContainer.originalY = null;
+        effectContainer.barrierRing = null; // destroyed via the child loop above
         
         // Destroy the container itself
         effectContainer.destroy({ children: true, texture: false, baseTexture: false, context: true });
@@ -4858,6 +4780,28 @@ class GameEngine {
         // its area but never renders larger than the real radius.
         sprite.scale.set(radius / (this.fieldTextureRadius || 64));
         return sprite;
+    }
+
+    /**
+     * Build the hard "shell" ring that distinguishes a shield barrier from a
+     * plain tinted field. Strokes are inset by half their width so the outer
+     * edge lands exactly on the physics radius — never beyond it. Stays in the
+     * blue energy-shield palette.
+     */
+    createShieldBarrierRing(radius) {
+        const ring = new PIXI.Graphics();
+
+        // Solid outer shell — the dominant "this is a barrier" cue.
+        const shellWidth = Math.max(3, radius * 0.06);
+        ring.circle(0, 0, radius - shellWidth / 2)
+            .stroke({ width: shellWidth, color: 0x33aaff, alpha: 0.95 });
+
+        // Bright inner highlight ring for a layered, glassy shell look.
+        const highlightWidth = Math.max(1.5, radius * 0.025);
+        ring.circle(0, 0, radius - shellWidth - highlightWidth)
+            .stroke({ width: highlightWidth, color: 0xcceeff, alpha: 0.75 });
+
+        return ring;
     }
 
     /**
@@ -5145,18 +5089,11 @@ class GameEngine {
      * Animate shield barrier effects
      */
     animateShieldBarrier(container) {
-        const time = container.animationTime;
-        
-        // Shield energy fluctuation (slowed down)
-        const energy = 0.95 + Math.sin(time * 2) * 0.05;
-        container.scale.set(energy);
-        
-        // Shield shimmer effect (slowed down)
-        const shimmer = 0.8 + Math.sin(time * 3) * 0.15;
-        container.alpha = shimmer;
-        
-        // Steady rotation for energy field (slowed down)
-        container.rotation = time * 0.015;
+        // Shield barriers render as a steady, solid shell — no scale/alpha
+        // oscillation or rotation.
+        container.scale.set(1.0);
+        container.alpha = 1.0;
+        container.rotation = 0;
     }
     
     /**

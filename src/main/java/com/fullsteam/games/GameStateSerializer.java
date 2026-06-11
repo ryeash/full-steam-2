@@ -665,7 +665,7 @@ public class GameStateSerializer {
             flagState.put("y", pos.y);
             flagState.put("ownerTeam", flag.getOwnerTeam());
             flagState.put("state", flag.getState().name());
-            flagState.put("isOddball", flag.isOddball());
+            flagState.put("oddball", flag.isOddball());
             flagStates.add(flagState);
         }
         return flagStates;
