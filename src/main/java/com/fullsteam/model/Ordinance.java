@@ -7,7 +7,7 @@ public enum Ordinance {
     // Projectile-based ordinance
     BULLET(0, "Standard projectile", 2.0, 1.0, false, 0.3, 50.0, null, 0.0, 0.0),
     ROCKET(20, "High-speed explosive projectile", 4.0, 1.2, true, 1.4, 50.0, null, 0.0, 0.0),
-    GRENADE(10, "Arcing explosive projectile", 3.0, 0.6, true, 1.2, 20.0, null, 0.0, 0.0),
+    GRENADE(10, "Slow arcing explosive projectile", 3.0, 0.7, true, 1.2, 20.0, null, 0.0, 0.0),
     PLASMA(15, "Energy-based projectile", 2.5, 1.1, false, 0.8, 40.0, null, 0.0, 0.0),
     DART(5, "Small, fast projectile", 1.5, 1.4, false, 0.1, 50.0, null, 0.0, 0.0),
 

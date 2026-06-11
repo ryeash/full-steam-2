@@ -121,10 +121,15 @@ class GameEngine {
                 interpolator.update(deltaTime);
             });
             
-            // Animate plasma effects
+            // Animate plasma effects and extend projectile trails. Both ride the
+            // interpolated container position, so they must run per render frame
+            // (after the interpolators above have moved the containers).
             this.projectiles.forEach(projectileContainer => {
                 if (projectileContainer.isPlasma) {
                     this.animatePlasmaEffects(projectileContainer, deltaTime);
+                }
+                if (projectileContainer.trail) {
+                    this.updateProjectileTrail(projectileContainer);
                 }
             });
             
@@ -2851,25 +2856,51 @@ class GameEngine {
      * Update projectile trail graphics
      */
     updateProjectileTrail(projectileContainer) {
-        if (!projectileContainer.trail || !projectileContainer.trailPoints) {
-            return;
-        }
-        
         const trail = projectileContainer.trail;
         const points = projectileContainer.trailPoints;
-        
-        // Clear previous trail
-        trail.clear();
-        
-        if (points.length < 2) return;
-        
-        // Single tapered polyline: one moveTo/lineTo chain and a single stroke()
-        // call, instead of N per-segment strokes. Far less geometry churn.
-        trail.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) {
-            trail.lineTo(points[i].x, points[i].y);
+        if (!trail || !points) {
+            return;
         }
-        trail.stroke({ width: trail.trailWidth, color: trail.trailColor, alpha: trail.trailAlpha });
+
+        // Record the projectile's current world position (its container lives in
+        // gameContainer space, driven by the interpolator). We keep a short
+        // rolling history and drop the oldest sample once we exceed the cap.
+        const cx = projectileContainer.position.x;
+        const cy = projectileContainer.position.y;
+        points.push({ x: cx, y: cy });
+        const maxLen = projectileContainer.maxTrailLength || 8;
+        if (points.length > maxLen) {
+            points.splice(0, points.length - maxLen);
+        }
+
+        trail.clear();
+        if (points.length < 2) return;
+
+        // The trail Graphics is a CHILD of the moving container, so draw each
+        // recorded world point relative to the container's current position —
+        // that anchors the trail in world space behind the projectile. Taper
+        // width + alpha from oldest (thin/faint) to newest (full) so it fades
+        // out into the distance.
+        const isRocket = projectileContainer.projectileData
+            && projectileContainer.projectileData.ordinance === 'ROCKET';
+        for (let i = 1; i < points.length; i++) {
+            const progress = i / (points.length - 1); // 0 = oldest segment, 1 = newest
+            const ax = points[i - 1].x - cx, ay = points[i - 1].y - cy;
+            const bx = points[i].x - cx, by = points[i].y - cy;
+            const width = trail.trailWidth * (0.2 + 0.8 * progress);
+            const alpha = trail.trailAlpha * progress;
+
+            trail.moveTo(ax, ay);
+            trail.lineTo(bx, by);
+            trail.stroke({ width, color: trail.trailColor, alpha });
+
+            // Bright inner core near the head of a rocket exhaust.
+            if (isRocket && progress > 0.7) {
+                trail.moveTo(ax, ay);
+                trail.lineTo(bx, by);
+                trail.stroke({ width: width * 0.4, color: trail.trailSecondaryColor, alpha: alpha * 0.8 });
+            }
+        }
     }
     
     /**
@@ -3190,7 +3221,9 @@ class GameEngine {
         
         effectContainer.effectData = effectData;
     }
-    
+
+    /**
+     * Remove a field effect
      */
     removeFieldEffect(effectId) {
         const effectContainer = this.fieldEffects.get(effectId);
@@ -3412,11 +3445,9 @@ class GameEngine {
         const oddball = flagContainer.oddball;
 
         if (state === 'CARRIED') {
-            // Flag/ball is being carried - make it bob and pulse
             flagContainer.alpha = 0.9;
             flagContainer.scale.set(0.8);
         } else if (state === 'DROPPED') {
-            // Flag/ball is dropped - pulse slowly
             flagContainer.alpha = 0.8 + Math.sin(Date.now() / 500) * 0.2;
             flagContainer.scale.set(1.0);
         } else {
