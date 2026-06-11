@@ -3188,6 +3188,14 @@ class GameEngine {
             effectContainer.barrierRing = ring;
         }
 
+        // Utility zones get a distinctive centered symbol so they're instantly
+        // recognizable instead of reading as just another tinted cloud.
+        const icon = this.createFieldEffectIcon(effectData.type, effectData.radius || 50);
+        if (icon) {
+            effectContainer.addChild(icon);
+            effectContainer.iconOverlay = icon;
+        }
+
         // Add animated elements for certain effects
         this.addEffectAnimation(effectContainer, effectData);
         
@@ -4397,7 +4405,11 @@ class GameEngine {
             case 'HEAL_ZONE':
             case 'SPEED_BOOST':
                 return 6;  // Above obstacles, below players
-            
+            // Crowd control effects - render above players
+            case 'SLOW_FIELD':
+            case 'GRAVITY_WELL':
+                return 20; // Above players
+
             // Dangerous/active effects - render above players for visibility
             case 'EXPLOSION':
             case 'FRAGMENTATION':
@@ -4407,12 +4419,8 @@ class GameEngine {
             case 'POISON':
             case 'ERUPTION':
                 return 20; // Above players
-            
-            // Crowd control effects - render above players
-            case 'SLOW_FIELD':
-            case 'GRAVITY_WELL':
-                return 20; // Above players
-            
+
+
             // Defensive effects - render above players
             case 'SHIELD_BARRIER':
                 return 15; // Above players but below dangerous effects
@@ -4768,6 +4776,7 @@ class GameEngine {
         effectContainer.originalX = null;
         effectContainer.originalY = null;
         effectContainer.barrierRing = null; // destroyed via the child loop above
+        effectContainer.iconOverlay = null; // destroyed via the child loop above
         
         // Destroy the container itself
         effectContainer.destroy({ children: true, texture: false, baseTexture: false, context: true });
@@ -4821,15 +4830,15 @@ class GameEngine {
      */
     getFieldEffectStyle(type) {
         switch (type) {
-            case 'EXPLOSION':      return { color: 0xffaa44, alpha: 0.9 };
+            case 'EXPLOSION':      return { color: 0xff501f, alpha: 0.9 };
             case 'FIRE':           return { color: 0xff5522, alpha: 0.7 };
             case 'ELECTRIC':       return { color: 0x88aaff, alpha: 0.85 };
             case 'FREEZE':         return { color: 0x88ccff, alpha: 0.7 };
             case 'FRAGMENTATION':  return { color: 0xffcc66, alpha: 0.9 };
             case 'POISON':         return { color: 0x88cc44, alpha: 0.6 };
-            case 'HEAL_ZONE':      return { color: 0x44ff88, alpha: 0.5 };
-            case 'SLOW_FIELD':     return { color: 0x66aaff, alpha: 0.5 };
-            case 'SHIELD_BARRIER': return { color: 0x66ccff, alpha: 0.5 };
+            case 'HEAL_ZONE':      return { color: 0x888888, alpha: 0.8 };
+            case 'SLOW_FIELD':     return { color: 0xe2ca76, alpha: 0.75 };
+            case 'SHIELD_BARRIER': return { color: 0x66ccff, alpha: 0.6 };
             case 'GRAVITY_WELL':   return { color: 0x9966ff, alpha: 0.7 };
             case 'SPEED_BOOST':    return { color: 0xffee66, alpha: 0.6 };
             case 'SMOKE':          return { color: 0x888888, alpha: 0.6 };
@@ -4838,8 +4847,67 @@ class GameEngine {
             default:               return { color: 0xffffff, alpha: 0.6 };
         }
     }
-    
-    
+
+    /**
+     * Build a distinctive centered symbol for the utility zones that otherwise
+     * look like generic tinted clouds. Returns a Graphics centered at the origin
+     * (sized to the effect radius), or null for types that don't get an icon.
+     * Symbols are vertically symmetric so the Y-flipped gameContainer renders
+     * them upright without extra handling.
+     */
+    createFieldEffectIcon(type, radius) {
+        const g = new PIXI.Graphics();
+
+        switch (type) {
+            case 'HEAL_ZONE': {
+                // Medical badge: white cross on a red rounded square.
+                const s = Math.min(radius * 1.1, 44); // badge edge length
+                g.roundRect(-s / 2, -s / 2, s, s, s * 0.22).fill(0xcc2222);
+                g.roundRect(-s / 2, -s / 2, s, s, s * 0.22).stroke({ width: Math.max(1.5, s * 0.05), color: 0xffffff, alpha: 0.9 });
+                const armT = s * 0.18; // half-thickness of the cross arms
+                const armL = s * 0.34; // half-length of the cross arms
+                g.rect(-armT, -armL, armT * 2, armL * 2).fill(0xffffff); // vertical bar
+                g.rect(-armL, -armT, armL * 2, armT * 2).fill(0xffffff); // horizontal bar
+                return g;
+            }
+            case 'SPEED_BOOST': {
+                // ">>" double chevron — reads as fast/forward.
+                const h = Math.min(radius * 0.5, 18);   // chevron half-height
+                const w = h * 0.8;                       // chevron depth
+                const lw = Math.max(2.5, h * 0.28);      // stroke width
+                // Tip x-positions shifted right so the pair is centered on the
+                // origin (each chevron spans [cx - w, cx], so without the shift
+                // the group's visual midpoint sat left of center).
+                for (const cx of [-w * 0.3, w * 1.3]) {  // two stacked chevrons
+                    g.moveTo(cx - w, -h);
+                    g.lineTo(cx, 0);
+                    g.lineTo(cx - w, h);
+                    g.stroke({ width: lw, color: 0xffffff, alpha: 0.95, cap: 'round', join: 'round' });
+                }
+                return g;
+            }
+            case 'SLOW_FIELD': {
+                // Hourglass — reads as time/slowed.
+                const w = Math.min(radius * 0.42, 15);  // half-width
+                const h = Math.min(radius * 0.5, 18);   // half-height
+                const frame = Math.max(2, w * 0.32);
+                // Top and bottom bulbs (two triangles meeting at the waist).
+                g.moveTo(-w, -h); g.lineTo(w, -h); g.lineTo(0, 0); g.closePath();
+                g.moveTo(-w, h);  g.lineTo(w, h);  g.lineTo(0, 0); g.closePath();
+                g.fill({ color: 0xeaf2ff, alpha: 0.9 });
+                g.moveTo(-w, -h); g.lineTo(w, -h); g.lineTo(0, 0); g.lineTo(-w, h); g.lineTo(w, h); g.lineTo(0, 0); g.closePath();
+                g.stroke({ width: Math.max(2, w * 0.22), color: 0x1b3a66, alpha: 0.9, join: 'round' });
+                // End caps on the frame.
+                g.rect(-w - frame * 0.2, -h - frame * 0.35, (w + frame * 0.2) * 2, frame * 0.5).fill(0x1b3a66);
+                g.rect(-w - frame * 0.2, h - frame * 0.15, (w + frame * 0.2) * 2, frame * 0.5).fill(0x1b3a66);
+                return g;
+            }
+            default:
+                return null;
+        }
+    }
+
+
     /**
      * Add animation to field effects
      */
@@ -5063,21 +5131,8 @@ class GameEngine {
      * Animate heal zone effects
      */
     animateHealZone(container) {
-        const time = container.animationTime;
-        
-        // Gentle pulsing scale for the entire zone (like a heartbeat)
-        const pulse = 0.95 + Math.sin(time * 3) * 0.05;
-        container.scale.set(pulse);
-        
-        // Pulsing alpha to make the red cross appear to "breathe" or pulse
-        // This creates the active healing indicator effect
-        const breathe = 0.85 + Math.sin(time * 4) * 0.15;
-        container.alpha = breathe;
-        
-        // No rotation - keep the cross upright and recognizable
     }
-    
-    
+
     /**
      * Animate slow field effects
      */
@@ -5091,9 +5146,8 @@ class GameEngine {
         // Pulsing alpha to show field strength
         const pulse = 0.7 + Math.sin(time * 2.5) * 0.2;
         container.alpha = pulse;
-        
-        // Slow counter-rotation
-        container.rotation = -time * 0.3;
+
+        // No rotation — keep the hourglass icon upright and readable.
     }
     
     /**
@@ -5137,9 +5191,8 @@ class GameEngine {
         // Bright, active alpha
         const active = 0.8 + Math.sin(time * 7) * 0.15;
         container.alpha = active;
-        
-        // Fast rotation for dynamic feel
-        container.rotation = time * 2.0;
+
+        // No rotation — keep the ">>" chevron icon upright and readable.
     }
     
     /**
@@ -5222,10 +5275,10 @@ class GameEngine {
             // Utility effect speeds
             case 'HEAL_ZONE':
             case 'SLOW_FIELD':
-                return 0.08; // Slow, gentle animation
+                return 0.01; // Slow, gentle animation
             case 'SHIELD_BARRIER':
             case 'SPEED_BOOST':
-                return 0.12; // Medium-fast, energetic
+                return 0.07; // Medium-fast, energetic
             case 'GRAVITY_WELL':
                 return 0.06; // Slow, ominous
             case 'SMOKE':
