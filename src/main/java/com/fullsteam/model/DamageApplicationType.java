@@ -13,7 +13,7 @@ public enum DamageApplicationType {
     INSTANT("Applies all damage immediately on hit"),
 
     /**
-     * Applies damage continuously while beam is active (e.g., plasma beam, heal beam)
+     * Applies damage continuously while beam is active (e.g., plasma beam)
      */
     DAMAGE_OVER_TIME("Applies damage continuously while beam is active");
 

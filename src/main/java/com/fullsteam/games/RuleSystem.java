@@ -6,6 +6,7 @@ import com.fullsteam.model.GameState;
 import com.fullsteam.model.RespawnMode;
 import com.fullsteam.model.RoundScore;
 import com.fullsteam.model.Rules;
+import com.fullsteam.model.Scoring;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.VictoryCondition;
 import com.fullsteam.model.WeaponConfig;
@@ -299,6 +300,8 @@ public class RuleSystem {
                     .captures(player.getCaptures())
                     // Objective/bonus points (KOTH, oddball, VIP, HQ) earned by this player.
                     .bonusPoints(player.getScoring().bonusPoints(rules))
+                    // Full breakdown so the round-end screen can show every component.
+                    .score(buildScoreBreakdown(player))
                     .build();
             roundScores.put(player.getId(), score);
         }
@@ -311,6 +314,7 @@ public class RuleSystem {
         roundEndEvent.put("round", currentRound);
         roundEndEvent.put("scores", new ArrayList<>(roundScores.values()));
         roundEndEvent.put("restDuration", rules.getRestDuration());
+        roundEndEvent.put("scoringConfig", buildScoringConfig());
         broadcaster.accept(roundEndEvent);
     }
 
@@ -619,6 +623,7 @@ public class RuleSystem {
         victoryEvent.put("victoryMessage", message);
         victoryEvent.put("victoryCondition", rules.getVictoryCondition());
         victoryEvent.put("finalScores", calculateFinalScores());
+        victoryEvent.put("scoringConfig", buildScoringConfig());
         broadcaster.accept(victoryEvent);
 
         gameEventManager.broadcastSystemMessage("🏆 " + message);
@@ -638,12 +643,48 @@ public class RuleSystem {
         victoryEvent.put("victoryMessage", message);
         victoryEvent.put("victoryCondition", rules.getVictoryCondition());
         victoryEvent.put("finalScores", calculateFinalScores());
+        victoryEvent.put("scoringConfig", buildScoringConfig());
         broadcaster.accept(victoryEvent);
 
         gameEventManager.broadcastSystemMessage("🏆 " + message);
     }
 
     // ===== SCORING HELPERS =====
+
+    /**
+     * Scoreboard config shared by the live gameState, round-end, and game-over
+     * payloads: the contributing score components (display order) and how to
+     * order the board. Derived from {@link Rules} so it always matches scoring.
+     */
+    private Map<String, Object> buildScoringConfig() {
+        Map<String, Object> scoringConfig = new HashMap<>();
+        scoringConfig.put("components", rules.getActiveScoreComponents());
+        scoringConfig.put("scoreStyle", rules.getScoreStyle().name());
+        scoringConfig.put("sortBy",
+                rules.getVictoryCondition() == VictoryCondition.ELIMINATION ? "placement" : "score");
+        return scoringConfig;
+    }
+
+    /**
+     * Per-component score breakdown for a player, matching the live gameState
+     * player {@code score} map so round-end/game-over screens reuse the same
+     * client rendering. KOTH/oddball/HQ-damage stay as doubles.
+     */
+    private Map<String, Object> buildScoreBreakdown(Player player) {
+        Scoring s = player.getScoring();
+        Map<String, Object> m = new HashMap<>();
+        m.put("kills", s.getKills());
+        m.put("deaths", s.getDeaths());
+        m.put("captures", s.getFlagCaptures());
+        m.put("koth", s.getKingOfTheHillPoints());
+        m.put("oddball", s.getOddball());
+        m.put("hqDamage", s.getHeadquarterDamage());
+        m.put("hqDestroyed", s.getHeadquartersDestroyed());
+        m.put("vipKills", s.getVipKills());
+        m.put("bonus", s.bonusPoints(rules));
+        m.put("total", s.total(rules));
+        return m;
+    }
 
     private Map<Integer, Integer> calculateTeamScores() {
         Map<Integer, Integer> teamScores = new HashMap<>();
@@ -688,12 +729,17 @@ public class RuleSystem {
             Map<Integer, Integer> teamKills = new HashMap<>();
             Map<Integer, Integer> teamDeaths = new HashMap<>();
             Map<Integer, Integer> teamCaptures = new HashMap<>();
+            // Per-team aggregate of every score component, summing the same
+            // breakdown shown per player so the team row totals reconcile.
+            Map<Integer, Map<String, Object>> teamBreakdown = new HashMap<>();
 
             for (Player player : gameEntities.getAllPlayers()) {
                 int team = player.getTeam();
                 teamKills.merge(team, player.getKills(), Integer::sum);
                 teamDeaths.merge(team, player.getDeaths(), Integer::sum);
                 teamCaptures.merge(team, player.getCaptures(), Integer::sum);
+                accumulateBreakdown(teamBreakdown.computeIfAbsent(team, k -> new HashMap<>()),
+                        buildScoreBreakdown(player));
             }
 
             for (Map.Entry<Integer, Integer> entry : teamScores.entrySet()) {
@@ -703,6 +749,12 @@ public class RuleSystem {
                 teamScore.put("kills", teamKills.getOrDefault(entry.getKey(), 0));
                 teamScore.put("deaths", teamDeaths.getOrDefault(entry.getKey(), 0));
                 teamScore.put("captures", teamCaptures.getOrDefault(entry.getKey(), 0));
+                // Per-component breakdown (object) under a distinct key, since
+                // "score" here is the numeric team total. The authoritative team
+                // total overrides the summed-doubles total.
+                Map<String, Object> breakdown = teamBreakdown.getOrDefault(entry.getKey(), new HashMap<>());
+                breakdown.put("total", entry.getValue());
+                teamScore.put("scoreBreakdown", breakdown);
                 scores.add(teamScore);
             }
         } else {
@@ -738,11 +790,28 @@ public class RuleSystem {
                 playerScore.put("captures", player.getCaptures());
                 playerScore.put("placement", player.getPlacement());
                 playerScore.put("eliminationTime", player.getEliminationTime());
+                // Per-component breakdown (object) under a distinct key, since
+                // "score" here is the numeric player total.
+                playerScore.put("scoreBreakdown", buildScoreBreakdown(player));
                 scores.add(playerScore);
             }
         }
 
         return scores;
+    }
+
+    /**
+     * Add the numeric values of {@code src} into {@code dst} key-by-key (used to
+     * sum per-player score breakdowns into a team aggregate).
+     */
+    private void accumulateBreakdown(Map<String, Object> dst, Map<String, Object> src) {
+        for (Map.Entry<String, Object> e : src.entrySet()) {
+            if (!(e.getValue() instanceof Number n)) {
+                continue;
+            }
+            double prev = dst.get(e.getKey()) instanceof Number p ? p.doubleValue() : 0.0;
+            dst.put(e.getKey(), prev + n.doubleValue());
+        }
     }
 
     /**
@@ -775,6 +844,11 @@ public class RuleSystem {
 
         // Scoring style info
         data.put("scoreStyle", rules.getScoreStyle().name());
+
+        // Scoreboard config: which per-player score components actually feed the
+        // team total under these rules (in display order), plus how to order the
+        // board. Lets the client render exactly the contributing columns.
+        data.put("scoringConfig", buildScoringConfig());
 
         // Event data
         if (eventSystem != null) {

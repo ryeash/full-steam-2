@@ -19,7 +19,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Beam weapon class for all beam types (laser, plasma, heal beam, etc.)
+ * Beam weapon class for all beam types (laser, plasma)
  * Beams are instantaneous line-of-sight weapons that can apply damage in different ways
  * Similar to Projectile.java, this single class handles multiple beam types via Ordinance
  */
@@ -123,7 +123,7 @@ public class Beam extends GameEntity {
             return false;
         }
 
-        // Can't affect the owner (unless it's a heal beam)
+        // Can't affect the owner
         if (player.getId() == ownerId) {
             return false;
         }

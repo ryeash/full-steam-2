@@ -1821,33 +1821,26 @@ class GameEngine {
             const scoresContainer = document.createElement('div');
             scoresContainer.className = 'scores-container';
 
+            // Columns are driven by the round's scoring rules (event-supplied).
+            const columns = this.activeScoreColumns(data.scores, data.scoringConfig);
             const hasTeams = data.scores.some(s => s.team > 0);
 
             if (hasTeams) {
                 const teams = {};
-                const teamTotals = {};
                 data.scores.forEach(score => {
                     const t = score.team || 0;
-                    if (!teams[t]) {
-                        teams[t] = [];
-                        teamTotals[t] = { kills: 0, deaths: 0, captures: 0 };
-                    }
-                    teams[t].push(score);
-                    teamTotals[t].kills   += score.kills   || 0;
-                    teamTotals[t].deaths  += score.deaths  || 0;
-                    teamTotals[t].captures += score.captures || 0;
+                    (teams[t] || (teams[t] = [])).push(score);
                 });
 
-                const sortedTeams = Object.entries(teams).sort(([a], [b]) => {
-                    const ta = parseInt(a), tb = parseInt(b);
-                    if (ta === 0) return 1;
-                    if (tb === 0) return -1;
-                    return teamTotals[b].kills - teamTotals[a].kills;
+                const teamTotal = list => list.reduce((s, p) => s + this.playerScoreTotal(p), 0);
+                const sortedTeams = Object.entries(teams).sort(([a, la], [b, lb]) => {
+                    if (parseInt(a) === 0) return 1;
+                    if (parseInt(b) === 0) return -1;
+                    return teamTotal(lb) - teamTotal(la);
                 });
 
                 sortedTeams.forEach(([teamNum, players]) => {
                     const teamNumInt = parseInt(teamNum);
-                    const totals = teamTotals[teamNum];
                     const teamColor = this.getTeamColorCSS(teamNumInt);
 
                     const teamHeader = document.createElement('div');
@@ -1862,38 +1855,30 @@ class GameEngine {
                     const teamStats = document.createElement('div');
                     teamStats.className = 'team-header-stats';
 
-                    const kEl = document.createElement('span');
-                    kEl.className = 'stat-kills';
-                    kEl.textContent = `${totals.kills} K`;
-
-                    const dEl = document.createElement('span');
-                    dEl.className = 'stat-deaths';
-                    dEl.textContent = `${totals.deaths} D`;
-
-                    const kdEl = document.createElement('span');
-                    kdEl.className = 'stat-kd';
-                    kdEl.textContent = `${(totals.kills / Math.max(1, totals.deaths)).toFixed(2)} K/D`;
-
-                    teamStats.append(kEl, dEl);
-                    if (totals.captures > 0) {
-                        const cEl = document.createElement('span');
-                        cEl.className = 'stat-captures';
-                        cEl.textContent = `${totals.captures} 🚩`;
-                        teamStats.appendChild(cEl);
-                    }
-                    teamStats.appendChild(kdEl);
+                    const scoreEl = document.createElement('span');
+                    scoreEl.className = 'stat-score';
+                    scoreEl.textContent = `${teamTotal(players)} pts`;
+                    teamStats.appendChild(scoreEl);
+                    // Per-component team totals, summing the same values shown per player.
+                    columns.forEach(c => {
+                        const span = document.createElement('span');
+                        span.className = 'stat-' + c.key;
+                        if (c.color) span.style.color = c.color;
+                        span.textContent = `${players.reduce((s, p) => s + (c.read(this.getBreakdown(p)) || 0), 0)} ${c.label}`;
+                        teamStats.appendChild(span);
+                    });
 
                     teamHeader.append(teamName, teamStats);
                     scoresContainer.appendChild(teamHeader);
 
                     [...players]
-                        .sort((a, b) => (b.kills || 0) - (a.kills || 0))
-                        .forEach(score => scoresContainer.appendChild(this.createScoreRow(score)));
+                        .sort((a, b) => this.playerScoreTotal(b) - this.playerScoreTotal(a))
+                        .forEach(score => scoresContainer.appendChild(this.createScoreRow(score, null, columns)));
                 });
             } else {
                 [...data.scores]
-                    .sort((a, b) => (b.kills || 0) - (a.kills || 0))
-                    .forEach((score, i) => scoresContainer.appendChild(this.createScoreRow(score, i + 1)));
+                    .sort((a, b) => this.playerScoreTotal(b) - this.playerScoreTotal(a))
+                    .forEach((score, i) => scoresContainer.appendChild(this.createScoreRow(score, i + 1, columns)));
             }
 
             content.appendChild(scoresContainer);
@@ -1912,7 +1897,7 @@ class GameEngine {
     /**
      * Create a score row for a player (round-end scoreboard)
      */
-    createScoreRow(score, rank = null) {
+    createScoreRow(score, rank = null, columns = []) {
         const isLocalPlayer = score.playerId === this.myPlayerId;
 
         const row = document.createElement('div');
@@ -1927,26 +1912,19 @@ class GameEngine {
         const stats = document.createElement('div');
         stats.className = 'score-row-stats';
 
-        const kills = document.createElement('span');
-        kills.className = 'stat-kills';
-        kills.textContent = `${score.kills || 0} K`;
+        // Total first, then a span per contributing component, then deaths (info).
+        const scoreSpan = document.createElement('span');
+        scoreSpan.className = 'stat-score';
+        scoreSpan.textContent = `${this.playerScoreTotal(score)} pts`;
+        stats.appendChild(scoreSpan);
+
+        this.appendScoreStats(stats, score, columns);
 
         const deaths = document.createElement('span');
         deaths.className = 'stat-deaths';
         deaths.textContent = `${score.deaths || 0} D`;
+        stats.appendChild(deaths);
 
-        if (score.captures > 0) {
-            const captures = document.createElement('span');
-            captures.className = 'stat-captures';
-            captures.textContent = `${score.captures} 🚩`;
-            stats.appendChild(captures);
-        }
-
-        const kd = document.createElement('span');
-        kd.className = 'stat-kd';
-        kd.textContent = `${((score.kills || 0) / Math.max(1, score.deaths || 0)).toFixed(2)} K/D`;
-
-        stats.append(kills, deaths, kd);
         row.append(nameSection, stats);
         return row;
     }
@@ -1979,7 +1957,7 @@ class GameEngine {
 
         const message = document.createElement('p');
         message.className = 'game-over-message';
-        message.textContent = data.message || 'The battle has ended!';
+        message.textContent = data.victoryMessage || data.message || 'The battle has ended!';
         content.appendChild(message);
 
         const vcInfo = document.createElement('p');
@@ -1997,17 +1975,18 @@ class GameEngine {
             scoresContainer.className = 'final-scores-container';
 
             const isEliminationMode = data.victoryCondition === 'ELIMINATION';
+            const columns = this.activeScoreColumns(data.finalScores, data.scoringConfig);
             const sortedScores = [...data.finalScores].sort((a, b) => {
                 if (isEliminationMode && a.placement && b.placement) {
                     if (a.placement !== b.placement) return a.placement - b.placement;
                     if (b.kills !== a.kills) return b.kills - a.kills;
                     return b.eliminationTime - a.eliminationTime;
                 }
-                return b.score - a.score;
+                return this.playerScoreTotal(b) - this.playerScoreTotal(a);
             });
 
             sortedScores.forEach((score, index) => {
-                scoresContainer.appendChild(this.createFinalScoreRow(score, index + 1, data, isEliminationMode));
+                scoresContainer.appendChild(this.createFinalScoreRow(score, index + 1, data, isEliminationMode, columns));
             });
 
             content.appendChild(scoresContainer);
@@ -2027,7 +2006,7 @@ class GameEngine {
     /**
      * Create a score row for the game over screen
      */
-    createFinalScoreRow(score, rank, gameOverData, isEliminationMode = false) {
+    createFinalScoreRow(score, rank, gameOverData, isEliminationMode = false, columns = []) {
         const isLocalPlayer = score.playerId === this.myPlayerId;
         const displayRank = isEliminationMode && score.placement ? score.placement : rank;
 
@@ -2069,26 +2048,18 @@ class GameEngine {
         } else {
             const scoreSpan = document.createElement('span');
             scoreSpan.className = 'stat-score';
-            scoreSpan.textContent = `${score.score} pts`;
+            scoreSpan.textContent = `${this.playerScoreTotal(score)} pts`;
             stats.appendChild(scoreSpan);
         }
 
-        const killsSpan = document.createElement('span');
-        killsSpan.className = 'stat-kills';
-        killsSpan.textContent = `${score.kills} K`;
+        // One span per contributing score component (driven by scoringConfig),
+        // then deaths as informational stat.
+        this.appendScoreStats(stats, score, columns);
 
         const deathsSpan = document.createElement('span');
         deathsSpan.className = 'stat-deaths';
-        deathsSpan.textContent = `${score.deaths} D`;
-
-        stats.append(killsSpan, deathsSpan);
-
-        if (score.captures > 0) {
-            const capturesSpan = document.createElement('span');
-            capturesSpan.className = 'stat-captures';
-            capturesSpan.textContent = `${score.captures} 🚩`;
-            stats.appendChild(capturesSpan);
-        }
+        deathsSpan.textContent = `${(this.getBreakdown(score).deaths ?? score.deaths) || 0} D`;
+        stats.appendChild(deathsSpan);
 
         row.appendChild(stats);
         return row;
@@ -5465,129 +5436,207 @@ class GameEngine {
         }
     }
     
+    /**
+     * Registry of every per-player score component the server can report. Each
+     * entry knows its column header and how to read the value from a player's
+     * serialized {@code score} map. KOTH/oddball/HQ-damage are doubles, so they're
+     * rounded for display. The set actually shown is driven by the server's
+     * scoringConfig.components (see {@link Rules#getActiveScoreComponents}).
+     */
+    static SCORE_COLUMN_DEFS = {
+        kills:       { label: 'Kills',   read: bd => bd.kills ?? 0 },
+        captures:    { label: '🚩 Caps', color: '#FFD700', read: bd => bd.captures ?? 0 },
+        koth:        { label: '👑 Zone', read: bd => Math.round(bd.koth ?? 0) },
+        oddball:     { label: '🏐 Ball', read: bd => Math.round(bd.oddball ?? 0) },
+        vipKills:    { label: '🎯 VIP',  read: bd => bd.vipKills ?? 0 },
+        hqDamage:    { label: '🏰 Dmg',  read: bd => Math.round(bd.hqDamage ?? 0) },
+        hqDestroyed: { label: '💥 HQ',   read: bd => bd.hqDestroyed ?? 0 },
+    };
+
+    /**
+     * Resolve the per-component score breakdown object for any scoreboard entry.
+     * Live gameState players and round-end rows carry it on {@code score} (an
+     * object); game-over finalScores rows carry it on {@code scoreBreakdown}
+     * (since their {@code score} is the numeric total). Falls back to the entry
+     * itself for legacy top-level fields.
+     */
+    getBreakdown(entry) {
+        if (entry.score && typeof entry.score === 'object') return entry.score;
+        if (entry.scoreBreakdown && typeof entry.scoreBreakdown === 'object') return entry.scoreBreakdown;
+        return entry;
+    }
+
+    /**
+     * The ordered list of score-component column defs to render, driven by the
+     * server's scoringConfig (live or event-supplied). Falls back (for older
+     * payloads / before the first config arrives) to kills plus any component
+     * some entry has scored in.
+     */
+    activeScoreColumns(entries, config = this.gameState?.scoringConfig) {
+        const defs = GameEngine.SCORE_COLUMN_DEFS;
+        let keys = config?.components;
+        if (!Array.isArray(keys) || keys.length === 0) {
+            keys = Object.keys(defs).filter(k =>
+                k === 'kills' || entries.some(e => (defs[k].read(this.getBreakdown(e)) || 0) > 0));
+        }
+        return keys.filter(k => defs[k]).map(k => ({ key: k, ...defs[k] }));
+    }
+
+    /** Authoritative total for any entry: breakdown.total, else numeric score, else kills. */
+    playerScoreTotal(entry) {
+        const bd = this.getBreakdown(entry);
+        if (bd && typeof bd.total === 'number') return bd.total;
+        if (typeof entry.score === 'number') return entry.score;
+        return entry.kills || 0;
+    }
+
+    /** Append one styled stat span per active score component to a stats element. */
+    appendScoreStats(statsEl, entry, columns) {
+        const bd = this.getBreakdown(entry);
+        columns.forEach(c => {
+            const span = document.createElement('span');
+            span.className = 'stat-' + c.key;
+            if (c.color) span.style.color = c.color;
+            span.textContent = `${c.read(bd)} ${c.label}`;
+            statsEl.appendChild(span);
+        });
+    }
+
+    /**
+     * Order players for the live board. Score modes: highest total first.
+     * Elimination: living players first, then by score (placement isn't in the
+     * per-tick payload; the game-over screen shows full placement order).
+     */
+    sortPlayersForBoard(players) {
+        const elimination = this.gameState?.scoringConfig?.sortBy === 'placement';
+        return [...players].sort((a, b) => {
+            if (elimination) {
+                const aDead = a.eliminated ? 1 : 0;
+                const bDead = b.eliminated ? 1 : 0;
+                if (aDead !== bDead) return aDead - bDead; // living first
+            }
+            return this.playerScoreTotal(b) - this.playerScoreTotal(a);
+        });
+    }
+
+    /** Whether to show a dedicated Score column (redundant in pure deathmatch). */
+    showsScoreColumn(columns) {
+        return !(columns.length === 1 && columns[0].key === 'kills');
+    }
+
     updateFFAScoreboard(content, players) {
-        // The server-computed total (kills/captures/KOTH/oddball/HQ by score style)
-        // is the authoritative ranking; fall back to kills for older payloads.
-        const totalOf = p => (p.score && typeof p.score.total === 'number') ? p.score.total : (p.kills || 0);
-        const sortedPlayers = [...players].sort((a, b) => totalOf(b) - totalOf(a));
-        
-        // Check if any player has captures (CTF mode)
-        const hasCaptures = players.some(p => (p.captures || 0) > 0);
-        // Only show the Score column when objective scoring makes it differ from kills.
-        const hasObjectiveScore = players.some(p => totalOf(p) !== (p.kills || 0));
-        
+        const columns = this.activeScoreColumns(players);
+        const showScore = this.showsScoreColumn(columns);
+        const sortedPlayers = this.sortPlayersForBoard(players);
+
         content.innerHTML = `
+            <div style="text-align: center; margin-bottom: 8px; font-size: 12px; color: #aaa;">
+                Scoring: ${this.getScoreTypeName(this.gameState?.scoreStyle)}
+            </div>
             <table style="width: 100%; color: white;">
                 <thead>
                     <tr>
-                        <th>Player</th>
-                        ${hasObjectiveScore ? '<th>Score</th>' : ''}
-                        <th>Kills</th>
+                        <th style="text-align: left;">Player</th>
+                        ${showScore ? '<th>Score</th>' : ''}
+                        ${columns.map(c => `<th>${c.label}</th>`).join('')}
                         <th>Deaths</th>
-                        ${hasCaptures ? '<th>Captures</th>' : ''}
                         <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${sortedPlayers.map(player => {
+                    ${sortedPlayers.map((player, i) => {
                         const vipIndicator = player.isVip ? ' 👑' : '';
+                        const dimmed = player.eliminated ? 'opacity: 0.5;' : '';
                         return `
-                        <tr style="${player.id === this.myPlayerId ? 'background: rgba(46, 204, 113, 0.2);' : ''}">
-                            <td><span style="color: ${this.getTeamColorCSS(player.team || 0)}">●</span> ${player.name || `Player ${player.id}`}${vipIndicator}</td>
-                            ${hasObjectiveScore ? `<td style="font-weight: bold;">${totalOf(player)}</td>` : ''}
-                            <td>${player.kills || 0}</td>
+                        <tr style="${player.id === this.myPlayerId ? 'background: rgba(46, 204, 113, 0.2);' : ''}${dimmed}">
+                            <td style="text-align: left;">#${i + 1} <span style="color: ${this.getTeamColorCSS(player.team || 0)}">●</span> ${player.name || `Player ${player.id}`}${vipIndicator}</td>
+                            ${showScore ? `<td style="font-weight: bold;">${this.playerScoreTotal(player)}</td>` : ''}
+                            ${columns.map(c => `<td${c.color ? ` style="color: ${c.color};"` : ''}>${c.read(this.getBreakdown(player))}</td>`).join('')}
                             <td>${player.deaths || 0}</td>
-                            ${hasCaptures ? `<td style="color: #FFD700;">${player.captures || 0} 🚩</td>` : ''}
-                            <td>${player.active ? 'Alive' : 'Dead'}</td>
+                            <td>${player.active ? 'Alive' : (player.eliminated ? 'Out' : 'Dead')}</td>
                         </tr>
                     `}).join('')}
                 </tbody>
             </table>
         `;
     }
-    
+
     updateTeamScoreboard(content, players) {
+        const columns = this.activeScoreColumns(players);
+
         // Group players by team
         const teams = {};
         players.forEach(player => {
             const teamNum = player.team || 0;
-            if (!teams[teamNum]) {
-                teams[teamNum] = [];
-            }
-            teams[teamNum].push(player);
+            (teams[teamNum] || (teams[teamNum] = [])).push(player);
         });
-        
-        // Check if any player has captures (CTF mode)
-        const hasCaptures = players.some(p => (p.captures || 0) > 0);
-        
-        // Get effective team scores from game state (includes all scoring mechanisms)
+
+        // Effective team scores are authoritative (server sums every mechanism).
         const effectiveTeamScores = this.gameState?.teamScores || {};
-        
-        // Sort teams by effective team score (from server rules)
-        const sortedTeams = Object.entries(teams).sort((a, b) => {
-            const teamA = parseInt(a[0]);
-            const teamB = parseInt(b[0]);
-            const scoreA = effectiveTeamScores[teamA] || 0;
-            const scoreB = effectiveTeamScores[teamB] || 0;
-            return scoreB - scoreA;
-        });
-        
-        // Get scoring style info for display
-        const scoreStyle = this.gameState?.scoreStyle || 'TOTAL_KILLS';
-        const scoreTypeName = this.getScoreTypeName(scoreStyle);
-        
+        const teamScoreOf = t => effectiveTeamScores[t] || 0;
+
+        const sortedTeams = Object.entries(teams).sort(
+            (a, b) => teamScoreOf(parseInt(b[0])) - teamScoreOf(parseInt(a[0])));
+
         let html = `<div style="color: white;">
             <div style="text-align: center; margin-bottom: 10px; font-size: 12px; color: #aaa;">
-                Scoring: ${scoreTypeName}
+                Scoring: ${this.getScoreTypeName(this.gameState?.scoreStyle)}
             </div>`;
-        
+
         sortedTeams.forEach(([teamNum, teamPlayers]) => {
-            const teamKills = teamPlayers.reduce((sum, p) => sum + (p.kills || 0), 0);
-            const teamDeaths = teamPlayers.reduce((sum, p) => sum + (p.deaths || 0), 0);
-            const teamCaptures = teamPlayers.reduce((sum, p) => sum + (p.captures || 0), 0);
-            const teamName = teamNum == 0 ? 'Free For All' : `Team ${teamNum}`;
-            const teamColor = this.getTeamColorCSS(parseInt(teamNum));
-            
-            // Get effective team score from server
-            const effectiveScore = effectiveTeamScores[parseInt(teamNum)] || 0;
-            
-            // Build team header with effective score prominently displayed
-            const teamStats = hasCaptures 
-                ? `Score: ${effectiveScore} | K: ${teamKills} | D: ${teamDeaths} | 🚩: ${teamCaptures}`
-                : `Score: ${effectiveScore} | K: ${teamKills} | D: ${teamDeaths}`;
-            
+            const teamInt = parseInt(teamNum);
+            const teamName = teamInt === 0 ? 'Free For All' : `Team ${teamNum}`;
+            const teamColor = this.getTeamColorCSS(teamInt);
+            const effectiveScore = teamScoreOf(teamInt);
+
+            // Per-component team totals (summing the same values shown per player).
+            const componentTotals = columns
+                .map(c => `${c.label}: ${teamPlayers.reduce((s, p) => s + (c.read(this.getBreakdown(p)) || 0), 0)}`)
+                .join(' | ');
+            const teamDeaths = teamPlayers.reduce((s, p) => s + (p.deaths || 0), 0);
+            const headerStats = `Score: ${effectiveScore}${componentTotals ? ' | ' + componentTotals : ''} | D: ${teamDeaths}`;
+
             html += `
                 <div style="margin-bottom: 15px; border: 1px solid ${teamColor}; border-radius: 5px; padding: 8px;">
-                    <h4 style="margin: 0 0 8px 0; color: ${teamColor};">${teamName} (${teamStats})</h4>
+                    <h4 style="margin: 0 0 8px 0; color: ${teamColor};">${teamName} <span style="font-size: 11px; color: #ccc; font-weight: normal;">(${headerStats})</span></h4>
                     <table style="width: 100%; font-size: 12px;">
-                        ${teamPlayers
-                            .sort((a, b) => (b.kills || 0) - (a.kills || 0))
-                            .map(player => {
-                                const vipIndicator = player.isVip ? ' 👑' : '';
-                                return `
-                                <tr style="${player.id === this.myPlayerId ? 'background: rgba(46, 204, 113, 0.2);' : ''}">
-                                    <td style="padding: 2px;">${player.name || `Player ${player.id}`}${vipIndicator}</td>
-                                    <td style="padding: 2px; text-align: center;">${player.kills || 0}K</td>
-                                    <td style="padding: 2px; text-align: center;">${player.deaths || 0}D</td>
-                                    ${hasCaptures ? `<td style="padding: 2px; text-align: center; color: #FFD700;">${player.captures || 0}🚩</td>` : ''}
-                                    <td style="padding: 2px; text-align: center;">${player.active ? '✓' : '✗'}</td>
-                                </tr>
-                            `}).join('')}
+                        <thead>
+                            <tr style="color: #aaa;">
+                                <th style="text-align: left;">Player</th>
+                                <th>Score</th>
+                                ${columns.map(c => `<th>${c.label}</th>`).join('')}
+                                <th>D</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        ${this.sortPlayersForBoard(teamPlayers).map(player => {
+                            const vipIndicator = player.isVip ? ' 👑' : '';
+                            const dimmed = player.eliminated ? 'opacity: 0.5;' : '';
+                            return `
+                            <tr style="${player.id === this.myPlayerId ? 'background: rgba(46, 204, 113, 0.2);' : ''}${dimmed}">
+                                <td style="padding: 2px; text-align: left;">${player.name || `Player ${player.id}`}${vipIndicator}</td>
+                                <td style="padding: 2px; text-align: center; font-weight: bold;">${this.playerScoreTotal(player)}</td>
+                                ${columns.map(c => `<td style="padding: 2px; text-align: center;${c.color ? ` color: ${c.color};` : ''}">${c.read(this.getBreakdown(player))}</td>`).join('')}
+                                <td style="padding: 2px; text-align: center;">${player.deaths || 0}</td>
+                                <td style="padding: 2px; text-align: center;">${player.active ? '✓' : '✗'}</td>
+                            </tr>
+                        `}).join('')}
+                        </tbody>
                     </table>
                 </div>
             `;
         });
-        
+
         html += '</div>';
         content.innerHTML = html;
     }
-    
+
     getScoreTypeName(scoreStyle) {
         switch (scoreStyle) {
             case 'TOTAL_KILLS': return 'Kills Only';
-            case 'CAPTURES': return 'Flag Captures Only';
-            case 'KOTH_ZONES': return 'Zone Control Only';
-            case 'TOTAL': return 'All Scoring Methods';
+            case 'OBJECTIVE': return 'Objectives Only';
+            case 'TOTAL': return 'Kills + Objectives';
             default: return 'Kills Only';
         }
     }

@@ -24,7 +24,7 @@ import java.util.Set;
 public class FieldEffect extends GameEntity {
     private final int ownerId;
     private final FieldEffectType type;
-    private double radius; // Non-final to support growing effects
+    private double radius;
     private final double initialRadius;
     private final double maxRadius;
     private final double damage;

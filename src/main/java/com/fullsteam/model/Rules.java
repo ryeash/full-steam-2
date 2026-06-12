@@ -522,7 +522,45 @@ public class Rules {
     public boolean hasVip() {
         return enableVip;
     }
-    
+
+    /**
+     * The per-player score components that actually contribute to the total under
+     * the current rules, in scoreboard display order. This mirrors the gating in
+     * {@link Scoring#total(Rules)} ({@code baseScore} + {@code bonusPoints}) so the
+     * client renders exactly the columns that feed a team's score — no more, no
+     * less. Keys match the fields of the serialized per-player {@code score} map.
+     */
+    public List<String> getActiveScoreComponents() {
+        boolean objectiveScoring = scoreStyle == ScoreStyle.OBJECTIVE || scoreStyle == ScoreStyle.TOTAL;
+        List<String> components = new ArrayList<>();
+
+        // baseScore: kills count for TOTAL_KILLS and TOTAL.
+        if (scoreStyle != ScoreStyle.OBJECTIVE) {
+            components.add("kills");
+        }
+        // baseScore: flag captures count for OBJECTIVE and TOTAL.
+        if (objectiveScoring && hasFlags()) {
+            components.add("captures");
+        }
+        // bonusPoints: KOTH and VIP only count toward objective-based styles.
+        if (objectiveScoring && hasKothZones()) {
+            components.add("koth");
+        }
+        // bonusPoints: oddball counts whenever the mode is active.
+        if (hasOddball()) {
+            components.add("oddball");
+        }
+        if (objectiveScoring && hasVip()) {
+            components.add("vipKills");
+        }
+        // bonusPoints: HQ damage/destruction always count when HQs are present.
+        if (hasHeadquarters()) {
+            components.add("hqDamage");
+            components.add("hqDestroyed");
+        }
+        return components;
+    }
+
     /**
      * Check if the game should lock after a certain time.
      */
