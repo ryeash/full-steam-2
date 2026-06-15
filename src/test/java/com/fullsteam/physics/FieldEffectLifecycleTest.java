@@ -66,7 +66,7 @@ class FieldEffectLifecycleTest extends BaseTestClass {
         assertEquals(100, poisonEffect.getPosition().y, 0.1, "Should be at correct y position");
         
         // Check properties
-        double expectedRadius = BulletEffect.POISON.calculateRadius(50, Ordinance.BULLET);
+        double expectedRadius = BulletEffect.POISON.calculateRadius(50, Ordinance.PROJECTILE, 1.0);
         assertEquals(expectedRadius, poisonEffect.getRadius(), 0.1, "Should have correct radius");
         
         double expectedDamage = BulletEffect.POISON.calculateDamage(50);
@@ -254,7 +254,8 @@ class FieldEffectLifecycleTest extends BaseTestClass {
                 ownerTeam,
                 0.1, // linearDamping
                 effects,
-                Ordinance.BULLET
+                Ordinance.PROJECTILE,
+                1.0 // caliber
         );
     }
 }

@@ -842,10 +842,12 @@ public class GameManager {
 
             // Get players in beam path and apply damage based on beam type
             List<Player> playersInPath = getPlayersInBeamPath(beam);
+            boolean dotHitSomeone = false; // only ever set for DOT beams below
             for (Player player : playersInPath) {
                 if (beam.canAffectPlayer(player)) {
                     switch (beam.getDamageApplicationType()) {
                         case DAMAGE_OVER_TIME:
+                            dotHitSomeone = true;
                             double dotDamage = beam.processContinuousDamage(player, deltaTime);
                             if (dotDamage > 0) {
                                 // Apply damage and check if player died
@@ -862,6 +864,15 @@ public class GameManager {
                             break;
                     }
                 }
+            }
+
+            // Continuous beams leave a throttled trail of their AOE effects (fire,
+            // poison, smoke, ...) at the impact point while burning a target.
+            // Instant beams spawn their effects per-hit at creation time instead.
+            if (dotHitSomeone
+                    && !beam.getBulletEffects().isEmpty()
+                    && beam.tryEmitAreaEffect(System.currentTimeMillis())) {
+                weaponSystem.processBeamAreaEffects(beam, beam.getEffectiveEndPoint());
             }
         }
     }

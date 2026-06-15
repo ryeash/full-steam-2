@@ -2689,27 +2689,31 @@ class GameEngine {
         
         // Customize projectile appearance based on ordinance type
         this.customizeProjectileAppearance(sprite, projectileData);
-        
+
+        // Scale the sprite by the weapon's caliber so the render matches the
+        // server-side hitbox (1.0 = baseline). Multiply to preserve the Y-flip.
+        const caliber = projectileData.caliber || 1;
+        sprite.scale.x *= caliber;
+        sprite.scale.y *= caliber;
+
         // Add sprite to container
         projectileContainer.addChild(sprite);
         
-        // Add special effects for plasma projectiles
-        const ordinance = projectileData.ordinance || 'BULLET';
-        if (ordinance === 'PLASMA') {
+        // Energy glow for electrically-charged rounds (the old per-PLASMA glow is
+        // now derived from gameplay: ELECTRIC rounds shimmer).
+        const effects = projectileData.bulletEffects || [];
+        if (effects.includes('ELECTRIC')) {
             this.createPlasmaEffects(projectileContainer, sprite);
         }
-        
-        // Check if this projectile should have a trail
-        const shouldHaveTrail = this.shouldProjectileHaveTrail(ordinance);
-        
-        if (shouldHaveTrail) {
-            // Create trail graphics
-            const trail = this.createProjectileTrail(ordinance);
+
+        // Trails are now derived from caliber/speed/effects, not the ordinance name.
+        if (this.shouldProjectileHaveTrail(projectileData)) {
+            const trail = this.createProjectileTrail(projectileData);
             trail.zIndex = -1; // Behind the main projectile
             projectileContainer.addChildAt(trail, 0); // Add at index 0 to be behind sprite
             projectileContainer.trail = trail;
             projectileContainer.trailPoints = []; // Store recent positions for trail
-            projectileContainer.maxTrailLength = this.getTrailLength(ordinance);
+            projectileContainer.maxTrailLength = this.getTrailLength(projectileData);
         }
         
         // Set projectile z-index below players but above obstacles
@@ -2730,63 +2734,42 @@ class GameEngine {
     }
     
     /**
-     * Check if projectile should have a trail based on ordinance type
+     * Whether a projectile leaves a trail — derived from gameplay rather than the
+     * ordinance name: big-caliber rounds (exhaust/smoke) or very fast rounds (tracer).
      */
-    shouldProjectileHaveTrail(ordinance) {
-        // Based on Ordinance.java hasTrail() property
-        switch (ordinance) {
-            case 'ROCKET':
-            case 'GRENADE':
-                return true;
-            default:
-                return false;
-        }
+    shouldProjectileHaveTrail(projectileData) {
+        const caliber = projectileData.caliber || 1;
+        const speed = Math.hypot(projectileData.vx || 0, projectileData.vy || 0);
+        return caliber >= 1.3 || speed >= 800;
     }
-    
+
     /**
-     * Create trail graphics for projectiles
+     * Trail style derived from caliber (width) and the dominant bullet effect
+     * (color), instead of the ordinance type.
      */
-    createProjectileTrail(ordinance) {
+    createProjectileTrail(projectileData) {
         const trail = new PIXI.Graphics();
-        
-        switch (ordinance) {
-            case 'ROCKET':
-                // Rocket exhaust trail - bright orange/yellow with flames
-                trail.trailColor = 0xff6600; // Orange
-                trail.trailSecondaryColor = 0xffaa00; // Yellow
-                trail.trailWidth = 8;
-                trail.trailAlpha = 0.8;
-                break;
-            case 'GRENADE':
-                // Grenade trail - dark smoke
-                trail.trailColor = 0x666666; // Dark gray
-                trail.trailSecondaryColor = 0x999999; // Light gray
-                trail.trailWidth = 6;
-                trail.trailAlpha = 0.6;
-                break;
-            default:
-                trail.trailColor = 0xffffff;
-                trail.trailSecondaryColor = 0xcccccc;
-                trail.trailWidth = 4;
-                trail.trailAlpha = 0.5;
-                break;
-        }
-        
+        const caliber = projectileData.caliber || 1;
+        const effects = projectileData.bulletEffects || [];
+
+        let color = 0xff8800, secondary = 0xffcc44; // default warm exhaust
+        if (effects.includes('SMOKE'))         { color = 0x666666; secondary = 0x999999; }
+        else if (effects.includes('FREEZING')) { color = 0x88ccff; secondary = 0xcceeff; }
+        else if (effects.includes('POISON'))   { color = 0x88cc44; secondary = 0xaaff66; }
+        else if (effects.includes('ELECTRIC')) { color = 0x66ccff; secondary = 0xaaddff; }
+        else if (effects.includes('INCENDIARY') || effects.includes('EXPLOSIVE')) { color = 0xff6600; secondary = 0xffaa00; }
+
+        trail.trailColor = color;
+        trail.trailSecondaryColor = secondary;
+        trail.trailWidth = 3 * caliber + 2; // ~5 at baseline, ~8 at ×2
+        trail.trailAlpha = 0.7;
         return trail;
     }
-    
-    /**
-     * Get trail length based on ordinance type
-     */
-    getTrailLength(ordinance) {
-        switch (ordinance) {
-            case 'ROCKET':
-                return 15; // Long rocket exhaust
-            case 'GRENADE':
-                return 10; // Medium smoke trail
-            default:
-                return 8;
-        }
+
+    /** Trail length (sample count) derived from caliber — bigger rounds trail longer. */
+    getTrailLength(projectileData) {
+        const caliber = projectileData.caliber || 1;
+        return Math.round(8 + (caliber - 1) * 7); // ~8 baseline, ~15 at ×2
     }
     
     /**
@@ -2852,8 +2835,8 @@ class GameEngine {
         // that anchors the trail in world space behind the projectile. Taper
         // width + alpha from oldest (thin/faint) to newest (full) so it fades
         // out into the distance.
-        const isRocket = projectileContainer.projectileData
-            && projectileContainer.projectileData.ordinance === 'ROCKET';
+        // Large-caliber rounds get a bright inner core near the head (exhaust look).
+        const bigBore = (projectileContainer.projectileData?.caliber || 1) >= 1.7;
         for (let i = 1; i < points.length; i++) {
             const progress = i / (points.length - 1); // 0 = oldest segment, 1 = newest
             const ax = points[i - 1].x - cx, ay = points[i - 1].y - cy;
@@ -2865,8 +2848,8 @@ class GameEngine {
             trail.lineTo(bx, by);
             trail.stroke({ width, color: trail.trailColor, alpha });
 
-            // Bright inner core near the head of a rocket exhaust.
-            if (isRocket && progress > 0.7) {
+            // Bright inner core near the head of a large round's exhaust.
+            if (bigBore && progress > 0.7) {
                 trail.moveTo(ax, ay);
                 trail.lineTo(bx, by);
                 trail.stroke({ width: width * 0.4, color: trail.trailSecondaryColor, alpha: alpha * 0.8 });
@@ -2878,39 +2861,14 @@ class GameEngine {
      * Customize projectile appearance based on ordinance type and effects
      */
     customizeProjectileAppearance(sprite, projectileData) {
-        const ordinance = projectileData.ordinance || 'BULLET';
         const effects = projectileData.bulletEffects || [];
-        
-        // Set size based on ordinance
-        switch (ordinance) {
-            case 'ROCKET':
-                sprite.scale.set(2.0);
-                sprite.tint = 0xff4444; // Red for rockets
-                break;
-            case 'GRENADE':
-                sprite.scale.set(1.5);
-                sprite.tint = 0x44aa44; // Green for grenades
-                break;
-            case 'PLASMA':
-                sprite.scale.set(1.2);
-                sprite.tint = 0x8888ff; // Bright blue-white for plasma core
-                sprite.alpha = 0.9; // Slightly transparent for energy effect
-                break;
-            case 'LASER':
-                sprite.scale.set(0.8);
-                sprite.tint = 0xff44ff; // Magenta for laser
-                break;
-            case 'DART':
-                sprite.scale.set(0.5);
-                sprite.tint = 0xffaa44; // Orange for darts
-                break;
-            case 'BULLET':
-            default:
-                sprite.scale.set(1.0);
-                sprite.tint = 0xf39c12; // Default bullet color
-                break;
-        }
-        
+
+        // Base appearance. Size is driven by CALIBER (applied as a scale multiplier
+        // by the caller), and color is modulated by bullet effects below — there's
+        // no longer a per-ordinance sub-type to switch on.
+        sprite.scale.set(1.0);
+        sprite.tint = 0xf39c12; // Default projectile color
+
         // Add visual effects for special bullet effects
         if (effects.includes('HOMING')) {
             // Add a subtle glow for homing projectiles

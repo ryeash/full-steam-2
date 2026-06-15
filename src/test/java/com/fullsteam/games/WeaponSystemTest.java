@@ -223,6 +223,8 @@ class WeaponSystemTest extends BaseTestClass {
                 0,  // projectile speed (not used for beams, 0 points)
                 0,  // bullets per shot (0 points)
                 -10,  // linear damping (0 points, must be negative or 0)
+                0,  // handling (0 points)
+                0,  // caliber (0 points)
                 Set.of(),
                 Ordinance.LASER // Beam weapon (40 points)
         );

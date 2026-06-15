@@ -2,92 +2,167 @@ package com.fullsteam.model;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
+import static com.fullsteam.model.WeaponAttribute.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Locks in the {@link WeaponAttribute} point→value curves so balance changes show
- * up as an explicit, reviewable diff (and so the doc-comment sample values can't
- * silently drift from the code again). Values mirror the comments in the enum.
+ * Locks in the {@link WeaponAttribute} point→value curves and the coupling
+ * resolver so balance/coupling changes show up as an explicit, reviewable diff.
  */
 class WeaponAttributeTest {
 
     private static final double EPS = 0.01;
 
+    /** Resolve a single attribute's final (coupled) value from a sparse allocation. */
+    private static double resolved(WeaponAttribute target, Map<WeaponAttribute, Integer> alloc) {
+        return WeaponAttribute.resolve(alloc).get(target);
+    }
+
+    // ===== Base curves (no couplings) =====
+
     @Test
-    void linearStatsMatchEndpoints() {
-        assertEquals(10, WeaponAttribute.DAMAGE.compute(0), EPS);
-        assertEquals(50, WeaponAttribute.DAMAGE.compute(40), EPS);
-        assertEquals(5, WeaponAttribute.MAGAZINE_SIZE.compute(0), EPS);
-        assertEquals(45, WeaponAttribute.MAGAZINE_SIZE.compute(40), EPS);
+    void baseCurveEndpoints() {
+        assertEquals(10, DAMAGE.compute(0), EPS);
+        assertEquals(50, DAMAGE.compute(40), EPS);
+        assertEquals(0.5, FIRE_RATE.compute(0), EPS);
+        assertEquals(7.07, FIRE_RATE.compute(30), EPS);
+        assertEquals(150, RANGE.compute(0), EPS);
+        assertEquals(1188, RANGE.compute(35), 1.0);
+        assertEquals(30, RANGE.compute(-3), EPS);          // sacrifice floor
+        assertEquals(3, MAGAZINE_SIZE.compute(0), EPS);
+        assertEquals(50, MAGAZINE_SIZE.compute(47), EPS);
+        assertEquals(4.33, RELOAD_TIME.compute(0), EPS);
+        assertEquals(300, PROJECTILE_SPEED.compute(0), EPS);
+        assertEquals(943, PROJECTILE_SPEED.compute(30), 1.0);
+        assertEquals(1, BULLETS_PER_SHOT.compute(0), EPS);
+        assertEquals(8, BULLETS_PER_SHOT.compute(35), EPS);
+        // LINEAR_DAMPING is two-sided: 0 → 0.09 baseline, -10 → 0.39 (drag), +10 → 0.0 (zippy).
+        assertEquals(0.09, LINEAR_DAMPING.compute(0), EPS);
+        assertEquals(0.39, LINEAR_DAMPING.compute(-10), EPS);
+        assertEquals(0.0, LINEAR_DAMPING.compute(10), EPS);
     }
 
     @Test
-    void fireRateIsDiminishing() {
-        assertEquals(0.5, WeaponAttribute.FIRE_RATE.compute(0), EPS);
-        assertEquals(4.29, WeaponAttribute.FIRE_RATE.compute(10), EPS);
-        assertEquals(7.07, WeaponAttribute.FIRE_RATE.compute(30), EPS);
-        // Concave: the second 10 points add less than the first 10.
-        double g1 = WeaponAttribute.FIRE_RATE.compute(10) - WeaponAttribute.FIRE_RATE.compute(0);
-        double g2 = WeaponAttribute.FIRE_RATE.compute(20) - WeaponAttribute.FIRE_RATE.compute(10);
-        assertTrue(g2 < g1, "fire rate gains should diminish");
+    void accuracyIsTwoSidedAndClamped() {
+        assertEquals(1.0, ACCURACY.compute(0), EPS);    // perfect by default
+        assertEquals(0.35, ACCURACY.compute(-5), EPS);  // sacrifice
+        assertEquals(0.0, ACCURACY.compute(-10), EPS);  // clamped low
+        assertEquals(1.0, ACCURACY.compute(10), EPS);   // positive points clamp at 1.0 (only useful vs couplings)
     }
 
     @Test
-    void rangeApproachesSoftCapAndFloorsOnSacrifice() {
-        assertEquals(150, WeaponAttribute.RANGE.compute(0), EPS);
-        assertEquals(807, WeaponAttribute.RANGE.compute(10), 1.0);
-        assertEquals(1144, WeaponAttribute.RANGE.compute(20), 1.0);
-        assertEquals(1369, WeaponAttribute.RANGE.compute(35), 1.0);
-        assertTrue(WeaponAttribute.RANGE.compute(35) < 1500, "stays under the ~1500 soft cap");
-        // Negative points hit the sacrifice floor rather than going nonsensical.
-        assertEquals(30, WeaponAttribute.RANGE.compute(-3), EPS);
-    }
-
-    @Test
-    void accuracyIsClampedToUnitInterval() {
-        assertEquals(1.0, WeaponAttribute.ACCURACY.compute(0), EPS);   // perfect by default
-        assertEquals(0.35, WeaponAttribute.ACCURACY.compute(-5), EPS);
-        assertEquals(0.0, WeaponAttribute.ACCURACY.compute(-10), EPS); // clamped (raw would be -0.3)
-    }
-
-    @Test
-    void reloadDecaysTowardFloorAndCapsOnSacrifice() {
-        assertEquals(4.0, WeaponAttribute.RELOAD_TIME.compute(0), EPS);
-        assertEquals(2.55, WeaponAttribute.RELOAD_TIME.compute(5), EPS);
-        assertEquals(0.81, WeaponAttribute.RELOAD_TIME.compute(25), EPS);
-        assertTrue(WeaponAttribute.RELOAD_TIME.compute(25) > 0.6, "never drops below the 0.6s floor");
-        assertEquals(6.0, WeaponAttribute.RELOAD_TIME.compute(-7), EPS); // sacrifice capped at 6s
-    }
-
-    @Test
-    void projectileSpeedIsDiminishing() {
-        assertEquals(300, WeaponAttribute.PROJECTILE_SPEED.compute(0), EPS);
-        assertEquals(696, WeaponAttribute.PROJECTILE_SPEED.compute(10), 1.0);
-        assertEquals(943, WeaponAttribute.PROJECTILE_SPEED.compute(30), 1.0);
-    }
-
-    @Test
-    void bulletsPerShotStepEveryFivePoints() {
-        assertEquals(1, WeaponAttribute.BULLETS_PER_SHOT.compute(0), EPS);
-        assertEquals(2, WeaponAttribute.BULLETS_PER_SHOT.compute(5), EPS);
-        assertEquals(8, WeaponAttribute.BULLETS_PER_SHOT.compute(35), EPS);
-        // Points between thresholds round down to the lower tier.
-        assertEquals(1, WeaponAttribute.BULLETS_PER_SHOT.compute(4), EPS);
-    }
-
-    @Test
-    void linearDampingSacrificeAddsDragAndStaysNonNegative() {
-        assertEquals(0.03, WeaponAttribute.LINEAR_DAMPING.compute(0), EPS);
-        assertEquals(0.23, WeaponAttribute.LINEAR_DAMPING.compute(-5), EPS);
-        assertEquals(0.43, WeaponAttribute.LINEAR_DAMPING.compute(-10), EPS);
+    void handlingIsTwoSidedMoveSpeedMultiplier() {
+        assertEquals(1.0, HANDLING.compute(0), EPS);
+        assertEquals(0.8, HANDLING.compute(-10), EPS);  // heavy / refund
+        assertEquals(1.3, HANDLING.compute(15), EPS);   // nimble / costs
     }
 
     @Test
     void computeRejectsOutOfRangePoints() {
-        assertThrows(IllegalArgumentException.class, () -> WeaponAttribute.DAMAGE.compute(41));
-        assertThrows(IllegalArgumentException.class, () -> WeaponAttribute.DAMAGE.compute(-1));
-        assertThrows(IllegalArgumentException.class, () -> WeaponAttribute.ACCURACY.compute(1)); // sacrifice-only
+        assertThrows(IllegalArgumentException.class, () -> DAMAGE.compute(41));
+        assertThrows(IllegalArgumentException.class, () -> DAMAGE.compute(-1));
+        assertThrows(IllegalArgumentException.class, () -> ACCURACY.compute(-11));
+        assertThrows(IllegalArgumentException.class, () -> ACCURACY.compute(26));
+    }
+
+    // ===== Couplings =====
+
+    @Test
+    void resolveWithoutInvestmentLeavesBaselines() {
+        Map<WeaponAttribute, Integer> none = Map.of();
+        assertEquals(1.0, resolved(ACCURACY, none), EPS);
+        assertEquals(1.0, resolved(HANDLING, none), EPS);
+        assertEquals(4.33, resolved(RELOAD_TIME, none), EPS);
+    }
+
+    @Test
+    void fireRateDragsAccuracyDown() {
+        // FIRE_RATE 15 = half its range → -4 effective accuracy points → 0.48.
+        assertEquals(0.48, resolved(ACCURACY, Map.of(FIRE_RATE, 15)), EPS);
+    }
+
+    @Test
+    void accuracyInvestmentOffsetsRecoilOneForOne() {
+        // Same -4 recoil, but +4 allocated accuracy points cancel it exactly → perfect.
+        assertEquals(1.0, resolved(ACCURACY, Map.of(FIRE_RATE, 15, ACCURACY, 4)), EPS);
+    }
+
+    @Test
+    void projectileSpeedSynergyPartlyOffsetsRecoil() {
+        // FIRE_RATE 30 (-8) + PROJECTILE_SPEED 30 (+5) → -3 net → 0.61.
+        assertEquals(0.61, resolved(ACCURACY, Map.of(FIRE_RATE, 30, PROJECTILE_SPEED, 30)), EPS);
+    }
+
+    @Test
+    void bigMagazineSlowsReload() {
+        double base = resolved(RELOAD_TIME, Map.of());
+        double big = resolved(RELOAD_TIME, Map.of(MAGAZINE_SIZE, 47));
+        assertTrue(big > base, "large magazine should lengthen reload");
+        // Stat-space flat-seconds coupling: +1.2s at a full mag, no cliff.
+        assertEquals(base + 1.2, big, EPS);
+    }
+
+    @Test
+    void heavyDamageReducesHandling() {
+        assertEquals(0.94, resolved(HANDLING, Map.of(DAMAGE, 20)), EPS);
+        assertEquals(0.88, resolved(HANDLING, Map.of(DAMAGE, 40)), EPS);
+    }
+
+    @Test
+    void morePelletsWidenSpread() {
+        // Max bullets (35 pts) → -5 effective accuracy points → 0.35.
+        assertEquals(0.35, resolved(ACCURACY, Map.of(BULLETS_PER_SHOT, 35)), EPS);
+    }
+
+    @Test
+    void longBarrelSynergyBoostsProjectileSpeed() {
+        // Baseline (no range investment) gets no synergy bump.
+        assertEquals(300, resolved(PROJECTILE_SPEED, Map.of()), EPS);
+        // Max range → +4 effective speed points → ~498.
+        assertEquals(498, resolved(PROJECTILE_SPEED, Map.of(RANGE, 35)), 2.0);
+    }
+
+    @Test
+    void caliberBaselineAndExtremes() {
+        assertEquals(1.0, CALIBER.compute(0), EPS);   // baseline size
+        assertEquals(2.0, CALIBER.compute(20), EPS);  // double size
+        assertEquals(0.5, CALIBER.compute(-10), EPS); // half size (refund)
+    }
+
+    @Test
+    void bigCaliberIsSlowerAndHoldsLess() {
+        // With speed/magazine investment, large caliber drags both down.
+        assertTrue(resolved(PROJECTILE_SPEED, Map.of(PROJECTILE_SPEED, 20, CALIBER, 20))
+                        < resolved(PROJECTILE_SPEED, Map.of(PROJECTILE_SPEED, 20)),
+                "big caliber should reduce projectile speed");
+        assertTrue(resolved(MAGAZINE_SIZE, Map.of(MAGAZINE_SIZE, 20, CALIBER, 20))
+                        < resolved(MAGAZINE_SIZE, Map.of(MAGAZINE_SIZE, 20)),
+                "big caliber should reduce magazine size");
+        // Positive-investment-only: small/baseline caliber pays nothing.
+        assertEquals(resolved(MAGAZINE_SIZE, Map.of(MAGAZINE_SIZE, 20)),
+                resolved(MAGAZINE_SIZE, Map.of(MAGAZINE_SIZE, 20, CALIBER, -10)), EPS);
+    }
+
+    @Test
+    void kickbackOnlyBitesPositiveDampingInvestment() {
+        // Baseline (0) and draggy (negative) damping → no kickback penalty.
+        assertEquals(1.0, resolved(HANDLING, Map.of(LINEAR_DAMPING, 0)), EPS);
+        assertEquals(1.0, resolved(HANDLING, Map.of(LINEAR_DAMPING, -10)), EPS);
+        // Zippy rounds (max positive) → full -5 handling points → 1.0 + 0.02*(-5) = 0.90.
+        assertEquals(0.90, resolved(HANDLING, Map.of(LINEAR_DAMPING, 10)), EPS);
+    }
+
+    @Test
+    void couplingsReadAllocatedNotCoupledValues() {
+        // DAMAGE→HANDLING must not feed back: investing in HANDLING shouldn't change
+        // the damage-driven penalty, only the starting point it's applied to.
+        double h0 = resolved(HANDLING, Map.of(DAMAGE, 40));            // 0 + (-6) → 0.88
+        double h5 = resolved(HANDLING, Map.of(DAMAGE, 40, HANDLING, 5)); // 5 + (-6) → -1 → 0.98
+        assertEquals(0.88, h0, EPS);
+        assertEquals(0.98, h5, EPS);
     }
 }

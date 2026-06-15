@@ -9,6 +9,7 @@ import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.LobbyInfo;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.UtilityWeapon;
+import com.fullsteam.model.Weapon;
 import com.fullsteam.model.WeaponAttribute;
 import com.fullsteam.model.WeaponConfig;
 import io.micronaut.context.annotation.Context;
@@ -32,6 +33,7 @@ import org.slf4j.LoggerFactory;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -115,6 +117,9 @@ public class GameController {
                     effectData.put("displayName", formatDisplayName(effect.name()));
                     effectData.put("cost", effect.getPointCost());
                     effectData.put("description", effect.getDescription());
+                    // Lets the customizer disable flight-only effects (HOMING, etc.)
+                    // when a beam ordnance is selected.
+                    effectData.put("validForBeams", effect.isValidForBeams());
                     return effectData;
                 })
                 .collect(Collectors.toList());
@@ -128,9 +133,9 @@ public class GameController {
                     ordData.put("displayName", formatDisplayName(ord.name()));
                     ordData.put("cost", ord.getPointCost());
                     ordData.put("description", ord.getDescription());
-                    ordData.put("size", ord.getSize());
                     ordData.put("speedMultiplier", ord.getSpeedMultiplier());
                     ordData.put("hasTrail", ord.isHasTrail());
+                    ordData.put("beam", ord.isBeamType());
                     return ordData;
                 })
                 .collect(Collectors.toList());
@@ -143,16 +148,12 @@ public class GameController {
         presets.put("ASSAULT_RIFLE", createPresetData(WeaponConfig.ASSAULT_RIFLE_PRESET));
         presets.put("HAND_CANNON", createPresetData(WeaponConfig.HAND_CANNON_PRESET));
         presets.put("SNIPER_RIFLE", createPresetData(WeaponConfig.SNIPER_RIFLE_PRESET));
-        presets.put("PLASMA_RIFLE", createPresetData(WeaponConfig.PLASMA_RIFLE_PRESET));
         presets.put("TWIN_SIXES", createPresetData(WeaponConfig.TWIN_SIXES_PRESET));
         presets.put("MINIGUN", createPresetData(WeaponConfig.MINIGUN_PRESET));
-        presets.put("PRECISION_DART_GUN", createPresetData(WeaponConfig.PRECISION_DART_GUN_PRESET));
         presets.put("SHOTGUN", createPresetData(WeaponConfig.SHOTGUN_PRESET));
 
         // Explosive weapons (ordinance + effects)
-        presets.put("EXPLOSIVE_SNIPER", createPresetData(WeaponConfig.EXPLOSIVE_SNIPER_PRESET));
         presets.put("ROCKET_LAUNCHER", createPresetData(WeaponConfig.ROCKET_LAUNCHER_PRESET));
-        presets.put("GRENADE_LAUNCHER", createPresetData(WeaponConfig.GRENADE_LAUNCHER_PRESET));
         presets.put("CLUSTER_MORTAR", createPresetData(WeaponConfig.CLUSTER_MORTAR_PRESET));
 
         // Special effect showcases
@@ -166,25 +167,17 @@ public class GameController {
 
         // Beam weapon presets
         presets.put("LASER_RIFLE", createPresetData(WeaponConfig.LASER_RIFLE_PRESET));
-        presets.put("PRISM_GUN", createPresetData(WeaponConfig.PRISM_GUN_PRESET));
         presets.put("PLASMA_CANNON", createPresetData(WeaponConfig.PLASMA_CANNON_PRESET));
+        presets.put("ARC_LASER", createPresetData(WeaponConfig.ARC_LASER_PRESET));
+        presets.put("RAILGUN", createPresetData(WeaponConfig.RAILGUN_PRESET));
 
         // Advanced combination weapons
         presets.put("STORM_CALLER", createPresetData(WeaponConfig.STORM_CALLER_PRESET));
         presets.put("NAPALM_LAUNCHER", createPresetData(WeaponConfig.NAPALM_LAUNCHER_PRESET));
-        presets.put("CRYO_SHOTGUN", createPresetData(WeaponConfig.CRYO_SHOTGUN_PRESET));
         presets.put("VENOM_NEEDLER", createPresetData(WeaponConfig.VENOM_NEEDLER_PRESET));
-        presets.put("THUNDERBOLT_CANNON", createPresetData(WeaponConfig.THUNDERBOLT_CANNON_PRESET));
-        presets.put("RICOCHET_RIFLE", createPresetData(WeaponConfig.RICOCHET_RIFLE_PRESET));
-        presets.put("PLAGUE_MORTAR", createPresetData(WeaponConfig.PLAGUE_MORTAR_PRESET));
-        presets.put("WILDFIRE_SPRAYER", createPresetData(WeaponConfig.WILDFIRE_SPRAYER_PRESET));
         presets.put("FROST_LANCE", createPresetData(WeaponConfig.FROST_LANCE_PRESET));
         presets.put("SHRAPNEL_CANNON", createPresetData(WeaponConfig.SHRAPNEL_CANNON_PRESET));
-        presets.put("SEEKING_INFERNO", createPresetData(WeaponConfig.SEEKING_INFERNO_PRESET));
-        presets.put("EMP_BURST_GUN", createPresetData(WeaponConfig.EMP_BURST_GUN_PRESET));
-        presets.put("GLACIAL_MORTAR", createPresetData(WeaponConfig.GLACIAL_MORTAR_PRESET));
         presets.put("PHANTOM_NEEDLES", createPresetData(WeaponConfig.PHANTOM_NEEDLES_PRESET));
-        presets.put("CORROSIVE_CANNON", createPresetData(WeaponConfig.CORROSIVE_CANNON_PRESET));
 
         data.put("presets", presets);
 
@@ -209,6 +202,123 @@ public class GameController {
         return data;
     }
 
+    /**
+     * Resolve a customization config into the full set of end-result stats the
+     * weapon will actually have — final values, the un-coupled base, each
+     * coupling's signed point contribution, the point budget, and derived combat
+     * stats. The client renders this instead of recomputing weapon math, so all
+     * attribute/coupling logic lives server-side (one source of truth).
+     */
+    @Post("/api/weapon-customization/resolve")
+    public HttpResponse<Map<String, Object>> resolveCustomization(@Body WeaponConfig config) {
+        Map<WeaponAttribute, Integer> allocated = new EnumMap<>(WeaponAttribute.class);
+        allocated.put(WeaponAttribute.DAMAGE, config.damage);
+        allocated.put(WeaponAttribute.FIRE_RATE, config.fireRate);
+        allocated.put(WeaponAttribute.RANGE, config.range);
+        allocated.put(WeaponAttribute.ACCURACY, config.accuracy);
+        allocated.put(WeaponAttribute.MAGAZINE_SIZE, config.magazineSize);
+        allocated.put(WeaponAttribute.RELOAD_TIME, config.reloadTime);
+        allocated.put(WeaponAttribute.PROJECTILE_SPEED, config.projectileSpeed);
+        allocated.put(WeaponAttribute.BULLETS_PER_SHOT, config.bulletsPerShot);
+        allocated.put(WeaponAttribute.LINEAR_DAMPING, config.linearDamping);
+        allocated.put(WeaponAttribute.HANDLING, config.handling);
+
+        WeaponAttribute.Resolution res;
+        try {
+            res = WeaponAttribute.resolveDetailed(allocated);
+        } catch (IllegalArgumentException e) {
+            return HttpResponse.badRequest(Map.of("error", e.getMessage()));
+        }
+
+        Ordinance ordinance = config.ordinance != null ? config.ordinance : Ordinance.PROJECTILE;
+
+        Map<String, Object> attributes = new HashMap<>();
+        for (WeaponAttribute a : WeaponAttribute.values()) {
+            double value = res.values().get(a);
+            double base = res.baseValues().get(a);
+            Map<String, Object> attr = new HashMap<>();
+            attr.put("label", formatDisplayName(a.name()));
+            attr.put("points", allocated.get(a));
+            attr.put("value", value);
+            attr.put("baseValue", base);
+            attr.put("display", formatStat(a, value, ordinance));
+            attr.put("baseDisplay", formatStat(a, base, ordinance));
+            // Coupled if the final value differs from the un-coupled base — works
+            // uniformly for point-space and stat-space couplings.
+            attr.put("coupled", Math.abs(value - base) > 1e-6);
+            attributes.put(a.name(), attr);
+        }
+
+        List<Map<String, Object>> couplings = res.appliedCouplings().stream().map(c -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("source", c.source().name());
+            m.put("target", c.target().name());
+            m.put("label", formatDisplayName(c.source().name()) + " → " + formatDisplayName(c.target().name()));
+            m.put("delta", c.delta());
+            m.put("space", c.space().name());
+            m.put("display", formatCouplingDelta(c));
+            return m;
+        }).collect(Collectors.toList());
+
+        int attrPoints = config.getAttributePoints();
+        int effectPoints = config.getBulletEffects().stream().mapToInt(BulletEffect::getPointCost).sum();
+        int ordinancePoints = ordinance.getPointCost();
+        int total = attrPoints + effectPoints + ordinancePoints;
+        Map<String, Object> budget = new HashMap<>();
+        budget.put("attributePoints", attrPoints);
+        budget.put("effectPoints", effectPoints);
+        budget.put("ordinancePoints", ordinancePoints);
+        budget.put("total", total);
+        budget.put("max", 100);
+        budget.put("remaining", 100 - total);
+
+        double damage = res.values().get(WeaponAttribute.DAMAGE);
+        int bullets = (int) Math.round(res.values().get(WeaponAttribute.BULLETS_PER_SHOT));
+        double fireRate = res.values().get(WeaponAttribute.FIRE_RATE);
+        double dpb = Weapon.damagePerBullet(damage, bullets);
+        Map<String, Object> derived = new HashMap<>();
+        derived.put("damagePerBullet", dpb);
+        derived.put("burstDamage", dpb * bullets);
+        derived.put("dps", dpb * bullets * fireRate);
+        derived.put("effectiveProjectileSpeed", res.values().get(WeaponAttribute.PROJECTILE_SPEED) * ordinance.getSpeedMultiplier());
+        derived.put("moveSpeedMultiplier", res.values().get(WeaponAttribute.HANDLING));
+
+        Map<String, Object> out = new HashMap<>();
+        out.put("valid", total <= 100);
+        out.put("budget", budget);
+        out.put("attributes", attributes);
+        out.put("couplings", couplings);
+        out.put("derived", derived);
+        return HttpResponse.ok(out);
+    }
+
+    /** Human-readable signed delta for one coupling, in its space's units. */
+    private String formatCouplingDelta(WeaponAttribute.AppliedCoupling c) {
+        if (c.space() == WeaponAttribute.CouplingSpace.STAT) {
+            // STAT deltas are in the target's own units; only RELOAD_TIME uses STAT today (seconds).
+            String unit = c.target() == WeaponAttribute.RELOAD_TIME ? "s" : "";
+            return String.format("%+.2f%s", c.delta(), unit);
+        }
+        return String.format("%+.1f pts", c.delta());
+    }
+
+    /** Human-readable end-result string for a resolved attribute value. */
+    private String formatStat(WeaponAttribute a, double v, Ordinance ordinance) {
+        return switch (a) {
+            case ACCURACY -> Math.round(v * 100) + "%";
+            case HANDLING -> Math.round(v * 100) + "% move speed";
+            case FIRE_RATE -> String.format("%.1f shots/s", v);
+            case RELOAD_TIME -> String.format("%.2f s", v);
+            case LINEAR_DAMPING -> String.format("%.2f drag", v);
+            case RANGE -> Math.round(v) + " units";
+            case PROJECTILE_SPEED -> Math.round(v * ordinance.getSpeedMultiplier()) + " units/s";
+            case MAGAZINE_SIZE -> (int) Math.round(v) + " rounds";
+            case BULLETS_PER_SHOT -> (int) Math.round(v) + (Math.round(v) == 1 ? " bullet" : " bullets");
+            case DAMAGE -> String.valueOf((int) Math.round(v));
+            case CALIBER -> String.format("×%.2f size", v);
+        };
+    }
+
     private String formatDisplayName(String name) {
         return Arrays.stream(name.split("_"))
                 .map(word -> word.charAt(0) + word.substring(1).toLowerCase())
@@ -218,17 +328,19 @@ public class GameController {
     private Map<String, Object> createPresetData(WeaponConfig weapon) {
         Map<String, Object> preset = new HashMap<>();
         preset.put("displayName", weapon.getType());
-        Map<String, Integer> attributes = Map.of(
-                WeaponAttribute.DAMAGE.name(), weapon.getDamage(),
-                WeaponAttribute.FIRE_RATE.name(), weapon.getFireRate(),
-                WeaponAttribute.RANGE.name(), weapon.getRange(),
-                WeaponAttribute.ACCURACY.name(), weapon.getAccuracy(),
-                WeaponAttribute.MAGAZINE_SIZE.name(), weapon.getMagazineSize(),
-                WeaponAttribute.RELOAD_TIME.name(), weapon.getReloadTime(),
-                WeaponAttribute.PROJECTILE_SPEED.name(), weapon.getProjectileSpeed(),
-                WeaponAttribute.BULLETS_PER_SHOT.name(), weapon.getBulletsPerShot(),
-                WeaponAttribute.LINEAR_DAMPING.name(), weapon.getLinearDamping()
-        );
+        // Map.of caps at 10 pairs; the attribute count exceeds it, so build explicitly.
+        Map<String, Integer> attributes = new HashMap<>();
+        attributes.put(WeaponAttribute.DAMAGE.name(), weapon.getDamage());
+        attributes.put(WeaponAttribute.FIRE_RATE.name(), weapon.getFireRate());
+        attributes.put(WeaponAttribute.RANGE.name(), weapon.getRange());
+        attributes.put(WeaponAttribute.ACCURACY.name(), weapon.getAccuracy());
+        attributes.put(WeaponAttribute.MAGAZINE_SIZE.name(), weapon.getMagazineSize());
+        attributes.put(WeaponAttribute.RELOAD_TIME.name(), weapon.getReloadTime());
+        attributes.put(WeaponAttribute.PROJECTILE_SPEED.name(), weapon.getProjectileSpeed());
+        attributes.put(WeaponAttribute.BULLETS_PER_SHOT.name(), weapon.getBulletsPerShot());
+        attributes.put(WeaponAttribute.LINEAR_DAMPING.name(), weapon.getLinearDamping());
+        attributes.put(WeaponAttribute.HANDLING.name(), weapon.getHandling());
+        attributes.put(WeaponAttribute.CALIBER.name(), weapon.getCaliber());
         preset.put("attributes", attributes);
         preset.put("effects", weapon.getBulletEffects()
                 .stream()

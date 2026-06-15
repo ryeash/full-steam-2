@@ -26,13 +26,17 @@ public class Projectile extends GameEntity {
     private boolean dismissedByVelocity = false;
     private boolean dismissedByRange = false;
 
+    /** Size multiplier from the weapon's CALIBER attribute (1.0 = baseline). */
+    private final double caliber;
+
     // prevent double hits
     private final Set<Integer> affectedPlayers;
     private final Set<Integer> affectedObstacles;
 
     public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange,
-                      int ownerTeam, double linearDamping, Set<BulletEffect> bulletEffects, Ordinance ordinance) {
-        super(Config.nextEntityId(), createProjectileBody(x, y, vx, vy, linearDamping, ordinance, bulletEffects), 1.0);
+                      int ownerTeam, double linearDamping, Set<BulletEffect> bulletEffects, Ordinance ordinance,
+                      double caliber) {
+        super(Config.nextEntityId(), createProjectileBody(x, y, vx, vy, linearDamping, bulletEffects, caliber), 1.0);
         this.initialPosition = new Vector2(x, y);
         this.ownerId = ownerId;
         this.ownerTeam = ownerTeam;
@@ -40,6 +44,7 @@ public class Projectile extends GameEntity {
         this.linearDamping = linearDamping;
         this.bulletEffects = new HashSet<>(bulletEffects);
         this.ordinance = ordinance;
+        this.caliber = caliber;
 
         // Calculate time to live based on range and speed
         double speed = new Vector2(vx, vy).getMagnitude();
@@ -52,9 +57,13 @@ public class Projectile extends GameEntity {
         this.affectedObstacles = new HashSet<>();
     }
 
-    private static Body createProjectileBody(double x, double y, double vx, double vy, double linearDamping, Ordinance ordinance, Set<BulletEffect> bulletEffects) {
+    /** Base projectile radius at caliber 1.0; CALIBER is the only size input. */
+    private static final double BASE_RADIUS = 2.0;
+
+    private static Body createProjectileBody(double x, double y, double vx, double vy, double linearDamping, Set<BulletEffect> bulletEffects, double caliber) {
         Body body = new Body();
-        Circle circle = new Circle(ordinance.getSize());
+        // Radius comes entirely from the weapon's caliber (baseline ×1.0 = BASE_RADIUS).
+        Circle circle = new Circle(BASE_RADIUS * caliber);
         body.addFixture(circle);
 
         // Set restitution for bouncy projectiles
@@ -87,9 +96,10 @@ public class Projectile extends GameEntity {
             return;
         }
 
-        // Check velocity threshold for dismissal
+        // Check velocity threshold for dismissal. Bigger-caliber (heavier) rounds
+        // carry momentum, so they persist to a lower speed before dismissal.
         double currentSpeed = body.getLinearVelocity().getMagnitude();
-        if (currentSpeed < ordinance.getMinimumVelocity() && !dismissedByVelocity) {
+        if (currentSpeed < ordinance.getMinimumVelocity() / caliber && !dismissedByVelocity) {
             // Mark as dismissed by velocity to trigger effects
             dismissedByVelocity = true;
             active = false;

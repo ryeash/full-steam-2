@@ -155,6 +155,9 @@ public class Player extends GameEntity {
         if (primary != null) {
             weapon = primary.buildWeapon();
             weapon.reload();
+            // Handling scales the wielder's move speed (1.0 = baseline). Heavy
+            // weapons (incl. the DAMAGE→HANDLING coupling) move you slower.
+            this.maxSpeed = Config.PLAYER_SPEED * weapon.getHandling();
         }
         if (utility != null) {
             this.utilityWeapon = utility;
@@ -234,7 +237,8 @@ public class Player extends GameEntity {
                     team,
                     weapon.getLinearDamping(),
                     weapon.getBulletEffects(),
-                    weapon.getOrdinance()
+                    weapon.getOrdinance(),
+                    weapon.getCaliber()
             ));
 
         }
@@ -277,7 +281,7 @@ public class Player extends GameEntity {
             angle += (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * maxAccuracySpread;
             Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
             beams.add(new Beam(pos, direction, range, damage, getId(), getTeam(),
-                    ordinance, weapon.getBulletEffects()));
+                    ordinance, weapon.getBulletEffects(), weapon.getCaliber()));
         }
         return beams;
     }

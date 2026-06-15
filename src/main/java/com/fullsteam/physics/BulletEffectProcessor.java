@@ -69,7 +69,7 @@ public class BulletEffectProcessor {
                 projectile.getOwnerId(),
                 FieldEffectType.EXPLOSION,
                 position,
-                BulletEffect.EXPLOSIVE.calculateRadius(projectile.getDamage(), projectile.getOrdinance()),
+                BulletEffect.EXPLOSIVE.calculateRadius(projectile.getDamage(), projectile.getOrdinance(), projectile.getCaliber()),
                 BulletEffect.EXPLOSIVE.calculateDamage(projectile.getDamage()),
                 FieldEffectType.EXPLOSION.getDefaultDuration(),
                 projectile.getOwnerTeam()
@@ -82,7 +82,7 @@ public class BulletEffectProcessor {
                 projectile.getOwnerId(),
                 FieldEffectType.FIRE,
                 position,
-                BulletEffect.INCENDIARY.calculateRadius(projectile.getDamage(), projectile.getOrdinance()),
+                BulletEffect.INCENDIARY.calculateRadius(projectile.getDamage(), projectile.getOrdinance(), projectile.getCaliber()),
                 BulletEffect.INCENDIARY.calculateDamage(projectile.getDamage()),
                 FieldEffectType.FIRE.getDefaultDuration(),
                 projectile.getOwnerTeam()
@@ -95,7 +95,7 @@ public class BulletEffectProcessor {
                 projectile.getOwnerId(),
                 FieldEffectType.ELECTRIC,
                 position,
-                BulletEffect.ELECTRIC.calculateRadius(projectile.getDamage(), projectile.getOrdinance()),
+                BulletEffect.ELECTRIC.calculateRadius(projectile.getDamage(), projectile.getOrdinance(), projectile.getCaliber()),
                 BulletEffect.ELECTRIC.calculateDamage(projectile.getDamage()),
                 FieldEffectType.ELECTRIC.getDefaultDuration(),
                 projectile.getOwnerTeam()
@@ -108,7 +108,7 @@ public class BulletEffectProcessor {
                 projectile.getOwnerId(),
                 FieldEffectType.FREEZE,
                 position,
-                BulletEffect.FREEZING.calculateRadius(projectile.getDamage(), projectile.getOrdinance()),
+                BulletEffect.FREEZING.calculateRadius(projectile.getDamage(), projectile.getOrdinance(), projectile.getCaliber()),
                 BulletEffect.FREEZING.calculateDamage(projectile.getDamage()),
                 FieldEffectType.FREEZE.getDefaultDuration(),
                 projectile.getOwnerTeam()
@@ -121,7 +121,7 @@ public class BulletEffectProcessor {
                 projectile.getOwnerId(),
                 FieldEffectType.POISON,
                 position,
-                BulletEffect.POISON.calculateRadius(projectile.getDamage(), projectile.getOrdinance()),
+                BulletEffect.POISON.calculateRadius(projectile.getDamage(), projectile.getOrdinance(), projectile.getCaliber()),
                 BulletEffect.POISON.calculateDamage(projectile.getDamage()),
                 FieldEffectType.POISON.getDefaultDuration(),
                 projectile.getOwnerTeam()
@@ -134,7 +134,7 @@ public class BulletEffectProcessor {
                 projectile.getOwnerId(),
                 FieldEffectType.SMOKE,
                 position,
-                BulletEffect.SMOKE.calculateRadius(projectile.getDamage(), projectile.getOrdinance()),
+                BulletEffect.SMOKE.calculateRadius(projectile.getDamage(), projectile.getOrdinance(), projectile.getCaliber()),
                 0.0,
                 FieldEffectType.SMOKE.getDefaultDuration(),
                 projectile.getOwnerTeam()
@@ -148,7 +148,7 @@ public class BulletEffectProcessor {
                 projectile.getOwnerId(),
                 FieldEffectType.FRAGMENTATION,
                 position,
-                BulletEffect.FRAGMENTING.calculateRadius(projectile.getDamage(), projectile.getOrdinance()),
+                BulletEffect.FRAGMENTING.calculateRadius(projectile.getDamage(), projectile.getOrdinance(), projectile.getCaliber()),
                 BulletEffect.FRAGMENTING.calculateDamage(projectile.getDamage()),
                 FieldEffectType.FRAGMENTATION.getDefaultDuration(),
                 projectile.getOwnerTeam()
@@ -181,7 +181,10 @@ public class BulletEffectProcessor {
                     projectile.getOwnerTeam(),
                     projectile.getLinearDamping(),
                     childEffects,
-                    Ordinance.DART // Small, fast fragments
+                    Ordinance.PROJECTILE, // Small, fast fragments
+                    // Fragments are a fraction of the parent's caliber, floored so
+                    // they never shrink to nothing.
+                    Math.max(0.4, projectile.getCaliber() * 0.5)
             );
             gameEntities.add(fragment);
         }
@@ -295,12 +298,17 @@ public class BulletEffectProcessor {
                 case POISON:
                     createPoisonEffectForBeam(beam, hitPosition);
                     break;
-                // these don't apply to beams
+                case SMOKE:
+                    createSmokeEffectForBeam(beam, hitPosition);
+                    break;
+                // PIERCING governs beam pass-through in WeaponSystem (not an AOE
+                // spawn). HOMING/BOUNCY/FRAGMENTING are flight behaviors with no
+                // meaning for an instant ray; they are also stripped at weapon
+                // build time, so these are defensive no-ops.
                 case PIERCING:
                 case HOMING:
                 case BOUNCY:
                 case FRAGMENTING:
-                case SMOKE:
                     break;
             }
         }
@@ -314,7 +322,7 @@ public class BulletEffectProcessor {
                 beam.getOwnerId(),
                 FieldEffectType.EXPLOSION,
                 position,
-                BulletEffect.EXPLOSIVE.calculateRadius(beam.getDamage(), beam.getOrdinance()),
+                BulletEffect.EXPLOSIVE.calculateRadius(beam.getDamage(), beam.getOrdinance(), beam.getCaliber()),
                 BulletEffect.EXPLOSIVE.calculateDamage(beam.getDamage()),
                 FieldEffectType.EXPLOSION.getDefaultDuration(),
                 beam.getOwnerTeam()
@@ -330,7 +338,7 @@ public class BulletEffectProcessor {
                 beam.getOwnerId(),
                 FieldEffectType.FIRE,
                 position,
-                BulletEffect.INCENDIARY.calculateRadius(beam.getDamage(), beam.getOrdinance()),
+                BulletEffect.INCENDIARY.calculateRadius(beam.getDamage(), beam.getOrdinance(), beam.getCaliber()),
                 BulletEffect.INCENDIARY.calculateDamage(beam.getDamage()),
                 FieldEffectType.FIRE.getDefaultDuration(),
                 beam.getOwnerTeam()
@@ -346,7 +354,7 @@ public class BulletEffectProcessor {
                 beam.getOwnerId(),
                 FieldEffectType.ELECTRIC,
                 position,
-                BulletEffect.ELECTRIC.calculateRadius(beam.getDamage(), beam.getOrdinance()),
+                BulletEffect.ELECTRIC.calculateRadius(beam.getDamage(), beam.getOrdinance(), beam.getCaliber()),
                 BulletEffect.ELECTRIC.calculateDamage(beam.getDamage()),
                 FieldEffectType.ELECTRIC.getDefaultDuration(),
                 beam.getOwnerTeam()
@@ -362,7 +370,7 @@ public class BulletEffectProcessor {
                 beam.getOwnerId(),
                 FieldEffectType.FREEZE,
                 position,
-                BulletEffect.FREEZING.calculateRadius(beam.getDamage(), beam.getOrdinance()),
+                BulletEffect.FREEZING.calculateRadius(beam.getDamage(), beam.getOrdinance(), beam.getCaliber()),
                 BulletEffect.FREEZING.calculateDamage(beam.getDamage()),
                 FieldEffectType.FREEZE.getDefaultDuration(),
                 beam.getOwnerTeam()
@@ -378,11 +386,27 @@ public class BulletEffectProcessor {
                 beam.getOwnerId(),
                 FieldEffectType.POISON,
                 position,
-                BulletEffect.POISON.calculateRadius(beam.getDamage(), beam.getOrdinance()),
+                BulletEffect.POISON.calculateRadius(beam.getDamage(), beam.getOrdinance(), beam.getCaliber()),
                 BulletEffect.POISON.calculateDamage(beam.getDamage()),
                 FieldEffectType.POISON.getDefaultDuration(),
                 beam.getOwnerTeam()
         );
         gameEntities.add(poison);
+    }
+
+    /**
+     * Create a vision-blocking smoke cloud at a beam's impact point
+     */
+    private void createSmokeEffectForBeam(Beam beam, Vector2 position) {
+        FieldEffect smoke = new FieldEffect(
+                beam.getOwnerId(),
+                FieldEffectType.SMOKE,
+                position,
+                BulletEffect.SMOKE.calculateRadius(beam.getDamage(), beam.getOrdinance(), beam.getCaliber()),
+                0.0,
+                FieldEffectType.SMOKE.getDefaultDuration(),
+                beam.getOwnerTeam()
+        );
+        gameEntities.add(smoke);
     }
 }

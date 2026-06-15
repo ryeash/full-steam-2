@@ -196,8 +196,8 @@ public class UtilitySystem {
     }
 
     /**
-     * Create a smoke grenade using the standard Projectile system with GRENADE ordinance
-     * and SMOKE bullet effect. The projectile arcs, slows, and detonates into a SMOKE
+     * Create a smoke grenade using the standard Projectile system (PROJECTILE ordinance,
+     * caliber-sized) and SMOKE bullet effect. The projectile slows and detonates into a SMOKE
      * field effect via BulletEffectProcessor when dismissed.
      */
     private void createSmokeProjectile(UtilityActivation activation) {
@@ -214,7 +214,8 @@ public class UtilitySystem {
                 activation.team(),
                 0.87,
                 Set.of(BulletEffect.SMOKE),
-                Ordinance.GRENADE
+                Ordinance.PROJECTILE,
+                1.5 // caliber preserves the old GRENADE projectile size (2.0 * 1.5 = 3.0)
         );
         gameEntities.add(grenade);
     }

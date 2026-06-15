@@ -6,6 +6,7 @@ import com.fullsteam.model.EnvironmentalEvent;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Rules;
 import com.fullsteam.physics.GameEntities;
+import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.world.World;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +28,10 @@ class EventSystemTest extends BaseTestClass {
     @BeforeEach
     protected void baseSetUp() {
         world = new World<>();
+        // TerrainGenerator reads world.getBounds() in its constructor; the tests
+        // build 2000x2000 worlds, so set matching bounds (production does this in
+        // GameManager). Without it, getBounds() is null → NPE.
+        world.setBounds(new AxisAlignedBounds(2000, 2000));
     }
 
     @Test

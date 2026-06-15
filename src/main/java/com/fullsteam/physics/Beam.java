@@ -38,6 +38,7 @@ public class Beam extends GameEntity {
     protected final double damageInterval;
     protected final Ordinance ordinance; // Type of beam (laser, plasma, heal, etc.)
     protected final Set<BulletEffect> bulletEffects; // Special effects this beam has
+    protected final double caliber; // Size multiplier from the weapon's CALIBER attribute (1.0 = baseline)
 
     // Track affected players for DOT beams
     protected final Set<Integer> affectedPlayers = new HashSet<>();
@@ -45,8 +46,9 @@ public class Beam extends GameEntity {
 
 
     public Beam(Vector2 startPoint, Vector2 direction, double range, double damage,
-                int ownerId, int ownerTeam, Ordinance ordinance, Set<BulletEffect> bulletEffects) {
-        super(Config.nextEntityId(), createBeamBody(startPoint, direction, range), Double.POSITIVE_INFINITY); // Beams don't have health
+                int ownerId, int ownerTeam, Ordinance ordinance, Set<BulletEffect> bulletEffects,
+                double caliber) {
+        super(Config.nextEntityId(), createBeamBody(startPoint, direction, range, caliber), Double.POSITIVE_INFINITY); // Beams don't have health
         this.startPoint = startPoint.copy();
         this.direction = direction.copy();
         this.direction.normalize();
@@ -56,6 +58,7 @@ public class Beam extends GameEntity {
         this.ownerTeam = ownerTeam;
         this.ordinance = ordinance;
         this.bulletEffects = new HashSet<>(bulletEffects);
+        this.caliber = caliber;
         this.damageApplicationType = ordinance.getDamageApplicationType();
         this.damageInterval = ordinance.getDamageInterval();
         this.expires = (long) (System.currentTimeMillis() + (1000 * ordinance.getBeamDuration()));
@@ -71,10 +74,38 @@ public class Beam extends GameEntity {
         this.effectiveEndPoint = this.endPoint.copy();
     }
 
-    private static Body createBeamBody(Vector2 startPoint, Vector2 direction, double range) {
+    /** Min interval between AOE-effect spawns for a continuous (DOT) beam. */
+    private static final long AREA_EFFECT_INTERVAL_MS = 350;
+    /** Last time this beam spawned its AOE effects (for the DOT throttle). */
+    private long lastAreaEffectTime = 0L;
+
+    /**
+     * Throttle for spawning a continuous beam's AOE field effects (fire, poison,
+     * smoke, ...). Without this a DOT beam would spawn a fresh field every physics
+     * tick; instead it leaves a bounded trail. Returns true — and arms the next
+     * window — at most once per {@link #AREA_EFFECT_INTERVAL_MS}.
+     */
+    public boolean tryEmitAreaEffect(long now) {
+        if (now - lastAreaEffectTime < AREA_EFFECT_INTERVAL_MS) {
+            return false;
+        }
+        lastAreaEffectTime = now;
+        return true;
+    }
+
+    /** Base beam width at caliber 1.0; CALIBER is the only size input (matches render). */
+    private static final double BASE_WIDTH = 2.0;
+
+    /** Rendered/physical beam width — driven entirely by the weapon's caliber. */
+    public double getSize() {
+        return BASE_WIDTH * caliber;
+    }
+
+    private static Body createBeamBody(Vector2 startPoint, Vector2 direction, double range, double caliber) {
         Body body = new Body();
-        // Create a thin rectangle representing the beam line for collision detection
-        Rectangle rectangle = new Rectangle(range, 2.0); // Very thin beam
+        // Create a thin rectangle representing the beam line for collision detection;
+        // caliber widens the beam.
+        Rectangle rectangle = new Rectangle(range, BASE_WIDTH * caliber); // Very thin beam
         BodyFixture bodyFixture = body.addFixture(rectangle);
         bodyFixture.setSensor(true);
         body.setMass(MassType.INFINITE); // Stationary

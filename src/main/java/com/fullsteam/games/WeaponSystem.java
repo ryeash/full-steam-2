@@ -282,4 +282,14 @@ public class WeaponSystem {
         }
     }
 
+    /**
+     * Spawn a continuous (DOT) beam's AOE field effects at a point. Throttling is
+     * the caller's responsibility (see {@link Beam#tryEmitAreaEffect}). Instant
+     * beams spawn their effects per-hit via {@link #applyBeamDamage}; this is the
+     * equivalent entry point for the continuous-damage loop in GameManager.
+     */
+    public void processBeamAreaEffects(Beam beam, Vector2 position) {
+        bulletEffectProcessor.processBeamEffectHit(beam, position);
+    }
+
 }

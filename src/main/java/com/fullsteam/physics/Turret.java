@@ -174,7 +174,8 @@ public class Turret extends GameEntity {
                 ownerTeam,
                 0.02,
                 Set.of(),
-                Ordinance.BULLET
+                Ordinance.PROJECTILE,
+                1.0 // baseline caliber
         );
     }
 

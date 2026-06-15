@@ -25,9 +25,10 @@ class WeaponCustomizer {
         this.onValidityChange = options.onValidityChange || (() => {});
 
         this.weaponData = null;
-        this.currentWeapon = { attributes: {}, effects: [], ordinance: 'BULLET' };
+        this.currentWeapon = { attributes: {}, effects: [], ordinance: 'PROJECTILE' };
         this.currentUtilityWeapon = 'HEAL_ZONE';
         this._lastValid = false;
+        this._resolveTimer = null;
     }
 
     async init() {
@@ -67,7 +68,9 @@ class WeaponCustomizer {
             'RELOAD_TIME': 'reloadTime',
             'PROJECTILE_SPEED': 'projectileSpeed',
             'BULLETS_PER_SHOT': 'bulletsPerShot',
-            'LINEAR_DAMPING': 'linearDamping'
+            'LINEAR_DAMPING': 'linearDamping',
+            'HANDLING': 'handling',
+            'CALIBER': 'caliber'
         };
         const mappedAttributes = {};
         Object.entries(this.currentWeapon.attributes).forEach(([enumName, value]) => {
@@ -99,22 +102,18 @@ class WeaponCustomizer {
                     <div class="preset-section">
                         <h3>Weapon Presets</h3>
                         <div class="preset-tabs">
-                            <button type="button" class="preset-tab active" data-category="basic">Basic</button>
+                            <button type="button" class="preset-tab active" data-category="kinetic">Kinetic</button>
                             <button type="button" class="preset-tab" data-category="effects">Effects</button>
-                            <button type="button" class="preset-tab" data-category="explosive">Explosive</button>
-                            <button type="button" class="preset-tab" data-category="combo">Combo</button>
+                            <button type="button" class="preset-tab" data-category="beams">Beams</button>
                         </div>
-                        <div class="preset-category active" id="category-basic">
-                            <div class="preset-buttons" id="preset-buttons-basic"></div>
+                        <div class="preset-category active" id="category-kinetic">
+                            <div class="preset-buttons" id="preset-buttons-kinetic"></div>
                         </div>
                         <div class="preset-category" id="category-effects">
                             <div class="preset-buttons" id="preset-buttons-effects"></div>
                         </div>
-                        <div class="preset-category" id="category-explosive">
-                            <div class="preset-buttons" id="preset-buttons-explosive"></div>
-                        </div>
-                        <div class="preset-category" id="category-combo">
-                            <div class="preset-buttons" id="preset-buttons-combo"></div>
+                        <div class="preset-category" id="category-beams">
+                            <div class="preset-buttons" id="preset-buttons-beams"></div>
                         </div>
                     </div>
 
@@ -154,6 +153,10 @@ class WeaponCustomizer {
                             <h3>Utility Weapon</h3>
                             <div id="utility-weapon-selection"></div>
                         </div>
+                        <div class="customization-section">
+                            <h3>Resulting Stats</h3>
+                            <div id="resolved-stats" class="resolved-stats">Adjust your loadout to preview…</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -173,6 +176,7 @@ class WeaponCustomizer {
         if (!this._loadSavedConfiguration()) {
             this._resetToDefaults();
         }
+        this._applyOrdinanceEffectGating();
         this._updatePointDisplay();
     }
 
@@ -180,16 +184,13 @@ class WeaponCustomizer {
     _qa(selector) { return this.root.querySelectorAll(selector); }
 
     /**
-     * Returns the human-readable display string for an attribute's point value.
-     * Most attributes show raw points; BULLETS_PER_SHOT shows the computed
-     * bullet count (1 + pts/5) so players see the actual game value.
+     * Slider labels show the raw allocated points only. The actual resolved game
+     * values (incl. bullet count, coupling effects, etc.) come from the server
+     * via /api/weapon-customization/resolve and are shown in the Resulting Stats
+     * panel — no weapon math is computed client-side.
      */
     _formatAttrValue(key, points) {
-        if (key === 'BULLETS_PER_SHOT') {
-            const bullets = 1 + Math.round(points / 5);
-            return `${bullets} bullet${bullets !== 1 ? 's' : ''}`;
-        }
-        return String(points);
+        return `${points} pt${points === 1 || points === -1 ? '' : 's'}`;
     }
 
     _createAttributeSliders() {
@@ -260,7 +261,7 @@ class WeaponCustomizer {
             div.className = 'ordinance-option';
             div.innerHTML = `
                 <input type="radio" name="ordinance" id="ord-${ord.name}"
-                       value="${ord.name}" ${ord.name === 'BULLET' ? 'checked' : ''}>
+                       value="${ord.name}" ${ord.name === 'PROJECTILE' ? 'checked' : ''}>
                 <div class="ordinance-info">
                     <div class="ordinance-name">${ord.displayName}</div>
                     <div class="ordinance-description">${ord.description}</div>
@@ -272,6 +273,7 @@ class WeaponCustomizer {
             radio.addEventListener('change', (e) => {
                 if (e.target.checked) {
                     this.currentWeapon.ordinance = ord.name;
+                    this._applyOrdinanceEffectGating();
                     this._updatePointDisplay();
                 }
             });
@@ -318,12 +320,11 @@ class WeaponCustomizer {
 
     _createPresetButtons() {
         const categories = {
-            basic: ['ASSAULT_RIFLE', 'HAND_CANNON', 'SNIPER_RIFLE', 'PLASMA_RIFLE', 'TWIN_SIXES', 'PRECISION_DART_GUN', 'SHOTGUN', 'MINIGUN', 'LASER_RIFLE', 'PRISM_GUN', 'PLASMA_CANNON'],
-            effects: ['BOUNCY_SMG', 'PIERCING_RIFLE', 'INCENDIARY_SHOTGUN', 'SEEKER_DART', 'ARC_PISTOL', 'TOXIC_SPRAYER', 'ICE_CANNON', 'RICOCHET_RIFLE'],
-            explosive: ['EXPLOSIVE_SNIPER', 'ROCKET_LAUNCHER', 'GRENADE_LAUNCHER', 'CLUSTER_MORTAR'],
-            combo: ['STORM_CALLER', 'NAPALM_LAUNCHER', 'CRYO_SHOTGUN', 'VENOM_NEEDLER', 'THUNDERBOLT_CANNON',
-                    'PLAGUE_MORTAR', 'WILDFIRE_SPRAYER', 'FROST_LANCE', 'SHRAPNEL_CANNON',
-                    'SEEKING_INFERNO', 'EMP_BURST_GUN', 'GLACIAL_MORTAR', 'PHANTOM_NEEDLES', 'CORROSIVE_CANNON']
+            kinetic: ['ASSAULT_RIFLE', 'HAND_CANNON', 'SNIPER_RIFLE', 'MINIGUN', 'SHOTGUN', 'TWIN_SIXES'],
+            effects: ['ROCKET_LAUNCHER', 'INCENDIARY_SHOTGUN', 'ARC_PISTOL', 'ICE_CANNON', 'TOXIC_SPRAYER',
+                      'PIERCING_RIFLE', 'BOUNCY_SMG', 'SEEKER_DART', 'CLUSTER_MORTAR',
+                      'NAPALM_LAUNCHER', 'STORM_CALLER', 'VENOM_NEEDLER', 'FROST_LANCE', 'SHRAPNEL_CANNON', 'PHANTOM_NEEDLES'],
+            beams: ['LASER_RIFLE', 'PLASMA_CANNON', 'ARC_LASER', 'RAILGUN']
         };
         Object.entries(categories).forEach(([categoryName, presetKeys]) => {
             const container = this._q(`#preset-buttons-${categoryName}`);
@@ -374,11 +375,42 @@ class WeaponCustomizer {
         this.currentWeapon.ordinance = preset.ordinance;
         const radio = this._q(`#ord-${preset.ordinance}`);
         if (radio) radio.checked = true;
+        this._applyOrdinanceEffectGating();
         this._updatePointDisplay();
     }
 
+    /**
+     * Disable bullet effects that don't apply to the current ordnance: beam
+     * ordnance can't use the flight-only behaviors (HOMING/BOUNCY/FRAGMENTING).
+     * Forbidden effects are unchecked, removed from the loadout, and dimmed. The
+     * server's BulletEffect.validFor() enforces the same rule — this is the UX
+     * mirror so points are never spent on an inert effect.
+     */
+    _applyOrdinanceEffectGating() {
+        const ord = this.weaponData.ordinances.find(o => o.name === this.currentWeapon.ordinance);
+        const isBeam = !!(ord && ord.beam);
+        let changed = false;
+        this.weaponData.effects.forEach(effect => {
+            const checkbox = this._q(`#effect-${effect.name}`);
+            if (!checkbox) return;
+            const row = checkbox.closest('.effect-checkbox');
+            const forbidden = isBeam && !effect.validForBeams;
+            checkbox.disabled = forbidden;
+            if (row) {
+                row.classList.toggle('disabled', forbidden);
+                row.title = forbidden ? 'Not available for beam weapons' : '';
+            }
+            if (forbidden && checkbox.checked) {
+                checkbox.checked = false;
+                this.currentWeapon.effects = this.currentWeapon.effects.filter(e => e !== effect.name);
+                changed = true;
+            }
+        });
+        if (changed) this._updatePointDisplay();
+    }
+
     _resetToDefaults() {
-        this.currentWeapon = { attributes: {}, effects: [], ordinance: 'BULLET' };
+        this.currentWeapon = { attributes: {}, effects: [], ordinance: 'PROJECTILE' };
         Object.keys(this.weaponData.attributes).forEach(key => {
             this.currentWeapon.attributes[key] = 0;
             const slider = this._q(`#attr-${key}`);
@@ -392,8 +424,9 @@ class WeaponCustomizer {
             const checkbox = this._q(`#effect-${effect.name}`);
             if (checkbox) checkbox.checked = false;
         });
-        const bulletRadio = this._q('#ord-BULLET');
-        if (bulletRadio) bulletRadio.checked = true;
+        const projectileRadio = this._q('#ord-PROJECTILE');
+        if (projectileRadio) projectileRadio.checked = true;
+        this._applyOrdinanceEffectGating();
     }
 
     _totalPoints() {
@@ -456,6 +489,62 @@ class WeaponCustomizer {
                 console.error('onValidityChange threw:', e);
             }
         }
+
+        // Ask the server for the real resolved stats (debounced).
+        this._scheduleResolve();
+    }
+
+    /** Debounced request for the server-resolved end-result stats. */
+    _scheduleResolve() {
+        if (this._resolveTimer) clearTimeout(this._resolveTimer);
+        this._resolveTimer = setTimeout(() => this._fetchResolved(), 150);
+    }
+
+    async _fetchResolved() {
+        const panel = this._q('#resolved-stats');
+        if (!panel) return;
+        try {
+            const { weaponConfig } = this.getPlayerConfig();
+            const resp = await fetch('/api/weapon-customization/resolve', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(weaponConfig)
+            });
+            if (!resp.ok) { panel.textContent = 'Could not resolve loadout.'; return; }
+            this._renderResolved(panel, await resp.json());
+        } catch (e) {
+            panel.textContent = 'Could not resolve loadout.';
+        }
+    }
+
+    /** Render the server's resolved stats: end values, couplings, derived combat numbers. */
+    _renderResolved(panel, data) {
+        const attrs = data.attributes || {};
+        const order = ['DAMAGE', 'FIRE_RATE', 'BULLETS_PER_SHOT', 'MAGAZINE_SIZE', 'RELOAD_TIME',
+                       'RANGE', 'PROJECTILE_SPEED', 'ACCURACY', 'HANDLING', 'LINEAR_DAMPING'];
+        const statRows = order.filter(k => attrs[k]).map(k => {
+            const a = attrs[k];
+            // When a stat is coupled, show its un-coupled base for context (unit-correct).
+            const tag = a.coupled ? ` <span class="coupling-tag">(base ${a.baseDisplay})</span>` : '';
+            return `<div class="rs-row"><span class="rs-label">${a.label}</span><span class="rs-val">${a.display}${tag}</span></div>`;
+        }).join('');
+
+        const d = data.derived || {};
+        const derivedRows = `
+            <div class="rs-row"><span class="rs-label">DPS</span><span class="rs-val">${Math.round(d.dps || 0)}</span></div>
+            <div class="rs-row"><span class="rs-label">Damage / bullet</span><span class="rs-val">${(d.damagePerBullet || 0).toFixed(1)}</span></div>
+            <div class="rs-row"><span class="rs-label">Move speed</span><span class="rs-val">${Math.round((d.moveSpeedMultiplier || 1) * 100)}%</span></div>`;
+
+        const couplings = (data.couplings || []).map(c =>
+            `<div class="rs-coupling ${c.delta > 0 ? 'up' : 'down'}">${c.label}: ${c.display}</div>`
+        ).join('') || '<div class="rs-coupling none">No couplings active</div>';
+
+        const b = data.budget || {};
+        panel.innerHTML = `
+            <div class="rs-section">${statRows}</div>
+            <div class="rs-section rs-derived">${derivedRows}</div>
+            <div class="rs-section"><div class="rs-subhead">Active couplings</div>${couplings}</div>
+            <div class="rs-budget ${data.valid ? 'ok' : 'over'}">${b.total}/${b.max} pts${data.valid ? '' : ' — over budget'}</div>`;
     }
 
     _saveConfiguration() {
@@ -479,10 +568,15 @@ class WeaponCustomizer {
             if (!config.weapon || !config.weapon.attributes || !config.weapon.effects || !config.weapon.ordinance) {
                 return false;
             }
+            // Coerce a stale/removed ordinance (e.g. a legacy 'BULLET'/'ROCKET' in
+            // localStorage) to the default so it stays valid after the collapse.
+            const validOrdinances = (this.weaponData.ordinances || []).map(o => o.name);
+            const savedOrdinance = validOrdinances.includes(config.weapon.ordinance)
+                ? config.weapon.ordinance : 'PROJECTILE';
             this.currentWeapon = {
                 attributes: { ...config.weapon.attributes },
                 effects: [...config.weapon.effects],
-                ordinance: config.weapon.ordinance
+                ordinance: savedOrdinance
             };
             if (config.utilityWeapon) {
                 this.currentUtilityWeapon = config.utilityWeapon;
@@ -514,6 +608,7 @@ class WeaponCustomizer {
         });
         const radio = this._q(`#ord-${this.currentWeapon.ordinance}`);
         if (radio) radio.checked = true;
+        this._applyOrdinanceEffectGating();
         const utilityRadio = this._q(`#utility-${this.currentUtilityWeapon}`);
         if (utilityRadio) utilityRadio.checked = true;
     }

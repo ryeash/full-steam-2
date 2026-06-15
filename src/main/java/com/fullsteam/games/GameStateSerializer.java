@@ -346,6 +346,7 @@ public class GameStateSerializer {
             projState.put("ownerId", projectile.getOwnerId());
             projState.put("ownerTeam", projectile.getOwnerTeam());
             projState.put("ordinance", projectile.getOrdinance().name());
+            projState.put("caliber", projectile.getCaliber());
             projState.put("bulletEffects", projectile.getBulletEffects().stream()
                     .map(Enum::name).collect(Collectors.toList()));
             projectileStates.add(projState);
@@ -504,7 +505,7 @@ public class GameStateSerializer {
             Map<String, Object> beamState = new HashMap<>();
             beamState.put("id", beam.getId());
             beamState.put("ordinance", beam.getOrdinance());
-            beamState.put("size", beam.getOrdinance().getSize());
+            beamState.put("size", beam.getSize());
             beamState.put("startX", startPos.x);
             beamState.put("startY", startPos.y);
             beamState.put("endX", effectiveEndPos.x);

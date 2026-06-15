@@ -78,7 +78,8 @@ public class DefenseLaser extends GameEntity {
                     ownerId,
                     ownerTeam,
                     Ordinance.PLASMA_BEAM, // Reuse existing plasma beam
-                    Set.of() // No special effects needed
+                    Set.of(), // No special effects needed
+                    1.0 // baseline caliber
             );
             beam.setExpires(this.getExpires());
             beams.add(beam);

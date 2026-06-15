@@ -59,11 +59,7 @@ public final class WeaponFormatter {
      */
     private static String formatOrdinanceName(Ordinance ordinance) {
         return switch (ordinance) {
-            case BULLET -> "Bullet";
-            case ROCKET -> "Rocket";
-            case GRENADE -> "Grenade";
-            case PLASMA -> "Plasma";
-            case DART -> "Dart";
+            case PROJECTILE -> "Projectile";
             case LASER -> "Laser";
             case PLASMA_BEAM -> "Plasma Beam";
         };
