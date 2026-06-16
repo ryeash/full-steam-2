@@ -25,19 +25,18 @@ public class Turret extends GameEntity {
     private final double fireRate;
     private final double damage;
     private final double projectileSpeed;
-    private final long expires;
     private long lastShotTime = 0;
     private Player currentTarget;
     private Vector2 aimDirection = new Vector2(1, 0);
 
     public Turret(int ownerId, int ownerTeam, Vector2 position, double lifespan) {
-        super(Config.nextEntityId(), createTurretBody(position), 50.0); // 50 HP turret
+        super(Config.nextEntityId(), createTurretBody(position), 50.0);
         this.ownerId = ownerId;
         this.ownerTeam = ownerTeam;
-        this.detectionRange = 400.0; // Detection range
+        this.detectionRange = 400.0;
         this.fireRate = 3.0;
-        this.damage = 15.0; // Moderate damage
-        this.projectileSpeed = 400.0; // Fast projectiles
+        this.damage = 15.0;
+        this.projectileSpeed = 400.0;
         this.expires = (long) (System.currentTimeMillis() + (lifespan * 1000));
         this.setRotation(Math.random() * 2 * Math.PI);
     }
@@ -55,12 +54,6 @@ public class Turret extends GameEntity {
     public void update(double deltaTime) {
         super.update(deltaTime);
         if (!active) {
-            return;
-        }
-
-        // Update lifespan
-        if (System.currentTimeMillis() > expires) {
-            active = false;
             return;
         }
 
@@ -140,8 +133,8 @@ public class Turret extends GameEntity {
 
         lastShotTime = System.currentTimeMillis();
 
-        // Predict target movement for better accuracy
-        Vector2 targetPos = predictTargetPosition();
+        // Aim straight at the target's current position (no movement leading).
+        Vector2 targetPos = currentTarget.getPosition();
         Vector2 turretPos = getPosition();
 
         Vector2 fireDirection = new Vector2(targetPos.x - turretPos.x, targetPos.y - turretPos.y);
@@ -177,29 +170,6 @@ public class Turret extends GameEntity {
                 Ordinance.PROJECTILE,
                 1.0 // baseline caliber
         );
-    }
-
-    /**
-     * Predict where the target will be when the projectile reaches them
-     */
-    private Vector2 predictTargetPosition() {
-        if (currentTarget == null) {
-            return getPosition();
-        }
-
-        Vector2 targetPos = currentTarget.getPosition();
-        Vector2 targetVel = currentTarget.getVelocity();
-        Vector2 turretPos = getPosition();
-
-        // Simple prediction: assume target continues at current velocity
-        double distance = turretPos.distance(targetPos);
-        double timeToHit = distance / projectileSpeed;
-
-        // Predict target position
-        Vector2 predictedPos = targetPos.copy();
-        predictedPos.add(targetVel.x * timeToHit, targetVel.y * timeToHit);
-
-        return predictedPos;
     }
 
     /**

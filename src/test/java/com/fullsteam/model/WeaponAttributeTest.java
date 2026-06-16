@@ -157,6 +157,24 @@ class WeaponAttributeTest {
     }
 
     @Test
+    void heavyWeaponIsSteadierFiringPlatform() {
+        // Baseline / nimble handling grants no accuracy synergy (negativeFrac == 0).
+        assertEquals(1.0, resolved(ACCURACY, Map.of(HANDLING, 0)), EPS);
+        assertEquals(1.0, resolved(ACCURACY, Map.of(HANDLING, 15)), EPS);
+
+        // A heavy weapon (handling -10) that sacrificed accuracy claws it back:
+        // -5 acc pts (=0.35) + full +5 synergy points → 0 effective → perfect again.
+        assertEquals(0.35, resolved(ACCURACY, Map.of(ACCURACY, -5)), EPS);
+        assertEquals(1.0, resolved(ACCURACY, Map.of(ACCURACY, -5, HANDLING, -10)), EPS);
+
+        // Half-heavy (handling -5) → +2.5 synergy points → -2.5 effective → 0.675.
+        assertEquals(0.675, resolved(ACCURACY, Map.of(ACCURACY, -5, HANDLING, -5)), EPS);
+
+        // Synergy is wasted with no accuracy sacrifice — baseline already clamps at 1.0.
+        assertEquals(1.0, resolved(ACCURACY, Map.of(HANDLING, -10)), EPS);
+    }
+
+    @Test
     void couplingsReadAllocatedNotCoupledValues() {
         // DAMAGE→HANDLING must not feed back: investing in HANDLING shouldn't change
         // the damage-driven penalty, only the starting point it's applied to.

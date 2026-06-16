@@ -120,6 +120,19 @@ public enum WeaponAttribute {
     }
 
     /**
+     * Fraction (0..1) of <em>negative</em> investment only (0 at or above the
+     * zero-point baseline, 1.0 at the minimum). The mirror of {@link #positiveFrac}:
+     * used by couplings that bite only on deliberately heavier/sacrificed builds
+     * (e.g. a heavy weapon — negative HANDLING points — is a steadier platform).
+     */
+    public double negativeFrac(int points) {
+        if (min >= 0) {
+            return 0.0;
+        }
+        return Math.max(0.0, Math.min(1.0, points / (double) min));
+    }
+
+    /**
      * Map allocated points to the gameplay stat value <em>without</em> couplings.
      * Throws if {@code points} is outside this attribute's {@code [min,max]} bound.
      * Most callers want {@link #resolve} instead, which applies couplings.
@@ -187,6 +200,12 @@ public enum WeaponAttribute {
             // Synergy: a longer barrel (range investment) gives higher muzzle
             // velocity. Positive-investment-only so baseline weapons aren't bumped.
             new Coupling(RANGE, PROJECTILE_SPEED, +4, RANGE::positiveFrac),
+            // Synergy: a heavy weapon is a stable firing platform. Negative-handling
+            // (deliberately heavy) builds claw back accuracy — only meaningful for a
+            // weapon that sacrificed accuracy, since baseline accuracy already clamps
+            // at 1.0. Reads allocated handling points (not the DAMAGE→HANDLING result),
+            // so it stays first-order and loop-free like every other coupling.
+            new Coupling(HANDLING, ACCURACY, +5, HANDLING::negativeFrac),
             // Heft: bigger rounds are slower and fewer fit in a magazine.
             // Positive-investment-only — baseline/small calibers pay nothing.
             new Coupling(CALIBER, PROJECTILE_SPEED, -6, CALIBER::positiveFrac),
