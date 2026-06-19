@@ -146,14 +146,19 @@ class WeaponCustomizer {
                             <div id="effect-checkboxes"></div>
                         </div>
                         <div class="customization-section">
-                            <h3>Ordinance Type</h3>
-                            <div id="ordinance-radios"></div>
+                            <h3>Munitions</h3>
+                            <div class="munitions-field">
+                                <label class="munitions-label" for="ordinance-select">Ordnance Type</label>
+                                <select id="ordinance-select" class="loadout-select" aria-label="Ordnance type"></select>
+                                <div id="ordinance-detail" class="munitions-detail"></div>
+                            </div>
+                            <div class="munitions-field">
+                                <label class="munitions-label" for="utility-select">Utility Weapon</label>
+                                <select id="utility-select" class="loadout-select" aria-label="Utility weapon"></select>
+                                <div id="utility-detail" class="munitions-detail"></div>
+                            </div>
                         </div>
-                        <div class="customization-section">
-                            <h3>Utility Weapon</h3>
-                            <div id="utility-weapon-selection"></div>
-                        </div>
-                        <div class="customization-section">
+                        <div class="customization-section rs-rail">
                             <h3>Resulting Stats</h3>
                             <div id="resolved-stats" class="resolved-stats">Adjust your loadout to preview…</div>
                         </div>
@@ -169,8 +174,8 @@ class WeaponCustomizer {
 
         this._createAttributeSliders();
         this._createEffectCheckboxes();
-        this._createOrdinanceRadios();
-        this._createUtilityWeaponSelection();
+        this._createOrdinanceDropdown();
+        this._createUtilityDropdown();
         this._createPresetButtons();
 
         if (!this._loadSavedConfiguration()) {
@@ -253,69 +258,70 @@ class WeaponCustomizer {
         });
     }
 
-    _createOrdinanceRadios() {
-        const container = this._q('#ordinance-radios');
-        container.innerHTML = '';
+    _createOrdinanceDropdown() {
+        const select = this._q('#ordinance-select');
+        if (!select) return;
+        select.innerHTML = '';
         this.weaponData.ordinances.forEach(ord => {
-            const div = document.createElement('div');
-            div.className = 'ordinance-option';
-            div.innerHTML = `
-                <input type="radio" name="ordinance" id="ord-${ord.name}"
-                       value="${ord.name}" ${ord.name === 'PROJECTILE' ? 'checked' : ''}>
-                <div class="ordinance-info">
-                    <div class="ordinance-name">${ord.displayName}</div>
-                    <div class="ordinance-description">${ord.description}</div>
-                </div>
-                <div class="ordinance-cost">${ord.cost} pts</div>
-            `;
-            container.appendChild(div);
-            const radio = div.querySelector('input[type="radio"]');
-            radio.addEventListener('change', (e) => {
-                if (e.target.checked) {
-                    this.currentWeapon.ordinance = ord.name;
-                    this._applyOrdinanceEffectGating();
-                    this._updatePointDisplay();
-                }
-            });
-            div.addEventListener('click', (e) => {
-                if (e.target.type !== 'radio') radio.click();
-            });
+            const opt = document.createElement('option');
+            opt.value = ord.name;
+            // Surface the point cost in the label since the dropdown hides the
+            // per-row cost the radios used to show (free ordnance omits it).
+            opt.textContent = ord.cost > 0 ? `${ord.displayName} — ${ord.cost} pts` : ord.displayName;
+            select.appendChild(opt);
         });
+        select.value = this.currentWeapon.ordinance || 'PROJECTILE';
+        select.addEventListener('change', () => {
+            this.currentWeapon.ordinance = select.value;
+            this._updateOrdinanceDetail();
+            this._applyOrdinanceEffectGating();
+            this._updatePointDisplay();
+        });
+        this._updateOrdinanceDetail();
     }
 
-    _createUtilityWeaponSelection() {
-        const container = this._q('#utility-weapon-selection');
-        container.innerHTML = '';
+    /** Refresh the description line under the ordnance dropdown. */
+    _updateOrdinanceDetail() {
+        const el = this._q('#ordinance-detail');
+        if (!el) return;
+        const ord = this.weaponData.ordinances.find(o => o.name === this.currentWeapon.ordinance);
+        el.textContent = ord ? ord.description : '';
+    }
+
+    _createUtilityDropdown() {
+        const select = this._q('#utility-select');
+        if (!select) return;
         if (!this.weaponData.utilityWeapons) {
             console.error('No utility weapon data available');
             return;
         }
+        select.innerHTML = '';
         this.weaponData.utilityWeapons.forEach(utility => {
-            const div = document.createElement('div');
-            div.className = 'utility-weapon-option';
-            div.innerHTML = `
-                <input type="radio" name="utilityWeapon" id="utility-${utility.name}"
-                       value="${utility.name}"
-                       ${utility.name === this.currentUtilityWeapon ? 'checked' : ''}>
-                <div class="utility-info">
-                    <div class="utility-name">${utility.displayName}</div>
-                    <div class="utility-category">${utility.category}</div>
-                    <div class="utility-description">${utility.description}</div>
-                </div>
-                <div class="utility-cooldown">${utility.cooldown}s</div>
-            `;
-            container.appendChild(div);
-            const radio = div.querySelector('input[type="radio"]');
-            radio.addEventListener('change', (e) => {
-                if (e.target.checked) {
-                    this.currentUtilityWeapon = utility.name;
-                    this._saveConfiguration();
-                }
-            });
-            div.addEventListener('click', (e) => {
-                if (e.target.type !== 'radio') radio.click();
-            });
+            const opt = document.createElement('option');
+            opt.value = utility.name;
+            opt.textContent = utility.displayName;
+            select.appendChild(opt);
         });
+        // Keep currentUtilityWeapon in sync with whatever the select shows.
+        if (this.currentUtilityWeapon) {
+            select.value = this.currentUtilityWeapon;
+        } else {
+            this.currentUtilityWeapon = select.value;
+        }
+        select.addEventListener('change', () => {
+            this.currentUtilityWeapon = select.value;
+            this._updateUtilityDetail();
+            this._saveConfiguration();
+        });
+        this._updateUtilityDetail();
+    }
+
+    /** Refresh the category/cooldown/description line under the utility dropdown. */
+    _updateUtilityDetail() {
+        const el = this._q('#utility-detail');
+        if (!el) return;
+        const u = this.weaponData.utilityWeapons.find(x => x.name === this.currentUtilityWeapon);
+        el.textContent = u ? `${u.category} · ${u.cooldown}s cooldown — ${u.description}` : '';
     }
 
     _createPresetButtons() {
@@ -373,8 +379,9 @@ class WeaponCustomizer {
             if (checkbox) checkbox.checked = preset.effects.includes(effect.name);
         });
         this.currentWeapon.ordinance = preset.ordinance;
-        const radio = this._q(`#ord-${preset.ordinance}`);
-        if (radio) radio.checked = true;
+        const ordSelect = this._q('#ordinance-select');
+        if (ordSelect) ordSelect.value = preset.ordinance;
+        this._updateOrdinanceDetail();
         this._applyOrdinanceEffectGating();
         this._updatePointDisplay();
     }
@@ -424,8 +431,9 @@ class WeaponCustomizer {
             const checkbox = this._q(`#effect-${effect.name}`);
             if (checkbox) checkbox.checked = false;
         });
-        const projectileRadio = this._q('#ord-PROJECTILE');
-        if (projectileRadio) projectileRadio.checked = true;
+        const ordSelect = this._q('#ordinance-select');
+        if (ordSelect) ordSelect.value = 'PROJECTILE';
+        this._updateOrdinanceDetail();
         this._applyOrdinanceEffectGating();
     }
 
@@ -606,11 +614,13 @@ class WeaponCustomizer {
             const checkbox = this._q(`#effect-${effect.name}`);
             if (checkbox) checkbox.checked = this.currentWeapon.effects.includes(effect.name);
         });
-        const radio = this._q(`#ord-${this.currentWeapon.ordinance}`);
-        if (radio) radio.checked = true;
+        const ordSelect = this._q('#ordinance-select');
+        if (ordSelect) ordSelect.value = this.currentWeapon.ordinance;
+        this._updateOrdinanceDetail();
         this._applyOrdinanceEffectGating();
-        const utilityRadio = this._q(`#utility-${this.currentUtilityWeapon}`);
-        if (utilityRadio) utilityRadio.checked = true;
+        const utilSelect = this._q('#utility-select');
+        if (utilSelect && this.currentUtilityWeapon) utilSelect.value = this.currentUtilityWeapon;
+        this._updateUtilityDetail();
     }
 }
 

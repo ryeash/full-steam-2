@@ -905,6 +905,48 @@ body.game-page html {
     font-size: 1.05em;
 }
 
+/* --- Munitions section: single-select dropdowns (ordnance + utility) --- */
+#loadout-modal .loadout-select {
+    width: 100%;
+    padding: 6px 8px;
+    background: #1a1a1a;
+    border: 2px solid #555;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 0.85em;
+    cursor: pointer;
+    appearance: auto;
+    box-sizing: border-box;
+}
+#loadout-modal .loadout-select:focus { outline: none; border-color: #00ff88; }
+
+#loadout-modal .munitions-field { margin-bottom: 16px; }
+#loadout-modal .munitions-field:last-child { margin-bottom: 0; }
+#loadout-modal .munitions-label {
+    display: block;
+    color: #aaa;
+    font-size: 0.8em;
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+#loadout-modal .munitions-detail {
+    color: #888;
+    font-size: 0.75em;
+    line-height: 1.35;
+    margin-top: 5px;
+    min-height: 2.4em;
+}
+
+/* Resulting Stats pinned as the right rail (only in the 4-column layout, so it
+   stays visible without scrolling; auto-flows normally on narrower screens). */
+@media (min-width: 1201px) {
+    #loadout-modal .customization-section.rs-rail {
+        position: sticky;
+        top: 0;
+        align-self: start;
+    }
+}
+
 /* --- Point tracker (single line) --- */
 #loadout-modal .point-tracker {
     border-top: 1px solid #333;
