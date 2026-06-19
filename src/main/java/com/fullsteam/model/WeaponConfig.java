@@ -23,6 +23,7 @@ public class WeaponConfig {
     public int linearDamping = 0;
     public int handling = 0;
     public int caliber = 0;
+    public int knockback = 0;
     public Set<BulletEffect> bulletEffects = new HashSet<>();
     public Ordinance ordinance = Ordinance.PROJECTILE;
 
@@ -42,6 +43,7 @@ public class WeaponConfig {
                 linearDamping,
                 handling,
                 caliber,
+                knockback,
                 effects,
                 ordinance);
     }
@@ -59,6 +61,7 @@ public class WeaponConfig {
             0,
             0,      // handling (move-speed mult)
             0,      // caliber (size mult)
+            0,      // knockback (no recoil)
             Set.of(),
             Ordinance.PROJECTILE  // total: 100 pts (attr 100 + fx 0 + ord 0)
     );
@@ -66,7 +69,7 @@ public class WeaponConfig {
     public static final WeaponConfig HAND_CANNON_PRESET = new WeaponConfig(
             "Hand Cannon",
             40,
-            27,
+            21,     // fire rate (6 pts → knockback)
             9,
             0,
             10,
@@ -76,6 +79,7 @@ public class WeaponConfig {
             0,
             -5,     // handling (heavy)
             0,      // caliber (size mult)
+            6,      // knockback → 240k (hard-hitting pistol punch)
             Set.of(),
             Ordinance.PROJECTILE  // total: 100 pts (attr 100 + fx 0 + ord 0)
     );
@@ -87,7 +91,7 @@ public class WeaponConfig {
             "Sniper Rifle",
             40,     // damage 50
             2,      // Very slow fire rate (0.9 shots/sec)
-            33,     // range ~1350 units
+            27,     // range ~1240 units (6 pts → knockback)
             0,      // Perfect accuracy (1.0)
             10,     // magazine 10 rounds
             5,     // reload ~2.55s
@@ -96,6 +100,7 @@ public class WeaponConfig {
             0,      // No damping (bullets maintain speed)
             -5,     // handling (heavy)
             0,      // caliber (size mult)
+            6,      // knockback → 240k (high-velocity round punches)
             Set.of(),
             Ordinance.PROJECTILE  // total: 100 pts (attr 100 + fx 0 + ord 0)
     );
@@ -116,6 +121,7 @@ public class WeaponConfig {
             -5,      // No damping
             0,      // handling (move-speed mult)
             0,      // caliber (size mult)
+            0,      // knockback (no recoil)
             Set.of(),
             Ordinance.PROJECTILE  // total: 100 pts (attr 100 + fx 0 + ord 0)
     );
@@ -134,6 +140,7 @@ public class WeaponConfig {
             -5,
             5,     // handling (nimble)
             0,      // caliber (size mult)
+            0,      // knockback (no recoil)
             Set.of(BulletEffect.BOUNCY),
             Ordinance.PROJECTILE  // total: 100 pts (attr 85 + fx 15 + ord 0)
     );
@@ -141,7 +148,7 @@ public class WeaponConfig {
     // Example: Rocket Launcher (89 pts total)
     public static final WeaponConfig ROCKET_LAUNCHER_PRESET = new WeaponConfig(
             "Rocket Launcher",
-            36,
+            31,     // damage (5 pts → knockback; explosion AOE compensates)
             1,
             7,
             0,
@@ -152,6 +159,7 @@ public class WeaponConfig {
             0,
             -5,     // handling (heavy)
             20,     // caliber ×2.00
+            5,      // knockback → 200k (direct-hit shove)
             Set.of(BulletEffect.EXPLOSIVE),
             Ordinance.PROJECTILE  // total: 100 pts (attr 75 + fx 25 + ord 0)
     );
@@ -162,13 +170,35 @@ public class WeaponConfig {
             1,     // low fire rate
             5,     // range ~533 units
             -10,    // Poor accuracy (spread)
-            40,     // magazine 45 rounds
+            32,     // magazine ~35 rounds (8 pts → knockback)
             2,     // reload ~3.32s
             11,     // speed ~720 units/sec
             25,     // Multiple streams
             -10,     // Negative damping for spread
             0,      // handling (move-speed mult)
             0,      // caliber (size mult)
+            8,      // knockback → 320k (per-pellet split ≈ 1.2× total blowback)
+            Set.of(),
+            Ordinance.PROJECTILE  // total: 100 pts (attr 100 + fx 0 + ord 0)
+    );
+
+    // Concussion Cannon - showcases KNOCKBACK: a heavy slug that physically shoves
+    // targets back. High knockback + caliber make it sluggish to carry, since the
+    // KNOCKBACK→HANDLING and DAMAGE→HANDLING couplings stack on its move speed.
+    public static final WeaponConfig CONCUSSION_CANNON_PRESET = new WeaponConfig(
+            "Concussion Cannon",
+            30,     // damage
+            8,      // fire rate
+            8,      // range
+            0,      // accuracy
+            16,     // magazine
+            8,      // reload
+            8,      // projectile speed
+            0,      // single shot
+            0,      // damping
+            0,      // handling (couplings drag it down)
+            10,     // caliber ×1.50 (big slug)
+            12,     // knockback → ~480k impulse per hit
             Set.of(),
             Ordinance.PROJECTILE  // total: 100 pts (attr 100 + fx 0 + ord 0)
     );
@@ -177,7 +207,7 @@ public class WeaponConfig {
     public static final WeaponConfig PIERCING_RIFLE_PRESET = new WeaponConfig(
             "Piercing Rifle",
             40,     // damage 50
-            12,     // fire rate ~4.7 shots/s
+            8,      // fire rate ~3.6 shots/s (4 pts → knockback)
             13,     // range ~933 units
             0,     // Good accuracy
             5,      // Small magazine
@@ -187,6 +217,7 @@ public class WeaponConfig {
             0,      // No damping
             0,      // handling (move-speed mult)
             0,      // caliber (size mult)
+            4,      // knockback → 160k (heavy AP round shoves each pierced target)
             Set.of(BulletEffect.PIERCING),  // effects: 20 pts
             Ordinance.PROJECTILE  // total: 100 pts (attr 80 + fx 20 + ord 0)
     );
@@ -194,7 +225,7 @@ public class WeaponConfig {
     // Incendiary Effect Showcase - Sets targets on fire
     public static final WeaponConfig INCENDIARY_SHOTGUN_PRESET = new WeaponConfig(
             "Incendiary Shotgun",
-            38,     // damage 48
+            32,     // damage (6 pts → knockback; fire DoT carries it)
             10,      // Slow fire rate
             5,     // range ~533 units
             -8,     // Poor accuracy (shotgun spread)
@@ -205,6 +236,7 @@ public class WeaponConfig {
             0,      // No damping
             0,      // handling (move-speed mult)
             0,      // caliber (size mult)
+            6,      // knockback → 240k (close-range blast, per-pellet split)
             Set.of(BulletEffect.INCENDIARY),  // effects: 18 pts
             Ordinance.PROJECTILE  // total: 100 pts (attr 82 + fx 18 + ord 0)
     );
@@ -217,12 +249,13 @@ public class WeaponConfig {
             7,     // range ~653 units
             -5,     // Poor accuracy (mortar arc)
             9,      // Small magazine
-            16,     // reload ~1.17s
+            12,     // reload ~1.40s (4 pts → knockback)
             7,     // projectile speed
             0,      // Single shot
             -3,     // Negative damping for arc
             -5,     // handling (heavy)
             10,     // caliber ×1.50
+            4,      // knockback → 160k (shell + fragments shove)
             Set.of(BulletEffect.FRAGMENTING),  // effects: 22 pts
             Ordinance.PROJECTILE  // total: 100 pts (attr 78 + fx 22 + ord 0)
     );
@@ -241,6 +274,7 @@ public class WeaponConfig {
             0,      // No damping
             5,     // handling (nimble)
             -5,     // caliber ×0.75
+            0,      // knockback (no recoil)
             Set.of(BulletEffect.HOMING),  // effects: 30 pts
             Ordinance.PROJECTILE  // total: 100 pts (attr 70 + fx 30 + ord 0)
     );
@@ -259,6 +293,7 @@ public class WeaponConfig {
             0,      // No damping
             5,     // handling (nimble)
             0,      // caliber (size mult)
+            0,      // knockback (no recoil)
             Set.of(BulletEffect.ELECTRIC),  // effects: 16 pts
             Ordinance.PROJECTILE  // total: 100 pts (attr 84 + fx 16 + ord 0)
     );
@@ -277,6 +312,7 @@ public class WeaponConfig {
             -3,     // Negative damping for spread
             0,      // handling (move-speed mult)
             0,      // caliber (size mult)
+            0,      // knockback (no recoil)
             Set.of(BulletEffect.POISON),  // effects: 22 pts
             Ordinance.PROJECTILE  // total: 100 pts (attr 78 + fx 22 + ord 0)
     );
@@ -295,6 +331,7 @@ public class WeaponConfig {
             0,      // No damping
             -5,     // handling (heavy)
             0,      // caliber (size mult)
+            0,      // knockback (no recoil)
             Set.of(BulletEffect.FREEZING),  // effects: 14 pts
             Ordinance.PROJECTILE  // total: 100 pts (attr 86 + fx 14 + ord 0)
     );
@@ -303,7 +340,7 @@ public class WeaponConfig {
     public static final WeaponConfig TWIN_SIXES_PRESET = new WeaponConfig(
             "Twin Sixes",
             40,     // Very high damage
-            30,     // fire rate ~7.1 shots/s
+            26,     // fire rate ~6.6 shots/s (4 pts → knockback)
             7,     // range ~653 units
             -5,     // Imperfect accuracy (spread)
             9,     // magazine 12 rounds (two six-shooters)
@@ -313,6 +350,7 @@ public class WeaponConfig {
             0,      // No damping
             5,     // handling (nimble)
             0,      // caliber (size mult)
+            4,      // knockback → 160k (revolver kick, split across 2 shots)
             Set.of(),  // no effects
             Ordinance.PROJECTILE  // total: 100 pts (attr 100 + fx 0 + ord 0)
     );
@@ -331,6 +369,7 @@ public class WeaponConfig {
             -10,      // Not used for beams
             0,      // handling (move-speed mult)
             4,      // caliber ×1.20 → beam width 2.40
+            0,      // knockback (no recoil)
             Set.of(),  // no effects
             Ordinance.LASER  // total: 100 pts (attr 50 + fx 0 + ord 50)
     );
@@ -349,6 +388,7 @@ public class WeaponConfig {
             -10,      // Not used for beams
             -5,     // handling (heavy)
             8,      // caliber ×1.40 → beam width 2.80 (thicker than the laser)
+            0,      // knockback (no recoil)
             Set.of(),  // no effects
             Ordinance.PLASMA_BEAM  // total: 100 pts (attr 55 + fx 0 + ord 45)
     );
@@ -367,6 +407,7 @@ public class WeaponConfig {
             -10,    // Not used for beams (reclaims budget)
             0,      // handling
             3,      // caliber ×1.15 → beam width 2.30
+            0,      // knockback (no recoil)
             Set.of(BulletEffect.ELECTRIC),  // chains lightning on hit
             Ordinance.LASER  // total: 100 pts (attr 34 + fx 16 + ord 50)
     );
@@ -385,6 +426,7 @@ public class WeaponConfig {
             -10,    // Not used for beams (reclaims budget)
             -2,     // handling (heavy)
             5,      // caliber ×1.25 → beam width 2.50
+            0,      // knockback (no recoil)
             Set.of(BulletEffect.PIERCING),  // punches through everything in line
             Ordinance.PLASMA_BEAM  // total: 100 pts (attr 35 + fx 20 + ord 45)
     );
@@ -405,6 +447,7 @@ public class WeaponConfig {
             -10,    // Negative damping
             0,      // handling (move-speed mult)
             -5,     // caliber ×0.75
+            0,      // knockback (no recoil)
             Set.of(BulletEffect.ELECTRIC, BulletEffect.HOMING),  // effects: 46 pts
             Ordinance.PROJECTILE  // total: 100 pts (attr 54 + fx 46 + ord 0)
     );
@@ -423,6 +466,7 @@ public class WeaponConfig {
             -3,     // Negative damping
             -5,     // handling (heavy)
             10,     // caliber ×1.50
+            0,      // knockback (no recoil)
             Set.of(BulletEffect.INCENDIARY, BulletEffect.EXPLOSIVE),  // effects: 43 pts
             Ordinance.PROJECTILE  // total: 100 pts (attr 57 + fx 43 + ord 0)
     );
@@ -441,6 +485,7 @@ public class WeaponConfig {
             -10,    // Negative damping
             5,     // handling (nimble)
             -5,     // caliber ×0.75
+            0,      // knockback (no recoil)
             Set.of(BulletEffect.POISON, BulletEffect.PIERCING),  // effects: 42 pts
             Ordinance.PROJECTILE  // total: 100 pts (attr 58 + fx 42 + ord 0)
     );
@@ -459,6 +504,7 @@ public class WeaponConfig {
             -10,    // Negative damping
             0,      // handling (move-speed mult)
             5,     // caliber ×1.25
+            0,      // knockback (no recoil)
             Set.of(BulletEffect.FREEZING, BulletEffect.PIERCING),  // effects: 34 pts
             Ordinance.PROJECTILE  // total: 100 pts (attr 66 + fx 34 + ord 0)
     );
@@ -476,7 +522,8 @@ public class WeaponConfig {
             0,      // Single shot
             -10,    // Negative damping
             -5,     // handling (heavy)
-            20,     // caliber ×2.00
+            16,     // caliber ×1.80 (4 pts → knockback)
+            4,      // knockback → 160k (cannon blast; fragments inherit the punch)
             Set.of(BulletEffect.FRAGMENTING, BulletEffect.EXPLOSIVE),  // effects: 47 pts
             Ordinance.PROJECTILE  // total: 100 pts (attr 53 + fx 47 + ord 0)
     );
@@ -495,11 +542,12 @@ public class WeaponConfig {
             -10,    // Negative damping
             5,     // handling (nimble)
             -5,     // caliber ×0.75
+            0,      // knockback (no recoil)
             Set.of(BulletEffect.HOMING, BulletEffect.BOUNCY),  // effects: 45 pts
             Ordinance.PROJECTILE  // total: 100 pts (attr 55 + fx 45 + ord 0)
     );
 
     public int getAttributePoints() {
-        return damage + fireRate + range + accuracy + magazineSize + reloadTime + projectileSpeed + bulletsPerShot + linearDamping + handling + caliber;
+        return damage + fireRate + range + accuracy + magazineSize + reloadTime + projectileSpeed + bulletsPerShot + linearDamping + handling + caliber + knockback;
     }
 }

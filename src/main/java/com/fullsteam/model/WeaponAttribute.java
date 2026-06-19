@@ -80,7 +80,13 @@ public enum WeaponAttribute {
     // positive = bigger rounds (easier to land, costs budget) and drive the
     // CALIBER→SPEED/→MAGAZINE couplings (big rounds are slower and fewer); negative
     // = smaller rounds (refund budget). 0 pts → 1.0, +20 → 2.0, -10 → 0.5.
-    CALIBER(-10, 20, linear(1.0, 0.05).clamp(0.5, 2.0));
+    CALIBER(-10, 20, linear(1.0, 0.05).clamp(0.5, 2.0)),
+
+    // Knockback: per-hit impulse (dyn4j units) applied to the victim along the
+    // projectile's travel direction — see CollisionProcessor. One-sided: 0 pts =
+    // no shove (opt-in), scaling linearly. Drives the KNOCKBACK→HANDLING coupling
+    // (Newton's 3rd: a punchy weapon shoves you too). 0 pts → 0, 15 → 600k.
+    KNOCKBACK(0, 15, linear(0, 40_000));
 
     private final int min;
     private final int max;
@@ -96,6 +102,15 @@ public enum WeaponAttribute {
         if (input < min || input > max) {
             throw new IllegalArgumentException("points allocated to " + this + " is out of range [" + min + ", " + max + "]");
         }
+    }
+
+    /**
+     * Whether this attribute does anything on beam ordnance. KNOCKBACK is a
+     * physical impulse applied to projectile hits (see CollisionProcessor); beams
+     * are instant rays and never apply it, so the customizer disables it for them.
+     */
+    public boolean appliesToBeams() {
+        return this != KNOCKBACK;
     }
 
     /** Fraction (0..1) of this attribute's range that {@code points} represents — the default coupling driver. */
@@ -209,7 +224,11 @@ public enum WeaponAttribute {
             // Heft: bigger rounds are slower and fewer fit in a magazine.
             // Positive-investment-only — baseline/small calibers pay nothing.
             new Coupling(CALIBER, PROJECTILE_SPEED, -6, CALIBER::positiveFrac),
-            new Coupling(CALIBER, MAGAZINE_SIZE, -8, CALIBER::positiveFrac)
+            new Coupling(CALIBER, MAGAZINE_SIZE, -8, CALIBER::positiveFrac),
+            // Newton's 3rd: a high-knockback weapon shoves the wielder too, modeled
+            // as a handling (move-speed) penalty. Positive-investment-only so
+            // zero-knockback weapons pay nothing.
+            new Coupling(KNOCKBACK, HANDLING, -5, KNOCKBACK::positiveFrac)
     );
 
     /** One coupling's contribution for a build, in its {@link CouplingSpace}'s units. */

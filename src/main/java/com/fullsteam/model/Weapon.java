@@ -22,6 +22,8 @@ public class Weapon {
     private final double linearDamping;
     private final double handling;
     private final double caliber;
+    private final double knockback;
+    private final double knockbackPerBullet;
     private final Set<BulletEffect> bulletEffects;
     private final Ordinance ordinance;
 
@@ -40,11 +42,12 @@ public class Weapon {
                   int linearDamping,
                   int handling,
                   int caliber,
+                  int knockback,
                   Set<BulletEffect> bulletEffects,
                   Ordinance ordinance
     ) {
         // Calculate total points including bullet effects and ordinance
-        this.attributePoints = damage + fireRate + range + accuracy + magazineSize + reloadTime + projectileSpeed + bulletsPerShot + linearDamping + handling + caliber;
+        this.attributePoints = damage + fireRate + range + accuracy + magazineSize + reloadTime + projectileSpeed + bulletsPerShot + linearDamping + handling + caliber + knockback;
         int effectPoints = bulletEffects.stream().mapToInt(BulletEffect::getPointCost).sum();
         int ordinancePoints = ordinance.getPointCost();
         int totalPoints = attributePoints + effectPoints + ordinancePoints;
@@ -73,6 +76,7 @@ public class Weapon {
         allocated.put(WeaponAttribute.LINEAR_DAMPING, linearDamping);
         allocated.put(WeaponAttribute.HANDLING, handling);
         allocated.put(WeaponAttribute.CALIBER, caliber);
+        allocated.put(WeaponAttribute.KNOCKBACK, knockback);
         Map<WeaponAttribute, Double> stats = WeaponAttribute.resolve(allocated);
 
         this.damage = stats.get(WeaponAttribute.DAMAGE);
@@ -81,15 +85,14 @@ public class Weapon {
         this.accuracy = stats.get(WeaponAttribute.ACCURACY);
         this.magazineSize = (int) Math.round(stats.get(WeaponAttribute.MAGAZINE_SIZE));
         this.reloadTime = stats.get(WeaponAttribute.RELOAD_TIME);
-        // Apply ordinance speed multiplier to projectile speed
         this.projectileSpeed = stats.get(WeaponAttribute.PROJECTILE_SPEED) * ordinance.getSpeedMultiplier();
         this.bulletsPerShot = (int) stats.get(WeaponAttribute.BULLETS_PER_SHOT).doubleValue();
         this.damagePerBullet = damagePerBullet(this.damage, this.bulletsPerShot);
         this.linearDamping = stats.get(WeaponAttribute.LINEAR_DAMPING);
         this.handling = stats.get(WeaponAttribute.HANDLING);
         this.caliber = stats.get(WeaponAttribute.CALIBER);
-        // Start fully loaded to the computed magazine capacity (was previously set
-        // from the raw point count — a latent bug).
+        this.knockback = stats.get(WeaponAttribute.KNOCKBACK);
+        this.knockbackPerBullet = knockbackPerBullet(this.knockback, this.bulletsPerShot);
         this.currentAmmo = this.magazineSize;
     }
 
@@ -108,7 +111,9 @@ public class Weapon {
         this.linearDamping = other.linearDamping;
         this.handling = other.handling;
         this.caliber = other.caliber;
-        this.currentAmmo = other.currentAmmo; // Preserve actual current ammo, not magazine size
+        this.knockback = other.knockback;
+        this.knockbackPerBullet = other.knockbackPerBullet;
+        this.currentAmmo = other.currentAmmo;
         this.bulletEffects = other.bulletEffects;
         this.ordinance = other.ordinance;
         this.attributePoints = other.attributePoints;
@@ -121,6 +126,18 @@ public class Weapon {
      */
     public static double damagePerBullet(double damage, int bulletsPerShot) {
         return bulletsPerShot > 1 ? damage / Math.pow(bulletsPerShot, 0.7) : damage;
+    }
+
+    /**
+     * Per-pellet knockback for multi-shot weapons. The total knockback delivered
+     * by one trigger pull is held near-constant at ~1.2× a single bullet (rather
+     * than stacking n× as a scatter shot otherwise would), split evenly across the
+     * pellets — so each pellet is {@code min(1, 1.2/n)} of the weapon's knockback:
+     * a bit heavier than an even {@code 1/n} share. Single-shot weapons get the
+     * full value.
+     */
+    public static double knockbackPerBullet(double knockback, int bulletsPerShot) {
+        return knockback * Math.min(1.0, 1.2 / Math.max(1, bulletsPerShot));
     }
 
     public void reload() {

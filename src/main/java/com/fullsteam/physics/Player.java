@@ -238,7 +238,8 @@ public class Player extends GameEntity {
                     weapon.getLinearDamping(),
                     weapon.getBulletEffects(),
                     weapon.getOrdinance(),
-                    weapon.getCaliber()
+                    weapon.getCaliber(),
+                    weapon.getKnockbackPerBullet()
             ));
 
         }

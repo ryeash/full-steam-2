@@ -1111,6 +1111,10 @@ body.game-page html {
 /* --- Attribute sliders --- */
 #loadout-modal .attribute-slider { margin-bottom: 10px; }
 
+/* Attribute gated off for the current ordnance (e.g. KNOCKBACK on a beam) */
+#loadout-modal .attribute-slider.disabled { opacity: 0.4; cursor: not-allowed; }
+#loadout-modal .attribute-slider.disabled .slider { cursor: not-allowed; }
+
 #loadout-modal .attribute-slider label {
     display: block;
     color: #fff;

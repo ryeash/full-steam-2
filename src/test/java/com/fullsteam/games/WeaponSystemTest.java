@@ -225,6 +225,7 @@ class WeaponSystemTest extends BaseTestClass {
                 -10,  // linear damping (0 points, must be negative or 0)
                 0,  // handling (0 points)
                 0,  // caliber (0 points)
+                0,  // knockback (0 points)
                 Set.of(),
                 Ordinance.LASER // Beam weapon (40 points)
         );

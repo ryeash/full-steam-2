@@ -200,6 +200,15 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         // Apply direct status effects from bullet on hit
         applyDirectBulletEffects(player, projectile);
 
+        // Knockback: shove the victim along the projectile's travel direction
+        // (like NetProjectile's pushback). Applied before the damage call so a
+        // killing shot still imparts its impulse.
+        double knockback = projectile.getKnockback();
+        if (knockback > 0) {
+            Vector2 dir = projectile.getBody().getLinearVelocity().getNormalized();
+            player.getBody().applyImpulse(dir.multiply(knockback));
+        }
+
         if (player.takeDamage(projectile.getDamage())) {
             Player killer = gameEntities.getPlayer(projectile.getOwnerId());
             gameManager.killPlayer(player, killer);

@@ -127,6 +127,31 @@ class WeaponAttributeTest {
     }
 
     @Test
+    void knockbackCurveEndpoints() {
+        assertEquals(0.0, KNOCKBACK.compute(0), EPS);        // opt-in: no shove at baseline
+        assertEquals(600_000.0, KNOCKBACK.compute(15), EPS); // max investment
+    }
+
+    @Test
+    void knockbackSplitsHeavierThanEvenAcrossPellets() {
+        // Single shot keeps the full value; multi-pellet shots hold the total near
+        // ~1.2x split evenly, so each pellet is heavier than an even 1/n share.
+        assertEquals(1000.0, Weapon.knockbackPerBullet(1000.0, 1), EPS);  // 1.0x
+        assertEquals(600.0, Weapon.knockbackPerBullet(1000.0, 2), EPS);   // 0.6x each
+        assertEquals(400.0, Weapon.knockbackPerBullet(1000.0, 3), EPS);   // 0.4x each
+        assertEquals(240.0, Weapon.knockbackPerBullet(1000.0, 5), EPS);   // 0.24x each
+    }
+
+    @Test
+    void knockbackShovesTheWielder() {
+        // Newton's 3rd: investing in knockback drags your own handling down.
+        // Baseline (0 knockback) pays nothing.
+        assertEquals(1.0, resolved(HANDLING, Map.of(KNOCKBACK, 0)), EPS);
+        // Max knockback (15) → full -5 handling points → 1.0 + 0.02*(-5) = 0.90.
+        assertEquals(0.90, resolved(HANDLING, Map.of(KNOCKBACK, 15)), EPS);
+    }
+
+    @Test
     void caliberBaselineAndExtremes() {
         assertEquals(1.0, CALIBER.compute(0), EPS);   // baseline size
         assertEquals(2.0, CALIBER.compute(20), EPS);  // double size

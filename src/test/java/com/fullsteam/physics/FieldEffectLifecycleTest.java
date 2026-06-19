@@ -255,7 +255,8 @@ class FieldEffectLifecycleTest extends BaseTestClass {
                 0.1, // linearDamping
                 effects,
                 Ordinance.PROJECTILE,
-                1.0 // caliber
+                1.0, // caliber
+                0.0  // knockback
         );
     }
 }

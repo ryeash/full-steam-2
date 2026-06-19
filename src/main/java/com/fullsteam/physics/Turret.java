@@ -168,7 +168,8 @@ public class Turret extends GameEntity {
                 0.02,
                 Set.of(),
                 Ordinance.PROJECTILE,
-                1.0 // baseline caliber
+                1.0, // baseline caliber
+                0.0  // turrets apply no knockback
         );
     }
 

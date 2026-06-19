@@ -105,6 +105,9 @@ public class GameController {
             attrData.put("max", attr.getMax());
             attrData.put("name", attr.name());
             attrData.put("displayName", formatDisplayName(attr.name()));
+            // Lets the customizer disable projectile-only attributes (KNOCKBACK)
+            // when a beam ordnance is selected.
+            attrData.put("validForBeams", attr.appliesToBeams());
             attributes.put(attr.name(), attrData);
         }
         data.put("attributes", attributes);
@@ -151,6 +154,7 @@ public class GameController {
         presets.put("TWIN_SIXES", createPresetData(WeaponConfig.TWIN_SIXES_PRESET));
         presets.put("MINIGUN", createPresetData(WeaponConfig.MINIGUN_PRESET));
         presets.put("SHOTGUN", createPresetData(WeaponConfig.SHOTGUN_PRESET));
+        presets.put("CONCUSSION_CANNON", createPresetData(WeaponConfig.CONCUSSION_CANNON_PRESET));
 
         // Explosive weapons (ordinance + effects)
         presets.put("ROCKET_LAUNCHER", createPresetData(WeaponConfig.ROCKET_LAUNCHER_PRESET));
@@ -222,6 +226,8 @@ public class GameController {
         allocated.put(WeaponAttribute.BULLETS_PER_SHOT, config.bulletsPerShot);
         allocated.put(WeaponAttribute.LINEAR_DAMPING, config.linearDamping);
         allocated.put(WeaponAttribute.HANDLING, config.handling);
+        allocated.put(WeaponAttribute.CALIBER, config.caliber);
+        allocated.put(WeaponAttribute.KNOCKBACK, config.knockback);
 
         WeaponAttribute.Resolution res;
         try {
@@ -316,6 +322,7 @@ public class GameController {
             case BULLETS_PER_SHOT -> (int) Math.round(v) + (Math.round(v) == 1 ? " bullet" : " bullets");
             case DAMAGE -> String.valueOf((int) Math.round(v));
             case CALIBER -> String.format("×%.2f size", v);
+            case KNOCKBACK -> v <= 0 ? "none" : String.format("%.0fk impulse", v / 1000.0);
         };
     }
 
@@ -341,6 +348,7 @@ public class GameController {
         attributes.put(WeaponAttribute.LINEAR_DAMPING.name(), weapon.getLinearDamping());
         attributes.put(WeaponAttribute.HANDLING.name(), weapon.getHandling());
         attributes.put(WeaponAttribute.CALIBER.name(), weapon.getCaliber());
+        attributes.put(WeaponAttribute.KNOCKBACK.name(), weapon.getKnockback());
         preset.put("attributes", attributes);
         preset.put("effects", weapon.getBulletEffects()
                 .stream()

@@ -83,7 +83,8 @@ class WeaponCustomizer {
             'DAMAGE': 'damage', 'FIRE_RATE': 'fireRate', 'RANGE': 'range',
             'ACCURACY': 'accuracy', 'MAGAZINE_SIZE': 'magazineSize', 'RELOAD_TIME': 'reloadTime',
             'PROJECTILE_SPEED': 'projectileSpeed', 'BULLETS_PER_SHOT': 'bulletsPerShot',
-            'LINEAR_DAMPING': 'linearDamping', 'HANDLING': 'handling', 'CALIBER': 'caliber'
+            'LINEAR_DAMPING': 'linearDamping', 'HANDLING': 'handling', 'CALIBER': 'caliber',
+            'KNOCKBACK': 'knockback'
         };
         const mappedAttributes = {};
         Object.entries(this.state.attributes).forEach(([enumName, value]) => {
@@ -295,7 +296,7 @@ class WeaponCustomizer {
 
     _buildPresetButtons() {
         const categories = {
-            kinetic: ['ASSAULT_RIFLE', 'HAND_CANNON', 'SNIPER_RIFLE', 'MINIGUN', 'SHOTGUN', 'TWIN_SIXES'],
+            kinetic: ['ASSAULT_RIFLE', 'HAND_CANNON', 'SNIPER_RIFLE', 'MINIGUN', 'SHOTGUN', 'TWIN_SIXES', 'CONCUSSION_CANNON'],
             effects: ['ROCKET_LAUNCHER', 'INCENDIARY_SHOTGUN', 'ARC_PISTOL', 'ICE_CANNON', 'TOXIC_SPRAYER',
                       'PIERCING_RIFLE', 'BOUNCY_SMG', 'SEEKER_DART', 'CLUSTER_MORTAR',
                       'NAPALM_LAUNCHER', 'STORM_CALLER', 'VENOM_NEEDLER', 'FROST_LANCE', 'SHRAPNEL_CANNON', 'PHANTOM_NEEDLES'],
@@ -356,20 +357,25 @@ class WeaponCustomizer {
     _normalizeState() {
         const d = this.weaponData;
 
+        // Ordnance first, so attribute/effect gating below can depend on it.
+        const ordNames = d.ordinances.map(o => o.name);
+        if (!ordNames.includes(this.state.ordinance)) this.state.ordinance = 'PROJECTILE';
+        const ord = d.ordinances.find(o => o.name === this.state.ordinance);
+        const isBeam = !!(ord && ord.beam);
+
+        // Attributes: snap to step, clamp to range, and zero any that don't apply
+        // to the current ordnance (e.g. KNOCKBACK on a beam).
         const attrs = {};
         Object.entries(d.attributes).forEach(([key, meta]) => {
             const step = key === 'BULLETS_PER_SHOT' ? 5 : 1;
             let v = Number(this.state.attributes[key]) || 0;
             v = Math.round(v / step) * step;
-            attrs[key] = Math.max(meta.min, Math.min(meta.max, v));
+            v = Math.max(meta.min, Math.min(meta.max, v));
+            if (isBeam && meta.validForBeams === false) v = 0;
+            attrs[key] = v;
         });
         this.state.attributes = attrs;
 
-        const ordNames = d.ordinances.map(o => o.name);
-        if (!ordNames.includes(this.state.ordinance)) this.state.ordinance = 'PROJECTILE';
-
-        const ord = d.ordinances.find(o => o.name === this.state.ordinance);
-        const isBeam = !!(ord && ord.beam);
         this.state.effects = this.state.effects.filter(name => {
             const e = d.effects.find(x => x.name === name);
             if (!e) return false;                       // unknown effect
@@ -386,18 +392,29 @@ class WeaponCustomizer {
     _render() {
         const d = this.weaponData;
 
-        // Attribute sliders + labels
-        Object.keys(d.attributes).forEach(key => {
+        // Ordnance drives both attribute and effect gating below.
+        const ord = d.ordinances.find(o => o.name === this.state.ordinance);
+        const isBeam = !!(ord && ord.beam);
+
+        // Attribute sliders + labels (gate off projectile-only attrs on beams).
+        Object.entries(d.attributes).forEach(([key, meta]) => {
             const slider = this._q(`#attr-${key}`);
             const label = this._q(`#value-${key}`);
             const v = this.state.attributes[key];
-            if (slider) slider.value = v;
+            const gated = isBeam && meta.validForBeams === false;
+            if (slider) {
+                slider.value = v;
+                slider.disabled = gated;
+                const row = slider.closest('.attribute-slider');
+                if (row) {
+                    row.classList.toggle('disabled', gated);
+                    row.title = gated ? 'Not applicable to beam weapons' : '';
+                }
+            }
             if (label) label.textContent = this._formatAttrValue(key, v);
         });
 
         // Effect checkboxes (checked + beam gating)
-        const ord = d.ordinances.find(o => o.name === this.state.ordinance);
-        const isBeam = !!(ord && ord.beam);
         d.effects.forEach(effect => {
             const cb = this._q(`#effect-${effect.name}`);
             if (!cb) return;
@@ -515,7 +532,7 @@ class WeaponCustomizer {
     _renderResolved(panel, data) {
         const attrs = data.attributes || {};
         const order = ['DAMAGE', 'FIRE_RATE', 'BULLETS_PER_SHOT', 'MAGAZINE_SIZE', 'RELOAD_TIME',
-                       'RANGE', 'PROJECTILE_SPEED', 'ACCURACY', 'HANDLING', 'LINEAR_DAMPING'];
+                       'RANGE', 'PROJECTILE_SPEED', 'ACCURACY', 'HANDLING', 'LINEAR_DAMPING', 'CALIBER', 'KNOCKBACK'];
         const statRows = order.filter(k => attrs[k]).map(k => {
             const a = attrs[k];
             const tag = a.coupled ? ` <span class="coupling-tag">(base ${a.baseDisplay})</span>` : '';

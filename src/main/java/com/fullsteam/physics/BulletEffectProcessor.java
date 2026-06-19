@@ -5,6 +5,7 @@ import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Ordinance;
+import com.fullsteam.model.Weapon;
 import org.dyn4j.geometry.Vector2;
 
 import java.util.HashSet;
@@ -184,7 +185,11 @@ public class BulletEffectProcessor {
                     Ordinance.PROJECTILE, // Small, fast fragments
                     // Fragments are a fraction of the parent's caliber, floored so
                     // they never shrink to nothing.
-                    Math.max(0.4, projectile.getCaliber() * 0.5)
+                    Math.max(0.4, projectile.getCaliber() * 0.5),
+                    // Fragments split the parent's knockback the same way pellets do:
+                    // the total across all fragments stays near-constant (~1.2x the
+                    // parent) rather than stacking per-fragment.
+                    Weapon.knockbackPerBullet(projectile.getKnockback(), fragmentCount)
             );
             gameEntities.add(fragment);
         }

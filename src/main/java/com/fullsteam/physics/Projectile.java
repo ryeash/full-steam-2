@@ -29,13 +29,16 @@ public class Projectile extends GameEntity {
     /** Size multiplier from the weapon's CALIBER attribute (1.0 = baseline). */
     private final double caliber;
 
+    /** Per-hit impulse from the weapon's KNOCKBACK attribute (0 = no shove). */
+    private final double knockback;
+
     // prevent double hits
     private final Set<Integer> affectedPlayers;
     private final Set<Integer> affectedObstacles;
 
     public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange,
                       int ownerTeam, double linearDamping, Set<BulletEffect> bulletEffects, Ordinance ordinance,
-                      double caliber) {
+                      double caliber, double knockback) {
         super(Config.nextEntityId(), createProjectileBody(x, y, vx, vy, linearDamping, bulletEffects, caliber), 1.0);
         this.initialPosition = new Vector2(x, y);
         this.ownerId = ownerId;
@@ -45,6 +48,7 @@ public class Projectile extends GameEntity {
         this.bulletEffects = new HashSet<>(bulletEffects);
         this.ordinance = ordinance;
         this.caliber = caliber;
+        this.knockback = knockback;
 
         // Calculate time to live based on range and speed
         double speed = new Vector2(vx, vy).getMagnitude();

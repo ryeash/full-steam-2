@@ -215,7 +215,8 @@ public class UtilitySystem {
                 0.87,
                 Set.of(BulletEffect.SMOKE),
                 Ordinance.PROJECTILE,
-                1.5 // caliber preserves the old GRENADE projectile size (2.0 * 1.5 = 3.0)
+                1.5, // caliber preserves the old GRENADE projectile size (2.0 * 1.5 = 3.0)
+                0.0  // smoke grenade applies no knockback
         );
         gameEntities.add(grenade);
     }
