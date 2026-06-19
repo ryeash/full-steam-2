@@ -1,7 +1,6 @@
 package com.fullsteam.games;
 
 import com.fullsteam.physics.GameEntities;
-import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.TeamSpawnArea;
 import com.fullsteam.physics.TeamSpawnManager;

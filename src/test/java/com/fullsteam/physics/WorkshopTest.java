@@ -3,7 +3,6 @@ package com.fullsteam.physics;
 import com.fullsteam.games.BaseTestClass;
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.games.GameManager;
-import com.fullsteam.model.PlayerSession;
 import com.fullsteam.model.Rules;
 import org.dyn4j.geometry.Vector2;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,7 +11,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for Workshop entity and workshop functionality.
@@ -45,7 +47,7 @@ class WorkshopTest extends BaseTestClass {
 
         // Create game manager
         gameManager = new GameManager("test_game", gameConfig, null);
-        
+
         // Create a test player
         testPlayer = new Player(1, "TestPlayer", 0, 0, 1, 100.0);
         gameManager.getGameEntities().add(testPlayer);
@@ -56,10 +58,10 @@ class WorkshopTest extends BaseTestClass {
     void testWorkshopCreation() {
         // Get all workshops
         var workshops = gameManager.getGameEntities().getAllWorkshops();
-        
+
         // Should have 2 workshops as configured
         assertEquals(2, workshops.size());
-        
+
         // Check workshop properties
         for (Workshop workshop : workshops) {
             assertNotNull(workshop);
@@ -75,15 +77,15 @@ class WorkshopTest extends BaseTestClass {
     @DisplayName("Workshop crafting progress tracking")
     void testCraftingProgress() {
         Workshop workshop = gameManager.getGameEntities().getAllWorkshops().iterator().next();
-        
+
         // Initially no crafting progress
         Map<Integer, Double> initialProgress = workshop.getAllCraftingProgress();
         assertFalse(initialProgress.containsKey(testPlayer.getId()));
         assertEquals(0, workshop.getActiveCrafters());
-        
+
         // Start crafting
         workshop.addPlayer(testPlayer);
-        
+
         // Should have crafting progress
         Map<Integer, Double> progressMap = workshop.getAllCraftingProgress();
         assertTrue(progressMap.containsKey(testPlayer.getId()));
@@ -95,20 +97,20 @@ class WorkshopTest extends BaseTestClass {
     @DisplayName("Workshop crafting completion detection")
     void testCraftingCompletion() {
         Workshop workshop = gameManager.getGameEntities().getAllWorkshops().iterator().next();
-        
+
         // Start crafting
         workshop.addPlayer(testPlayer);
-        
+
         // Initially not complete
         Map<Integer, Double> initialProgress = workshop.getAllCraftingProgress();
         assertTrue(initialProgress.get(testPlayer.getId()) < 0.5);
-        
+
         // Simulate crafting completion by advancing time using incrementProgress
         boolean complete = false;
         for (int i = 0; i < 100 && !complete; i++) {
             complete = workshop.incrementProgress(testPlayer, 0.05); // 5ms per update, 100 updates = 5 seconds
         }
-        
+
         // Should be complete now (or very close to complete)
         Map<Integer, Double> finalProgress = workshop.getAllCraftingProgress();
         double progress = finalProgress.get(testPlayer.getId());
@@ -119,23 +121,23 @@ class WorkshopTest extends BaseTestClass {
     @DisplayName("Workshop crafting reset after completion")
     void testCraftingReset() {
         Workshop workshop = gameManager.getGameEntities().getAllWorkshops().iterator().next();
-        
+
         // Start crafting and complete it
         workshop.addPlayer(testPlayer);
         boolean complete = false;
         for (int i = 0; i < 100 && !complete; i++) {
             complete = workshop.incrementProgress(testPlayer, 0.05);
         }
-        
+
         // Should be complete now (or very close to complete)
         Map<Integer, Double> progressAfterCraft = workshop.getAllCraftingProgress();
         double progress = progressAfterCraft.get(testPlayer.getId());
         assertTrue(progress >= 0.99, "Expected progress >= 0.99, but got " + progress);
-        
+
         // Remove and re-add player to reset crafting progress
         workshop.removePlayer(testPlayer);
         workshop.addPlayer(testPlayer);
-        
+
         // Should be back to 0 progress
         Map<Integer, Double> resetProgress = workshop.getAllCraftingProgress();
         assertEquals(0.0, resetProgress.get(testPlayer.getId()));
@@ -145,14 +147,14 @@ class WorkshopTest extends BaseTestClass {
     @DisplayName("Workshop stop crafting removes player")
     void testStopCrafting() {
         Workshop workshop = gameManager.getGameEntities().getAllWorkshops().iterator().next();
-        
+
         // Start crafting
         workshop.addPlayer(testPlayer);
         assertEquals(1, workshop.getActiveCrafters());
-        
+
         // Stop crafting
         workshop.removePlayer(testPlayer);
-        
+
         // Should have no active crafters
         assertEquals(0, workshop.getActiveCrafters());
         assertFalse(workshop.getAllCraftingProgress().containsKey(testPlayer.getId()));
@@ -174,7 +176,7 @@ class WorkshopTest extends BaseTestClass {
                 .build();
 
         GameManager disabledGameManager = new GameManager("disabled_game", disabledConfig, null);
-        
+
         // Should have no workshops
         var workshops = disabledGameManager.getGameEntities().getAllWorkshops();
         assertEquals(0, workshops.size());
@@ -184,10 +186,10 @@ class WorkshopTest extends BaseTestClass {
     @DisplayName("Workshop sensor behavior")
     void testWorkshopSensorBehavior() {
         Workshop workshop = gameManager.getGameEntities().getAllWorkshops().iterator().next();
-        
+
         // Workshop should be a sensor (players can walk through it)
         assertTrue(workshop.getBody().getFixture(0).isSensor());
-        
+
         // Workshop should be static (infinite mass)
         assertEquals(org.dyn4j.geometry.MassType.INFINITE, workshop.getBody().getMass().getType());
     }
@@ -196,19 +198,19 @@ class WorkshopTest extends BaseTestClass {
     @DisplayName("Multiple players crafting at same workshop")
     void testMultiplePlayersCrafting() {
         Workshop workshop = gameManager.getGameEntities().getAllWorkshops().iterator().next();
-        
+
         // Create additional test players
         Player player2 = new Player(2, "Player2", 0, 0, 1, 100.0);
         Player player3 = new Player(3, "Player3", 0, 0, 2, 100.0);
-        
+
         // Start crafting for multiple players
         workshop.addPlayer(testPlayer);
         workshop.addPlayer(player2);
         workshop.addPlayer(player3);
-        
+
         // Should have 3 active crafters
         assertEquals(3, workshop.getActiveCrafters());
-        
+
         // All players should have crafting progress
         Map<Integer, Double> progressMap = workshop.getAllCraftingProgress();
         assertTrue(progressMap.containsKey(testPlayer.getId()));
@@ -217,10 +219,10 @@ class WorkshopTest extends BaseTestClass {
         assertTrue(progressMap.get(testPlayer.getId()) >= 0.0);
         assertTrue(progressMap.get(player2.getId()) >= 0.0);
         assertTrue(progressMap.get(player3.getId()) >= 0.0);
-        
+
         // Stop crafting for one player
         workshop.removePlayer(player2);
-        
+
         // Should have 2 active crafters
         assertEquals(2, workshop.getActiveCrafters());
         assertFalse(workshop.getAllCraftingProgress().containsKey(player2.getId()));
@@ -230,7 +232,7 @@ class WorkshopTest extends BaseTestClass {
     @DisplayName("Workshop position validation")
     void testWorkshopPositions() {
         var workshops = gameManager.getGameEntities().getAllWorkshops();
-        
+
         // All workshops should have valid positions
         for (Workshop workshop : workshops) {
             Vector2 pos = workshop.getPosition();
@@ -238,13 +240,13 @@ class WorkshopTest extends BaseTestClass {
             assertTrue(pos.x >= -1000 && pos.x <= 1000); // Within world bounds
             assertTrue(pos.y >= -1000 && pos.y <= 1000);
         }
-        
+
         // Workshops should be positioned differently
         if (workshops.size() >= 2) {
             Workshop[] workshopArray = workshops.toArray(new Workshop[0]);
             Vector2 pos1 = workshopArray[0].getPosition();
             Vector2 pos2 = workshopArray[1].getPosition();
-            
+
             // Should not be at the same position
             double xDiff = Math.abs(pos1.x - pos2.x);
             double yDiff = Math.abs(pos1.y - pos2.y);

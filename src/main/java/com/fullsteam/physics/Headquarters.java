@@ -43,9 +43,9 @@ public class Headquarters extends GameEntity {
         double halfHeight = HQ_HEIGHT / 2.0;
         double[][] turretCorners = {
                 {-halfWidth, -halfHeight}, // Top-left
-                { halfWidth, -halfHeight}, // Top-right
-                { halfWidth,  halfHeight}, // Bottom-right
-                {-halfWidth,  halfHeight}  // Bottom-left
+                {halfWidth, -halfHeight}, // Top-right
+                {halfWidth, halfHeight}, // Bottom-right
+                {-halfWidth, halfHeight}  // Bottom-left
         };
         for (double[] corner : turretCorners) {
             Circle turret = new Circle(HQ_TURRET_RADIUS);

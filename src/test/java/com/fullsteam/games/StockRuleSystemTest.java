@@ -1,7 +1,11 @@
 package com.fullsteam.games;
 
 import com.fullsteam.BaseTestClass;
-import com.fullsteam.model.*;
+import com.fullsteam.model.GameState;
+import com.fullsteam.model.RespawnMode;
+import com.fullsteam.model.Rules;
+import com.fullsteam.model.ScoreStyle;
+import com.fullsteam.model.VictoryCondition;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
 import org.dyn4j.dynamics.Body;
@@ -12,7 +16,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for the stock/default RuleSystem configuration.
@@ -202,10 +208,10 @@ class StockRuleSystemTest extends BaseTestClass {
         // Kill the player
         player.die();
         assertFalse(player.isActive(), "Player should be dead");
-        
+
         // Set respawn time to 1 second
         player.setRespawnTime(1L);
-        
+
         // Advance time past the respawn time
         ruleSystem.update(2.0);
 

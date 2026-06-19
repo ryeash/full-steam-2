@@ -4,7 +4,18 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
-import static com.fullsteam.model.WeaponAttribute.*;
+import static com.fullsteam.model.WeaponAttribute.ACCURACY;
+import static com.fullsteam.model.WeaponAttribute.BULLETS_PER_SHOT;
+import static com.fullsteam.model.WeaponAttribute.CALIBER;
+import static com.fullsteam.model.WeaponAttribute.DAMAGE;
+import static com.fullsteam.model.WeaponAttribute.FIRE_RATE;
+import static com.fullsteam.model.WeaponAttribute.HANDLING;
+import static com.fullsteam.model.WeaponAttribute.KNOCKBACK;
+import static com.fullsteam.model.WeaponAttribute.LINEAR_DAMPING;
+import static com.fullsteam.model.WeaponAttribute.MAGAZINE_SIZE;
+import static com.fullsteam.model.WeaponAttribute.PROJECTILE_SPEED;
+import static com.fullsteam.model.WeaponAttribute.RANGE;
+import static com.fullsteam.model.WeaponAttribute.RELOAD_TIME;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -17,7 +28,9 @@ class WeaponAttributeTest {
 
     private static final double EPS = 0.01;
 
-    /** Resolve a single attribute's final (coupled) value from a sparse allocation. */
+    /**
+     * Resolve a single attribute's final (coupled) value from a sparse allocation.
+     */
     private static double resolved(WeaponAttribute target, Map<WeaponAttribute, Integer> alloc) {
         return WeaponAttribute.resolve(alloc).get(target);
     }

@@ -1,6 +1,5 @@
 package com.fullsteam.physics;
 
-import com.fullsteam.Config;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;

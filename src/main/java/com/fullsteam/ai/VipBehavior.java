@@ -1,6 +1,5 @@
 package com.fullsteam.ai;
 
-import com.fullsteam.games.StatusEffectManager;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
@@ -39,8 +38,8 @@ public class VipBehavior implements AIBehavior {
 
         switch (currentRole) {
             case VIP_SURVIVE -> executeVipSurviveBehavior(aiPlayer, gameEntities, input, deltaTime);
-            case PROTECTOR   -> executeProtectorBehavior(aiPlayer, gameEntities, input, deltaTime);
-            case HUNTER      -> executeHunterBehavior(aiPlayer, gameEntities, input, deltaTime);
+            case PROTECTOR -> executeProtectorBehavior(aiPlayer, gameEntities, input, deltaTime);
+            case HUNTER -> executeHunterBehavior(aiPlayer, gameEntities, input, deltaTime);
         }
 
         handleReload(aiPlayer, input);

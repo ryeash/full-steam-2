@@ -74,9 +74,13 @@ public class Beam extends GameEntity {
         this.effectiveEndPoint = this.endPoint.copy();
     }
 
-    /** Min interval between AOE-effect spawns for a continuous (DOT) beam. */
+    /**
+     * Min interval between AOE-effect spawns for a continuous (DOT) beam.
+     */
     private static final long AREA_EFFECT_INTERVAL_MS = 350;
-    /** Last time this beam spawned its AOE effects (for the DOT throttle). */
+    /**
+     * Last time this beam spawned its AOE effects (for the DOT throttle).
+     */
     private long lastAreaEffectTime = 0L;
 
     /**
@@ -93,10 +97,14 @@ public class Beam extends GameEntity {
         return true;
     }
 
-    /** Base beam width at caliber 1.0; CALIBER is the only size input (matches render). */
+    /**
+     * Base beam width at caliber 1.0; CALIBER is the only size input (matches render).
+     */
     private static final double BASE_WIDTH = 2.0;
 
-    /** Rendered/physical beam width — driven entirely by the weapon's caliber. */
+    /**
+     * Rendered/physical beam width — driven entirely by the weapon's caliber.
+     */
     public double getSize() {
         return BASE_WIDTH * caliber;
     }

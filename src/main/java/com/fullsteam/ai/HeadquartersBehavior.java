@@ -20,12 +20,12 @@ public class HeadquartersBehavior implements AIBehavior {
     private int targetHQId = -1;
     private double roleEvaluationTime = 0;
     private static final double ROLE_EVALUATION_INTERVAL = 8.0;
-    
+
     // Per-AI randomization for patrol patterns to prevent clustering
     private final double patrolSpeedVariation;
     private final double patrolRadiusVariation;
     private final double patrolAngleOffset;
-    
+
     public HeadquartersBehavior() {
         // Initialize random variations per AI instance
         this.patrolSpeedVariation = 0.8 + Math.random() * 0.4; // 0.8 to 1.2
@@ -66,7 +66,7 @@ public class HeadquartersBehavior implements AIBehavior {
         Headquarters myHQ = getTeamHeadquarters(myTeam, gameEntities);
         if (myHQ != null && myHQ.isActive()) {
             double hqHealthPercent = myHQ.getHealth() / myHQ.getMaxHealth();
-            
+
             // If HQ is under heavy attack, prioritize defense
             if (hqHealthPercent < 0.5) {
                 currentRole = HQRole.DEFENDER;
@@ -84,7 +84,7 @@ public class HeadquartersBehavior implements AIBehavior {
 
         // Check how many teammates are defending
         int defendersCount = countDefendersNearHQ(aiPlayer, myHQ, gameEntities);
-        
+
         // Personality-based role assignment
         double aggressiveness = aiPlayer.getPersonality().getAggressiveness();
         double teamwork = aiPlayer.getPersonality().getTeamwork();
@@ -136,7 +136,7 @@ public class HeadquartersBehavior implements AIBehavior {
      */
     private void executeAttackerBehavior(AIPlayer aiPlayer, GameEntities gameEntities, PlayerInput input, double deltaTime) {
         Headquarters targetHQ = gameEntities.getHeadquarters(targetHQId);
-        
+
         // Validate target
         if (targetHQ == null || !targetHQ.isActive() || targetHQ.getTeamNumber() == aiPlayer.getTeam()) {
             targetHQ = findNearestEnemyHQ(aiPlayer, gameEntities);
@@ -190,8 +190,8 @@ public class HeadquartersBehavior implements AIBehavior {
             // Good position, strafe around HQ
             double strafeAngle = (System.currentTimeMillis() / 2500.0) % (Math.PI * 2);
             Vector2 strafeDir = new Vector2(
-                Math.cos(strafeAngle),
-                Math.sin(strafeAngle)
+                    Math.cos(strafeAngle),
+                    Math.sin(strafeAngle)
             );
             input.setMoveX(strafeDir.x * 0.5);
             input.setMoveY(strafeDir.y * 0.5);
@@ -224,7 +224,7 @@ public class HeadquartersBehavior implements AIBehavior {
      */
     private void executeDefenderBehavior(AIPlayer aiPlayer, GameEntities gameEntities, PlayerInput input, double deltaTime) {
         Headquarters myHQ = gameEntities.getHeadquarters(targetHQId);
-        
+
         // Validate target
         if (myHQ == null || !myHQ.isActive() || myHQ.getTeamNumber() != aiPlayer.getTeam()) {
             myHQ = getTeamHeadquarters(aiPlayer.getTeam(), gameEntities);
@@ -268,27 +268,27 @@ public class HeadquartersBehavior implements AIBehavior {
             // Good position, patrol around HQ
             double patrolAngle = (System.currentTimeMillis() / 4000.0) * patrolSpeedVariation + patrolAngleOffset;
             patrolAngle = patrolAngle % (Math.PI * 2);
-            
+
             // Add personality variation to patrol pattern
             double personalityOffset = aiPlayer.getPersonality().getMobility() * Math.PI * 0.5;
             patrolAngle += personalityOffset;
-            
+
             // Apply radius variation per AI
             double adjustedRadius = optimalDefenseRadius * patrolRadiusVariation;
-            
+
             Vector2 patrolOffset = new Vector2(
-                Math.cos(patrolAngle) * adjustedRadius,
-                Math.sin(patrolAngle) * adjustedRadius
+                    Math.cos(patrolAngle) * adjustedRadius,
+                    Math.sin(patrolAngle) * adjustedRadius
             );
             Vector2 patrolTarget = hqPos.copy().add(patrolOffset);
             Vector2 direction = patrolTarget.copy().subtract(myPos);
-            
+
             if (direction.getMagnitude() > 20) {
                 direction.normalize();
-                
+
                 // Apply hazard avoidance
                 direction = HazardAvoidance.calculateSafeMovement(myPos, direction, gameEntities, 80.0);
-                
+
                 input.setMoveX(direction.x * 0.6);
                 input.setMoveY(direction.y * 0.6);
             }
@@ -298,7 +298,7 @@ public class HeadquartersBehavior implements AIBehavior {
         Player bestThreat = findBestThreatToHQ(aiPlayer, myHQ, gameEntities);
         if (bestThreat != null) {
             engageEnemy(aiPlayer, bestThreat, input);
-            
+
             // Use utility on threats
             double threatDistance = myPos.distance(bestThreat.getPosition());
             if (aiPlayer.canUseUtility() && threatDistance < 200) {
@@ -351,7 +351,7 @@ public class HeadquartersBehavior implements AIBehavior {
     private Player findBestThreatToHQ(AIPlayer aiPlayer, Headquarters hq, GameEntities gameEntities) {
         Vector2 hqPos = hq.getPosition();
         int myTeam = aiPlayer.getTeam();
-        
+
         Player bestThreat = null;
         double bestScore = -1;
 
@@ -441,7 +441,7 @@ public class HeadquartersBehavior implements AIBehavior {
         // Personality modifiers
         double strategicThinking = aiPlayer.getPersonality().getStrategicThinking();
         double teamwork = aiPlayer.getPersonality().getTeamwork();
-        
+
         priority += (int) (strategicThinking * 8);
         priority += (int) (teamwork * 7);
 
@@ -467,7 +467,7 @@ public class HeadquartersBehavior implements AIBehavior {
     private Headquarters findNearestEnemyHQ(AIPlayer aiPlayer, GameEntities gameEntities) {
         Vector2 myPos = aiPlayer.getPosition();
         int myTeam = aiPlayer.getTeam();
-        
+
         Headquarters nearest = null;
         double nearestDistance = Double.MAX_VALUE;
 
@@ -486,7 +486,7 @@ public class HeadquartersBehavior implements AIBehavior {
 
     private boolean areEnemiesNearHQ(AIPlayer aiPlayer, Headquarters hq, GameEntities gameEntities, double radius) {
         if (hq == null) return false;
-        
+
         Vector2 hqPos = hq.getPosition();
         int myTeam = aiPlayer.getTeam();
 
@@ -506,7 +506,7 @@ public class HeadquartersBehavior implements AIBehavior {
 
     private int countDefendersNearHQ(AIPlayer aiPlayer, Headquarters hq, GameEntities gameEntities) {
         if (hq == null) return 0;
-        
+
         int count = 0;
         Vector2 hqPos = hq.getPosition();
         int myTeam = aiPlayer.getTeam();
@@ -530,7 +530,7 @@ public class HeadquartersBehavior implements AIBehavior {
     private Player findNearestEnemy(AIPlayer aiPlayer, GameEntities gameEntities, double maxRange) {
         Vector2 myPos = aiPlayer.getPosition();
         int myTeam = aiPlayer.getTeam();
-        
+
         Player nearest = null;
         double nearestDistance = maxRange;
 

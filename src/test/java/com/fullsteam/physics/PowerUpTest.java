@@ -10,7 +10,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for PowerUp entity and power-up functionality.
@@ -44,11 +49,11 @@ class PowerUpTest extends BaseTestClass {
 
         // Create game manager
         gameManager = new GameManager("test_game", gameConfig, null);
-        
+
         // Create a test player
         testPlayer = new Player(1, "TestPlayer", 0, 0, 1, 100.0);
         gameManager.getGameEntities().add(testPlayer);
-        
+
         // Get the test workshop
         testWorkshop = gameManager.getGameEntities().getAllWorkshops().iterator().next();
     }
@@ -57,7 +62,7 @@ class PowerUpTest extends BaseTestClass {
     @DisplayName("PowerUp creation with correct properties")
     void testPowerUpCreation() {
         Vector2 spawnPos = new Vector2(100, 100);
-        
+
         PowerUp powerUp = new PowerUp(
                 1,
                 spawnPos,
@@ -66,7 +71,7 @@ class PowerUpTest extends BaseTestClass {
                 30.0,
                 1.5
         );
-        
+
         assertNotNull(powerUp);
         assertTrue(powerUp.isActive());
         assertEquals(PowerUpType.SPEED_BOOST, powerUp.getType());
@@ -80,7 +85,7 @@ class PowerUpTest extends BaseTestClass {
     @DisplayName("All power-up types can be created")
     void testAllPowerUpTypes() {
         Vector2 spawnPos = new Vector2(100, 100);
-        
+
         for (PowerUpType type : PowerUpType.values()) {
             PowerUp powerUp = new PowerUp(
                     1,
@@ -90,7 +95,7 @@ class PowerUpTest extends BaseTestClass {
                     30.0,
                     1.0
             );
-            
+
             assertNotNull(powerUp);
             assertEquals(type, powerUp.getType());
             assertNotNull(type.getDisplayName());
@@ -109,9 +114,9 @@ class PowerUpTest extends BaseTestClass {
                 25.0,
                 2.0
         );
-        
+
         PowerUpEffect effect = powerUp.getEffect();
-        
+
         assertNotNull(effect);
         assertEquals(PowerUpType.DAMAGE_BOOST, effect.type());
         assertEquals(25.0, effect.duration());
@@ -123,7 +128,7 @@ class PowerUpTest extends BaseTestClass {
     void testPowerUpCollection() {
         Vector2 playerPos = new Vector2(100, 100);
         testPlayer.getBody().getTransform().setTranslation(playerPos.x, playerPos.y);
-        
+
         PowerUp powerUp = new PowerUp(
                 1,
                 playerPos, // Same position as player
@@ -132,14 +137,14 @@ class PowerUpTest extends BaseTestClass {
                 30.0,
                 1.0
         );
-        
+
         // Should be collectible by the player
         assertTrue(powerUp.canBeCollectedBy(testPlayer));
-        
+
         // Test with inactive player
         testPlayer.setActive(false);
         assertFalse(powerUp.canBeCollectedBy(testPlayer));
-        
+
         // Test with dead player
         testPlayer.setActive(true);
         testPlayer.setHealth(0);
@@ -157,17 +162,17 @@ class PowerUpTest extends BaseTestClass {
                 30.0,
                 1.0
         );
-        
+
         // Update power-up
         powerUp.update(5.0);
-        
+
         // Should still be active
         assertTrue(powerUp.isActive());
-        
+
         // Deactivate power-up
         powerUp.setActive(false);
         powerUp.update(10.0);
-        
+
         // Should still be inactive
         assertFalse(powerUp.isActive());
     }
@@ -177,16 +182,16 @@ class PowerUpTest extends BaseTestClass {
     void testPowerUpDisplayProperties() {
         assertEquals("Speed Boost", PowerUpType.SPEED_BOOST.getDisplayName());
         assertEquals("⚡", PowerUpType.SPEED_BOOST.getRenderHint());
-        
+
         assertEquals("Health Regen", PowerUpType.HEALTH_REGENERATION.getDisplayName());
         assertEquals("❤️", PowerUpType.HEALTH_REGENERATION.getRenderHint());
-        
+
         assertEquals("Damage Boost", PowerUpType.DAMAGE_BOOST.getDisplayName());
         assertEquals("⚔️", PowerUpType.DAMAGE_BOOST.getRenderHint());
-        
+
         assertEquals("Damage Resist", PowerUpType.DAMAGE_RESISTANCE.getDisplayName());
         assertEquals("🛡️", PowerUpType.DAMAGE_RESISTANCE.getRenderHint());
-        
+
         assertEquals("Berserker", PowerUpType.BERSERKER_MODE.getDisplayName());
         assertEquals("🔥", PowerUpType.BERSERKER_MODE.getRenderHint());
     }
@@ -202,10 +207,10 @@ class PowerUpTest extends BaseTestClass {
                 30.0,
                 1.0
         );
-        
+
         // Power-up should be a sensor (players can walk through it)
         assertTrue(powerUp.getBody().getFixture(0).isSensor());
-        
+
         // Power-up should have infinite mass (stationary, no bouncing)
         assertSame(powerUp.getBody().getMass().getType(), MassType.INFINITE);
     }
@@ -221,24 +226,24 @@ class PowerUpTest extends BaseTestClass {
                 30.0,
                 1.0
         );
-        
+
         // Position player at power-up location
         testPlayer.getBody().getTransform().setTranslation(100, 100);
-        
+
         // Active player with health should be able to collect
         testPlayer.setActive(true);
         testPlayer.setHealth(100);
         assertTrue(powerUp.canBeCollectedBy(testPlayer));
-        
+
         // Inactive player should not be able to collect
         testPlayer.setActive(false);
         assertFalse(powerUp.canBeCollectedBy(testPlayer));
-        
+
         // Dead player should not be able to collect
         testPlayer.setActive(true);
         testPlayer.setHealth(0);
         assertFalse(powerUp.canBeCollectedBy(testPlayer));
-        
+
         // Inactive power-up should not be collectible
         testPlayer.setHealth(100);
         powerUp.setActive(false);
@@ -256,9 +261,9 @@ class PowerUpTest extends BaseTestClass {
                 30.0,
                 1.0
         );
-        
+
         assertEquals(testWorkshop.getId(), powerUp.getWorkshopId());
-        
+
         // Test with different workshop ID
         PowerUp powerUp2 = new PowerUp(
                 2,
@@ -268,7 +273,7 @@ class PowerUpTest extends BaseTestClass {
                 30.0,
                 1.0
         );
-        
+
         assertEquals(999, powerUp2.getWorkshopId());
         assertNotEquals(powerUp.getWorkshopId(), powerUp2.getWorkshopId());
     }
@@ -284,7 +289,7 @@ class PowerUpTest extends BaseTestClass {
                 30.0,
                 0.5 // Weak effect
         );
-        
+
         PowerUp strongPowerUp = new PowerUp(
                 2,
                 new Vector2(200, 200),
@@ -293,10 +298,10 @@ class PowerUpTest extends BaseTestClass {
                 30.0,
                 3.0 // Strong effect
         );
-        
+
         assertEquals(0.5, weakPowerUp.getEffectStrength());
         assertEquals(3.0, strongPowerUp.getEffectStrength());
-        
+
         assertEquals(0.5, weakPowerUp.getEffect().strength());
         assertEquals(3.0, strongPowerUp.getEffect().strength());
     }

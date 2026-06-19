@@ -22,7 +22,7 @@ public class OddballBehavior implements AIBehavior {
     private OddballRole currentRole = OddballRole.GRABBER;
     private double roleChangeTime = 0;
     private static final double ROLE_CHANGE_INTERVAL = 2.0; // Re-evaluate frequently
-    
+
     // For stable random movement when carrying ball
     private double randomMoveAngle = Math.random() * Math.PI * 2;
     private double randomMoveChangeTime = 0;
@@ -92,28 +92,28 @@ public class OddballBehavior implements AIBehavior {
      */
     private void executeCarrierBehavior(AIPlayer aiPlayer, GameEntities gameEntities, PlayerInput input, double deltaTime) {
         Vector2 myPos = aiPlayer.getPosition();
-        
+
         // Find nearest enemy
         Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
-        
+
         if (nearestEnemy != null && nearestEnemy.isActive()) {
             Vector2 enemyPos = nearestEnemy.getPosition();
 
             // EVADE - run away from enemies
             Vector2 awayFromEnemy = myPos.difference(enemyPos);
             awayFromEnemy.normalize();
-            
+
             // Apply hazard avoidance (critical when carrying ball!)
             awayFromEnemy = HazardAvoidance.calculateSafeMovement(myPos, awayFromEnemy, gameEntities, 120.0);
-            
+
             // Move away from enemy
             input.setMoveX(awayFromEnemy.x);
             input.setMoveY(awayFromEnemy.y);
-            
+
             // Look at enemy to track them
             input.setWorldX(enemyPos.x);
             input.setWorldY(enemyPos.y);
-            
+
             // Can't shoot while carrying oddball, so just evade
             // The ball carrier status effect prevents shooting anyway
         } else {
@@ -121,7 +121,7 @@ public class OddballBehavior implements AIBehavior {
             Vector2 centerPos = new Vector2(0, 0);
             Vector2 toCenter = centerPos.difference(myPos);
             double distanceToCenter = toCenter.getMagnitude();
-            
+
             if (distanceToCenter > 100) {
                 toCenter.normalize();
                 input.setMoveX(toCenter.x * 0.5); // Move slowly toward center
@@ -243,10 +243,10 @@ public class OddballBehavior implements AIBehavior {
         // Move toward carrier
         Vector2 toCarrier = carrierPos.difference(myPos);
         toCarrier.normalize();
-        
+
         // Apply hazard avoidance
         toCarrier = HazardAvoidance.calculateSafeMovement(myPos, toCarrier, gameEntities, 100.0);
-        
+
         input.setMoveX(toCarrier.x);
         input.setMoveY(toCarrier.y);
 
@@ -276,13 +276,13 @@ public class OddballBehavior implements AIBehavior {
             Vector2 myPos = aiPlayer.getPosition();
             Vector2 centerPos = new Vector2(0, 0);
             Vector2 toCenter = centerPos.difference(myPos);
-            
+
             if (toCenter.getMagnitude() > 50) {
                 toCenter.normalize();
                 input.setMoveX(toCenter.x * 0.5);
                 input.setMoveY(toCenter.y * 0.5);
             }
-            
+
             // Look for enemies
             Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
             if (nearestEnemy != null && nearestEnemy.isActive()) {
@@ -303,10 +303,10 @@ public class OddballBehavior implements AIBehavior {
         // Rush toward oddball
         Vector2 toOddball = oddballPos.difference(myPos);
         toOddball.normalize();
-        
+
         // Apply hazard avoidance
         toOddball = HazardAvoidance.calculateSafeMovement(myPos, toOddball, gameEntities, 100.0);
-        
+
         input.setMoveX(toOddball.x);
         input.setMoveY(toOddball.y);
 
@@ -325,7 +325,7 @@ public class OddballBehavior implements AIBehavior {
             if (enemyDistanceToOddball < distanceToOddball || distanceToEnemy < 150) {
                 input.setWorldX(enemyPos.x);
                 input.setWorldY(enemyPos.y);
-                
+
                 double weaponRange = aiPlayer.getCurrentWeapon().getRange();
                 if (distanceToEnemy < weaponRange * 0.9) {
                     input.setLeft(true);
@@ -337,7 +337,7 @@ public class OddballBehavior implements AIBehavior {
     @Override
     public int getPriority(AIPlayer aiPlayer, GameEntities gameEntities) {
         Flag oddball = findOddball(gameEntities);
-        
+
         // No oddball = no priority
         if (oddball == null) {
             return 0;
@@ -364,7 +364,7 @@ public class OddballBehavior implements AIBehavior {
     @Override
     public boolean shouldContinue(AIPlayer aiPlayer, GameEntities gameEntities) {
         Flag oddball = findOddball(gameEntities);
-        
+
         // Continue if oddball exists
         if (oddball == null) {
             return false;
@@ -413,10 +413,10 @@ public class OddballBehavior implements AIBehavior {
     private Player findNearestEnemy(AIPlayer aiPlayer, GameEntities gameEntities) {
         Vector2 myPos = aiPlayer.getPosition();
         int myTeam = aiPlayer.getTeam();
-        
+
         Player nearest = null;
         double nearestDistance = Double.MAX_VALUE;
-        
+
         for (Player player : gameEntities.getAllPlayers()) {
             if (player.getId() != aiPlayer.getId() && player.isActive() && player.getTeam() != myTeam) {
                 double distance = myPos.distance(player.getPosition());
@@ -426,7 +426,7 @@ public class OddballBehavior implements AIBehavior {
                 }
             }
         }
-        
+
         return nearest;
     }
 }

@@ -113,7 +113,9 @@ public enum WeaponAttribute {
         return this != KNOCKBACK;
     }
 
-    /** Fraction (0..1) of this attribute's range that {@code points} represents — the default coupling driver. */
+    /**
+     * Fraction (0..1) of this attribute's range that {@code points} represents — the default coupling driver.
+     */
     public double frac(int points) {
         if (max == min) {
             return 0.0;
@@ -171,7 +173,7 @@ public enum WeaponAttribute {
      *       predictable and bounded.</li>
      * </ul>
      */
-    public enum CouplingSpace { POINTS, STAT }
+    public enum CouplingSpace {POINTS, STAT}
 
     /**
      * A directed link: when {@code source} is invested in, {@code strength}
@@ -181,11 +183,16 @@ public enum WeaponAttribute {
      */
     public record Coupling(WeaponAttribute source, WeaponAttribute target,
                            double strength, IntToDoubleFunction driver, CouplingSpace space) {
-        /** Point-space, full-range driver. */
+        /**
+         * Point-space, full-range driver.
+         */
         public Coupling(WeaponAttribute source, WeaponAttribute target, double strength) {
             this(source, target, strength, source::frac, CouplingSpace.POINTS);
         }
-        /** Point-space with a custom driver. */
+
+        /**
+         * Point-space with a custom driver.
+         */
         public Coupling(WeaponAttribute source, WeaponAttribute target, double strength, IntToDoubleFunction driver) {
             this(source, target, strength, driver, CouplingSpace.POINTS);
         }
@@ -231,9 +238,16 @@ public enum WeaponAttribute {
             new Coupling(KNOCKBACK, HANDLING, -5, KNOCKBACK::positiveFrac)
     );
 
-    /** One coupling's contribution for a build, in its {@link CouplingSpace}'s units. */
-    public record AppliedCoupling(WeaponAttribute source, WeaponAttribute target,
-                                  double delta, CouplingSpace space) {}
+    /**
+     * One coupling's contribution for a build, in its {@link CouplingSpace}'s units.
+     */
+    public record AppliedCoupling(
+            WeaponAttribute source,
+            WeaponAttribute target,
+            double delta,
+            CouplingSpace space
+    ) {
+    }
 
     /**
      * Full breakdown of a resolved build: final (coupled) and base (un-coupled)
@@ -241,7 +255,8 @@ public enum WeaponAttribute {
      */
     public record Resolution(Map<WeaponAttribute, Double> values,
                              Map<WeaponAttribute, Double> baseValues,
-                             List<AppliedCoupling> appliedCouplings) {}
+                             List<AppliedCoupling> appliedCouplings) {
+    }
 
     /**
      * Resolve allocated points into final stat values, applying {@link #COUPLINGS}.
@@ -255,7 +270,9 @@ public enum WeaponAttribute {
         return resolveDetailed(allocated).values();
     }
 
-    /** Like {@link #resolve} but also reports base values and the coupling breakdown. */
+    /**
+     * Like {@link #resolve} but also reports base values and the coupling breakdown.
+     */
     public static Resolution resolveDetailed(Map<WeaponAttribute, Integer> allocated) {
         EnumMap<WeaponAttribute, Double> effective = new EnumMap<>(WeaponAttribute.class);
         EnumMap<WeaponAttribute, Double> baseValues = new EnumMap<>(WeaponAttribute.class);
@@ -330,12 +347,16 @@ public enum WeaponAttribute {
 
     // ----- Curve factories -----
 
-    /** {@code base + perPoint * points} — proportional. */
+    /**
+     * {@code base + perPoint * points} — proportional.
+     */
     static Curve linear(double base, double perPoint) {
         return p -> base + perPoint * p;
     }
 
-    /** {@code base + scale * sqrt(points)} — concave/diminishing. Negative points treated as 0. */
+    /**
+     * {@code base + scale * sqrt(points)} — concave/diminishing. Negative points treated as 0.
+     */
     static Curve sqrtDim(double base, double scale) {
         return p -> base + scale * Math.sqrt(Math.max(0, p));
     }
@@ -358,7 +379,9 @@ public enum WeaponAttribute {
         return p -> floor + (start - floor) * Math.exp(-p / tau);
     }
 
-    /** {@code base + perStep * floor(points / pointsPerStep)} — discrete tiers. */
+    /**
+     * {@code base + perStep * floor(points / pointsPerStep)} — discrete tiers.
+     */
     static Curve stepped(double base, double perStep, int pointsPerStep) {
         return p -> base + perStep * Math.floor(p / pointsPerStep);
     }

@@ -23,12 +23,12 @@ public class FlagBehavior implements AIBehavior {
     private int targetFlagId = -1;
     private double roleChangeTime = 0;
     private static final double ROLE_CHANGE_INTERVAL = 10.0; // Re-evaluate role every 10 seconds
-    
+
     // Per-AI randomization for patrol patterns to prevent clustering
     private final double patrolSpeedVariation;
     private final double patrolRadiusVariation;
     private final double patrolAngleOffset;
-    
+
     public FlagBehavior() {
         // Initialize random variations per AI instance
         this.patrolSpeedVariation = 0.75 + Math.random() * 0.5; // 0.75 to 1.25
@@ -129,7 +129,7 @@ public class FlagBehavior implements AIBehavior {
         if (carriedFlag != null) {
             // Return flag to home position
             returnFlagToBase(aiPlayer, carriedFlag, input, gameEntities);
-            
+
             // Still defend ourselves while carrying
             engageNearbyEnemies(aiPlayer, gameEntities, input, 300);
             return;
@@ -153,7 +153,7 @@ public class FlagBehavior implements AIBehavior {
 
         // Tactical movement - avoid straight lines
         double moveIntensity = 0.8 + (aiPlayer.getPersonality().getMobility() * 0.2);
-        
+
         // Add some weaving to avoid fire
         double weaveFactor = Math.sin(System.currentTimeMillis() / 500.0) * 0.3;
         Vector2 perpendicular = new Vector2(-direction.y, direction.x);
@@ -218,21 +218,21 @@ public class FlagBehavior implements AIBehavior {
             // Good position, patrol around flag
             double patrolAngle = (System.currentTimeMillis() / 3000.0) * patrolSpeedVariation + patrolAngleOffset;
             patrolAngle = patrolAngle % (Math.PI * 2);
-            
+
             // Apply radius variation per AI
             double adjustedRadius = optimalDefenseRadius * patrolRadiusVariation;
-            
+
             Vector2 patrolOffset = new Vector2(
-                Math.cos(patrolAngle) * adjustedRadius,
-                Math.sin(patrolAngle) * adjustedRadius
+                    Math.cos(patrolAngle) * adjustedRadius,
+                    Math.sin(patrolAngle) * adjustedRadius
             );
             Vector2 patrolTarget = flagPos.copy().add(patrolOffset);
             Vector2 direction = patrolTarget.copy().subtract(myPos);
             direction.normalize();
-            
+
             // Apply hazard avoidance
             direction = HazardAvoidance.calculateSafeMovement(myPos, direction, gameEntities, 100.0);
-            
+
             input.setMoveX(direction.x * 0.5);
             input.setMoveY(direction.y * 0.5);
         }
@@ -263,19 +263,19 @@ public class FlagBehavior implements AIBehavior {
             // Chase the flag carrier
             int carrierId = targetFlag.getCarriedByPlayerId();
             Player carrier = gameEntities.getPlayer(carrierId);
-            
+
             if (carrier != null && carrier.isActive()) {
                 Vector2 carrierPos = carrier.getPosition();
                 double distance = myPos.distance(carrierPos);
 
                 // Aggressive pursuit
                 Vector2 direction = carrierPos.copy().subtract(myPos);
-                
+
                 // Predict carrier movement
                 Vector2 carrierVel = carrier.getVelocity();
                 double timeToIntercept = distance / (aiPlayer.getVelocity().getMagnitude() + 100);
                 Vector2 predictedPos = carrierPos.copy().add(carrierVel.copy().multiply(timeToIntercept));
-                
+
                 direction = predictedPos.copy().subtract(myPos);
                 direction.normalize();
 
@@ -326,7 +326,7 @@ public class FlagBehavior implements AIBehavior {
     private void returnFlagToBase(AIPlayer aiPlayer, Flag carriedFlag, PlayerInput input, GameEntities gameEntities) {
         Vector2 myPos = aiPlayer.getPosition();
         int myTeam = aiPlayer.getTeam();
-        
+
         // Find our team's flag to capture at
         Flag myTeamFlag = gameEntities.getAllFlags().stream()
                 .filter(flag -> flag.getOwnerTeam() == myTeam)
@@ -334,7 +334,7 @@ public class FlagBehavior implements AIBehavior {
                 .filter(flag -> flag.isAtHome()) // Must be at home to capture
                 .findFirst()
                 .orElse(null);
-        
+
         if (myTeamFlag == null) {
             // Can't find our flag to capture at, just move toward center for now
             // This shouldn't happen in normal gameplay but handles edge cases
@@ -345,7 +345,7 @@ public class FlagBehavior implements AIBehavior {
             input.setMoveY(direction.y * 0.8);
             return;
         }
-        
+
         Vector2 homePos = myTeamFlag.getPosition();
         double distance = myPos.distance(homePos);
 
@@ -396,7 +396,7 @@ public class FlagBehavior implements AIBehavior {
             // Aim at enemy
             Vector2 enemyPos = nearestEnemy.getPosition();
             Vector2 enemyVel = nearestEnemy.getVelocity();
-            
+
             // Lead target
             double projectileSpeed = aiPlayer.getCurrentWeapon().getProjectileSpeed();
             double timeToTarget = nearestDistance / projectileSpeed;
@@ -442,7 +442,7 @@ public class FlagBehavior implements AIBehavior {
                 break;
             }
         }
-        
+
         // If not a CTF game (e.g., Oddball), don't use this behavior
         if (!isCTFGame) {
             return 0;
@@ -477,7 +477,7 @@ public class FlagBehavior implements AIBehavior {
         // Moderate priority based on personality
         double aggressiveness = aiPlayer.getPersonality().getAggressiveness();
         double strategicThinking = aiPlayer.getPersonality().getStrategicThinking();
-        
+
         return (int) (60 + (strategicThinking * 20) + (aggressiveness * 10));
     }
 
@@ -524,7 +524,7 @@ public class FlagBehavior implements AIBehavior {
     private Flag findNearestTeamFlag(AIPlayer aiPlayer, GameEntities gameEntities) {
         Vector2 myPos = aiPlayer.getPosition();
         int myTeam = aiPlayer.getTeam();
-        
+
         return gameEntities.getAllFlags().stream()
                 .filter(flag -> flag.getOwnerTeam() == myTeam)
                 .filter(flag -> !flag.isOddball()) // Ignore oddball
@@ -538,7 +538,7 @@ public class FlagBehavior implements AIBehavior {
     private Flag findNearestEnemyFlag(AIPlayer aiPlayer, GameEntities gameEntities) {
         Vector2 myPos = aiPlayer.getPosition();
         int myTeam = aiPlayer.getTeam();
-        
+
         return gameEntities.getAllFlags().stream()
                 .filter(flag -> flag.getOwnerTeam() != myTeam && flag.getOwnerTeam() != 0)
                 .min((f1, f2) -> Double.compare(
@@ -551,7 +551,7 @@ public class FlagBehavior implements AIBehavior {
     private Flag findBestEnemyFlagToCapture(AIPlayer aiPlayer, GameEntities gameEntities) {
         Vector2 myPos = aiPlayer.getPosition();
         int myTeam = aiPlayer.getTeam();
-        
+
         // Prefer flags that are at home (not carried or dropped)
         return gameEntities.getAllFlags().stream()
                 .filter(flag -> flag.getOwnerTeam() != myTeam && flag.getOwnerTeam() != 0)
@@ -566,7 +566,7 @@ public class FlagBehavior implements AIBehavior {
     private Flag findNearestDroppedFriendlyFlag(AIPlayer aiPlayer, GameEntities gameEntities) {
         Vector2 myPos = aiPlayer.getPosition();
         int myTeam = aiPlayer.getTeam();
-        
+
         return gameEntities.getAllFlags().stream()
                 .filter(flag -> flag.getOwnerTeam() == myTeam)
                 .filter(flag -> !flag.isOddball()) // Ignore oddball

@@ -13,40 +13,40 @@ import java.util.List;
  * Helps AI players detect and avoid dangerous field effects and environmental hazards.
  */
 public class HazardAvoidance {
-    
+
     /**
      * Find all dangerous field effects near a position.
-     * 
-     * @param position Center position to check from
-     * @param checkRadius How far to look for hazards
+     *
+     * @param position     Center position to check from
+     * @param checkRadius  How far to look for hazards
      * @param gameEntities Current game state
      * @return List of dangerous field effects within range
      */
     public static List<FieldEffect> findNearbyHazards(Vector2 position, double checkRadius, GameEntities gameEntities) {
         List<FieldEffect> hazards = new ArrayList<>();
-        
+
         for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
             if (!effect.isActive()) {
                 continue;
             }
-            
+
             // Check if this is a dangerous effect type
             if (!isDangerousEffect(effect.getType())) {
                 continue;
             }
-            
+
             // Check if effect is within detection range (effect radius + check radius)
             double distance = position.distance(effect.getPosition());
             double effectiveRange = effect.getRadius() + checkRadius;
-            
+
             if (distance < effectiveRange) {
                 hazards.add(effect);
             }
         }
-        
+
         return hazards;
     }
-    
+
     /**
      * Check if a field effect type is dangerous and should be avoided.
      */
@@ -66,7 +66,7 @@ public class HazardAvoidance {
             case HEAL_ZONE, SPEED_BOOST, SHIELD_BARRIER, FRAGMENTATION -> false;
         };
     }
-    
+
     /**
      * Get the threat level of a field effect (0.0 = safe, 1.0 = extremely dangerous).
      */
@@ -84,40 +84,40 @@ public class HazardAvoidance {
             default -> 0.0;
         };
     }
-    
+
     /**
      * Calculate a safe movement direction that avoids nearby hazards.
-     * 
-     * @param currentPos Current position
+     *
+     * @param currentPos       Current position
      * @param desiredDirection The direction the AI wants to move
-     * @param gameEntities Current game state
-     * @param detectionRadius How far to detect hazards
+     * @param gameEntities     Current game state
+     * @param detectionRadius  How far to detect hazards
      * @return Modified movement direction that avoids hazards, or original if no hazards
      */
-    public static Vector2 calculateSafeMovement(Vector2 currentPos, Vector2 desiredDirection, 
-                                                 GameEntities gameEntities, double detectionRadius) {
+    public static Vector2 calculateSafeMovement(Vector2 currentPos, Vector2 desiredDirection,
+                                                GameEntities gameEntities, double detectionRadius) {
         List<FieldEffect> nearbyHazards = findNearbyHazards(currentPos, detectionRadius, gameEntities);
-        
+
         if (nearbyHazards.isEmpty()) {
             return desiredDirection.copy(); // No hazards, move as desired
         }
-        
+
         // Calculate repulsion vectors from all hazards
         Vector2 avoidanceVector = new Vector2(0, 0);
-        
+
         for (FieldEffect hazard : nearbyHazards) {
             Vector2 toHazard = hazard.getPosition().copy().subtract(currentPos);
             double distance = toHazard.getMagnitude();
-            
+
             if (distance < 0.1) {
                 // We're basically on top of the hazard - flee in any direction
                 distance = 0.1;
             }
-            
+
             // Calculate repulsion strength based on distance and threat level
             double threatLevel = getThreatLevel(hazard);
             double hazardRadius = hazard.getRadius();
-            
+
             // Stronger repulsion when closer to hazard
             double repulsionStrength;
             if (distance < hazardRadius) {
@@ -128,21 +128,21 @@ public class HazardAvoidance {
                 double distanceFromEdge = distance - hazardRadius;
                 repulsionStrength = threatLevel * (detectionRadius / (distanceFromEdge + 1.0));
             }
-            
+
             // Add repulsion vector (away from hazard)
             toHazard.normalize();
             toHazard.multiply(-repulsionStrength); // Negative to push away
             avoidanceVector.add(toHazard);
         }
-        
+
         // Combine desired direction with avoidance
         // Weight avoidance more heavily when hazards are very close
         double avoidanceWeight = Math.min(1.0, avoidanceVector.getMagnitude() / 2.0);
         double desiredWeight = 1.0 - (avoidanceWeight * 0.7); // Don't completely ignore desired direction
-        
+
         Vector2 finalDirection = desiredDirection.copy().multiply(desiredWeight);
         finalDirection.add(avoidanceVector.multiply(avoidanceWeight));
-        
+
         // Normalize to get direction
         if (finalDirection.getMagnitude() > 0.01) {
             finalDirection.normalize();
@@ -156,14 +156,14 @@ public class HazardAvoidance {
                 finalDirection = desiredDirection.copy();
             }
         }
-        
+
         return finalDirection;
     }
-    
+
     /**
      * Check if a position is currently safe (no active hazards).
-     * 
-     * @param position Position to check
+     *
+     * @param position     Position to check
      * @param safetyMargin Extra distance to consider (buffer zone)
      * @param gameEntities Current game state
      * @return true if position is safe, false if in or near hazards
@@ -173,23 +173,23 @@ public class HazardAvoidance {
             if (!effect.isActive() || !isDangerousEffect(effect.getType())) {
                 continue;
             }
-            
+
             double distance = position.distance(effect.getPosition());
             double dangerZone = effect.getRadius() + safetyMargin;
-            
+
             if (distance < dangerZone) {
                 return false; // Too close to hazard
             }
         }
-        
+
         return true; // No hazards nearby
     }
-    
+
     /**
      * Find the nearest safe position from a given location.
      * Useful for finding where to flee when surrounded by hazards.
-     * 
-     * @param currentPos Current position
+     *
+     * @param currentPos   Current position
      * @param searchRadius How far to search for safety
      * @param gameEntities Current game state
      * @return Nearest safe position, or null if none found
@@ -199,17 +199,17 @@ public class HazardAvoidance {
         int samples = 16; // Check 16 directions
         double bestDistance = Double.MAX_VALUE;
         Vector2 bestPosition = null;
-        
+
         for (int i = 0; i < samples; i++) {
             double angle = (Math.PI * 2.0 * i) / samples;
-            
+
             // Check at multiple distances
             for (double dist = searchRadius * 0.5; dist <= searchRadius; dist += searchRadius * 0.25) {
                 Vector2 testPos = new Vector2(
-                    currentPos.x + Math.cos(angle) * dist,
-                    currentPos.y + Math.sin(angle) * dist
+                        currentPos.x + Math.cos(angle) * dist,
+                        currentPos.y + Math.sin(angle) * dist
                 );
-                
+
                 if (isPositionSafe(testPos, 20.0, gameEntities)) {
                     double distanceToSafety = currentPos.distance(testPos);
                     if (distanceToSafety < bestDistance) {
@@ -219,61 +219,61 @@ public class HazardAvoidance {
                 }
             }
         }
-        
+
         return bestPosition;
     }
-    
+
     /**
      * Check if moving from one position to another would cross through hazards.
-     * 
-     * @param from Starting position
-     * @param to Destination position
+     *
+     * @param from         Starting position
+     * @param to           Destination position
      * @param gameEntities Current game state
      * @return true if path crosses hazards, false if clear
      */
     public static boolean pathCrossesHazards(Vector2 from, Vector2 to, GameEntities gameEntities) {
         Vector2 direction = to.copy().subtract(from);
         double distance = direction.getMagnitude();
-        
+
         if (distance < 1.0) {
             return false; // Too short to matter
         }
-        
+
         direction.normalize();
-        
+
         // Check points along the path
         int checkPoints = (int) Math.min(10, distance / 20.0); // Check every ~20 units
         for (int i = 1; i <= checkPoints; i++) {
             double t = (double) i / checkPoints;
             Vector2 checkPos = from.copy().add(direction.copy().multiply(distance * t));
-            
+
             if (!isPositionSafe(checkPos, 10.0, gameEntities)) {
                 return true; // Path crosses hazard
             }
         }
-        
+
         return false; // Path is clear
     }
-    
+
     /**
      * Get a danger rating for the current area (0.0 = safe, 1.0 = extremely dangerous).
      * Useful for deciding whether to retreat or engage.
      */
     public static double getAreaDangerRating(Vector2 position, double radius, GameEntities gameEntities) {
         List<FieldEffect> nearbyHazards = findNearbyHazards(position, radius, gameEntities);
-        
+
         if (nearbyHazards.isEmpty()) {
             return 0.0;
         }
-        
+
         double totalThreat = 0.0;
         double maxThreat = 0.0;
-        
+
         for (FieldEffect hazard : nearbyHazards) {
             double threat = getThreatLevel(hazard);
             double distance = position.distance(hazard.getPosition());
             double hazardRadius = hazard.getRadius();
-            
+
             // Threat increases as we get closer
             double proximityFactor;
             if (distance < hazardRadius) {
@@ -281,12 +281,12 @@ public class HazardAvoidance {
             } else {
                 proximityFactor = Math.max(0.0, 1.0 - ((distance - hazardRadius) / radius));
             }
-            
+
             double effectiveThreat = threat * proximityFactor;
             totalThreat += effectiveThreat;
             maxThreat = Math.max(maxThreat, effectiveThreat);
         }
-        
+
         // Return combination of max threat and average threat
         return Math.min(1.0, (maxThreat * 0.7) + (totalThreat / nearbyHazards.size() * 0.3));
     }

@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 import java.util.function.Consumer;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Test integration between ScoreStyle and KOTH zone scoring.
@@ -58,15 +58,15 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
     @DisplayName("OBJECTIVE score style should count objectives (captures + KOTH zones), not kills")
     void testObjectiveScoreStyle() {
         // Create players with kills and captures
-        Player player1 = new Player(1, "Player1", 100, 100, 1,100.0);
-        Player player2 = new Player(2, "Player2", 200, 200, 2,100.0);
+        Player player1 = new Player(1, "Player1", 100, 100, 1, 100.0);
+        Player player2 = new Player(2, "Player2", 200, 200, 2, 100.0);
         player1.addKill(); // Player 1 has 1 kill
         player1.addCapture(); // Player 1 has 1 capture
         player2.addKill(); // Player 2 has 1 kill
         player2.addKill(); // Player 2 has 2 kills total
         player2.addCapture(); // Player 2 has 1 capture
         player2.addCapture(); // Player 2 has 2 captures
-        
+
         gameEntities.add(player1);
         gameEntities.add(player2);
 
@@ -78,7 +78,7 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         Map<String, Object> stateData = ruleSystem.getStateData();
         @SuppressWarnings("unchecked")
         Map<Integer, Integer> teamScores = (Map<Integer, Integer>) stateData.get("teamScores");
-        
+
         // With OBJECTIVE score style:
         // - Team 1: 1 capture + 5 KOTH points = 6 points (kills ignored)
         // - Team 2: 2 captures + 10 KOTH points = 12 points (kills ignored)
@@ -106,7 +106,7 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         player1.addCapture(); // Player 1 has 1 capture
         player2.addKill(); // Player 2 has 1 kill
         player2.addKill(); // Player 2 has 2 kills total
-        
+
         gameEntities.add(player1);
         gameEntities.add(player2);
 
@@ -118,7 +118,7 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         Map<String, Object> stateData = ruleSystem.getStateData();
         @SuppressWarnings("unchecked")
         Map<Integer, Integer> teamScores = (Map<Integer, Integer>) stateData.get("teamScores");
-        
+
         // With TOTAL score style:
         // - Team 1: 1 kill + 1 capture + 5 KOTH points = 7 points
         // - Team 2: 2 kills + 0 captures + 10 KOTH points = 12 points
@@ -147,7 +147,7 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         player2.addKill(); // Player 2 has 1 kill
         player2.addKill(); // Player 2 has 2 kills total
         player2.addCapture(); // Player 2 has 1 capture (should be ignored)
-        
+
         gameEntities.add(player1);
         gameEntities.add(player2);
 
@@ -159,7 +159,7 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
         Map<String, Object> stateData = ruleSystem.getStateData();
         @SuppressWarnings("unchecked")
         Map<Integer, Integer> teamScores = (Map<Integer, Integer>) stateData.get("teamScores");
-        
+
         // With TOTAL_KILLS score style:
         // - Team 1: 1 kill (objectives and KOTH scores ignored)
         // - Team 2: 2 kills (objectives and KOTH scores ignored)

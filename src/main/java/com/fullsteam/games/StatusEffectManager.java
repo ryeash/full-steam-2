@@ -9,18 +9,18 @@ import com.fullsteam.physics.Player;
 /**
  * Manages status effects that can be applied to players during gameplay.
  * This class provides pre-configured attribute modifications for common game scenarios.
- * 
+ * <p>
  * Status effects include:
  * - Buffs: Speed boost, damage boost, health regeneration, damage resistance, invincibility
  * - Debuffs: Burning, poison, slow
  * - Game mode effects: Ball carrier (Oddball), VIP status
- * 
+ *
  * <h2>RenderHint Format</h2>
  * Status effects use a declarative renderHint string to control visual appearance on the client:
  * <pre>
  * "effect_name:#HEXCOLOR:animation_type:show_icon:Display Name:params"
  * </pre>
- * 
+ *
  * <h3>Fields:</h3>
  * <ul>
  *   <li><b>effect_name</b>: Internal identifier (e.g., "poison", "fire", "speed_sparks")</li>
@@ -30,7 +30,7 @@ import com.fullsteam.physics.Player;
  *   <li><b>Display Name</b>: Human-readable name shown to player</li>
  *   <li><b>params</b>: (Optional) JSON object with animation parameters</li>
  * </ul>
- * 
+ *
  * <h3>Animation Types:</h3>
  * <ul>
  *   <li><b>pulse/sparkle</b>: Pulsing ring with rotating particles
@@ -47,12 +47,12 @@ import com.fullsteam.physics.Player;
  *       <br>Params: {count, radius, size}</li>
  *   <li><b>crown</b>: VIP crown with sparkles</li>
  * </ul>
- * 
+ *
  * <h3>Examples:</h3>
  * <pre>
  * // Simple format (no params)
  * "poison:#8BC34A:cloud:true:Poison"
- * 
+ *
  * // Enhanced format with parameters
  * "fire:#FF4500:flame:true:Burning:{\"count\":12,\"radius\":22,\"height\":10}"
  * "speed_sparks:#00FFFF:sparkle:true:Speed Boost:{\"particles\":12,\"particleDistance\":28}"

@@ -10,7 +10,11 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for GameEntities workshop and power-up management.
@@ -52,11 +56,11 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
                 5.0,
                 3
         );
-        
+
         // Initially no workshops
         assertEquals(0, gameEntities.getAllWorkshops().size());
         assertNull(gameEntities.getWorkshop(1));
-        
+
         // Add workshop
         gameEntities.add(workshop);
 
@@ -75,13 +79,13 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
                 5.0,
                 3
         );
-        
+
         gameEntities.add(workshop);
         assertEquals(1, gameEntities.getAllWorkshops().size());
-        
+
         // Remove workshop
         gameEntities.removeWorkshop(1);
-        
+
         // Should be removed
         assertEquals(0, gameEntities.getAllWorkshops().size());
         assertNull(gameEntities.getWorkshop(1));
@@ -98,14 +102,14 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
                 30.0,
                 1.0
         );
-        
+
         // Initially no power-ups
         assertEquals(0, gameEntities.getAllPowerUps().size());
         assertNull(gameEntities.getPowerUp(1));
-        
+
         // Add power-up
         gameEntities.add(powerUp);
-        
+
         // Should be able to get power-up
         assertEquals(1, gameEntities.getAllPowerUps().size());
         assertNotNull(gameEntities.getPowerUp(1));
@@ -123,13 +127,13 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
                 30.0,
                 1.0
         );
-        
+
         gameEntities.add(powerUp);
         assertEquals(1, gameEntities.getAllPowerUps().size());
-        
+
         // Remove power-up
         gameEntities.removePowerUp(1);
-        
+
         // Should be removed
         assertEquals(0, gameEntities.getAllPowerUps().size());
         assertNull(gameEntities.getPowerUp(1));
@@ -140,31 +144,31 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
     void testGetPowerUpsForWorkshop() {
         Workshop workshop1 = new Workshop(1, new Vector2(100, 100), 5.0, 3);
         Workshop workshop2 = new Workshop(2, new Vector2(200, 200), 5.0, 3);
-        
+
         PowerUp powerUp1 = new PowerUp(1, new Vector2(110, 110), PowerUpType.SPEED_BOOST, 1, 30.0, 1.0);
         PowerUp powerUp2 = new PowerUp(2, new Vector2(120, 120), PowerUpType.DAMAGE_BOOST, 1, 30.0, 1.0);
         PowerUp powerUp3 = new PowerUp(3, new Vector2(210, 210), PowerUpType.HEALTH_REGENERATION, 2, 30.0, 1.0);
-        
+
         gameEntities.add(workshop1);
         gameEntities.add(workshop2);
         gameEntities.add(powerUp1);
         gameEntities.add(powerUp2);
         gameEntities.add(powerUp3);
-        
+
         // Get power-ups for workshop 1
         Collection<PowerUp> workshop1PowerUps = gameEntities.getPowerUpsForWorkshop(1);
         assertEquals(2, workshop1PowerUps.size());
         assertTrue(workshop1PowerUps.contains(powerUp1));
         assertTrue(workshop1PowerUps.contains(powerUp2));
         assertFalse(workshop1PowerUps.contains(powerUp3));
-        
+
         // Get power-ups for workshop 2
         Collection<PowerUp> workshop2PowerUps = gameEntities.getPowerUpsForWorkshop(2);
         assertEquals(1, workshop2PowerUps.size());
         assertTrue(workshop2PowerUps.contains(powerUp3));
         assertFalse(workshop2PowerUps.contains(powerUp1));
         assertFalse(workshop2PowerUps.contains(powerUp2));
-        
+
         // Get power-ups for non-existent workshop
         Collection<PowerUp> nonExistentWorkshopPowerUps = gameEntities.getPowerUpsForWorkshop(999);
         assertEquals(0, nonExistentWorkshopPowerUps.size());
@@ -175,24 +179,24 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
     void testUpdateAllWorkshopsAndPowerUps() {
         Workshop workshop = new Workshop(1, new Vector2(100, 100), 5.0, 3);
         PowerUp powerUp = new PowerUp(1, new Vector2(110, 110), PowerUpType.SPEED_BOOST, 1, 30.0, 1.0);
-        
+
         gameEntities.add(workshop);
         gameEntities.add(powerUp);
-        
+
         // Create a test player and add to workshop
         Player testPlayer = new Player(1, "TestPlayer", 100, 100, 1, 100.0);
         workshop.addPlayer(testPlayer);
-        
+
         var initialProgress = workshop.getAllCraftingProgress();
         double initialValue = initialProgress.getOrDefault(1, 0.0);
-        
+
         // Manually increment progress (since updateAll doesn't call incrementProgress)
         workshop.incrementProgress(testPlayer, 1.0); // 1 second
-        
+
         // Workshop progress should have increased
         var currentProgress = workshop.getAllCraftingProgress();
         assertTrue(currentProgress.get(1) > initialValue);
-        
+
         // Power-up should still be active (no expiration in current implementation)
         assertTrue(powerUp.isActive());
     }
@@ -203,16 +207,16 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
         Workshop workshop1 = new Workshop(1, new Vector2(100, 100), 5.0, 3);
         Workshop workshop2 = new Workshop(2, new Vector2(200, 200), 5.0, 3);
         Workshop workshop3 = new Workshop(3, new Vector2(300, 300), 5.0, 3);
-        
+
         gameEntities.add(workshop1);
         gameEntities.add(workshop2);
         gameEntities.add(workshop3);
 
         assertEquals(3, gameEntities.getAllWorkshops().size());
-        
+
         // Remove middle workshop
         gameEntities.removeWorkshop(2);
-        
+
         assertEquals(2, gameEntities.getAllWorkshops().size());
         assertNotNull(gameEntities.getWorkshop(1));
         assertNull(gameEntities.getWorkshop(2));
@@ -225,16 +229,16 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
         PowerUp powerUp1 = new PowerUp(1, new Vector2(100, 100), PowerUpType.SPEED_BOOST, 1, 30.0, 1.0);
         PowerUp powerUp2 = new PowerUp(2, new Vector2(200, 200), PowerUpType.DAMAGE_BOOST, 1, 30.0, 1.0);
         PowerUp powerUp3 = new PowerUp(3, new Vector2(300, 300), PowerUpType.HEALTH_REGENERATION, 2, 30.0, 1.0);
-        
+
         gameEntities.add(powerUp1);
         gameEntities.add(powerUp2);
         gameEntities.add(powerUp3);
-        
+
         assertEquals(3, gameEntities.getAllPowerUps().size());
-        
+
         // Remove middle power-up
         gameEntities.removePowerUp(2);
-        
+
         assertEquals(2, gameEntities.getAllPowerUps().size());
         assertNotNull(gameEntities.getPowerUp(1));
         assertNull(gameEntities.getPowerUp(2));
@@ -246,17 +250,17 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
     void testWorkshopAndPowerUpCleanup() {
         Workshop workshop = new Workshop(1, new Vector2(100, 100), 5.0, 3);
         PowerUp powerUp = new PowerUp(1, new Vector2(110, 110), PowerUpType.SPEED_BOOST, 1, 30.0, 1.0);
-        
+
         gameEntities.add(workshop);
         gameEntities.add(powerUp);
-        
+
         assertEquals(1, gameEntities.getAllWorkshops().size());
         assertEquals(1, gameEntities.getAllPowerUps().size());
-        
+
         // Deactivate entities
         workshop.setActive(false);
         powerUp.setActive(false);
-        
+
         // Entities should still exist but be inactive
         assertEquals(1, gameEntities.getAllWorkshops().size());
         assertEquals(1, gameEntities.getAllPowerUps().size());
@@ -269,7 +273,7 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
     void testWorkshopCapacityTracking() {
         Workshop workshop = new Workshop(1, new Vector2(100, 100), 5.0, 3);
         gameEntities.add(workshop);
-        
+
         // Add power-ups up to capacity
         for (int i = 1; i <= 3; i++) {
             PowerUp powerUp = new PowerUp(
@@ -282,14 +286,14 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
             );
             gameEntities.add(powerUp);
         }
-        
+
         // Should be at capacity
         assertEquals(3, gameEntities.getPowerUpsForWorkshop(1).size());
-        
+
         // Try to add one more (should be allowed by GameEntities, but workshop logic should prevent spawning)
         PowerUp extraPowerUp = new PowerUp(4, new Vector2(140, 140), PowerUpType.DAMAGE_BOOST, 1, 30.0, 1.0);
         gameEntities.add(extraPowerUp);
-        
+
         // GameEntities allows it, but workshop capacity logic should handle the limit
         assertEquals(4, gameEntities.getAllPowerUps().size());
         assertEquals(4, gameEntities.getPowerUpsForWorkshop(1).size());
@@ -300,21 +304,21 @@ class GameEntitiesWorkshopTest extends BaseTestClass {
     void testWorkshopAndPowerUpSameId() {
         Workshop workshop = new Workshop(1, new Vector2(100, 100), 5.0, 3);
         PowerUp powerUp = new PowerUp(1, new Vector2(110, 110), PowerUpType.SPEED_BOOST, 1, 30.0, 1.0);
-        
+
         gameEntities.add(workshop);
         gameEntities.add(powerUp);
-        
+
         // Both should exist with same ID (different collections)
         assertNotNull(gameEntities.getWorkshop(1));
         assertNotNull(gameEntities.getPowerUp(1));
         assertEquals(workshop, gameEntities.getWorkshop(1));
         assertEquals(powerUp, gameEntities.getPowerUp(1));
-        
+
         // Remove workshop, power-up should still exist
         gameEntities.removeWorkshop(1);
         assertNull(gameEntities.getWorkshop(1));
         assertNotNull(gameEntities.getPowerUp(1));
-        
+
         // Remove power-up
         gameEntities.removePowerUp(1);
         assertNull(gameEntities.getWorkshop(1));

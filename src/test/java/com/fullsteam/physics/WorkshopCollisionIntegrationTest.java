@@ -12,7 +12,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Integration tests for Workshop and PowerUp collision detection.
@@ -54,14 +57,14 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
 
         // Create game manager
         gameManager = new GameManager("test_game", gameConfig, null);
-        
+
         // Create collision processor
         collisionProcessor = new CollisionProcessor(gameManager, gameManager.getGameEntities());
-        
+
         // Create a test player
         testPlayer = new Player(1, "TestPlayer", 0, 0, 1, 100.0);
         gameManager.getGameEntities().add(testPlayer);
-        
+
         // Get the test workshop
         testWorkshop = gameManager.getGameEntities().getAllWorkshops().iterator().next();
     }
@@ -76,13 +79,13 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
                 workshopPos.y + 50
         );
         testPlayer.getBody().getTransform().setTranslation(playerPos.x, playerPos.y);
-        
+
         // Initially no crafting progress
         assertFalse(testWorkshop.getAllCraftingProgress().containsKey(testPlayer.getId()));
-        
+
         // Simulate collision detection
         collisionProcessor.handlePlayerWorkshopCollision(testPlayer, testWorkshop);
-        
+
         // Should start crafting
         assertTrue(testWorkshop.getAllCraftingProgress().containsKey(testPlayer.getId()));
         assertEquals(1, testWorkshop.getActiveCrafters());
@@ -98,11 +101,11 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
                 workshopPos.y + 150
         );
         testPlayer.getBody().getTransform().setTranslation(playerPos.x, playerPos.y);
-        
+
         // Start crafting first
         testWorkshop.addPlayer(testPlayer);
         assertEquals(1, testWorkshop.getActiveCrafters());
-        
+
         // Simulate collision detection
         collisionProcessor.handlePlayerWorkshopCollision(testPlayer, testWorkshop);
 
@@ -126,25 +129,25 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
                 workshopPos.y + 50
         );
         testPlayer.getBody().getTransform().setTranslation(playerPos.x, playerPos.y);
-        
+
         // Start crafting and complete it
         testWorkshop.addPlayer(testPlayer);
-        
+
         // Simulate crafting completion
         boolean complete = false;
         for (int i = 0; i < 50 && !complete; i++) {
             complete = testWorkshop.incrementProgress(testPlayer, 0.04); // 2 seconds total
         }
-        
+
         assertTrue(complete || testWorkshop.getAllCraftingProgress().get(testPlayer.getId()) >= 0.99);
-        
+
         // Simulate collision detection to trigger power-up spawning
         collisionProcessor.handlePlayerWorkshopCollision(testPlayer, testWorkshop);
-        
+
         // Should have spawned a power-up
         Collection<PowerUp> powerUps = gameManager.getGameEntities().getPowerUpsForWorkshop(testWorkshop.getId());
         assertEquals(1, powerUps.size());
-        
+
         PowerUp spawnedPowerUp = powerUps.iterator().next();
         assertNotNull(spawnedPowerUp);
         assertTrue(spawnedPowerUp.isActive());
@@ -157,7 +160,7 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
         // Create a power-up at player position
         Vector2 playerPos = new Vector2(100, 100);
         testPlayer.getBody().getTransform().setTranslation(playerPos.x, playerPos.y);
-        
+
         PowerUp powerUp = new PowerUp(
                 1,
                 playerPos,
@@ -166,12 +169,12 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
                 30.0,
                 1.0
         );
-        
+
         gameManager.getGameEntities().add(powerUp);
 
         // Initially power-up should exist
         assertEquals(1, gameManager.getGameEntities().getAllPowerUps().size());
-        
+
         // Simulate collision detection
         collisionProcessor.handlePlayerPowerUpCollision(testPlayer, powerUp);
 
@@ -195,7 +198,7 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
                 workshopPos.y + 50
         );
         testPlayer.getBody().getTransform().setTranslation(playerPos.x, playerPos.y);
-        
+
         // Spawn multiple power-ups to reach capacity
         for (int i = 0; i < 3; i++) {
             PowerUp powerUp = new PowerUp(
@@ -208,20 +211,20 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
             );
             gameManager.getGameEntities().add(powerUp);
         }
-        
+
         // Should be at capacity
         assertEquals(3, gameManager.getGameEntities().getPowerUpsForWorkshop(testWorkshop.getId()).size());
-        
+
         // Complete crafting
         testWorkshop.addPlayer(testPlayer);
         boolean complete = false;
         for (int i = 0; i < 50 && !complete; i++) {
             complete = testWorkshop.incrementProgress(testPlayer, 0.04);
         }
-        
+
         // Try to spawn another power-up
         collisionProcessor.handlePlayerWorkshopCollision(testPlayer, testWorkshop);
-        
+
         // Should still be at capacity (no new power-up spawned)
         assertEquals(3, gameManager.getGameEntities().getPowerUpsForWorkshop(testWorkshop.getId()).size());
     }
@@ -232,21 +235,21 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
         // Create additional players
         Player player2 = new Player(2, "Player2", 0, 0, 1, 100.0);
         Player player3 = new Player(3, "Player3", 0, 0, 2, 100.0);
-        
+
         gameManager.getGameEntities().add(player2);
         gameManager.getGameEntities().add(player3);
-        
+
         // Position all players within workshop craft radius
         Vector2 workshopPos = testWorkshop.getPosition();
         testPlayer.getBody().getTransform().setTranslation(workshopPos.x + 50, workshopPos.y + 50);
         player2.getBody().getTransform().setTranslation(workshopPos.x + 60, workshopPos.y + 60);
         player3.getBody().getTransform().setTranslation(workshopPos.x + 70, workshopPos.y + 70);
-        
+
         // Simulate collision detection for all players
         collisionProcessor.handlePlayerWorkshopCollision(testPlayer, testWorkshop);
         collisionProcessor.handlePlayerWorkshopCollision(player2, testWorkshop);
         collisionProcessor.handlePlayerWorkshopCollision(player3, testWorkshop);
-        
+
         // All players should be crafting
         assertEquals(3, testWorkshop.getActiveCrafters());
         var progressMap = testWorkshop.getAllCraftingProgress();
@@ -265,13 +268,13 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
                 workshopPos.y + 50
         );
         testPlayer.getBody().getTransform().setTranslation(playerPos.x, playerPos.y);
-        
+
         // Make player inactive
         testPlayer.setActive(false);
-        
+
         // Simulate collision detection
         collisionProcessor.handlePlayerWorkshopCollision(testPlayer, testWorkshop);
-        
+
         // Should not start crafting
         assertEquals(0, testWorkshop.getActiveCrafters());
         assertFalse(testWorkshop.getAllCraftingProgress().containsKey(testPlayer.getId()));
@@ -287,14 +290,14 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
                 workshopPos.y + 50
         );
         testPlayer.getBody().getTransform().setTranslation(playerPos.x, playerPos.y);
-        
+
         // Make player dead
         testPlayer.setHealth(0);
         testPlayer.die();
-        
+
         // Simulate collision detection
         collisionProcessor.handlePlayerWorkshopCollision(testPlayer, testWorkshop);
-        
+
         // Should not start crafting
         assertEquals(0, testWorkshop.getActiveCrafters());
         assertFalse(testWorkshop.getAllCraftingProgress().containsKey(testPlayer.getId()));
@@ -313,12 +316,12 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
                 1.0
         );
         powerUp.setActive(false);
-        
+
         testPlayer.getBody().getTransform().setTranslation(100, 100);
-        
+
         // Simulate collision detection
         collisionProcessor.handlePlayerPowerUpCollision(testPlayer, powerUp);
-        
+
         // Should not be collected
         assertFalse(powerUp.isActive());
     }
@@ -332,7 +335,7 @@ class WorkshopCollisionIntegrationTest extends BaseTestClass {
                 workshopPos.y + 50
         );
         testPlayer.getBody().getTransform().setTranslation(playerPos.x, playerPos.y);
-        
+
         // Test with active, healthy player
         testPlayer.setActive(true);
         testPlayer.setHealth(100);

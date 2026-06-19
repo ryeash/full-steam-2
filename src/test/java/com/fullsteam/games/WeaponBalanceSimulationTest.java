@@ -18,7 +18,6 @@ import java.util.DoubleSummaryStatistics;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -27,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Weapon balance simulation that computes normalized DPS, range, AOE, and composite
  * power scores for every weapon preset and validates they fall within acceptable ratios.
- *
+ * <p>
  * Run this test to get a formatted balance report printed to stdout.
  * Tune the threshold constants below to tighten or relax balance constraints.
  */

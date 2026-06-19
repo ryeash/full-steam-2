@@ -31,7 +31,9 @@ public final class RandomNames {
         return names.get((int) (Math.random() * names.size()));
     }
 
-    /** Returns the full sorted list; callers must not mutate it. */
+    /**
+     * Returns the full sorted list; callers must not mutate it.
+     */
     public static List<String> getNames() {
         return names;
     }

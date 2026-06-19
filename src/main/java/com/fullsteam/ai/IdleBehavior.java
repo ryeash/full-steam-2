@@ -109,7 +109,7 @@ public class IdleBehavior implements AIBehavior {
         if (shouldReload && !aiPlayer.isReloading()) {
             input.setReload(true);
         }
-        
+
         // Use support utilities when idle and safe
         evaluateIdleUtilityUsage(aiPlayer, input, nearestEnemy);
 
@@ -159,11 +159,11 @@ public class IdleBehavior implements AIBehavior {
             candidateTarget.y = Math.max(-halfH, Math.min(halfH, candidateTarget.y));
 
             if (HazardAvoidance.isPositionSafe(candidateTarget, 30.0, gameEntities) &&
-                !HazardAvoidance.pathCrossesHazards(playerPos, candidateTarget, gameEntities)) {
+                    !HazardAvoidance.pathCrossesHazards(playerPos, candidateTarget, gameEntities)) {
                 wanderTarget = candidateTarget;
                 return;
             }
-            
+
             attempts++;
         }
 
@@ -199,13 +199,13 @@ public class IdleBehavior implements AIBehavior {
                 nearest = AITargetWrapper.fromPlayer(player);
             }
         }
-        
+
         // Check all enemy turrets
         for (Turret turret : gameEntities.getAllTurrets()) {
             if (!turret.isActive()) {
                 continue;
             }
-            
+
             // Skip friendly turrets - only target enemies
             AITargetWrapper turretWrapper = AITargetWrapper.fromTurret(turret);
             if (turretWrapper.isTeammateOf(aiPlayer)) {
@@ -221,7 +221,7 @@ public class IdleBehavior implements AIBehavior {
 
         return nearest;
     }
-    
+
     /**
      * Evaluate utility weapon usage during idle behavior.
      * Focus on support and defensive utilities when safe.
@@ -231,15 +231,15 @@ public class IdleBehavior implements AIBehavior {
         if (!aiPlayer.canUseUtility()) {
             return;
         }
-        
+
         if (nearestEnemy != null && aiPlayer.getPosition().distance(nearestEnemy.getPosition()) < 200) {
             return; // Too dangerous to use utilities
         }
-        
+
         UtilityWeapon utility = aiPlayer.getUtilityWeapon();
         boolean shouldUseUtility = false;
         double usageChance = 0.0;
-        
+
         switch (utility.getCategory()) {
             case SUPPORT:
                 // Use support utilities when health is low or proactively
@@ -251,7 +251,7 @@ public class IdleBehavior implements AIBehavior {
                     usageChance = 0.1;
                 }
                 break;
-                
+
             case DEFENSIVE:
                 // Use defensive utilities when health is low or preparing for combat
                 if (aiPlayer.getHealth() < 70) {
@@ -261,14 +261,14 @@ public class IdleBehavior implements AIBehavior {
                     usageChance = 0.2;
                 }
                 break;
-                
+
             case TACTICAL:
                 // Use tactical utilities for map control when safe
                 if (nearestEnemy == null || aiPlayer.getPosition().distance(nearestEnemy.getPosition()) > 300) {
                     usageChance = 0.15;
                 }
                 break;
-                
+
             case CROWD_CONTROL:
                 // Generally don't use crowd control when idle unless preparing for combat
                 if (nearestEnemy != null && aiPlayer.getPosition().distance(nearestEnemy.getPosition()) < 350) {
@@ -276,26 +276,26 @@ public class IdleBehavior implements AIBehavior {
                 }
                 break;
         }
-        
+
         // Personality modifiers
         double personalityMultiplier = 1.0;
-        
+
         // Strategic personalities use utilities more proactively
         if (aiPlayer.getPersonality().getPatience() > 0.6) {
             personalityMultiplier += 0.4;
         }
-        
+
         // Defensive personalities use defensive utilities more often
         if (utility.getCategory() == UtilityCategory.DEFENSIVE &&
-            aiPlayer.getPersonality().getAggressiveness() < 0.4) {
+                aiPlayer.getPersonality().getAggressiveness() < 0.4) {
             personalityMultiplier += 0.3;
         }
-        
+
         usageChance *= personalityMultiplier;
-        
+
         // Random factor with lower base chance than combat
         shouldUseUtility = Math.random() < usageChance;
-        
+
         if (shouldUseUtility) {
             input.setAltFire(true);
         }

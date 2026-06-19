@@ -30,8 +30,11 @@ public class PlayerConnectionService {
      * send a typed {@code joinRejected} message and close the socket.
      */
     public sealed interface ConnectResult {
-        record Success() implements ConnectResult {}
-        record Rejected(JoinRejectReason reason) implements ConnectResult {}
+        record Success() implements ConnectResult {
+        }
+
+        record Rejected(JoinRejectReason reason) implements ConnectResult {
+        }
     }
 
     public ConnectResult connectPlayer(WebSocketSession session, String gameId, boolean asSpectator) {

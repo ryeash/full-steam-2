@@ -6,7 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 /**
  * Base test class for all game system tests.
  * Provides a shared Micronaut application context with dependency injection.
- * 
+ * <p>
  * Benefits:
  * - Single application startup for all test classes
  * - Shared application context and beans

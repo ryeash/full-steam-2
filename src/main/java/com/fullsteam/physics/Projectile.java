@@ -26,10 +26,14 @@ public class Projectile extends GameEntity {
     private boolean dismissedByVelocity = false;
     private boolean dismissedByRange = false;
 
-    /** Size multiplier from the weapon's CALIBER attribute (1.0 = baseline). */
+    /**
+     * Size multiplier from the weapon's CALIBER attribute (1.0 = baseline).
+     */
     private final double caliber;
 
-    /** Per-hit impulse from the weapon's KNOCKBACK attribute (0 = no shove). */
+    /**
+     * Per-hit impulse from the weapon's KNOCKBACK attribute (0 = no shove).
+     */
     private final double knockback;
 
     // prevent double hits
@@ -61,7 +65,9 @@ public class Projectile extends GameEntity {
         this.affectedObstacles = new HashSet<>();
     }
 
-    /** Base projectile radius at caliber 1.0; CALIBER is the only size input. */
+    /**
+     * Base projectile radius at caliber 1.0; CALIBER is the only size input.
+     */
     private static final double BASE_RADIUS = 2.0;
 
     private static Body createProjectileBody(double x, double y, double vx, double vy, double linearDamping, Set<BulletEffect> bulletEffects, double caliber) {

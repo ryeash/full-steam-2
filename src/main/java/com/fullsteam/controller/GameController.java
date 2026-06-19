@@ -298,7 +298,9 @@ public class GameController {
         return HttpResponse.ok(out);
     }
 
-    /** Human-readable signed delta for one coupling, in its space's units. */
+    /**
+     * Human-readable signed delta for one coupling, in its space's units.
+     */
     private String formatCouplingDelta(WeaponAttribute.AppliedCoupling c) {
         if (c.space() == WeaponAttribute.CouplingSpace.STAT) {
             // STAT deltas are in the target's own units; only RELOAD_TIME uses STAT today (seconds).
@@ -308,7 +310,9 @@ public class GameController {
         return String.format("%+.1f pts", c.delta());
     }
 
-    /** Human-readable end-result string for a resolved attribute value. */
+    /**
+     * Human-readable end-result string for a resolved attribute value.
+     */
     private String formatStat(WeaponAttribute a, double v, Ordinance ordinance) {
         return switch (a) {
             case ACCURACY -> Math.round(v * 100) + "%";

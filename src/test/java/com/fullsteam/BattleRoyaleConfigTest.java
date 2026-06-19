@@ -1,7 +1,11 @@
 package com.fullsteam;
 
 import com.fullsteam.games.GameConfig;
-import com.fullsteam.model.*;
+import com.fullsteam.model.EntityWorldDensity;
+import com.fullsteam.model.RespawnMode;
+import com.fullsteam.model.Rules;
+import com.fullsteam.model.ScoreStyle;
+import com.fullsteam.model.VictoryCondition;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import jakarta.validation.ConstraintViolation;
@@ -10,7 +14,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @MicronautTest(startApplication = false)
 public class BattleRoyaleConfigTest extends BaseTestClass {
@@ -63,16 +69,16 @@ public class BattleRoyaleConfigTest extends BaseTestClass {
 
         // Validate the configuration
         Set<ConstraintViolation<GameConfig>> violations = validator.validate(config);
-        
+
         if (!violations.isEmpty()) {
             System.out.println("Validation violations found:");
             for (ConstraintViolation<GameConfig> violation : violations) {
                 System.out.println("  - " + violation.getPropertyPath() + ": " + violation.getMessage());
             }
         }
-        
+
         assertTrue(violations.isEmpty(), "Battle Royale configuration should be valid");
-        
+
         // Verify key Battle Royale characteristics
         assertEquals(50, config.getMaxPlayers(), "Should support 50 players");
         assertEquals(0, config.getTeamCount(), "Should be FFA (teamCount = 0)");
@@ -80,7 +86,7 @@ public class BattleRoyaleConfigTest extends BaseTestClass {
         assertEquals(4000.0, config.getWorldHeight(), "Should have large world height");
         assertTrue(config.isFreeForAll(), "Should be in FFA mode");
         assertFalse(config.isTeamMode(), "Should not be in team mode");
-        
+
         // Verify rules
         assertEquals(RespawnMode.ELIMINATION, rules.getRespawnMode(), "Should use elimination respawn");
         assertEquals(VictoryCondition.ELIMINATION, rules.getVictoryCondition(), "Should use elimination victory");
@@ -106,15 +112,15 @@ public class BattleRoyaleConfigTest extends BaseTestClass {
 
         Set<ConstraintViolation<GameConfig>> violations = validator.validate(config);
         assertTrue(violations.isEmpty(), "Should support 50 players with 4000x4000 world");
-        
+
         // Calculate area per player
         double totalArea = config.getWorldWidth() * config.getWorldHeight();
         double areaPerPlayer = totalArea / config.getMaxPlayers();
-        
+
         // With 4000x4000 = 16,000,000 total area / 50 players = 320,000 area per player
         // That's roughly equivalent to 565x565 per player, which is good spacing
         assertTrue(areaPerPlayer >= 300000, "Should have adequate space per player for BR gameplay");
-        
+
         System.out.println("Battle Royale Stats:");
         System.out.println("  Total World Area: " + totalArea);
         System.out.println("  Players: " + config.getMaxPlayers());
