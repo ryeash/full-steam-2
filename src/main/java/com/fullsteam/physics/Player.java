@@ -371,8 +371,9 @@ public class Player extends GameEntity {
     }
 
     /**
-     * Consume one life. Returns true if player is now eliminated.
-     * In ELIMINATION mode (livesRemaining = -1), first death eliminates the player.
+     * Consume one life. Returns true if player is now eliminated. Modes without
+     * limited lives leave livesRemaining = -1 (unlimited), so this is a no-op for
+     * them; LIMITED with maxLives = 1 eliminates on first death (one-life play).
      */
     public boolean loseLife() {
         if (livesRemaining > 0) {

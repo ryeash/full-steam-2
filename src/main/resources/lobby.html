@@ -514,7 +514,6 @@
                             <option value="ENDLESS">Endless (No Win Condition)</option>
                             <option value="SCORE_LIMIT">Score Limit (First to X)</option>
                             <option value="TIME_LIMIT">Time Limit (Most at Time)</option>
-                            <option value="OBJECTIVE">Objective (CTF/KOTH)</option>
                         </select>
                     </div>
                     <div class="config-item" id="scoreLimitField" style="display: none;">
@@ -548,7 +547,6 @@
                             <option value="INSTANT">Instant (Respawn after delay)</option>
                             <option value="WAVE">Wave (Team respawns together)</option>
                             <option value="NEXT_ROUND">Next Round (No respawn until round ends)</option>
-                            <option value="ELIMINATION">Elimination (One life only)</option>
                             <option value="LIMITED">Limited (X lives per player)</option>
                         </select>
                     </div>
@@ -846,15 +844,15 @@
         } else if (rules.victoryCondition === 'TIME_LIMIT') {
             const time = formatTime(rules.timeLimit);
             tags.push(`⏱️ ${time} Match`);
-        } else if (rules.victoryCondition === 'OBJECTIVE') {
-            tags.push(`🎯 Objective`);
         }
         
         // Respawn mode
-        if (rules.respawnMode === 'ELIMINATION') {
-            tags.push({ text: '💀 One Life', highlight: true });
-        } else if (rules.respawnMode === 'LIMITED') {
-            tags.push(`❤️ ${rules.maxLives} Lives`);
+        if (rules.respawnMode === 'LIMITED') {
+            if (rules.maxLives === 1) {
+                tags.push({ text: '💀 One Life', highlight: true });
+            } else {
+                tags.push(`❤️ ${rules.maxLives} Lives`);
+            }
         } else if (rules.respawnMode === 'WAVE') {
             tags.push(`🌊 Wave Respawn`);
         }
@@ -1003,7 +1001,7 @@
                     restDuration: 15,           // 15 second rest
                     flagsPerTeam: 1,            // Classic CTF - 1 flag per team
                     scoreStyle: 'OBJECTIVE',    // Score by objectives only
-                    victoryCondition: 'OBJECTIVE',
+                    victoryCondition: 'SCORE_LIMIT',  // first to the capture limit
                     scoreLimit: 5,              // First to 5 captures wins (more for 3 teams)
                     timeLimit: 600,
                     suddenDeath: true,          // Sudden death if tied
@@ -1064,7 +1062,7 @@
                     timeLimit: 1200,            // 20 minute max (safety limit for 50 players)
                     suddenDeath: false,
                     lockGameAfterSeconds: 15,   // Lock game after 15s - no late joins in BR!
-                    respawnMode: 'ELIMINATION', // ONE LIFE - Battle Royale style!
+                    respawnMode: 'LIMITED',     // ONE LIFE (maxLives: 1) - Battle Royale style!
                     respawnDelay: 0,
                     waveRespawnInterval: 30,
                     maxLives: 1,
@@ -1127,7 +1125,7 @@
                     restDuration: 10,
                     flagsPerTeam: 0,            // No flags in HQ assault
                     scoreStyle: 'TOTAL',        // Kills + HQ damage points
-                    victoryCondition: 'OBJECTIVE',  // Win by destroying enemy HQ
+                    victoryCondition: 'SCORE_LIMIT',  // Win by destroying enemy HQ (HQ damage feeds the score limit)
                     scoreLimit: 300,            // Fallback score limit
                     timeLimit: 900,             // 15 minute fallback
                     suddenDeath: false,
@@ -1430,7 +1428,9 @@
                 document.getElementById('timeLimit').value = r.timeLimit ?? 600;
                 document.getElementById('suddenDeath').checked = r.suddenDeath ?? false;
                 document.getElementById('lockGameAfterSeconds').value = r.lockGameAfterSeconds ?? 0;
-                document.getElementById('respawnMode').value = r.respawnMode || 'INSTANT';
+                // Coerce the retired ELIMINATION mode to its equivalent (LIMITED, 1 life).
+                document.getElementById('respawnMode').value =
+                    (r.respawnMode === 'ELIMINATION' ? 'LIMITED' : r.respawnMode) || 'INSTANT';
                 document.getElementById('respawnDelay').value = r.respawnDelay ?? 5;
                 document.getElementById('waveRespawnInterval').value = r.waveRespawnInterval ?? 30;
                 document.getElementById('maxLives').value = r.maxLives ?? 3;
@@ -1490,10 +1490,6 @@
                 timeLimitField.style.display = 'block';
                 suddenDeathField.style.display = 'block';
                 break;
-            case 'OBJECTIVE':
-                scoreLimitField.style.display = 'block';
-                suddenDeathField.style.display = 'block';
-                break;
         }
     }
     
@@ -1526,7 +1522,7 @@
                 respawnDelayField.style.display = 'block';
                 maxLivesField.style.display = 'block';
                 break;
-            // NEXT_ROUND and ELIMINATION don't need extra fields
+            // NEXT_ROUND doesn't need extra fields
         }
     }
     

@@ -23,14 +23,9 @@ public enum RespawnMode {
     NEXT_ROUND,
 
     /**
-     * No respawn at all - one life only.
-     * Last player/team standing wins. Battle royale style.
-     */
-    ELIMINATION,
-
-    /**
      * Limited number of lives per player.
      * Each death counts against your life pool. Once out of lives, eliminated.
+     * Set maxLives = 1 for one-life / battle-royale style play.
      */
     LIMITED
 }

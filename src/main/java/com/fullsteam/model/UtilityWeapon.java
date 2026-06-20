@@ -52,8 +52,14 @@ public enum UtilityWeapon {
     private final UtilityCategory category;
 
     // Constructor for FieldEffect and Entity-based utilities
-    UtilityWeapon(String displayName, String description, FieldEffectType fieldEffectType,
-                  String entityClassName, double cooldown, double range, double radius, double damage,
+    UtilityWeapon(String displayName,
+                  String description,
+                  FieldEffectType fieldEffectType,
+                  String entityClassName,
+                  double cooldown,
+                  double range,
+                  double radius,
+                  double damage,
                   UtilityCategory category) {
         this.displayName = displayName;
         this.description = description;

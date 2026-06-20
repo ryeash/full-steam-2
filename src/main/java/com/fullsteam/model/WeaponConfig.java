@@ -431,6 +431,27 @@ public class WeaponConfig {
             Ordinance.PLASMA_BEAM  // total: 100 pts (attr 35 + fx 20 + ord 45)
     );
 
+    // Ricochet Laser - Instant-hit laser that reflects off walls (BOUNCY beam).
+    // Heavy range investment gives the beam the travel budget to bank around
+    // corners through several bounces; thin (baseline caliber) and precise.
+    public static final WeaponConfig RICOCHET_LASER_PRESET = new WeaponConfig(
+            "Ricochet Laser",
+            14,     // damage ~24
+            6,      // medium fire rate
+            13,     // range ~817 units (long, to fuel bounces)
+            0,      // perfect accuracy (beams)
+            9,      // magazine
+            3,      // reload ~3.3s
+            0,      // speed (unused for beams)
+            0,      // single beam
+            -10,    // not used for beams (reclaims budget)
+            0,      // handling
+            0,      // caliber (thin, precise beam)
+            0,      // knockback (inert on beams)
+            Set.of(BulletEffect.BOUNCY),  // reflects off walls; 15 pts
+            Ordinance.LASER  // total: 100 pts (attr 35 + fx 15 + ord 50)
+    );
+
     // ===== ADVANCED COMBINATION WEAPONS =====
 
     // Storm Caller - Electric + Homing rapid-fire seeking electric projectiles

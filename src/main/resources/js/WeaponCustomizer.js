@@ -300,7 +300,7 @@ class WeaponCustomizer {
             effects: ['ROCKET_LAUNCHER', 'INCENDIARY_SHOTGUN', 'ARC_PISTOL', 'ICE_CANNON', 'TOXIC_SPRAYER',
                       'PIERCING_RIFLE', 'BOUNCY_SMG', 'SEEKER_DART', 'CLUSTER_MORTAR',
                       'NAPALM_LAUNCHER', 'STORM_CALLER', 'VENOM_NEEDLER', 'FROST_LANCE', 'SHRAPNEL_CANNON', 'PHANTOM_NEEDLES'],
-            beams: ['LASER_RIFLE', 'PLASMA_CANNON', 'ARC_LASER', 'RAILGUN']
+            beams: ['LASER_RIFLE', 'PLASMA_CANNON', 'ARC_LASER', 'RAILGUN', 'RICOCHET_LASER']
         };
         Object.entries(categories).forEach(([categoryName, presetKeys]) => {
             const container = this._q(`#preset-buttons-${categoryName}`);

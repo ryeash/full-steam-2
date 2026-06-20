@@ -37,10 +37,10 @@ public class BattleRoyaleConfigTest extends BaseTestClass {
                 .timeLimit(1200.0)  // 20 minutes
                 .suddenDeath(false)
                 .lockGameAfterSeconds(30.0)  // Lock after 30 seconds
-                .respawnMode(RespawnMode.ELIMINATION)
+                .respawnMode(RespawnMode.LIMITED)  // one-life BR = LIMITED with maxLives 1
                 .respawnDelay(0.0)
                 .waveRespawnInterval(30.0)
-                .maxLives(-1)
+                .maxLives(1)
                 .kothZones(0)
                 .kothPointsPerSecond(1.0)
                 .addWorkshops(true)  // Workshops for loot
@@ -88,7 +88,8 @@ public class BattleRoyaleConfigTest extends BaseTestClass {
         assertFalse(config.isTeamMode(), "Should not be in team mode");
 
         // Verify rules
-        assertEquals(RespawnMode.ELIMINATION, rules.getRespawnMode(), "Should use elimination respawn");
+        assertEquals(RespawnMode.LIMITED, rules.getRespawnMode(), "Should use limited respawn (one life)");
+        assertEquals(1, rules.getMaxLives(), "Battle royale is one life");
         assertEquals(VictoryCondition.ELIMINATION, rules.getVictoryCondition(), "Should use elimination victory");
         assertEquals(EntityWorldDensity.CHOKED, rules.getObstacleDensity(), "Should have choked obstacle density");
         assertTrue(rules.hasWorkshops(), "Should have workshops for loot");

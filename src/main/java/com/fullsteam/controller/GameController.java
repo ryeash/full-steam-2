@@ -137,7 +137,6 @@ public class GameController {
                     ordData.put("cost", ord.getPointCost());
                     ordData.put("description", ord.getDescription());
                     ordData.put("speedMultiplier", ord.getSpeedMultiplier());
-                    ordData.put("hasTrail", ord.isHasTrail());
                     ordData.put("beam", ord.isBeamType());
                     return ordData;
                 })
@@ -174,6 +173,7 @@ public class GameController {
         presets.put("PLASMA_CANNON", createPresetData(WeaponConfig.PLASMA_CANNON_PRESET));
         presets.put("ARC_LASER", createPresetData(WeaponConfig.ARC_LASER_PRESET));
         presets.put("RAILGUN", createPresetData(WeaponConfig.RAILGUN_PRESET));
+        presets.put("RICOCHET_LASER", createPresetData(WeaponConfig.RICOCHET_LASER_PRESET));
 
         // Advanced combination weapons
         presets.put("STORM_CALLER", createPresetData(WeaponConfig.STORM_CALLER_PRESET));

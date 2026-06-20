@@ -2072,7 +2072,6 @@ class GameEngine {
         const names = {
             'SCORE_LIMIT': 'Score Limit',
             'TIME_LIMIT': 'Time Limit',
-            'OBJECTIVE': 'Objective',
             'ELIMINATION': 'Elimination',
             'ENDLESS': 'Endless'
         };
@@ -3202,36 +3201,54 @@ class GameEngine {
      * Create a beam weapon effect
      */
     createBeam(beamData) {
+        // The container sits at world origin; each segment graphic is placed at its
+        // absolute world coords. A straight beam has one segment; a BOUNCY beam has
+        // one per leg of its reflected path.
         const beamContainer = new PIXI.Container();
-        
-        beamContainer.position.set(beamData.startX, beamData.startY);
-        
-        // Calculate beam length and angle
-        const dx = beamData.endX - beamData.startX;
-        const dy = beamData.endY - beamData.startY;
-        const length = Math.sqrt(dx * dx + dy * dy);
-        const angle = Math.atan2(dy, dx);
-        
-        // Create the main beam graphics based on type
-        const beamGraphics = this.createBeamGraphics(beamData, length);
-        beamGraphics.rotation = angle;
-        beamContainer.addChild(beamGraphics);
-        
-        // Add beam effects based on damage type
-        if (beamData.damageType === 'DAMAGE_OVER_TIME') {
-            this.addBeamEffects(beamContainer, beamData, length, angle);
-        }
-        
-        // Set z-index above projectiles but below players
-        beamContainer.zIndex = 9;
-        
-        // Store beam data and add to containers
+        beamContainer.position.set(0, 0);
+        beamContainer.zIndex = 9; // above projectiles, below players
+        this._renderBeamSegments(beamContainer, beamData);
         beamContainer.beamData = beamData;
-        beamContainer.beamGraphics = beamGraphics;
-        beamContainer.beamLength = length;
-        beamContainer.beamAngle = angle;
         this.beams.set(beamData.id, beamContainer);
         this.gameContainer.addChild(beamContainer);
+    }
+
+    /** Beam path vertices: server-supplied polyline, or [start, end] fallback. */
+    _beamPoints(beamData) {
+        if (Array.isArray(beamData.points) && beamData.points.length >= 2) {
+            return beamData.points;
+        }
+        return [{ x: beamData.startX, y: beamData.startY },
+                { x: beamData.endX, y: beamData.endY }];
+    }
+
+    /** Cheap geometry signature so updateBeam only rebuilds when the path changes. */
+    _beamSignature(points) {
+        return points.map(p => `${Math.round(p.x)},${Math.round(p.y)}`).join(';');
+    }
+
+    /** (Re)build one beam graphic per path segment, positioned/rotated in world space. */
+    _renderBeamSegments(beamContainer, beamData) {
+        if (beamContainer.segments) {
+            beamContainer.segments.forEach(seg => { beamContainer.removeChild(seg); seg.destroy({ children: true }); });
+        }
+        beamContainer.segments = [];
+        const pts = this._beamPoints(beamData);
+        for (let i = 0; i < pts.length - 1; i++) {
+            const a = pts[i], b = pts[i + 1];
+            const dx = b.x - a.x, dy = b.y - a.y;
+            const length = Math.sqrt(dx * dx + dy * dy);
+            const seg = new PIXI.Container();
+            seg.position.set(a.x, a.y);
+            seg.rotation = Math.atan2(dy, dx);
+            seg.addChild(this.createBeamGraphics(beamData, length));
+            if (beamData.ordinance === 'PLASMA_BEAM') {
+                this.addBeamEffects(seg, beamData, length, 0); // seg is already rotated
+            }
+            beamContainer.addChild(seg);
+            beamContainer.segments.push(seg);
+        }
+        beamContainer.beamSig = this._beamSignature(pts);
     }
     
     /**
@@ -3241,45 +3258,17 @@ class GameEngine {
         const beamContainer = this.beams.get(beamData.id);
         if (!beamContainer) return;
 
-        beamContainer.position.set(beamData.startX, beamData.startY);
-
-        const dx = beamData.endX - beamData.startX;
-        const dy = beamData.endY - beamData.startY;
-        const length = Math.sqrt(dx * dx + dy * dy);
-        const angle = Math.atan2(dy, dx);
-
-        // Only re-rasterise when the beam length changes — that's the expensive
-        // path (clear + redraw path geometry). Rotation is just a cheap matrix
-        // property and must be synced every frame so rotating beams (e.g. the
-        // defense laser) don't leave stale ghost graphics at the original angle.
-        if (Math.abs(length - beamContainer.beamLength) > 5) {
-            if (beamContainer.beamGraphics) {
-                beamContainer.beamGraphics.clear();
-                this.drawBeamGraphics(beamContainer.beamGraphics, beamData, length);
-            }
-            if (beamContainer.energyEffect) {
-                beamContainer.energyEffect.clear();
-                beamContainer.energyEffect.moveTo(0, 0);
-                beamContainer.energyEffect.lineTo(length, 0);
-                beamContainer.energyEffect.stroke({ width: 8, color: 0x4488ff, alpha: 0.1 });
-            }
-            beamContainer.beamLength = length;
+        // Rebuild segment geometry only when the path actually changes (e.g. the
+        // rotating defense laser). Player beams have a fixed path, so this is a
+        // no-op after the first frame.
+        const sig = this._beamSignature(this._beamPoints(beamData));
+        if (sig !== beamContainer.beamSig) {
+            this._renderBeamSegments(beamContainer, beamData);
         }
 
-        // Always sync rotation on both children — this is free and ensures
-        // energyEffect stays aligned with beamGraphics as the beam rotates.
-        if (beamContainer.beamGraphics) {
-            beamContainer.beamGraphics.rotation = angle;
-        }
-        if (beamContainer.energyEffect) {
-            beamContainer.energyEffect.rotation = angle;
-        }
-        beamContainer.beamAngle = angle;
-
-        // Fade the whole container as the beam nears expiry
+        // Fade the whole container (all segments) as the beam nears expiry.
         const intensity = beamData.durationPercent || 1.0;
         beamContainer.alpha = Math.max(0.3, intensity);
-
         beamContainer.beamData = beamData;
     }
     
@@ -3665,7 +3654,7 @@ class GameEngine {
      */
     addBeamEffects(beamContainer, beamData, length, angle) {
         // Add pulsing or crackling effects for continuous beams
-        if (beamData.damageType === 'DAMAGE_OVER_TIME') {
+        if (beamData.ordinance === 'PLASMA_BEAM') {
             // Add continuous energy effect
             const energyEffect = new PIXI.Graphics();
             energyEffect.moveTo(0, 0);

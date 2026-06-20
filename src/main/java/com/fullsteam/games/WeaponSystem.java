@@ -1,9 +1,9 @@
 package com.fullsteam.games;
 
 import com.fullsteam.model.BulletEffect;
-import com.fullsteam.model.DamageApplicationType;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
+import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.BulletEffectProcessor;
@@ -25,6 +25,7 @@ import org.dyn4j.world.result.RaycastResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -72,10 +73,12 @@ public class WeaponSystem {
         List<Beam> beams = player.shootBeam();
 
         for (Beam beam : beams) {
-            Vector2 effectiveEnd = findBeamObstacleIntersection(beam);
-            beam.setEffectiveEndPoint(effectiveEnd);
+            // Compute the beam's path — a straight [start, end] for normal beams, or
+            // a reflected polyline for BOUNCY beams. setPath keeps effectiveEndPoint
+            // (the last vertex) in sync for single-point consumers.
+            beam.setPath(computeBeamPath(beam));
             gameEntities.add(beam);
-            if (beam.getDamageApplicationType() == DamageApplicationType.INSTANT) {
+            if (beam.getOrdinance() == Ordinance.LASER) {
                 processStandardBeamHit(beam);
             }
         }
@@ -153,45 +156,82 @@ public class WeaponSystem {
      * Find where a beam intersects with obstacles, considering beam-specific piercing behavior.
      * Returns the effective end point of the beam (either full range or obstacle intersection).
      */
-    private Vector2 findBeamObstacleIntersection(Beam beam) {
-        Vector2 startPoint = beam.getStartPoint();
-        Vector2 endPoint = beam.getEndPoint();
-        Vector2 direction = endPoint.copy().subtract(startPoint);
-        double maxDistance = direction.getMagnitude();
-        direction.normalize();
+    /**
+     * Max reflections for a BOUNCY beam, and the nudge off a surface after a bounce.
+     */
+    private static final int MAX_BEAM_BOUNCES = 3;
+    private static final double BEAM_BOUNCE_EPSILON = 0.5;
 
-        Ray ray = new Ray(startPoint, direction);
+    /**
+     * Compute a beam's full path as a polyline of vertices [start, …, end].
+     *
+     * <p>Normal beams produce a straight two-point path (start → closest blocking
+     * obstacle, or full range). A BOUNCY beam (that isn't also PIERCING — piercing
+     * passes through obstacles and wins) reflects off each obstacle's surface
+     * normal, accumulating a vertex per bounce, up to {@link #MAX_BEAM_BOUNCES} or
+     * until its range is spent. Only obstacles reflect; players/turrets are passed
+     * through here and damaged later in the per-segment damage pass.
+     */
+    private List<Vector2> computeBeamPath(Beam beam) {
+        List<Vector2> path = new ArrayList<>();
+        Vector2 p = beam.getStartPoint().copy();
+        Vector2 d = beam.getDirection().copy();
+        d.normalize();
+        double remaining = beam.getRange();
+        boolean bouncy = beam.getBulletEffects().contains(BulletEffect.BOUNCY)
+                && !beam.getBulletEffects().contains(BulletEffect.PIERCING); // piercing wins
+        int maxBounces = bouncy ? MAX_BEAM_BOUNCES : 0;
 
-        // Raycast to find all entities
-        List<RaycastResult<Body, BodyFixture>> results = world.raycast(
-                ray,
-                maxDistance,
-                new DetectFilter<>(true, true, null)
-        );
-
-        if (results.isEmpty()) {
-            return endPoint; // No entities, beam reaches full range
+        path.add(p.copy());
+        for (int bounce = 0; ; bounce++) {
+            RaycastResult<Body, ?> hit = closestBlockingObstacle(beam, p, d, remaining);
+            if (hit == null) {
+                // Nothing to stop it — beam runs to the end of its remaining range.
+                path.add(p.copy().add(d.copy().multiply(remaining)));
+                break;
+            }
+            Vector2 hitPoint = hit.getRaycast().getPoint().copy();
+            path.add(hitPoint.copy());
+            if (bounce >= maxBounces) {
+                break; // out of bounces (or a non-bouncy beam stops at the wall)
+            }
+            Vector2 n = hit.getRaycast().getNormal().copy();
+            if (n.getMagnitude() == 0) {
+                break; // degenerate surface normal; stop here
+            }
+            n.normalize();
+            // Reflect: r = d − 2(d·n)n
+            d = d.subtract(n.multiply(2 * d.dot(n)));
+            d.normalize();
+            remaining -= p.distance(hitPoint);
+            if (remaining <= BEAM_BOUNCE_EPSILON) {
+                break;
+            }
+            // Resume just off the surface so we don't immediately re-hit it.
+            p = hitPoint.copy().add(d.copy().multiply(BEAM_BOUNCE_EPSILON));
         }
+        return path;
+    }
 
-        // Find the closest blocking entity based on beam type
+    /**
+     * Closest obstacle that blocks {@code beam} along ray (p, d) within maxDistance, or null.
+     */
+    private RaycastResult<Body, ?> closestBlockingObstacle(Beam beam, Vector2 p, Vector2 d, double maxDistance) {
+        Ray ray = new Ray(p, d);
+        List<RaycastResult<Body, BodyFixture>> results = world.raycast(
+                ray, maxDistance, new DetectFilter<>(true, true, null));
+        RaycastResult<Body, ?> closest = null;
         double closestDistance = maxDistance;
         for (RaycastResult<Body, ?> result : results) {
-            Body body = result.getBody();
-            Object userData = body.getUserData();
-            double distance = result.getRaycast().getDistance();
-
-            // Check if this entity blocks the beam based on beam type
-            if (shouldEntityBlockBeam(beam, userData)) {
+            if (shouldEntityBlockBeam(beam, result.getBody().getUserData())) {
+                double distance = result.getRaycast().getDistance();
                 if (distance < closestDistance) {
                     closestDistance = distance;
+                    closest = result;
                 }
             }
         }
-
-        // Calculate effective end point
-        Vector2 effectiveEnd = startPoint.copy();
-        effectiveEnd.add(direction.copy().multiply(closestDistance));
-        return effectiveEnd;
+        return closest;
     }
 
     /**
@@ -223,43 +263,53 @@ public class WeaponSystem {
      * Process standard beam hits (laser, etc.)
      */
     public void processStandardBeamHit(Beam beam) {
-        Vector2 startPoint = beam.getStartPoint();
-        Vector2 endPoint = beam.getEffectiveEndPoint();
-        Vector2 direction = endPoint.copy().subtract(startPoint);
+        // Walk each segment of the beam's path (one for a straight beam, more for a
+        // BOUNCY beam). The beam's affectedPlayers set dedups entities that lie on
+        // more than one segment so nothing is hit twice by the same beam.
+        List<Vector2> path = beam.getPath();
+        if (path == null || path.size() < 2) {
+            return;
+        }
+        for (int i = 0; i < path.size() - 1; i++) {
+            damageAlongSegment(beam, path.get(i), path.get(i + 1));
+        }
+    }
+
+    /**
+     * Apply a beam's instant damage to every affectable entity along one segment.
+     */
+    private void damageAlongSegment(Beam beam, Vector2 segStart, Vector2 segEnd) {
+        Vector2 direction = segEnd.copy().subtract(segStart);
         double distance = direction.getMagnitude();
+        if (distance <= 0) {
+            return;
+        }
         direction.normalize();
 
-        Ray ray = new Ray(startPoint, direction);
-
-        // Raycast to find all entities in beam path
+        Ray ray = new Ray(segStart, direction);
         List<RaycastResult<Body, BodyFixture>> results = world.raycast(
-                ray,
-                distance,
-                new DetectFilter<>(true, true, null)
-        );
-
+                ray, distance, new DetectFilter<>(true, true, null));
         if (results.isEmpty()) {
             return;
         }
-
-        // Sort results by distance for proper piercing order
+        // Sort by distance for proper piercing order along this segment.
         results.sort(Comparator.comparingDouble(r -> r.getRaycast().getDistance()));
 
-        // Process each hit based on beam piercing behavior
         for (RaycastResult<Body, ?> result : results) {
-            Body body = result.getBody();
-            Object userData = body.getUserData();
-
+            Object userData = result.getBody().getUserData();
             if (userData instanceof Player player) {
-                if (beam.canAffectPlayer(player)) {
+                // applyBeamDamage records the id; skip if already hit this beam.
+                if (beam.canAffectPlayer(player) && !beam.getAffectedPlayers().contains(player.getId())) {
                     applyBeamDamage(beam, player);
                 }
             } else if (userData instanceof Turret turret) {
-                if (turret.isActive()) {
+                if (turret.isActive() && !beam.getAffectedPlayers().contains(turret.getId())) {
                     applyBeamDamage(beam, turret);
                 }
             } else if (userData instanceof Obstacle) {
-                // Stop at obstacle if beam doesn't pierce obstacles
+                // Stop this segment at an obstacle unless the beam pierces. (For a
+                // bouncy beam the path already ends the segment at the wall, so this
+                // is the piercing/terminal guard for the final straight run.)
                 if (!beam.getBulletEffects().contains(BulletEffect.PIERCING)) {
                     break;
                 }

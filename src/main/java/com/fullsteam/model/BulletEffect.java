@@ -15,10 +15,11 @@ public enum BulletEffect {
     POISON(22, "Projectiles release poison gas, dealing area damage over time", 50.0, 0.5, 1.0, true),
     SMOKE(0, "Projectiles create a vision-blocking smoke cloud on impact", 60.0, 0.0, 0.0, true),
 
-    // Special — behavioral. PIERCING works for beams (controls beam pass-through),
-    // but BOUNCY/FRAGMENTING/HOMING are flight behaviors with no meaning for an
-    // instant-hit ray, so they are forbidden on beam ordnance.
-    BOUNCY(15, "Projectiles bounce off obstacles instead of stopping", 0, 1.0, 1.0, false),
+    // Special — behavioral. PIERCING and BOUNCY both work for beams: piercing
+    // controls beam pass-through, and bouncy reflects the beam off obstacles into
+    // a multi-segment path. FRAGMENTING/HOMING are flight behaviors with no meaning
+    // for an instant-hit ray, so they remain forbidden on beam ordnance.
+    BOUNCY(15, "Projectiles bounce off obstacles; beams reflect off walls", 0, 1.0, 1.0, true),
     PIERCING(20, "Projectiles pass through enemies, hitting multiple targets", 0, 1.0, 1.0, true),
     FRAGMENTING(22, "Projectiles split into multiple smaller projectiles on impact", 20, 0.0, 0.0, false),
     HOMING(30, "Projectiles slightly track towards nearby enemies", 0, 1.0, 1.0, false);

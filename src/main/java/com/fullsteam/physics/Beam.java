@@ -2,7 +2,6 @@ package com.fullsteam.physics;
 
 import com.fullsteam.Config;
 import com.fullsteam.model.BulletEffect;
-import com.fullsteam.model.DamageApplicationType;
 import com.fullsteam.model.Ordinance;
 import lombok.Getter;
 import lombok.Setter;
@@ -12,8 +11,10 @@ import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -29,13 +30,18 @@ public class Beam extends GameEntity {
     protected final Vector2 startPoint;
     protected Vector2 endPoint;
     protected Vector2 effectiveEndPoint; // Actual end point after obstacle collision
+    /**
+     * The beam's full path as a polyline: [start, bounce₁, …, end]. A plain
+     * (non-bouncing) beam is just [start, effectiveEnd]. BOUNCY beams add a vertex
+     * per reflection. Damage is applied per segment and the client renders it as a
+     * polyline. Kept in sync with {@link #effectiveEndPoint}.
+     */
+    protected List<Vector2> path;
     protected final Vector2 direction;
     protected final double range;
     protected final double damage;
     protected final int ownerId;
     protected final int ownerTeam;
-    protected final DamageApplicationType damageApplicationType;
-    protected final double damageInterval;
     protected final Ordinance ordinance; // Type of beam (laser, plasma, heal, etc.)
     protected final Set<BulletEffect> bulletEffects; // Special effects this beam has
     protected final double caliber; // Size multiplier from the weapon's CALIBER attribute (1.0 = baseline)
@@ -59,8 +65,6 @@ public class Beam extends GameEntity {
         this.ordinance = ordinance;
         this.bulletEffects = new HashSet<>(bulletEffects);
         this.caliber = caliber;
-        this.damageApplicationType = ordinance.getDamageApplicationType();
-        this.damageInterval = ordinance.getDamageInterval();
         this.expires = (long) (System.currentTimeMillis() + (1000 * ordinance.getBeamDuration()));
 
         // Calculate end point
@@ -72,6 +76,28 @@ public class Beam extends GameEntity {
         // Initially, effective end point is the same as end point
         // This will be updated by GameManager after obstacle collision detection
         this.effectiveEndPoint = this.endPoint.copy();
+        this.path = new ArrayList<>(List.of(this.startPoint.copy(), this.endPoint.copy()));
+    }
+
+    /**
+     * Set a single-segment effective endpoint (no bounces). Keeps {@link #path} in
+     * sync as a straight [start, end] polyline. Used by straight beams and the
+     * defense laser.
+     */
+    public void setEffectiveEndPoint(Vector2 effectiveEndPoint) {
+        this.effectiveEndPoint = effectiveEndPoint;
+        this.path = new ArrayList<>(List.of(startPoint.copy(), effectiveEndPoint.copy()));
+    }
+
+    /**
+     * Set the full reflected polyline (BOUNCY beams). The last vertex becomes the
+     * effective endpoint so existing single-point consumers keep working.
+     */
+    public void setPath(List<Vector2> path) {
+        this.path = path;
+        if (path != null && !path.isEmpty()) {
+            this.effectiveEndPoint = path.get(path.size() - 1).copy();
+        }
     }
 
     /**
@@ -113,7 +139,7 @@ public class Beam extends GameEntity {
         Body body = new Body();
         // Create a thin rectangle representing the beam line for collision detection;
         // caliber widens the beam.
-        Rectangle rectangle = new Rectangle(range, BASE_WIDTH * caliber); // Very thin beam
+        Rectangle rectangle = new Rectangle(range, BASE_WIDTH * caliber);
         BodyFixture bodyFixture = body.addFixture(rectangle);
         bodyFixture.setSensor(true);
         body.setMass(MassType.INFINITE); // Stationary
@@ -139,16 +165,6 @@ public class Beam extends GameEntity {
         if (isExpired()) {
             active = false;
             return;
-        }
-
-        // Handle damage application based on type
-        switch (damageApplicationType) {
-            case INSTANT:
-                // Instant damage is applied once during creation
-                break;
-            case DAMAGE_OVER_TIME:
-                // DOT damage is now handled by GameManager with proper collision detection
-                break;
         }
         super.update(deltaTime);
     }

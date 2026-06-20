@@ -42,7 +42,8 @@ public class AIWeaponSelector {
             WeaponConfig.LASER_RIFLE_PRESET,
             WeaponConfig.PLASMA_CANNON_PRESET,
             WeaponConfig.ARC_LASER_PRESET,
-            WeaponConfig.RAILGUN_PRESET
+            WeaponConfig.RAILGUN_PRESET,
+            WeaponConfig.RICOCHET_LASER_PRESET
     );
 
     private static final List<WeaponConfig> COMBO_WEAPONS = List.of(
@@ -78,6 +79,7 @@ public class AIWeaponSelector {
             WeaponConfig.PLASMA_CANNON_PRESET,
             WeaponConfig.ARC_LASER_PRESET,
             WeaponConfig.RAILGUN_PRESET,
+            WeaponConfig.RICOCHET_LASER_PRESET,
 
             // Combos
             WeaponConfig.NAPALM_LAUNCHER_PRESET,

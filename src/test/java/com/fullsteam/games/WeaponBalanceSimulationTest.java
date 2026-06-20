@@ -1,9 +1,7 @@
 package com.fullsteam.games;
 
 import com.fullsteam.model.BulletEffect;
-import com.fullsteam.model.DamageApplicationType;
 import com.fullsteam.model.FieldEffectType;
-import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.Weapon;
 import com.fullsteam.model.WeaponConfig;
 import org.junit.jupiter.api.BeforeAll;
@@ -249,10 +247,6 @@ class WeaponBalanceSimulationTest {
      * For beam weapons, uses beam duration and damage interval instead.
      */
     static double calculateSustainedDPS(Weapon w) {
-        if (w.getOrdinance().isBeamType()) {
-            return calculateBeamDPS(w);
-        }
-
         double damagePerShot = w.getDamagePerBullet() * w.getBulletsPerShot();
         double shotsPerSecond = w.getFireRate();
 
@@ -263,33 +257,6 @@ class WeaponBalanceSimulationTest {
         double fullCycleDuration = magazineDuration + w.getReloadTime();
 
         return fullCycleDuration > 0 ? magazineDamage / fullCycleDuration : 0;
-    }
-
-    private static double calculateBeamDPS(Weapon w) {
-        Ordinance ord = w.getOrdinance();
-        double beamDuration = ord.getBeamDuration();
-
-        if (ord.getDamageApplicationType() == DamageApplicationType.INSTANT) {
-            double damagePerShot = w.getDamagePerBullet();
-            double shotsPerSecond = w.getFireRate();
-            double magazineDuration = w.getMagazineSize() / Math.max(shotsPerSecond, 0.01);
-            double magazineDamage = damagePerShot * w.getMagazineSize();
-            double fullCycle = magazineDuration + w.getReloadTime();
-            return fullCycle > 0 ? magazineDamage / fullCycle : 0;
-        }
-
-        // DOT beams apply damage every damageInterval for beamDuration seconds
-        double damageInterval = ord.getDamageInterval();
-        if (damageInterval <= 0 || beamDuration <= 0) return 0;
-
-        double ticksPerBeam = beamDuration / damageInterval;
-        double damagePerBeam = w.getDamagePerBullet() * ticksPerBeam;
-        double beamsPerMag = w.getMagazineSize();
-        double magDuration = beamsPerMag * beamDuration;
-        double magDamage = damagePerBeam * beamsPerMag;
-        double fullCycle = magDuration + w.getReloadTime();
-
-        return fullCycle > 0 ? magDamage / fullCycle : 0;
     }
 
     /**

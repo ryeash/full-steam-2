@@ -398,27 +398,20 @@ public class RuleSystem {
             player.setRespawnTime(0);
             return;
         }
+        if (player.isEliminated()) {
+            log.info("Player {} eliminated, no respawn", player.getId());
+            player.setRespawnTime(0);
+            return;
+        }
         switch (rules.getRespawnMode()) {
-            case INSTANT:
+            case INSTANT, LIMITED:
                 player.setRespawnTime((long) (System.currentTimeMillis() + (rules.getRespawnDelay() * 1000)));
                 break;
             case WAVE:
                 player.setRespawnTime(waveRespawnTime);
                 break;
             case NEXT_ROUND:
-            case ELIMINATION:
                 player.setRespawnTime(roundEndTime);
-                break;
-            case LIMITED:
-                if (player.isEliminated()) {
-                    log.info("Player {} eliminated, no respawn", player.getId());
-                    player.setRespawnTime(0);
-                } else {
-                    long respawnTime = (long) (System.currentTimeMillis() + (rules.getRespawnDelay() * 1000));
-                    player.setRespawnTime(respawnTime);
-                    log.info("Player {} will respawn in {} seconds (lives: {})",
-                            player.getId(), rules.getRespawnDelay(), player.getLivesRemaining());
-                }
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + rules.getRespawnMode());
@@ -444,9 +437,6 @@ public class RuleSystem {
                 break;
             case ELIMINATION:
                 checkEliminationVictory();
-                break;
-            case OBJECTIVE:
-                checkObjectiveVictory();
                 break;
         }
     }
@@ -538,7 +528,7 @@ public class RuleSystem {
     private void checkEliminationVictory() {
         RespawnMode respawnMode = rules.getRespawnMode();
 
-        if (respawnMode != RespawnMode.ELIMINATION && respawnMode != RespawnMode.LIMITED) {
+        if (respawnMode != RespawnMode.LIMITED) {
             return;
         }
 
@@ -580,10 +570,6 @@ public class RuleSystem {
         }
     }
 
-    private void checkObjectiveVictory() {
-        // Objective victory uses score limit (e.g., CTF captures, KOTH points)
-        checkScoreLimitVictory();
-    }
 
     private void enableSuddenDeath() {
         if (gameOver) {

@@ -510,10 +510,20 @@ public class GameStateSerializer {
             beamState.put("startY", startPos.y);
             beamState.put("endX", effectiveEndPos.x);
             beamState.put("endY", effectiveEndPos.y);
+            // Full polyline for BOUNCY beams (single segment for everything else).
+            // The client renders this; startX/Y, endX/Y stay as first/last for
+            // any legacy consumer.
+            List<Map<String, Object>> points = new ArrayList<>();
+            for (Vector2 v : beam.getPath()) {
+                Map<String, Object> pt = new HashMap<>();
+                pt.put("x", v.x);
+                pt.put("y", v.y);
+                points.add(pt);
+            }
+            beamState.put("points", points);
             beamState.put("ownerId", beam.getOwnerId());
             beamState.put("ownerTeam", beam.getOwnerTeam());
             beamState.put("damage", beam.getDamage());
-            beamState.put("damageType", beam.getDamageApplicationType().name());
             beamState.put("durationPercent", beam.getDurationPercent());
             beamStates.add(beamState);
         }

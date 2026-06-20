@@ -493,10 +493,12 @@ public class Rules {
     }
 
     /**
-     * Check if players can respawn at all.
+     * Check if players can respawn at all. Every current respawn mode eventually
+     * respawns players (LIMITED until lives run out, NEXT_ROUND at the round
+     * boundary, etc.) — there is no longer a never-respawn mode.
      */
     public boolean allowsRespawn() {
-        return respawnMode != RespawnMode.ELIMINATION;
+        return true;
     }
 
     /**

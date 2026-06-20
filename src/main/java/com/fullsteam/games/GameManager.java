@@ -11,11 +11,11 @@ import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.GameInfo;
+import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
 import com.fullsteam.model.PlayerSessionState;
-import com.fullsteam.model.RespawnMode;
 import com.fullsteam.model.Rules;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.WeaponConfig;
@@ -51,9 +51,12 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -844,25 +847,14 @@ public class GameManager {
             List<Player> playersInPath = getPlayersInBeamPath(beam);
             boolean dotHitSomeone = false; // only ever set for DOT beams below
             for (Player player : playersInPath) {
-                if (beam.canAffectPlayer(player)) {
-                    switch (beam.getDamageApplicationType()) {
-                        case DAMAGE_OVER_TIME:
-                            dotHitSomeone = true;
-                            double dotDamage = beam.processContinuousDamage(player, deltaTime);
-                            if (dotDamage > 0) {
-                                // Apply damage and check if player died
-                                if (player.takeDamage(dotDamage)) {
-                                    killPlayer(player, beamOwner);
-                                }
-                            } else if (dotDamage < 0) {
-                                // Apply healing (negative damage)
-                                player.heal(-dotDamage);
-                            }
-                            break;
-                        case INSTANT:
-                            // Instant damage was already applied when beam was created
-                            break;
+                if (beam.canAffectPlayer(player) && beam.getOrdinance() == Ordinance.PLASMA_BEAM) {
+                    dotHitSomeone = true;
+                    double dotDamage = beam.processContinuousDamage(player, deltaTime);
+                    // Apply damage and check if player died
+                    if (player.takeDamage(dotDamage)) {
+                        killPlayer(player, beamOwner);
                     }
+                    break;
                 }
             }
 
@@ -1020,37 +1012,37 @@ public class GameManager {
      */
     private List<Player> getPlayersInBeamPath(Beam beam) {
         List<Player> playersInPath = new ArrayList<>();
-        Vector2 beamStart = beam.getStartPoint();
-        Vector2 effectiveBeamEnd = beam.getEffectiveEndPoint();
+        Set<Integer> seen = new HashSet<>();
+        List<Vector2> path = beam.getPath();
+        if (path == null || path.size() < 2) {
+            return playersInPath;
+        }
 
-        // Create ray from beam start to effective end
-        Vector2 direction = effectiveBeamEnd.copy();
-        direction.subtract(beamStart);
-        double maxDistance = direction.getMagnitude();
-        direction.normalize();
+        // Walk each segment of the (possibly reflected) beam path, collecting each
+        // affectable player once. Order is by segment then distance, which matches
+        // the order the beam actually travels.
+        for (int i = 0; i < path.size() - 1; i++) {
+            Vector2 segStart = path.get(i);
+            Vector2 direction = path.get(i + 1).copy().subtract(segStart);
+            double maxDistance = direction.getMagnitude();
+            if (maxDistance <= 0) {
+                continue;
+            }
+            direction.normalize();
 
-        Ray ray = new Ray(beamStart, direction);
+            Ray ray = new Ray(segStart, direction);
+            List<RaycastResult<Body, BodyFixture>> results =
+                    world.raycast(ray, maxDistance, new DetectFilter<>(true, true, null));
+            results.sort(Comparator.comparingDouble(r -> r.getRaycast().getDistance()));
 
-        // Use dyn4j's ray casting to find all players in the beam path
-        List<RaycastResult<Body, BodyFixture>> results = world.raycast(ray, maxDistance, new DetectFilter<>(true, true, null));
-
-        // Convert results to players and sort by distance
-        for (RaycastResult<Body, BodyFixture> result : results) {
-            Body body = result.getBody();
-            if (body.getUserData() instanceof Player player) {
-                if (player.isActive() && player.getHealth() > 0) {
+            for (RaycastResult<Body, BodyFixture> result : results) {
+                if (result.getBody().getUserData() instanceof Player player
+                        && player.isActive() && player.getHealth() > 0
+                        && seen.add(player.getId())) {
                     playersInPath.add(player);
                 }
             }
         }
-
-        // Sort by distance from beam start for proper piercing order
-        playersInPath.sort((p1, p2) -> {
-            double dist1 = beamStart.distanceSquared(p1.getPosition());
-            double dist2 = beamStart.distanceSquared(p2.getPosition());
-            return Double.compare(dist1, dist2);
-        });
-
         return playersInPath;
     }
 
@@ -1267,17 +1259,6 @@ public class GameManager {
         }
         victim.die();
 
-        if (gameConfig.getRules().getRespawnMode() == RespawnMode.ELIMINATION) {
-            victim.setEliminated(true);
-            victim.setEliminationTime(System.currentTimeMillis());
-
-            // Calculate placement based on how many players are still alive
-            int remainingPlayers = (int) gameEntities.getAllPlayers().stream()
-                    .filter(p -> !p.isEliminated())
-                    .count();
-            victim.setPlacement(remainingPlayers + 1); // +1 because this player just got eliminated
-        }
-
         // Award points if this was a VIP kill
         if (wasVip) {
             if (shooter != null && shooter.getTeam() != victim.getTeam() && shooter.getTeam() > 0) {
@@ -1298,6 +1279,17 @@ public class GameManager {
                 victim.getId(), victim.getLivesRemaining(), victim.isEliminated());
 
         if (wasEliminated) {
+            // Record elimination time + placement for last-man-standing ordering.
+            // Fires for any mode that can eliminate (e.g. LIMITED running out of
+            // lives) — was previously gated to the now-removed ELIMINATION respawn
+            // mode, which left LIMITED + elimination-victory games without placements.
+            victim.setEliminated(true);
+            victim.setEliminationTime(System.currentTimeMillis());
+            int remainingPlayers = (int) gameEntities.getAllPlayers().stream()
+                    .filter(p -> !p.isEliminated())
+                    .count();
+            victim.setPlacement(remainingPlayers + 1); // +1 because this player just got eliminated
+
             gameEventManager.broadcastElimination(
                     victim.getPlayerName(),
                     victim.getTeam(),
