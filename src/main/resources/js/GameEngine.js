@@ -1047,6 +1047,9 @@ class GameEngine {
             case 'playerKilled':
                 this.handlePlayerKilled(data);
                 break;
+            case 'eliminated':
+                this.handleEliminated(data);
+                break;
             case 'gameEvent':
                 this.handleGameEvent(data);
                 break;
@@ -1062,6 +1065,23 @@ class GameEngine {
         }
     }
     
+    /**
+     * The server eliminated us in a last-man-standing game and is switching us to
+     * spectator. The spectatorInit message that follows builds the free-look view;
+     * here we tear down the player-facing UI and stop sending input. The isSpectator
+     * flag + spectatorMode (created by spectatorInit) make sendPlayerInput a no-op.
+     */
+    handleEliminated(data) {
+        this.isSpectator = true;
+        this.hideDeathScreen();
+        this.displayGameEvent({
+            message: '💀 You were eliminated — now spectating',
+            category: 'INFO',
+            color: '#ff6666',
+            displayDuration: 5000
+        });
+    }
+
     handleSpectatorInit(data) {
         // Use the shared world setup so a LOBBY -> SPECTATOR downgrade doesn't
         // duplicate obstacles/terrain/grid that we already drew during lobbyInit.
@@ -3673,7 +3693,6 @@ class GameEngine {
      */
     createUtilityEntityGraphics(entityData) {
         const graphics = new PIXI.Graphics();
-        
         switch (entityData.type) {
             case 'TURRET':
                 return this.createTurretGraphics(graphics, entityData);
@@ -5721,6 +5740,11 @@ class GameEngine {
     }
     
     sendPlayerInput(input) {
+        // Once spectating (e.g. eliminated in a last-man-standing game) there's no
+        // player entity to drive, so swallow input.
+        if (this.isSpectator || this.spectatorMode) {
+            return;
+        }
         if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
             this.websocket.send(JSON.stringify(input));
         }

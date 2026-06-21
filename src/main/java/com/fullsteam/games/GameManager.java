@@ -18,6 +18,7 @@ import com.fullsteam.model.PlayerSession;
 import com.fullsteam.model.PlayerSessionState;
 import com.fullsteam.model.Rules;
 import com.fullsteam.model.UtilityWeapon;
+import com.fullsteam.model.VictoryCondition;
 import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.CollisionProcessor;
@@ -1220,6 +1221,29 @@ public class GameManager {
         }
     }
 
+    /**
+     * Move a just-eliminated human player into free-look spectator mode. Their
+     * {@link PlayerSession} flips {@code PLAYING → SPECTATOR} and the client is
+     * switched to the spectator view. The player's {@link Player} entity is left
+     * in place (inactive) so it still contributes to final scores/placement.
+     *
+     * <p>No-op for AI (no session) and for sessions not currently PLAYING.
+     * Deliberately does <em>not</em> trigger AI back-fill of the freed slot — the
+     * match shouldn't gain a fresh bot the instant someone is knocked out.
+     */
+    private void convertEliminatedToSpectator(Player victim) {
+        PlayerSession session = gameEntities.getPlayerSession(victim.getId());
+        if (session == null || session.getState() != PlayerSessionState.PLAYING) {
+            return;
+        }
+        session.setState(PlayerSessionState.SPECTATOR);
+        send(session.getSession(), Map.of("type", "eliminated"));
+        // Switch the client over to the spectator view (full game state).
+        send(session.getSession(), gameStateSerializer.createSpectatorInitialState());
+        log.info("Player {} eliminated in last-man-standing game; switched to SPECTATOR.",
+                victim.getId());
+    }
+
     private void downgradeLobbyToSpectator(PlayerSession session) {
         session.setState(PlayerSessionState.SPECTATOR);
         send(session.getSession(), Map.of("type", "lobbyTimeout"));
@@ -1295,6 +1319,14 @@ public class GameManager {
                     victim.getTeam(),
                     victim.getLivesRemaining()
             );
+
+            // In last-man-standing games, a fully-eliminated player is out for good,
+            // so move their client into free-look spectator mode rather than leaving
+            // them stranded on their corpse. The Player entity is retained (inactive)
+            // so their placement/score still appears on the final scoreboard.
+            if (gameConfig.getRules().getVictoryCondition() == VictoryCondition.ELIMINATION) {
+                convertEliminatedToSpectator(victim);
+            }
         }
 
         // Drop any flag the victim was carrying
