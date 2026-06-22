@@ -5,6 +5,9 @@ import com.fullsteam.games.GameManager;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
+import io.micronaut.context.annotation.Value;
+import io.micronaut.http.HttpHeaders;
+import io.micronaut.http.HttpRequest;
 import io.micronaut.websocket.WebSocketSession;
 import io.micronaut.websocket.annotation.OnClose;
 import io.micronaut.websocket.annotation.OnMessage;
@@ -16,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.List;
 import java.util.Map;
 
 import static com.fullsteam.controller.PlayerConnectionService.SESSION_KEY;
@@ -27,15 +31,33 @@ public class GameWebSocketEndpoint {
 
     private final PlayerConnectionService connectionService;
     private final ObjectMapper objectMapper;
+    /** Permitted Origins for WS handshakes; empty = allow any (dev). See application.yml. */
+    private final List<String> allowedOrigins;
 
     @Inject
-    public GameWebSocketEndpoint(PlayerConnectionService connectionService, ObjectMapper objectMapper) {
+    public GameWebSocketEndpoint(PlayerConnectionService connectionService,
+                                 ObjectMapper objectMapper,
+                                 @Value("${app.allowed-origins:}") List<String> allowedOrigins) {
         this.connectionService = connectionService;
         this.objectMapper = objectMapper;
+        // An unset property binds the empty string as ["" ] (a one-element list),
+        // not an empty list — strip blank entries so a blank config means
+        // "no allowlist / allow any origin".
+        this.allowedOrigins = allowedOrigins == null ? List.of()
+                : allowedOrigins.stream().map(String::trim).filter(s -> !s.isEmpty()).toList();
     }
 
     @OnOpen
-    public void onOpen(WebSocketSession session, String gameId) {
+    public void onOpen(WebSocketSession session, String gameId, HttpRequest<?> request) {
+        // Reject cross-site WebSocket handshakes when an origin allowlist is set.
+        if (!isOriginAllowed(request)) {
+            log.warn("Rejecting WS connection to game {} from disallowed origin '{}'",
+                    gameId, request.getHeaders().get(HttpHeaders.ORIGIN));
+            sendJoinRejected(session, "ORIGIN_NOT_ALLOWED");
+            session.close();
+            return;
+        }
+
         // Check if this is a spectator connection by parsing the request URI
         boolean asSpectator = false;
         try {
@@ -59,6 +81,19 @@ public class GameWebSocketEndpoint {
         }
     }
 
+    /**
+     * Whether the handshake's Origin is permitted. When no allowlist is configured
+     * (empty {@code app.allowed-origins}) all origins are allowed — convenient for
+     * local dev. In production, set APP_ALLOWED_ORIGINS to your site origin(s).
+     */
+    private boolean isOriginAllowed(HttpRequest<?> request) {
+        if (allowedOrigins == null || allowedOrigins.isEmpty()) {
+            return true;
+        }
+        String origin = request.getHeaders().get(HttpHeaders.ORIGIN);
+        return origin != null && allowedOrigins.contains(origin);
+    }
+
     private void sendJoinRejected(WebSocketSession session, String reason) {
         try {
             if (session.isOpen() && session.isWritable()) {
@@ -75,7 +110,9 @@ public class GameWebSocketEndpoint {
         }
     }
 
-    @OnMessage
+    // Pin the inbound frame cap well above any legit message (ping / input /
+    // loadout are all < 2KB) while bounding abuse; the Netty default is 64KB.
+    @OnMessage(maxPayloadLength = 8192)
     public void onMessage(byte[] message, WebSocketSession session) {
         PlayerSession playerSession = session.get(SESSION_KEY, PlayerSession.class).orElse(null);
 

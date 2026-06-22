@@ -3431,7 +3431,18 @@ class GameEngine {
         const baseCircle = new PIXI.Graphics();
         zoneContainer.baseCircle = baseCircle;
         zoneContainer.addChild(baseCircle);
-        
+
+        // Caution-tape stripes shown only while the zone is CONTESTED. Drawn as
+        // diagonal bands clipped to the zone circle by cautionMask.
+        const cautionStripes = new PIXI.Graphics();
+        cautionStripes.visible = false;
+        zoneContainer.cautionStripes = cautionStripes;
+        zoneContainer.addChild(cautionStripes);
+        const cautionMask = new PIXI.Graphics();
+        zoneContainer.cautionMask = cautionMask;
+        zoneContainer.addChild(cautionMask);
+        cautionStripes.mask = cautionMask;
+
         // Create capture progress ring
         const progressRing = new PIXI.Graphics();
         zoneContainer.progressRing = progressRing;
@@ -3530,6 +3541,18 @@ class GameEngine {
             glow.clear();
             glow.circle(0, 0, radius * 0.7).fill({ color: colors.glow, alpha: 0.3 });
 
+            // Caution-tape striping while contested (clipped to the zone circle).
+            const stripes = zoneContainer.cautionStripes;
+            if (zoneData.state === 'CONTESTED') {
+                this._drawCautionStripes(stripes, radius);
+                zoneContainer.cautionMask.clear();
+                zoneContainer.cautionMask.circle(0, 0, radius).fill({ color: 0xffffff });
+                stripes.visible = true;
+            } else {
+                stripes.clear();
+                stripes.visible = false;
+            }
+
             zoneContainer.zoneText.style.fill = colors.text;
 
             const statusText = zoneContainer.statusText;
@@ -3550,6 +3573,27 @@ class GameEngine {
     /**
      * Get colors for KOTH zone based on state
      */
+    /**
+     * Draw diagonal "caution tape" bands across the zone's bounding box. The
+     * caller masks this to the zone circle. Yellow bands over the zone's gray base
+     * fill read as a hazard/contested stripe pattern (no red — that clashes with
+     * the red team color).
+     */
+    _drawCautionStripes(g, radius) {
+        g.clear();
+        const stripeW = 16;          // band thickness
+        const step = stripeW * 2;    // band + equal gap
+        // 45° bands: each is the strip between the lines x - y = c and = c + stripeW.
+        for (let c = -2 * radius; c < 2 * radius; c += step) {
+            g.moveTo(c - radius, -radius);
+            g.lineTo(c + stripeW - radius, -radius);
+            g.lineTo(c + stripeW + radius, radius);
+            g.lineTo(c + radius, radius);
+            g.closePath();
+        }
+        g.fill({ color: 0xFFD21A, alpha: 0.55 });
+    }
+
     getKothZoneColors(zoneData) {
         switch (zoneData.state) {
             case 'CONTROLLED':
@@ -3564,13 +3608,15 @@ class GameEngine {
                 };
             
             case 'CONTESTED':
+                // Caution-tape look: yellow on a gray base (red was confused with
+                // the red team). The diagonal stripes are drawn separately.
                 return {
-                    fill: 0xFF4444,
-                    border: 0xFF4444,
-                    progress: 0xFF4444,
-                    glow: 0xFF4444,
+                    fill: 0x555555,
+                    border: 0xFFD21A,
+                    progress: 0xFFD21A,
+                    glow: 0x666666,
                     text: 0xFFFFFF,
-                    statusText: 0xFF4444
+                    statusText: 0xFFD21A
                 };
             
             case 'NEUTRAL':
