@@ -407,7 +407,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 Vector2 forceDirection = fieldEffect.getPosition()
                         .subtract(player.getPosition())
                         .getNormalized()
-                        .multiply(200000.0); // TODO: why does this have to be so high to actually affect players?
+                        .multiply(300000.0); // tuned up from 200000 — pull was a touch weak
                 if (!forceDirection.isZero()) {
                     player.getBody().applyForce(forceDirection);
                 }
