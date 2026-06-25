@@ -404,7 +404,7 @@ public class RuleSystem {
             return;
         }
         switch (rules.getRespawnMode()) {
-            case INSTANT, LIMITED:
+            case DELAYED, LIMITED:
                 player.setRespawnTime((long) (System.currentTimeMillis() + (rules.getRespawnDelay() * 1000)));
                 break;
             case WAVE:

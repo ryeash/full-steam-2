@@ -118,10 +118,10 @@ public class Rules {
      */
     @NotNull
     @Builder.Default
-    private RespawnMode respawnMode = RespawnMode.INSTANT;
+    private RespawnMode respawnMode = RespawnMode.DELAYED;
 
     /**
-     * Delay in seconds before player respawns (for INSTANT mode).
+     * Delay in seconds before player respawns (for DELAYED and LIMITED modes).
      */
     @Min(0)
     @Max(60)

@@ -5,10 +5,10 @@ package com.fullsteam.model;
  */
 public enum RespawnMode {
     /**
-     * Respawn immediately after a delay (current default behavior).
-     * Most forgiving mode.
+     * Respawn after a fixed delay (see {@code respawnDelay}). The default,
+     * most-forgiving mode.
      */
-    INSTANT,
+    DELAYED,
 
     /**
      * All dead players respawn together in waves at set intervals.

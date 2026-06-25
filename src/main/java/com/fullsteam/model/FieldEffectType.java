@@ -4,7 +4,7 @@ import lombok.Getter;
 
 @Getter
 public enum FieldEffectType {
-    // Combat effects (existing)
+    // Combat effects
     EXPLOSION(0.5, true),      // Short duration, instant damage
     FIRE(3.0, false),          // Long duration, damage over time
     ELECTRIC(1.0, false),      // Medium duration, chain damage
@@ -12,7 +12,7 @@ public enum FieldEffectType {
     FRAGMENTATION(0.3, true),  // Very short, creates multiple projectiles
     POISON(4.0, false),        // Long duration, damage over time
 
-    // Utility effects (new)
+    // Utility effects
     HEAL_ZONE(5.0, false),     // Continuous healing area for allies
     SLOW_FIELD(6.0, false),    // Movement reduction field
     SHIELD_BARRIER(8.0, false), // Damage absorption zone

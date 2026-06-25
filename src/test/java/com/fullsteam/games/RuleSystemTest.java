@@ -45,7 +45,7 @@ class RuleSystemTest extends BaseTestClass {
                         .restDuration(10.0)
                         .victoryCondition(VictoryCondition.SCORE_LIMIT)
                         .scoreLimit(25)
-                        .respawnMode(RespawnMode.INSTANT)
+                        .respawnMode(RespawnMode.DELAYED)
                         .respawnDelay(5.0)
                         .maxLives(-1)
                         .scoreStyle(ScoreStyle.TOTAL_KILLS)

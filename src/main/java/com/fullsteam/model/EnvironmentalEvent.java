@@ -1,9 +1,12 @@
 package com.fullsteam.model;
 
+import lombok.Getter;
+
 /**
  * Types of random environmental events that can occur during gameplay.
  * These create hazards and dynamic moments like meteor showers and supply drops.
  */
+@Getter
 public enum EnvironmentalEvent {
     METEOR_SHOWER("Meteor Shower", "☄️", 15.0, 5000),
     SUPPLY_DROP("Supply Drop", "📦", 30.0, 5000),
@@ -22,22 +25,6 @@ public enum EnvironmentalEvent {
         this.icon = icon;
         this.baseDuration = baseDuration;
         this.staggerTime = staggerTime;
-    }
-
-    public String getDisplayName() {
-        return displayName;
-    }
-
-    public String getIcon() {
-        return icon;
-    }
-
-    public double getBaseDuration() {
-        return baseDuration;
-    }
-
-    public long getStaggerTime() {
-        return staggerTime;
     }
 
     public String getAnnouncementMessage() {

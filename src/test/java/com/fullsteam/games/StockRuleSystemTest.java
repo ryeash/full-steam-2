@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * - scoreLimit = 50
  * - timeLimit = 600.0 (10 minutes)
  * - suddenDeath = false
- * - respawnMode = RespawnMode.INSTANT
+ * - respawnMode = RespawnMode.DELAYED
  * - respawnDelay = 5.0
  * - maxLives = -1 (unlimited)
  * - waveRespawnInterval = 30.0
@@ -115,10 +115,10 @@ class StockRuleSystemTest extends BaseTestClass {
     }
 
     @Test
-    @DisplayName("Should use stock respawn mode (INSTANT)")
+    @DisplayName("Should use stock respawn mode (DELAYED)")
     void testStockRespawnMode() {
-        assertEquals(RespawnMode.INSTANT, stockRules.getRespawnMode(),
-                "Stock respawn mode should be INSTANT");
+        assertEquals(RespawnMode.DELAYED, stockRules.getRespawnMode(),
+                "Stock respawn mode should be DELAYED");
     }
 
     @Test
@@ -235,8 +235,8 @@ class StockRuleSystemTest extends BaseTestClass {
     void testStockAllowsRespawn() {
         assertTrue(stockRules.allowsRespawn(),
                 "Stock rules should allow respawn");
-        assertEquals(RespawnMode.INSTANT, stockRules.getRespawnMode(),
-                "Stock respawn mode should be INSTANT");
+        assertEquals(RespawnMode.DELAYED, stockRules.getRespawnMode(),
+                "Stock respawn mode should be DELAYED");
     }
 
     @Test
@@ -244,8 +244,8 @@ class StockRuleSystemTest extends BaseTestClass {
     void testStockNoWaveRespawn() {
         assertFalse(stockRules.usesWaveRespawn(),
                 "Stock rules should not use wave respawn");
-        assertEquals(RespawnMode.INSTANT, stockRules.getRespawnMode(),
-                "Stock respawn mode should be INSTANT, not WAVE");
+        assertEquals(RespawnMode.DELAYED, stockRules.getRespawnMode(),
+                "Stock respawn mode should be DELAYED, not WAVE");
     }
 
     @Test
@@ -289,7 +289,7 @@ class StockRuleSystemTest extends BaseTestClass {
 
         assertEquals(rules1.getRespawnMode(), rules2.getRespawnMode());
         assertEquals(rules2.getRespawnMode(), rules3.getRespawnMode());
-        assertEquals(RespawnMode.INSTANT, rules1.getRespawnMode());
+        assertEquals(RespawnMode.DELAYED, rules1.getRespawnMode());
     }
 
     /**

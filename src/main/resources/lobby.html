@@ -544,7 +544,7 @@
                     <div class="config-item">
                         <label for="respawnMode">Respawn Mode:</label>
                         <select id="respawnMode" onchange="updateRespawnFields()">
-                            <option value="INSTANT">Instant (Respawn after delay)</option>
+                            <option value="DELAYED">Delayed (Respawn after a set delay)</option>
                             <option value="WAVE">Wave (Team respawns together)</option>
                             <option value="NEXT_ROUND">Next Round (No respawn until round ends)</option>
                             <option value="LIMITED">Limited (X lives per player)</option>
@@ -945,7 +945,7 @@
                     scoreLimit: 50,
                     timeLimit: 600,  // 10 minutes
                     suddenDeath: true,
-                    respawnMode: 'INSTANT',
+                    respawnMode: 'DELAYED',
                     respawnDelay: 5,
                     waveRespawnInterval: 30,
                     maxLives: -1,
@@ -975,7 +975,7 @@
                     scoreLimit: 25,  // First to 25 kills
                     timeLimit: 600,
                     suddenDeath: false,
-                    respawnMode: 'INSTANT',
+                    respawnMode: 'DELAYED',
                     respawnDelay: 3,  // Faster respawn for FFA
                     waveRespawnInterval: 30,
                     maxLives: -1,
@@ -1035,7 +1035,7 @@
                     scoreLimit: 200,            // First to 200 points (zone control only)
                     timeLimit: 900,             // 15 minute fallback
                     suddenDeath: true,
-                    respawnMode: 'INSTANT',
+                    respawnMode: 'DELAYED',
                     respawnDelay: 4,
                     waveRespawnInterval: 30,
                     maxLives: -1,
@@ -1164,7 +1164,7 @@
                     scoreLimit: 100,
                     timeLimit: 600,             // 10 minutes of mayhem
                     suddenDeath: true,
-                    respawnMode: 'INSTANT',     // Fast respawns keep action flowing
+                    respawnMode: 'DELAYED',     // Fast respawns keep action flowing
                     respawnDelay: 3,
                     waveRespawnInterval: 30,
                     maxLives: -1,
@@ -1208,7 +1208,7 @@
                     scoreLimit: 150,            // First to 150 points (2.5 minutes of holding)
                     timeLimit: 600,             // 10 minute fallback
                     suddenDeath: true,
-                    respawnMode: 'INSTANT',
+                    respawnMode: 'DELAYED',
                     respawnDelay: 4,
                     waveRespawnInterval: 30,
                     maxLives: -1,
@@ -1250,7 +1250,7 @@
                     scoreLimit: 90,             // 90 pts ≈ 90 seconds of solo zone control
                     timeLimit: 480,             // 8 minute hard cap
                     suddenDeath: true,
-                    respawnMode: 'INSTANT',
+                    respawnMode: 'DELAYED',
                     respawnDelay: 3,            // Fast respawn — dying just costs you the zone
                     maxLives: -1,
                     kothZones: 1,               // Single central zone — everyone converges here
@@ -1430,7 +1430,7 @@
                 document.getElementById('lockGameAfterSeconds').value = r.lockGameAfterSeconds ?? 0;
                 // Coerce the retired ELIMINATION mode to its equivalent (LIMITED, 1 life).
                 document.getElementById('respawnMode').value =
-                    (r.respawnMode === 'ELIMINATION' ? 'LIMITED' : r.respawnMode) || 'INSTANT';
+                    (r.respawnMode === 'ELIMINATION' ? 'LIMITED' : r.respawnMode) || 'DELAYED';
                 document.getElementById('respawnDelay').value = r.respawnDelay ?? 5;
                 document.getElementById('waveRespawnInterval').value = r.waveRespawnInterval ?? 30;
                 document.getElementById('maxLives').value = r.maxLives ?? 3;
@@ -1512,7 +1512,7 @@
         
         // Show relevant fields based on selection
         switch (respawnMode) {
-            case 'INSTANT':
+            case 'DELAYED':
                 respawnDelayField.style.display = 'block';
                 break;
             case 'WAVE':
