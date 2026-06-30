@@ -129,6 +129,11 @@ public class FieldEffect extends GameEntity {
     }
 
     public boolean canAffect(GameEntity entity) {
+        // SMOKE affects ALL players/turrets regardless of team or ownership
+        if (type == FieldEffectType.SMOKE) {
+            return entity instanceof Player || entity instanceof Turret;
+        }
+
         if (!active
                 || entity == null
                 || !isArmed() // delayed effects deal no damage until they fire
@@ -137,11 +142,6 @@ public class FieldEffect extends GameEntity {
                 // For instantaneous effects, check if already affected
                 || (type.isInstantaneous() && affectedEntities.contains(entity.getId()))) {
             return false;
-        }
-
-        // SMOKE affects ALL players/turrets regardless of team or ownership
-        if (type == FieldEffectType.SMOKE) {
-            return entity instanceof Player || entity instanceof Turret;
         }
 
         if (entity instanceof Player player) {
@@ -177,25 +177,24 @@ public class FieldEffect extends GameEntity {
         affectedEntities.add(entity.getId());
     }
 
+    public double getDamageAtPosition(Vector2 targetPosition) {
+        return damage * getIntensityAtPosition(targetPosition);
+    }
+
     public double getIntensityAtPosition(Vector2 targetPosition) {
         if (!isInRange(targetPosition)) {
             return 0.0;
         }
         return switch (type) {
-            // explosions degrade with distance from center
-            case EXPLOSION -> {
+            // most damaging fields degrade with distance from center
+            case EXPLOSION, FIRE, ELECTRIC, FREEZE, POISON -> {
                 double distance = getPosition().distance(targetPosition);
                 double intensity = 0.5 + (0.5 * (distance / radius));
                 yield Math.max(0.0, intensity);
             }
-            // Earthquakes have uniform intensity
-            case EARTHQUAKE -> 1.0;
+            // everything else is uniform
             default -> 1.0;
         };
-    }
-
-    public double getDamageAtPosition(Vector2 targetPosition) {
-        return damage * getIntensityAtPosition(targetPosition);
     }
 
     public long getDuration() {

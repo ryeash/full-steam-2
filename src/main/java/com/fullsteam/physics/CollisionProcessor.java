@@ -234,8 +234,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             double burnDamage = projectile.getDamage() * 0.15; // 15% of projectile damage per second
             double burnDuration = 3.0; // 3 seconds of burning
             StatusEffectManager.applyBurning(gameManager, player, burnDamage, burnDuration, projectile.getOwnerId());
-            log.debug("Applied burn status to player {} from incendiary projectile ({}dps for {}s)",
-                    player.getId(), burnDamage, burnDuration);
         }
 
         // Freezing bullets apply slow status directly
@@ -245,7 +243,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             Player shooter = gameEntities.getPlayer(projectile.getOwnerId());
             String source = shooter != null ? shooter.getPlayerName() : "Freezing Projectile";
             StatusEffectManager.applySlowEffect(player, slowAmount, slowDuration, source);
-            log.debug("Applied freeze slow to player {} from freezing projectile", player.getId());
         }
 
         // Poison bullets apply poison status directly
@@ -253,8 +250,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             double poisonDamage = projectile.getDamage() * 0.1; // 10% of projectile damage per second
             double poisonDuration = 4.0; // 4 seconds of poison
             StatusEffectManager.applyPoison(gameManager, player, poisonDamage, poisonDuration, projectile.getOwnerId());
-            log.debug("Applied poison status to player {} from poison projectile ({}dps for {}s)",
-                    player.getId(), poisonDamage, poisonDuration);
         }
 
         // Electric bullets apply brief slow from shock
@@ -264,7 +259,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             Player shooter = gameEntities.getPlayer(projectile.getOwnerId());
             String source = shooter != null ? shooter.getPlayerName() : "Electric Projectile";
             StatusEffectManager.applySlowEffect(player, slowAmount, slowDuration, source);
-            log.debug("Applied electric shock slow to player {} from electric projectile", player.getId());
         }
     }
 
@@ -286,8 +280,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         Vector2 hitPosition = new Vector2(hitPos.x, hitPos.y);
 
         // Process bullet effects on obstacle hit (only on first hit)
-        log.debug("Projectile {} hit obstacle {} at ({}, {}) - processing effects",
-                projectile.getId(), obstacle.getId(), hitPosition.x, hitPosition.y);
         bulletEffectProcessor.processEffectHit(projectile, hitPosition);
 
         // Check if projectile should bounce
@@ -386,8 +378,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                     gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
                 }
                 // Apply strong slowing effect (ground shaking makes movement difficult)
-                StatusEffectManager.applySlowEffect(player, 5, 0.7,
-                        "Earthquake");
+                StatusEffectManager.applySlowEffect(player, 5, 0.7, "Earthquake");
             }
             case HEAL_ZONE -> {
                 double effectValue = fieldEffect.getDamageAtPosition(player.getPosition());
@@ -398,8 +389,8 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 player.setHealth(Math.min(gameManager.getGameConfig().getPlayerMaxHealth(), player.getHealth() + healAmount));
             }
             case SLOW_FIELD -> {
-                StatusEffectManager.applySlowEffect(player, 10, 1.0,
-                        Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Slow Field"));
+                String source = Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Slow Field");
+                StatusEffectManager.applySlowEffect(player, 10, 1.0, source);
             }
             case SHIELD_BARRIER -> {
             }
