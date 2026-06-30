@@ -187,6 +187,23 @@ public class Player extends GameEntity {
     }
 
     /**
+     * Utility-weapon cooldown progress for the HUD ring: 0.0 just after use,
+     * ramping to 1.0 when the utility is ready again. Returns 1.0 when there is no
+     * utility or no cooldown.
+     */
+    public double getUtilityCooldownProgress() {
+        if (utilityWeapon == null) {
+            return 1.0;
+        }
+        double cooldownMs = utilityWeapon.getCooldown() * 1000.0;
+        if (cooldownMs <= 0) {
+            return 1.0;
+        }
+        double elapsed = System.currentTimeMillis() - lastUtilityUseTime;
+        return Math.max(0.0, Math.min(1.0, elapsed / cooldownMs));
+    }
+
+    /**
      * Refund the utility cooldown (e.g. when placement fails).
      * Resets the cooldown timer to allow immediate reuse.
      */

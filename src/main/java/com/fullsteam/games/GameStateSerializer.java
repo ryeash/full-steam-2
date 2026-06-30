@@ -290,6 +290,7 @@ public class GameStateSerializer {
         s.put("ammo", player.getCurrentWeapon().getCurrentAmmo());
         s.put("maxAmmo", player.getCurrentWeapon().getMagazineSize());
         s.put("reloading", player.isReloading());
+        s.put("utilityCooldownPercent", player.getUtilityCooldownProgress());
         s.put("weaponRange", player.getCurrentWeapon().getRange());
 
         Scoring scoring = player.getScoring();
@@ -349,9 +350,6 @@ public class GameStateSerializer {
             projState.put("caliber", projectile.getCaliber());
             projState.put("bulletEffects", projectile.getBulletEffects().stream()
                     .map(Enum::name).collect(Collectors.toList()));
-            if (projectile.isStrikeBeacon()) {
-                projState.put("strikeBeacon", true);
-            }
             projectileStates.add(projState);
         }
         return projectileStates;
@@ -403,6 +401,11 @@ public class GameStateSerializer {
     private List<Map<String, Object>> createFieldEffectStates() {
         List<Map<String, Object>> fieldEffectStates = new ArrayList<>();
         for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
+            // A delayed effect (e.g. a pending strike explosion) stays hidden until it
+            // arms/fires. Mines have their own serializer + arming visuals, so exempt them.
+            if (!effect.isArmed() && effect.getType() != FieldEffectType.PROXIMITY_MINE) {
+                continue;
+            }
             Vector2 pos = effect.getPosition();
             Map<String, Object> effectState = new HashMap<>();
             effectState.put("id", effect.getId());

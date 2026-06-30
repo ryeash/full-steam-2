@@ -2227,7 +2227,10 @@ class GameEngine {
         if (sprite.reloadIndicator) {
             this.updateReloadIndicator(sprite.reloadIndicator, playerData);
         }
-        
+        if (sprite.healthBar) {
+            this.updateUtilityCooldownBar(sprite.healthBar, playerData);
+        }
+
         // Update power-up visual indicators
         this.updatePowerUpIndicators(sprite, playerData);
 
@@ -2272,6 +2275,12 @@ class GameEngine {
             if (sprite.healthBar.healthFill) {
                 sprite.healthBar.healthFill.destroy({ context: true });
             }
+            if (sprite.healthBar.cooldownBg) {
+                sprite.healthBar.cooldownBg.destroy({ context: true });
+            }
+            if (sprite.healthBar.cooldownFill) {
+                sprite.healthBar.cooldownFill.destroy({ context: true });
+            }
             sprite.healthBar.destroy({ children: true, context: true });
             sprite.healthBar = null;
         }
@@ -2291,7 +2300,6 @@ class GameEngine {
             sprite.reloadIndicator.destroy({ children: true, context: true });
             sprite.reloadIndicator = null;
         }
-        
         // Remove and destroy death marker
         if (sprite.deathMarker) {
             if (sprite.deathMarker.parent) {
@@ -2419,7 +2427,7 @@ class GameEngine {
      * Create health bar for a player
      */
     createPlayerHealthBar(playerData) {
-        return this.createHealthBar(playerData, {
+        const container = this.createHealthBar(playerData, {
             width: 50,
             height: 6,
             yOffset: 35,
@@ -2429,6 +2437,9 @@ class GameEngine {
             showWhenFull: true,
             dynamicColor: true
         });
+        // Stack the utility cooldown bar directly under the health bar.
+        this._addUtilityCooldownBar(container);
+        return container;
     }
     
     /**
@@ -2450,9 +2461,53 @@ class GameEngine {
     /**
      * Create reload indicator for a player.
      */
+    /**
+     * Slim utility-cooldown bar stacked directly under the health bar (same width).
+     * Added to the health-bar container so it tracks position with it; only shown
+     * for the local player while the utility is recharging, filling left→right.
+     * nameContainer is Y-flipped, so "below" the health bar means negative local y.
+     */
+    _addUtilityCooldownBar(healthBarContainer) {
+        const w = healthBarContainer.config.width;
+        const r = healthBarContainer.config.cornerRadius;
+        const cdHeight = 3;
+        const gap = 2;
+        const topY = -(gap + cdHeight); // just below the health bar (flipped axis)
+
+        const cooldownBg = new PIXI.Graphics();
+        cooldownBg.roundRect(-w / 2, topY, w, cdHeight, r).fill(0x333333);
+        healthBarContainer.addChild(cooldownBg);
+
+        const cooldownFill = new PIXI.Graphics();
+        healthBarContainer.addChild(cooldownFill);
+
+        healthBarContainer.cooldownBg = cooldownBg;
+        healthBarContainer.cooldownFill = cooldownFill;
+        healthBarContainer.cooldownGeom = { w, cdHeight, topY, r };
+    }
+
+    /** Refresh the utility cooldown bar's fill/visibility from player state. */
+    updateUtilityCooldownBar(healthBarContainer, playerData) {
+        if (!healthBarContainer || !healthBarContainer.cooldownFill) return;
+
+        const pct = playerData.utilityCooldownPercent ?? 1;
+        // Local player only; hide when ready or inactive.
+        const show = playerData.id === this.myPlayerId && playerData.active && pct < 1;
+        healthBarContainer.cooldownBg.visible = show;
+        healthBarContainer.cooldownFill.visible = show;
+        if (!show) return;
+
+        const fill = healthBarContainer.cooldownFill;
+        if (fill._lastPct === pct) return; // skip redraw when unchanged
+        fill._lastPct = pct;
+        const g = healthBarContainer.cooldownGeom;
+        fill.clear();
+        fill.roundRect(-g.w / 2, g.topY, g.w * pct, g.cdHeight, g.r).fill(0xffcc33);
+    }
+
     createReloadIndicator(playerData) {
         const reloadContainer = new PIXI.Container();
-        
+
         // Create background circle for the "R"
         const background = new PIXI.Graphics();
         background.circle(0, 0, 12).fill({ color: 0x000000, alpha: 0.7 }); // Semi-transparent black background
@@ -2713,8 +2768,9 @@ class GameEngine {
         this.customizeProjectileAppearance(sprite, projectileData);
 
         // Strike Beacon: deliberately obvious — a bright red, blinking projectile in
-        // flight (the blink is driven per-frame by animateStrikeBeacon).
-        if (projectileData.strikeBeacon) {
+        // flight (the blink is driven per-frame by animateStrikeBeacon). Identified by
+        // its utility-only STRIKE bullet effect.
+        if ((projectileData.bulletEffects || []).includes('STRIKE')) {
             sprite.tint = 0xff3333;
             projectileContainer.isStrikeBeacon = true;
             projectileContainer.beaconTime = 0;

@@ -56,37 +56,37 @@ public class GameEntities {
     }
 
     public void add(GameEntity gameEntity) {
-        switch (gameEntity) {
-            case Player p -> players.put(p.getId(), p);
-            case Projectile projectile -> projectiles.put(projectile.getId(), projectile);
-            case Workshop workshop -> workshops.put(workshop.getId(), workshop);
-            case Obstacle obstacle -> obstacles.put(obstacle.getId(), obstacle);
-            case FieldEffect fieldEffect -> fieldEffects.put(fieldEffect.getId(), fieldEffect);
-            case Turret turret -> {
-                turrets.put(turret.getId(), turret);
-                List<Turret> forOwner = turrets.values()
-                        .stream()
-                        .filter(tp -> tp.getOwnerId() == turret.getOwnerId())
-                        .sorted(Comparator.comparing(Turret::getCreated))
-                        .collect(Collectors.toCollection(LinkedList::new));
-                while (forOwner.size() > 2) {
-                    Turret remove = forOwner.removeFirst();
-                    remove.setActive(false);
-                }
-            }
-            case DefenseLaser defenseLaser -> defenseLasers.put(defenseLaser.getId(), defenseLaser);
-            case NetProjectile netProjectile -> netProjectiles.put(netProjectile.getId(), netProjectile);
-            case Beam beam -> beams.put(beam.getId(), beam);
-            case Flag flag -> flags.put(flag.getId(), flag);
-            case KothZone kothZone -> kothZones.put(kothZone.getId(), kothZone);
-            case PowerUp powerUp -> powerUps.put(powerUp.getId(), powerUp);
-            case Headquarters hq -> headquarters.put(hq.getId(), hq);
-            case null -> {
-                // noop
-            }
-            default -> throw new IllegalArgumentException("Unknown GameEntity type: " + gameEntity);
-        }
         if (gameEntity != null) {
+            switch (gameEntity) {
+                case Player p -> players.put(p.getId(), p);
+                case Projectile projectile -> projectiles.put(projectile.getId(), projectile);
+                case Workshop workshop -> workshops.put(workshop.getId(), workshop);
+                case Obstacle obstacle -> obstacles.put(obstacle.getId(), obstacle);
+                case FieldEffect fieldEffect -> fieldEffects.put(fieldEffect.getId(), fieldEffect);
+                case Turret turret -> {
+                    turrets.put(turret.getId(), turret);
+                    List<Turret> forOwner = turrets.values()
+                            .stream()
+                            .filter(tp -> tp.getOwnerId() == turret.getOwnerId())
+                            .sorted(Comparator.comparing(Turret::getCreated))
+                            .collect(Collectors.toCollection(LinkedList::new));
+                    while (forOwner.size() > 2) {
+                        Turret remove = forOwner.removeFirst();
+                        remove.setActive(false);
+                    }
+                }
+                case DefenseLaser defenseLaser -> defenseLasers.put(defenseLaser.getId(), defenseLaser);
+                case NetProjectile netProjectile -> netProjectiles.put(netProjectile.getId(), netProjectile);
+                case Beam beam -> beams.put(beam.getId(), beam);
+                case Flag flag -> flags.put(flag.getId(), flag);
+                case KothZone kothZone -> kothZones.put(kothZone.getId(), kothZone);
+                case PowerUp powerUp -> powerUps.put(powerUp.getId(), powerUp);
+                case Headquarters hq -> headquarters.put(hq.getId(), hq);
+                case null -> {
+                    // noop
+                }
+                default -> throw new IllegalArgumentException("Unknown GameEntity type: " + gameEntity);
+            }
             addPostUpdateHook(() -> world.addBody(gameEntity.getBody()));
         }
     }

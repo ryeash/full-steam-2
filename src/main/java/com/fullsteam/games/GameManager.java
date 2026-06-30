@@ -765,10 +765,7 @@ public class GameManager {
             gameEntities.getProjectiles().entrySet().removeIf(entry -> {
                 Projectile projectile = entry.getValue();
                 if (!projectile.isActive()) {
-                    if (projectile.isStrikeBeacon()) {
-                        // Beacon landed: mark the spot and call in the delayed strike.
-                        utilitySystem.triggerStrikeBeacon(projectile);
-                    } else if (projectile.shouldTriggerEffectsOnDismissal()) {
+                    if (projectile.shouldTriggerEffectsOnDismissal()) {
                         projectile.markAsExploded();
                         getCollisionProcessor().getBulletEffectProcessor().processEffectHit(projectile, projectile.getPosition());
                     }

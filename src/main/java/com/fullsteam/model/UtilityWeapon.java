@@ -28,7 +28,7 @@ public enum UtilityWeapon {
             null, "Projectile", 4.0, 280.0, 60.0, 0.0, UtilityCategory.TACTICAL),
 
     STRIKE_BEACON("Strike Beacon", "Lobs a target beacon; it marks the spot with a warning zone, then calls in an explosive strike ~2s later",
-            null, "Projectile", 30.0, 280.0, 90.0, 60.0, UtilityCategory.TACTICAL),
+            null, "Projectile", 30.0, 480.0, 90.0, 60.0, UtilityCategory.TACTICAL),
 
     // Entity-based utilities (complex behaviors)
     TURRET_CONSTRUCTOR("Turret Constructor", "Deploys an automated defense turret",

@@ -37,6 +37,20 @@ public class FieldEffect extends GameEntity {
         this(ownerId, type, position, radius, radius, damage, duration, 0, ownerTeam);
     }
 
+    /**
+     * A delayed field effect: stays inert (deals no damage) and is not sent to
+     * clients until {@code delaySeconds} elapse, then activates for
+     * {@code durationSeconds}. Used for telegraphed strikes (e.g. the Strike Beacon's
+     * explosion lands after its warning zone). Damage gating is via {@link #isArmed()};
+     * the serializer skips unarmed effects so nothing renders during the delay.
+     */
+    public FieldEffect(int ownerId, FieldEffectType type, Vector2 position, double radius, double damage,
+                       double durationSeconds, double delaySeconds, int ownerTeam) {
+        this(ownerId, type, position, radius, radius, damage,
+                delaySeconds + durationSeconds,
+                (long) (System.currentTimeMillis() + delaySeconds * 1000), ownerTeam);
+    }
+
     public FieldEffect(int ownerId, FieldEffectType type, Vector2 position, double radius, double maxRadius, double damage, double duration, long armingTime, int ownerTeam) {
         super(Config.nextEntityId(), createFieldEffectBody(position, radius), Double.POSITIVE_INFINITY); // Field effects are indestructible
         this.ownerId = ownerId;
@@ -117,6 +131,7 @@ public class FieldEffect extends GameEntity {
     public boolean canAffect(GameEntity entity) {
         if (!active
                 || entity == null
+                || !isArmed() // delayed effects deal no damage until they fire
                 || type == FieldEffectType.WARNING_ZONE
                 || !isInRange(entity.getPosition())
                 // For instantaneous effects, check if already affected
@@ -184,7 +199,7 @@ public class FieldEffect extends GameEntity {
     }
 
     public long getDuration() {
-        return Math.max(expires - created, 0);
+        return Math.max(expires - activePhaseStart(), 0);
     }
 
     public long getTimeRemaining() {
@@ -192,11 +207,21 @@ public class FieldEffect extends GameEntity {
     }
 
     public double getProgress() {
-        long duration = expires - created;
-        long timeRemaining = expires - System.currentTimeMillis();
-        return (duration > 0 && timeRemaining > 0)
-                ? (double) (duration - timeRemaining) / duration
+        long start = activePhaseStart();
+        long duration = expires - start;
+        long elapsed = System.currentTimeMillis() - start;
+        return (duration > 0)
+                ? Math.max(0.0, Math.min(1.0, elapsed / (double) duration))
                 : 1.0;
+    }
+
+    /**
+     * Start of the visible/active phase. For a delayed effect that's its arming
+     * time (so duration/progress reflect the post-delay window, not the wait);
+     * for a normal effect it's just when it was created.
+     */
+    private long activePhaseStart() {
+        return Math.max(created, armingTime);
     }
 
 //    /**

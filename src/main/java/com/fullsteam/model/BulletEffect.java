@@ -7,17 +7,22 @@ import java.util.stream.Collectors;
 
 @Getter
 public enum BulletEffect {
-    EXPLOSIVE(25, "Projectiles explode on impact, dealing area damage", 50.0, 1.5, 1.0, true),
-    INCENDIARY(18, "Projectiles set targets on fire, dealing damage over time", 40.0, 0.6, 1.0, true),
-    ELECTRIC(16, "Projectiles chain lightning damage to nearby enemies", 60.0, 0.8, 1.0, true),
-    FREEZING(14, "Projectiles slow down hit targets temporarily", 35.0, 0.2, 1.0, true),
-    POISON(22, "Projectiles release poison gas, dealing area damage over time", 50.0, 0.5, 1.0, true),
-    SMOKE(0, "Projectiles create a vision-blocking smoke cloud on impact", 60.0, 0.0, 0.0, true),
-    BOUNCY(15, "Projectiles bounce off obstacles; beams reflect off walls", 0, 1.0, 1.0, true),
-    PIERCING(20, "Projectiles pass through enemies, hitting multiple targets", 0, 1.0, 1.0, true),
+    EXPLOSIVE(25, "Projectiles explode on impact, dealing area damage", 50.0, 1.5, 1.0, true, true),
+    INCENDIARY(18, "Projectiles set targets on fire, dealing damage over time", 40.0, 0.6, 1.0, true, true),
+    ELECTRIC(16, "Projectiles chain lightning damage to nearby enemies", 60.0, 0.8, 1.0, true, true),
+    FREEZING(14, "Projectiles slow down hit targets temporarily", 35.0, 0.2, 1.0, true, true),
+    POISON(22, "Projectiles release poison gas, dealing area damage over time", 50.0, 0.5, 1.0, true, true),
+    SMOKE(0, "Projectiles create a vision-blocking smoke cloud on impact", 60.0, 0.0, 0.0, true, true),
+    BOUNCY(15, "Projectiles bounce off obstacles; beams reflect off walls", 0, 1.0, 1.0, true, true),
+    PIERCING(20, "Projectiles pass through enemies, hitting multiple targets", 0, 1.0, 1.0, true, true),
 
-    FRAGMENTING(22, "Projectiles split into multiple smaller projectiles on impact", 20, 0.0, 0.0, false),
-    HOMING(30, "Projectiles slightly track towards nearby enemies", 0, 1.0, 1.0, false);
+    FRAGMENTING(22, "Projectiles split into multiple smaller projectiles on impact", 20, 0.0, 0.0, false, true),
+    HOMING(30, "Projectiles slightly track towards nearby enemies", 0, 1.0, 1.0, false, true),
+
+    // Utility-only effect carried by the Strike Beacon projectile. On dismissal it
+    // drops a WARNING_ZONE telegraph plus a delayed EXPLOSION (see BulletEffectProcessor).
+    // selectable=false keeps it out of the weapon customizer (where it makes no sense).
+    STRIKE(0, "Calls in a delayed explosive strike where the projectile lands", 0, 0.0, 0.0, false, false);
 
     private final int pointCost;
     private final String description;
@@ -25,14 +30,18 @@ public enum BulletEffect {
     private final double damageModification;
     private final double damageModificationForSize;
     private final boolean validForBeams;
+    // Whether this effect is offered in the weapon customizer. Utility-only effects
+    // (e.g. STRIKE) are false so they never appear as a selectable weapon option.
+    private final boolean selectable;
 
-    BulletEffect(int pointCost, String description, double baseRadius, double damageModification, double damageModificationForSize, boolean validForBeams) {
+    BulletEffect(int pointCost, String description, double baseRadius, double damageModification, double damageModificationForSize, boolean validForBeams, boolean selectable) {
         this.pointCost = pointCost;
         this.description = description;
         this.baseRadius = baseRadius;
         this.damageModification = damageModification;
         this.damageModificationForSize = damageModificationForSize;
         this.validForBeams = validForBeams;
+        this.selectable = selectable;
     }
 
     public double calculateRadius(double damage, Ordinance ordinance, double caliber) {

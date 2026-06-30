@@ -17,6 +17,13 @@ import static com.fullsteam.Config.HOMING_DISTANCE;
  * Handles the processing of bullet effects when projectiles hit targets or obstacles
  */
 public class BulletEffectProcessor {
+    /**
+     * Strike Beacon detonation parameters (the STRIKE bullet effect).
+     */
+    private static final double STRIKE_RADIUS = 120.0;
+    private static final double STRIKE_DAMAGE = 80.0;
+    private static final double STRIKE_DELAY_SECONDS = 2.0;
+
     private final GameEntities gameEntities;
 
     public BulletEffectProcessor(GameEntities gameEntities) {
@@ -24,42 +31,25 @@ public class BulletEffectProcessor {
     }
 
     public void processEffectHit(Projectile projectile, Vector2 hitPosition) {
-        // for FRAGMENTING rounds, the other effects will be attached to the fragments
-        if (projectile.hasBulletEffect(BulletEffect.FRAGMENTING)) {
-            createFragmentation(projectile, hitPosition);
-            return;
-        }
         for (BulletEffect effect : projectile.getBulletEffects()) {
             switch (effect) {
-                case EXPLOSIVE:
-                    createExplosion(projectile, hitPosition);
-                    break;
-                case INCENDIARY:
-                    createFireEffect(projectile, hitPosition);
-                    break;
-                case ELECTRIC:
-                    createElectricEffect(projectile, hitPosition);
-                    break;
-                case FREEZING:
-                    createFreezeEffect(projectile, hitPosition);
-                    break;
-                case FRAGMENTING:
-                    throw new UnsupportedOperationException();
-                case POISON:
-                    createPoisonEffect(projectile, hitPosition);
-                    break;
-                case SMOKE:
-                    createSmokeEffect(projectile, hitPosition);
-                    break;
-                case PIERCING:
+                case EXPLOSIVE -> createExplosion(projectile, hitPosition);
+                case INCENDIARY -> createFireEffect(projectile, hitPosition);
+                case ELECTRIC -> createElectricEffect(projectile, hitPosition);
+                case FREEZING -> createFreezeEffect(projectile, hitPosition);
+                case FRAGMENTING -> createFragmentation(projectile, hitPosition);
+                case POISON -> createPoisonEffect(projectile, hitPosition);
+                case SMOKE -> createSmokeEffect(projectile, hitPosition);
+                case STRIKE -> createStrikeEffect(projectile, hitPosition);
+                case PIERCING -> {
                     // Piercing is handled in collision detection - projectile continues
-                    break;
-                case HOMING:
+                }
+                case HOMING -> {
                     // Homing is handled during projectile flight
-                    break;
-                case BOUNCY:
+                }
+                case BOUNCY -> {
                     // Bouncy is handled in collision detection
-                    break;
+                }
             }
         }
     }
@@ -140,6 +130,34 @@ public class BulletEffectProcessor {
                 projectile.getOwnerTeam()
         );
         gameEntities.add(smoke);
+    }
+
+    /**
+     * Strike Beacon detonation (the STRIKE bullet effect, fired on dismissal where
+     * the beacon lands): an immediate non-damaging WARNING_ZONE telegraph, plus a
+     * delayed EXPLOSION that stays inert/hidden until it fires after the warning
+     * window. The delay lives in the FieldEffect itself — no scheduling needed.
+     */
+    private void createStrikeEffect(Projectile projectile, Vector2 position) {
+        int owner = projectile.getOwnerId();
+        int team = projectile.getOwnerTeam();
+        // Telegraph: warning zone for the full delay window.
+        gameEntities.add(new FieldEffect(owner,
+                FieldEffectType.WARNING_ZONE,
+                position.copy(),
+                STRIKE_RADIUS,
+                0.0,
+                STRIKE_DELAY_SECONDS,
+                team));
+        // The strike: a delayed explosion that detonates when the warning ends.
+        gameEntities.add(new FieldEffect(owner,
+                FieldEffectType.EXPLOSION,
+                position.copy(),
+                STRIKE_RADIUS,
+                STRIKE_DAMAGE,
+                FieldEffectType.EXPLOSION.getDefaultDuration(),
+                STRIKE_DELAY_SECONDS,
+                team));
     }
 
     private void createFragmentation(Projectile projectile, Vector2 position) {
@@ -305,14 +323,8 @@ public class BulletEffectProcessor {
                 case SMOKE:
                     createSmokeEffectForBeam(beam, hitPosition);
                     break;
-                // PIERCING governs beam pass-through in WeaponSystem (not an AOE
-                // spawn). HOMING/BOUNCY/FRAGMENTING are flight behaviors with no
-                // meaning for an instant ray; they are also stripped at weapon
-                // build time, so these are defensive no-ops.
-                case PIERCING:
-                case HOMING:
-                case BOUNCY:
-                case FRAGMENTING:
+                // nothing else triggers
+                default:
                     break;
             }
         }

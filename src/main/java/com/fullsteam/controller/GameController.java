@@ -112,8 +112,10 @@ public class GameController {
         }
         data.put("attributes", attributes);
 
-        // Bullet effects with costs and descriptions
+        // Bullet effects with costs and descriptions (utility-only effects like
+        // STRIKE are not selectable, so they're excluded from the customizer).
         List<Map<String, Object>> effects = Arrays.stream(BulletEffect.values())
+                .filter(BulletEffect::isSelectable)
                 .map(effect -> {
                     Map<String, Object> effectData = new HashMap<>();
                     effectData.put("name", effect.name());
