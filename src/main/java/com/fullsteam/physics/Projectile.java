@@ -4,6 +4,7 @@ import com.fullsteam.Config;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.Ordinance;
 import lombok.Getter;
+import lombok.Setter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
@@ -25,6 +26,14 @@ public class Projectile extends GameEntity {
     private boolean hasExploded = false;
     private boolean dismissedByVelocity = false;
     private boolean dismissedByRange = false;
+
+    /**
+     * Marks this projectile as a Strike Beacon (utility): on dismissal it spawns a
+     * warning zone and calls in a delayed explosive strike instead of normal bullet
+     * effects. Set post-construction by {@code UtilitySystem}.
+     */
+    @Setter
+    private boolean strikeBeacon = false;
 
     /**
      * Size multiplier from the weapon's CALIBER attribute (1.0 = baseline).

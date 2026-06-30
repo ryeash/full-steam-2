@@ -128,6 +128,9 @@ class GameEngine {
                 if (projectileContainer.isPlasma) {
                     this.animatePlasmaEffects(projectileContainer, deltaTime);
                 }
+                if (projectileContainer.isStrikeBeacon) {
+                    this.animateStrikeBeacon(projectileContainer, deltaTime);
+                }
                 if (projectileContainer.trail) {
                     this.updateProjectileTrail(projectileContainer);
                 }
@@ -2709,6 +2712,14 @@ class GameEngine {
         // Customize projectile appearance based on ordinance type
         this.customizeProjectileAppearance(sprite, projectileData);
 
+        // Strike Beacon: deliberately obvious — a bright red, blinking projectile in
+        // flight (the blink is driven per-frame by animateStrikeBeacon).
+        if (projectileData.strikeBeacon) {
+            sprite.tint = 0xff3333;
+            projectileContainer.isStrikeBeacon = true;
+            projectileContainer.beaconTime = 0;
+        }
+
         // Scale the sprite by the weapon's caliber so the render matches the
         // server-side hitbox (1.0 = baseline). Multiply to preserve the Y-flip.
         const caliber = projectileData.caliber || 1;
@@ -2828,6 +2839,15 @@ class GameEngine {
     /**
      * Update projectile trail graphics
      */
+    /** Blink a Strike Beacon projectile so it's unmistakable in flight (~5 Hz). */
+    animateStrikeBeacon(projectileContainer, deltaTime) {
+        projectileContainer.beaconTime = (projectileContainer.beaconTime || 0) + deltaTime;
+        const blink = (Math.sin(projectileContainer.beaconTime * 0.5) + 1) / 2; // 0..1
+        if (projectileContainer.sprite) {
+            projectileContainer.sprite.alpha = 0.3 + 0.7 * blink;
+        }
+    }
+
     updateProjectileTrail(projectileContainer) {
         const trail = projectileContainer.trail;
         const points = projectileContainer.trailPoints;
@@ -2998,6 +3018,7 @@ class GameEngine {
         // Clear all references
         projectileContainer.projectileData = null;
         projectileContainer.isPlasma = null;
+        projectileContainer.isStrikeBeacon = null;
         projectileContainer.maxTrailLength = null;
         
         // Destroy the container itself (children already manually destroyed above)

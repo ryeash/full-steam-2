@@ -21,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 
 /**
@@ -98,6 +99,9 @@ public class UtilitySystem {
                 break;
             case SMOKE_GRENADE:
                 createSmokeProjectile(activation);
+                break;
+            case STRIKE_BEACON:
+                createStrikeBeacon(activation);
                 break;
             default:
                 log.warn("Unknown entity-based utility weapon: {}", utility.getDisplayName());
@@ -219,5 +223,62 @@ public class UtilitySystem {
                 0.0  // smoke grenade applies no knockback
         );
         gameEntities.add(grenade);
+    }
+
+    /** Delay between the beacon landing (warning zone) and the explosive strike. */
+    private static final long STRIKE_DELAY_MS = 2000;
+
+    /**
+     * Create a Strike Beacon: a thrown, no-damage projectile that lobs like the
+     * smoke grenade and lands via damping/range. On dismissal {@link #triggerStrikeBeacon}
+     * marks the spot and calls in the strike. The projectile is flagged so the
+     * client renders it as a blinking beacon (deliberately obvious, to balance it).
+     */
+    private void createStrikeBeacon(UtilityActivation activation) {
+        Vector2 velocity = activation.direction().copy();
+        velocity.multiply(250.0);
+        Projectile beacon = new Projectile(
+                activation.playerId(),
+                activation.position().x,
+                activation.position().y,
+                velocity.x,
+                velocity.y,
+                0.0,                                          // no impact damage; the strike does the work
+                activation.utilityWeapon().getRange(),
+                activation.team(),
+                0.87,                                         // damping: lands like the smoke grenade
+                Set.of(),                                     // no bullet effects
+                Ordinance.PROJECTILE,
+                1.5,                                          // visible size
+                0.0                                           // no knockback
+        );
+        beacon.setStrikeBeacon(true);
+        gameEntities.add(beacon);
+    }
+
+    /**
+     * Land a Strike Beacon: drop a WARNING_ZONE at its resting spot now, then call
+     * in an EXPLOSION after {@link #STRIKE_DELAY_MS}. The delayed strike is scheduled
+     * off-thread and applied back on the game loop via a post-update hook (the same
+     * thread-safe pattern EventSystem uses for staggered hazards).
+     */
+    public void triggerStrikeBeacon(Projectile beacon) {
+        Vector2 pos = beacon.getPosition().copy();
+        int owner = beacon.getOwnerId();
+        int team = beacon.getOwnerTeam();
+        double radius = UtilityWeapon.STRIKE_BEACON.getRadius();
+        double damage = UtilityWeapon.STRIKE_BEACON.getDamage();
+
+        // Telegraph: non-damaging warning zone for the strike delay.
+        FieldEffect warning = new FieldEffect(owner, FieldEffectType.WARNING_ZONE, pos.copy(),
+                radius, 0.0, STRIKE_DELAY_MS / 1000.0, team);
+        gameEntities.add(warning);
+
+        // The strike itself, after the delay.
+        Config.EXECUTOR.schedule(() -> gameEntities.addPostUpdateHook(() -> {
+            FieldEffect strike = new FieldEffect(owner, FieldEffectType.EXPLOSION, pos.copy(),
+                    radius, damage, FieldEffectType.EXPLOSION.getDefaultDuration(), team);
+            gameEntities.add(strike);
+        }), STRIKE_DELAY_MS, TimeUnit.MILLISECONDS);
     }
 }

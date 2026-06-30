@@ -349,6 +349,9 @@ public class GameStateSerializer {
             projState.put("caliber", projectile.getCaliber());
             projState.put("bulletEffects", projectile.getBulletEffects().stream()
                     .map(Enum::name).collect(Collectors.toList()));
+            if (projectile.isStrikeBeacon()) {
+                projState.put("strikeBeacon", true);
+            }
             projectileStates.add(projState);
         }
         return projectileStates;

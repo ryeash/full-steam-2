@@ -27,6 +27,9 @@ public enum UtilityWeapon {
     SMOKE_GRENADE("Smoke Grenade", "Throws a grenade that detonates into a vision-blocking smoke cloud",
             null, "Projectile", 4.0, 280.0, 60.0, 0.0, UtilityCategory.TACTICAL),
 
+    STRIKE_BEACON("Strike Beacon", "Lobs a target beacon; it marks the spot with a warning zone, then calls in an explosive strike ~2s later",
+            null, "Projectile", 30.0, 280.0, 90.0, 60.0, UtilityCategory.TACTICAL),
+
     // Entity-based utilities (complex behaviors)
     TURRET_CONSTRUCTOR("Turret Constructor", "Deploys an automated defense turret",
             null, "Turret", 6.0, 40.0, 25.0, 30.0, UtilityCategory.DEFENSIVE),
