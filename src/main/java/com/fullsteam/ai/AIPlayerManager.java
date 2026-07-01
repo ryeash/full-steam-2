@@ -64,7 +64,7 @@ public class AIPlayerManager {
             behaviors.add(factory.get());
         }
         availableBehaviors.put(aiPlayer.getId(), behaviors);
-        log.info("Added AI player {} ({}) with personality type: {}",
+        log.debug("Added AI player {} ({}) with personality type: {}",
                 aiPlayer.getId(), aiPlayer.getPlayerName(), aiPlayer.getPersonality().getPersonalityType());
     }
 
@@ -76,7 +76,7 @@ public class AIPlayerManager {
         availableBehaviors.remove(playerId);
         generatedInputs.remove(playerId);
 
-        log.info("Removed AI player {}", playerId);
+        log.debug("Removed AI player {}", playerId);
     }
 
     /**
@@ -194,7 +194,7 @@ public class AIPlayerManager {
         WeaponConfig weapon = AIWeaponSelector.selectWeaponForPersonality(personality);
         UtilityWeapon utilityWeapon = AIWeaponSelector.selectUtilityWeaponForPersonality(personality);
         aiPlayer.applyWeaponConfig(weapon, utilityWeapon);
-        log.info("Assigned weapons to AI player {} ({}): Primary={}, Utility={}",
+        log.debug("Assigned weapons to AI player {} ({}): Primary={}, Utility={}",
                 aiPlayer.getId(), aiPlayer.getPersonality().getPersonalityType(),
                 weapon.getType(), utilityWeapon.getDisplayName());
         return aiPlayer;

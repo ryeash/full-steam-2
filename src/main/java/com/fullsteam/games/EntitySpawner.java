@@ -105,7 +105,7 @@ public class EntitySpawner {
         int flagsPerTeam = gameConfig.getRules().getFlagsPerTeam();
         int teamCount = gameConfig.getTeamCount();
 
-        log.info("Creating {} flags per team for {} teams", flagsPerTeam, teamCount);
+        log.debug("Creating {} flags per team for {} teams", flagsPerTeam, teamCount);
 
         for (int team = 1; team <= teamCount; team++) {
             TeamSpawnArea teamArea = teamSpawnManager.getTeamArea(team);
@@ -196,7 +196,7 @@ public class EntitySpawner {
         int zoneCount = rules.getKothZones();
         int teamCount = gameConfig.getTeamCount();
 
-        log.info("Creating {} KOTH zones for game {}", zoneCount, gameId);
+        log.debug("Creating {} KOTH zones for game {}", zoneCount, gameId);
 
         int zoneId = Config.nextEntityId();
 

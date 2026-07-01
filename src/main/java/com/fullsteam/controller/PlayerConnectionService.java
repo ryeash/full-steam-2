@@ -58,7 +58,7 @@ public class PlayerConnectionService {
                 if (!asSpectator) {
                     gameLobby.incrementPlayerCount();
                 }
-                log.info("{} {} connected to game {}",
+                log.debug("{} {} connected to game {}",
                         asSpectator ? "Spectator" : "Player",
                         playerSession.getPlayerId(),
                         gameId);
@@ -96,7 +96,7 @@ public class PlayerConnectionService {
                 gameLobby.decrementPlayerCount();
             }
 
-            log.info("{} {} disconnected",
+            log.debug("{} {} disconnected",
                     playerSession.isSpectator() ? "Spectator" : "Player",
                     playerSession.getPlayerId());
         }

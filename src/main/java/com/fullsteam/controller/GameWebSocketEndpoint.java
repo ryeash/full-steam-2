@@ -67,7 +67,7 @@ public class GameWebSocketEndpoint {
             log.debug("Could not parse spectate parameter from URI: {}", e.getMessage());
         }
 
-        log.info("WebSocket connection opened for gameId: {} (spectator: {})", gameId, asSpectator);
+        log.debug("WebSocket connection opened for gameId: {} (spectator: {})", gameId, asSpectator);
 
         ConnectResult result = connectionService.connectPlayer(session, gameId, asSpectator);
         if (result instanceof ConnectResult.Rejected(GameManager.JoinRejectReason reason)) {
@@ -76,7 +76,7 @@ public class GameWebSocketEndpoint {
             sendJoinRejected(session, reason.name());
             session.close();
         } else {
-            log.info("{} successfully connected to game {}",
+            log.debug("{} successfully connected to game {}",
                     asSpectator ? "Spectator" : "Player", gameId);
         }
     }
@@ -166,7 +166,7 @@ public class GameWebSocketEndpoint {
 
     @OnClose
     public void onClose(WebSocketSession session) {
-        log.info("WebSocket connection closed for session: {}", session.getId());
+        log.debug("WebSocket connection closed for session: {}", session.getId());
         connectionService.disconnectPlayer(session);
     }
 }

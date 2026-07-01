@@ -32,7 +32,7 @@ public class AIGameHelper {
             }
         }
 
-        log.info("Added {} AI players to game {}", added, gameManager.getGameId());
+        log.debug("Added {} AI players to game {}", added, gameManager.getGameId());
         return added;
     }
 }

@@ -20,5 +20,15 @@ RUN mkdir /app
 # Copy the built JAR from the build stage
 COPY --from=build /app/build/libs/*.jar /app/application.jar
 
-# Define the entry point to run the application
-ENTRYPOINT ["java", "-XX:+UseZGC", "-XX:+UseCompressedOops", "-XX:+UseCompressedClassPointers", "-XX:+UseStringDeduplication", "-Xmx1g", "-jar", "/app/application.jar"]
+# Heap sizing is container-memory-aware: MaxRAMPercentage sets the heap as a
+# fraction of the container's memory limit (`docker run --memory=...`), so heap
+# and limit stay in sync automatically. Tune the fraction with JAVA_MAX_RAM_PCT
+# (default 75). An explicit JAVA_MAX_MEM (e.g. `-e JAVA_MAX_MEM=2g`) still wins,
+# overriding the percentage. NB: without a --memory limit, the percentage is of
+# the host's RAM — always set a container memory limit in production.
+ENV JAVA_MAX_RAM_PCT=75.0
+
+# Run via `sh -c exec` so the shell expands the env vars while `exec` makes java
+# replace the shell as PID 1 (keeps SIGTERM working for clean shutdown).
+# NOTE: exec form (JSON array) does NOT expand env vars — hence the sh -c.
+ENTRYPOINT ["sh", "-c", "exec java -XX:+UseZGC -XX:+UseCompressedOops -XX:+UseCompressedClassPointers -XX:+UseStringDeduplication -XX:MaxRAMPercentage=${JAVA_MAX_RAM_PCT:-75.0} ${JAVA_MAX_MEM:+-Xmx}${JAVA_MAX_MEM} -jar /app/application.jar"]

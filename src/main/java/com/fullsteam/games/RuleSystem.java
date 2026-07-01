@@ -155,7 +155,7 @@ public class RuleSystem {
         Player vip = teamPlayers.getFirst();
         setPlayerAsVip(vip);
 
-        log.info("Player {} ({}) selected as VIP for team {}",
+        log.debug("Player {} ({}) selected as VIP for team {}",
                 vip.getId(), vip.getPlayerName(), teamNumber);
     }
 
@@ -399,7 +399,7 @@ public class RuleSystem {
             return;
         }
         if (player.isEliminated()) {
-            log.info("Player {} eliminated, no respawn", player.getId());
+            log.debug("Player {} eliminated, no respawn", player.getId());
             player.setRespawnTime(0);
             return;
         }
@@ -850,7 +850,7 @@ public class RuleSystem {
     public void initializePlayerLives(Player player) {
         if (rules.hasLimitedLives()) {
             player.initializeLives(rules.getMaxLives());
-            log.info("Player {} initialized with {} lives", player.getId(), rules.getMaxLives());
+            log.debug("Player {} initialized with {} lives", player.getId(), rules.getMaxLives());
         }
     }
 
@@ -862,7 +862,7 @@ public class RuleSystem {
         if (rules.hasLimitedLives()) {
             for (Player player : gameEntities.getAllPlayers()) {
                 player.initializeLives(rules.getMaxLives());
-                log.info("Player {} lives reset to {} for round {}",
+                log.debug("Player {} lives reset to {} for round {}",
                         player.getId(), rules.getMaxLives(), currentRound);
             }
 
@@ -923,7 +923,7 @@ public class RuleSystem {
 
         if (rotatedCount > 0) {
             gameEventManager.broadcastSystemMessage("🔄 Weapon Rotation! New loadouts assigned!");
-            log.info("Game {} - Rotated weapons for {} players", gameId, rotatedCount);
+            log.debug("Game {} - Rotated weapons for {} players", gameId, rotatedCount);
         }
     }
 }

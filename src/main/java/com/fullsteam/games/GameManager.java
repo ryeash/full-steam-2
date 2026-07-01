@@ -217,10 +217,10 @@ public class GameManager {
             int initialAICount = getMaxPlayers();
             int added = AIGameHelper.addMixedAIPlayers(this, initialAICount);
             if (added > 0) {
-                log.info("Added {} initial AI players to game {} for better gameplay", added, gameId);
+                log.debug("Added {} initial AI players to game {} for better gameplay", added, gameId);
             }
         } else {
-            log.info("AI filling disabled for game {} - no initial AI players added", gameId);
+            log.debug("AI filling disabled for game {} - no initial AI players added", gameId);
         }
 
         this.shutdownHook = Config.EXECUTOR.scheduleAtFixedRate(this::update, 0, 16, TimeUnit.MILLISECONDS);
@@ -232,7 +232,7 @@ public class GameManager {
         boolean asSpectator = playerSession.getState() == PlayerSessionState.SPECTATOR;
 
         if (ruleSystem.isGameOver()) {
-            log.info("{} {} attempted to join finished game {}",
+            log.debug("{} {} attempted to join finished game {}",
                     asSpectator ? "Spectator" : "Player", playerSession.getPlayerId(), gameId);
             return false;
         }
@@ -242,7 +242,7 @@ public class GameManager {
                 return false;
             }
             if (isGameLocked()) {
-                log.info("Player {} attempted to join locked game {}",
+                log.debug("Player {} attempted to join locked game {}",
                         playerSession.getPlayerId(), gameId);
                 return false;
             }
@@ -480,7 +480,7 @@ public class GameManager {
         // Add to AI manager
         aiPlayerManager.addAIPlayer(aiPlayer);
 
-        log.info("Added AI player {} ({}) with {} personality on team {} at spawn point ({}, {})",
+        log.debug("Added AI player {} ({}) with {} personality on team {} at spawn point ({}, {})",
                 aiPlayer.getId(), aiPlayer.getPlayerName(), personalityType,
                 assignedTeam, spawnPoint.x, spawnPoint.y);
 
@@ -505,7 +505,7 @@ public class GameManager {
                 gameEntities.removePlayer(playerId);
             }
             aiPlayerManager.removeAIPlayer(playerId);
-            log.info("Removed AI player {}", playerId);
+            log.debug("Removed AI player {}", playerId);
 
             // Ensure VIP is reassigned if this AI player was the VIP
             if (gameConfig.getRules().hasVip() && playerTeam > 0) {
@@ -610,13 +610,13 @@ public class GameManager {
             int aiToAdd = getMaxPlayers() - totalPlayers;
             int added = AIGameHelper.addMixedAIPlayers(this, aiToAdd);
             if (added > 0) {
-                log.info("Auto-filled {} AI players (total: {})", added, totalPlayers + added);
+                log.debug("Auto-filled {} AI players (total: {})", added, totalPlayers + added);
             }
         } else if (humanPlayers > 0 && totalPlayers > getMaxPlayers()) {
             int aiToRemove = totalPlayers - getMaxPlayers();
             int removed = removeExcessAIPlayers(aiToRemove);
             if (removed > 0) {
-                log.info("Removed {} excess AI players (total remaining: {})", removed, totalPlayers - removed);
+                log.debug("Removed {} excess AI players (total remaining: {})", removed, totalPlayers - removed);
             }
         }
 
@@ -670,7 +670,7 @@ public class GameManager {
             removeAIPlayer(aiToMove);
             // assignPlayerToTeam() will now direct the replacement to minTeam.
             AIGameHelper.addMixedAIPlayers(this, 1);
-            log.info("Rebalanced AI: moved one player from team {} ({}) to team {} ({})",
+            log.debug("Rebalanced AI: moved one player from team {} ({}) to team {} ({})",
                     maxTeam, teamCounts[maxTeam], minTeam, teamCounts[minTeam]);
         }
     }
@@ -883,7 +883,7 @@ public class GameManager {
         // Send spectator-specific initial game state
         send(playerSession.getSession(), gameStateSerializer.createSpectatorInitialState());
 
-        log.info("Spectator {} joined game {} successfully. Total spectators: {}",
+        log.debug("Spectator {} joined game {} successfully. Total spectators: {}",
                 playerSession.getPlayerId(), gameId, getSpectatorCount());
 
         // Notify players that a spectator joined (subtle notification)
@@ -906,7 +906,7 @@ public class GameManager {
         // here (the AI pre-fill stays put until the player actually spawns).
         playerSession.setLobbyEnteredAt(System.currentTimeMillis());
         send(playerSession.getSession(), gameStateSerializer.createLobbyInitialState(LOBBY_TIMEOUT_MS, playerSession.getPlayerName()));
-        log.info("Player {} joined game {} in LOBBY state (awaiting loadout). Total sessions: {}",
+        log.debug("Player {} joined game {} in LOBBY state (awaiting loadout). Total sessions: {}",
                 playerSession.getPlayerId(), gameId, gameEntities.getPlayerSessions().size());
     }
 
@@ -921,7 +921,7 @@ public class GameManager {
                                           UtilityWeapon utilityWeapon) {
         int assignedTeam = assignPlayerToTeam();
         Vector2 spawnPoint = spawnPointManager.findVariedSpawnPointForTeam(assignedTeam);
-        log.info("Player {} spawning in game {} at spawn point ({}, {}) on team {}",
+        log.debug("Player {} spawning in game {} at spawn point ({}, {}) on team {}",
                 playerSession.getPlayerId(), gameId, spawnPoint.x, spawnPoint.y, assignedTeam);
 
         Player player = new Player(playerSession.getPlayerId(), playerSession.getPlayerName(),
@@ -944,7 +944,7 @@ public class GameManager {
 
         playerSession.setState(PlayerSessionState.PLAYING);
         send(playerSession.getSession(), createInitialGameState(player));
-        log.info("Player {} ({}) spawned in game {} successfully. Total players: {}, Total sessions: {}",
+        log.debug("Player {} ({}) spawned in game {} successfully. Total players: {}, Total sessions: {}",
                 playerSession.getPlayerId(), playerSession.getPlayerName(), gameId,
                 gameEntities.getPlayers().size(), gameEntities.getPlayerSessions().size());
 
@@ -976,7 +976,7 @@ public class GameManager {
                 ruleSystem.ensureVipForTeam(playerTeam);
             }
         }
-        log.info("Player {} left game {}", playerSession.getPlayerId(), gameId);
+        log.debug("Player {} left game {}", playerSession.getPlayerId(), gameId);
 
         // Broadcast player leave event (only for human players)
         if (!aiPlayerManager.isAIPlayer(playerSession.getPlayerId())) {
@@ -1111,7 +1111,7 @@ public class GameManager {
                         StatusEffectManager.removeBallCarrier(carrier);
                     }
 
-                    log.info("Flag {} dropped at ({}, {}) - carrier {} inactive",
+                    log.debug("Flag {} dropped at ({}, {}) - carrier {} inactive",
                             flag.getId(), flag.getPosition().x, flag.getPosition().y, carrierId);
                 }
             }
@@ -1240,7 +1240,7 @@ public class GameManager {
         send(session.getSession(), Map.of("type", "eliminated"));
         // Switch the client over to the spectator view (full game state).
         send(session.getSession(), gameStateSerializer.createSpectatorInitialState());
-        log.info("Player {} eliminated in last-man-standing game; switched to SPECTATOR.",
+        log.debug("Player {} eliminated in last-man-standing game; switched to SPECTATOR.",
                 victim.getId());
     }
 
@@ -1249,7 +1249,7 @@ public class GameManager {
         send(session.getSession(), Map.of("type", "lobbyTimeout"));
         // Switch the client over to the spectator view (full game state)
         send(session.getSession(), gameStateSerializer.createSpectatorInitialState());
-        log.info("Lobby session {} timed out after {}ms; downgraded to SPECTATOR.",
+        log.debug("Lobby session {} timed out after {}ms; downgraded to SPECTATOR.",
                 session.getPlayerId(), LOBBY_TIMEOUT_MS);
     }
 
@@ -1339,7 +1339,7 @@ public class GameManager {
                     StatusEffectManager.removeBallCarrier(victim);
                 }
 
-                log.info("Player {} died, dropped flag {}", victim.getId(), flag.getId());
+                log.debug("Player {} died, dropped flag {}", victim.getId(), flag.getId());
             }
         }
 

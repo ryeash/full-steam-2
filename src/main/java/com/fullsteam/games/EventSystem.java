@@ -121,7 +121,7 @@ public class EventSystem {
 
         // Announce the event
         gameEventManager.broadcastSystemMessage(eventType.getAnnouncementMessage());
-        log.info("Game {} - Event started: {} at {} locations", gameId, eventType.name(), targetLocations.size());
+        log.debug("Game {} - Event started: {} at {} locations", gameId, eventType.name(), targetLocations.size());
     }
 
     /**

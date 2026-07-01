@@ -54,7 +54,7 @@ public class TeamSpawnManager {
                 log.warn("Unsupported team count: {}", teamCount);
         }
 
-        log.info("Created {} team spawn areas for {}x{} world",
+        log.debug("Created {} team spawn areas for {}x{} world",
                 teamAreas.size(), worldWidth, worldHeight);
     }
 

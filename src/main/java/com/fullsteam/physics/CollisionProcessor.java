@@ -704,7 +704,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     private void pickUpFlag(Player player, Flag flag) {
         flag.pickUp(player.getId());
 
-        log.info("Player {} (team {}) picked up flag {} (team {})",
+        log.debug("Player {} (team {}) picked up flag {} (team {})",
                 player.getId(), player.getTeam(), flag.getId(), flag.getOwnerTeam());
 
         // Apply ball carrier status effect for oddball mode
@@ -748,7 +748,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         // Award points to player
         gameManager.awardCapture(player, carriedFlag.getOwnerTeam());
 
-        log.info("Player {} (team {}) captured flag {} (team {})!",
+        log.debug("Player {} (team {}) captured flag {} (team {})!",
                 player.getId(), player.getTeam(), carriedFlag.getId(), carriedFlag.getOwnerTeam());
 
         // Broadcast capture event. When the rules give a flag more than one point
@@ -777,7 +777,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     private void returnFlag(Flag flag) {
         flag.returnToHome();
 
-        log.info("Flag {} (team {}) returned to home", flag.getId(), flag.getOwnerTeam());
+        log.debug("Flag {} (team {}) returned to home", flag.getId(), flag.getOwnerTeam());
 
         // Broadcast return event
         gameManager.broadcastGameEvent(
