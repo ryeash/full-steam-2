@@ -443,8 +443,8 @@ class GameEngine {
         
         // Minimap background
         const minimapBg = new PIXI.Graphics();
-        minimapBg.roundRect(0, 0, minimapWidth, minimapHeight, 4).fill({ color: 0x1a3d1f, alpha: 0.8 });
-        minimapBg.roundRect(0, 0, minimapWidth, minimapHeight, 4).stroke({ width: 1, color: 0x2ecc71, alpha: 0.6 });
+        minimapBg.roundRect(0, 0, minimapWidth, minimapHeight, 4).fill({ color: 0x0f2040, alpha: 0.8 });
+        minimapBg.roundRect(0, 0, minimapWidth, minimapHeight, 4).stroke({ width: 1, color: 0x5FC4B8, alpha: 0.6 });
         minimapContainer.addChild(minimapBg);
         
         // Minimap title
@@ -619,10 +619,10 @@ class GameEngine {
     getTeamColor(teamNumber) {
         switch (teamNumber) {
             case 0: return 0x808080; // Gray for FFA/no team
-            case 1: return 0x4CAF50; // Green
-            case 2: return 0xF44336; // Red
-            case 3: return 0x2196F3; // Blue
-            case 4: return 0xFF9800; // Orange
+            case 1: return 0x0072B2; // Cobalt blue
+            case 2: return 0xE69F00; // Amber
+            case 3: return 0x009E73; // Teal
+            case 4: return 0xCC79A7; // Mauve
             default: return 0x808080; // Default gray
         }
     }
@@ -2212,9 +2212,9 @@ class GameEngine {
         // Color based on health level (for players)
         let healthColor = config.fillColor;
         if (config.dynamicColor && healthPercent < 0.3) {
-            healthColor = 0xe74c3c; // Red
+            healthColor = 0xFF6B35; // Deep orange (critical)
         } else if (config.dynamicColor && healthPercent < 0.6) {
-            healthColor = 0xf39c12; // Orange
+            healthColor = 0xFFC300; // Amber-yellow (mid health)
         }
 
         // Only rebuild the fill geometry when it actually changes. Rebuilding a
@@ -2246,7 +2246,7 @@ class GameEngine {
             height: 6,
             yOffset: 35,
             bgColor: 0x333333,
-            fillColor: 0x2ecc71,
+            fillColor: 0x00B4D8,
             cornerRadius: 2,
             showWhenFull: true,
             dynamicColor: true

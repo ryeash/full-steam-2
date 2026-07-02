@@ -59,12 +59,12 @@ public class GameEvent {
      * Categories of game events for styling and organization
      */
     public enum EventCategory {
-        KILL("#FF4444"),           // Red for kills/deaths
-        CAPTURE("#00FF88"),        // Green for objectives
-        SYSTEM("#FFAA00"),         // Orange for system messages
+        KILL("#E67E22"),           // Amber-orange for kills (avoids red/green pair)
+        CAPTURE("#2EC4B6"),        // Teal for objectives (colorblind-safe)
+        SYSTEM("#FFAA00"),         // Amber for system messages
         ACHIEVEMENT("#FFD700"),    // Gold for achievements
         WARNING("#FF8800"),        // Orange for warnings
-        INFO("#00AAFF"),          // Blue for information
+        INFO("#56B4E9"),          // Sky blue for information
         CHAT("#FFFFFF");          // White for chat messages
 
         private final String defaultColor;
@@ -158,10 +158,10 @@ public class GameEvent {
      */
     private static String getTeamColorHex(int teamNumber) {
         return switch (teamNumber) {
-            case 1 -> "#4CAF50";  // Green (Team 1)
-            case 2 -> "#F44336";  // Red (Team 2)
-            case 3 -> "#2196F3";  // Blue (Team 3)
-            case 4 -> "#FF9800";  // Orange (Team 4)
+            case 1 -> "#0072B2";  // Cobalt blue (Team 1)
+            case 2 -> "#E69F00";  // Amber (Team 2)
+            case 3 -> "#009E73";  // Teal (Team 3)
+            case 4 -> "#CC79A7";  // Mauve (Team 4)
             default -> "#FFFFFF"; // White (FFA/Unknown)
         };
     }
