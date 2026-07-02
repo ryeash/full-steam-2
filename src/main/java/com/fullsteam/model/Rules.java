@@ -24,22 +24,6 @@ import java.util.List;
 @Introspected
 public class Rules {
     /**
-     * Duration of each round in seconds. 0 = infinite/no rounds
-     */
-    @Min(0)
-    @Max(7200)
-    @Builder.Default
-    private double roundDuration = 120.0;
-
-    /**
-     * Rest period between rounds in seconds
-     */
-    @Min(0)
-    @Max(60)
-    @Builder.Default
-    private double restDuration = 10.0;
-
-    /**
      * Number of flags each team has to protect/capture. 0 = no flags (traditional deathmatch)
      */
     @Min(0)
@@ -493,9 +477,16 @@ public class Rules {
     }
 
     /**
+     * Check if this mode uses event-driven "last one standing" respawns.
+     */
+    public boolean usesLastStanding() {
+        return respawnMode == RespawnMode.LAST_STANDING;
+    }
+
+    /**
      * Check if players can respawn at all. Every current respawn mode eventually
-     * respawns players (LIMITED until lives run out, NEXT_ROUND at the round
-     * boundary, etc.) — there is no longer a never-respawn mode.
+     * respawns players (LIMITED until lives run out, WAVE at the next wave, etc.)
+     * — there is no longer a never-respawn mode.
      */
     public boolean allowsRespawn() {
         return true;

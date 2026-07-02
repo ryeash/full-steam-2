@@ -36,8 +36,6 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
 
     private Rules createTestRules() {
         return Rules.builder()
-                .roundDuration(60.0)
-                .restDuration(10.0)
                 .scoreStyle(ScoreStyle.OBJECTIVE)
                 .kothZones(2)
                 .kothPointsPerSecond(5.0)
@@ -91,8 +89,6 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
     void testTotalScoreStyle() {
         // Change to TOTAL score style
         Rules totalRules = Rules.builder()
-                .roundDuration(60.0)
-                .restDuration(10.0)
                 .scoreStyle(ScoreStyle.TOTAL)
                 .kothZones(2)
                 .kothPointsPerSecond(5.0)
@@ -131,8 +127,6 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
     void testTotalKillsScoreStyle() {
         // Change to TOTAL_KILLS score style
         Rules killsRules = Rules.builder()
-                .roundDuration(60.0)
-                .restDuration(10.0)
                 .scoreStyle(ScoreStyle.TOTAL_KILLS)
                 .kothZones(2)
                 .kothPointsPerSecond(5.0)
@@ -171,8 +165,6 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
     @DisplayName("pointsPerFlagCapture multiplies captures in OBJECTIVE score style")
     void testPointsPerFlagCaptureWithObjectiveStyle() {
         Rules rules = Rules.builder()
-                .roundDuration(60.0)
-                .restDuration(10.0)
                 .scoreStyle(ScoreStyle.OBJECTIVE)
                 .flagsPerTeam(1)
                 .pointsPerFlagCapture(10)
@@ -199,8 +191,6 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
     @DisplayName("pointsPerFlagCapture is additive with kills under TOTAL score style")
     void testPointsPerFlagCaptureWithTotalStyle() {
         Rules rules = Rules.builder()
-                .roundDuration(60.0)
-                .restDuration(10.0)
                 .scoreStyle(ScoreStyle.TOTAL)
                 .flagsPerTeam(1)
                 .pointsPerFlagCapture(5)
@@ -228,8 +218,6 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
     @DisplayName("pointsPerFlagCapture has no effect under TOTAL_KILLS score style")
     void testPointsPerFlagCaptureIgnoredByTotalKills() {
         Rules rules = Rules.builder()
-                .roundDuration(60.0)
-                .restDuration(10.0)
                 .scoreStyle(ScoreStyle.TOTAL_KILLS)
                 .flagsPerTeam(1)
                 .pointsPerFlagCapture(50)
@@ -253,8 +241,6 @@ class ScoreStyleIntegrationTest extends BaseTestClass {
     void testDefaultPointsPerFlagCapturePreservesLegacyScoring() {
         // No explicit pointsPerFlagCapture - relies on the Builder.Default of 1
         Rules rules = Rules.builder()
-                .roundDuration(60.0)
-                .restDuration(10.0)
                 .scoreStyle(ScoreStyle.OBJECTIVE)
                 .flagsPerTeam(1)
                 .build();

@@ -28,8 +28,6 @@ public class BattleRoyaleConfigTest extends BaseTestClass {
     public void testBattleRoyaleConfiguration() {
         // Create the Battle Royale configuration as defined in lobby.html
         Rules rules = Rules.builder()
-                .roundDuration(0.0)
-                .restDuration(10.0)
                 .flagsPerTeam(0)
                 .scoreStyle(ScoreStyle.TOTAL_KILLS)
                 .victoryCondition(VictoryCondition.ELIMINATION)

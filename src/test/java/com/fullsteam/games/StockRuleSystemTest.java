@@ -25,8 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Tests the default rules that are used when no custom configuration is provided.
  * <p>
  * Stock Rules (from Rules.java @Builder.Default):
- * - roundDuration = 120.0 (2 minutes)
- * - restDuration = 10.0 (10 seconds)
  * - flagsPerTeam = 0 (no flags)
  * - scoreStyle = ScoreStyle.TOTAL_KILLS
  * - victoryCondition = VictoryCondition.ENDLESS
@@ -85,20 +83,6 @@ class StockRuleSystemTest extends BaseTestClass {
     // ============================================================================
     // Stock Configuration Validation Tests
     // ============================================================================
-
-    @Test
-    @DisplayName("Should use stock round duration (120 seconds)")
-    void testStockRoundDuration() {
-        assertEquals(120.0, stockRules.getRoundDuration(),
-                "Stock round duration should be 120 seconds");
-    }
-
-    @Test
-    @DisplayName("Should use stock rest duration (10 seconds)")
-    void testStockRestDuration() {
-        assertEquals(10.0, stockRules.getRestDuration(),
-                "Stock rest duration should be 10 seconds");
-    }
 
     @Test
     @DisplayName("Should use stock victory condition (ENDLESS)")
@@ -191,9 +175,8 @@ class StockRuleSystemTest extends BaseTestClass {
     // ============================================================================
 
     @Test
-    @DisplayName("Should start with round 1 and playing state using stock rules")
+    @DisplayName("Should start in playing state using stock rules")
     void testStockInitialState() {
-        assertEquals(1, ruleSystem.getCurrentRound(), "Should start with round 1");
         assertEquals(GameState.PLAYING, ruleSystem.getGameState(), "Should start in PLAYING state");
         assertFalse(ruleSystem.isGameOver(), "Game should not be over initially");
     }
@@ -275,10 +258,6 @@ class StockRuleSystemTest extends BaseTestClass {
         Rules rules3 = Rules.builder().build();
 
         // All should have identical stock values
-        assertEquals(rules1.getRoundDuration(), rules2.getRoundDuration());
-        assertEquals(rules2.getRoundDuration(), rules3.getRoundDuration());
-        assertEquals(120.0, rules1.getRoundDuration());
-
         assertEquals(rules1.getVictoryCondition(), rules2.getVictoryCondition());
         assertEquals(rules2.getVictoryCondition(), rules3.getVictoryCondition());
         assertEquals(VictoryCondition.ENDLESS, rules1.getVictoryCondition());

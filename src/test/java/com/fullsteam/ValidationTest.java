@@ -23,26 +23,12 @@ public class ValidationTest extends BaseTestClass {
     public void testValidRules() {
         // Valid rules should pass validation
         Rules rules = Rules.builder()
-                .roundDuration(120.0)
-                .restDuration(10.0)
                 .flagsPerTeam(2)
                 .scoreLimit(50)
                 .build();
 
         Set<ConstraintViolation<Rules>> violations = validator.validate(rules);
         assertTrue(violations.isEmpty(), "Valid rules should have no violations");
-    }
-
-    @Test
-    public void testInvalidRoundDuration() {
-        // Round duration exceeds max
-        Rules rules = Rules.builder()
-                .roundDuration(10000.0) // Max is 7200
-                .build();
-
-        Set<ConstraintViolation<Rules>> violations = validator.validate(rules);
-        assertFalse(violations.isEmpty(), "Should have violations for invalid roundDuration");
-        assertTrue(violations.stream().anyMatch(v -> v.getPropertyPath().toString().equals("roundDuration")));
     }
 
     @Test
@@ -162,7 +148,7 @@ public class ValidationTest extends BaseTestClass {
     public void testNestedValidation() {
         // Test that nested Rules validation works through GameConfig
         Rules invalidRules = Rules.builder()
-                .roundDuration(10000.0) // Invalid - exceeds max
+                .kothZones(10) // Invalid - exceeds max
                 .build();
 
         GameConfig config = GameConfig.builder()
@@ -178,7 +164,7 @@ public class ValidationTest extends BaseTestClass {
     public void testMultipleViolations() {
         // Test multiple violations at once
         Rules rules = Rules.builder()
-                .roundDuration(-1.0) // Invalid - negative
+                .respawnDelay(-5.0) // Invalid - negative
                 .scoreLimit(0) // Invalid - below min
                 .kothZones(10) // Invalid - exceeds max
                 .randomEventIntervalVariance(2.0) // Invalid - exceeds max
@@ -192,8 +178,6 @@ public class ValidationTest extends BaseTestClass {
     public void testBoundaryValues() {
         // Test boundary values - should all be valid
         Rules rules = Rules.builder()
-                .roundDuration(0.0) // Min boundary
-                .restDuration(60.0) // Max boundary (actual max is 60, not 300)
                 .scoreLimit(1) // Min boundary
                 .maxLives(-1) // Min boundary (special case for unlimited)
                 .kothZones(0) // Min boundary

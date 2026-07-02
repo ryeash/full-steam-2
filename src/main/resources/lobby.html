@@ -358,19 +358,6 @@
                 </div>
 
                 <div class="config-section">
-                    <h3>⏱️ Round Rules</h3>
-                    <div class="config-item">
-                        <label for="roundDuration">Round Duration (seconds):</label>
-                        <input type="number" id="roundDuration" min="0" max="7200" step="30" value="0">
-                        <small style="color: #888; font-size: 0.8em;">0 = infinite (no rounds)</small>
-                    </div>
-                    <div class="config-item">
-                        <label for="restDuration">Rest Between Rounds (seconds):</label>
-                        <input type="number" id="restDuration" min="5" max="60" step="5" value="10">
-                    </div>
-                </div>
-
-                <div class="config-section">
                     <h3>🚩 Capture the Flag</h3>
                     <div class="config-item">
                         <label for="flagsPerTeam">Flags Per Team:</label>
@@ -546,8 +533,8 @@
                         <select id="respawnMode" onchange="updateRespawnFields()">
                             <option value="DELAYED">Delayed (Respawn after a set delay)</option>
                             <option value="WAVE">Wave (Team respawns together)</option>
-                            <option value="NEXT_ROUND">Next Round (No respawn until round ends)</option>
                             <option value="LIMITED">Limited (X lives per player)</option>
+                            <option value="LAST_STANDING">Last Standing (Respawn when one is left)</option>
                         </select>
                     </div>
                     <div class="config-item" id="respawnDelayField">
@@ -721,6 +708,7 @@
             ['⭐ Oddball',          'oddball'],
             ['🎖️ VIP',              'vip-assassination'],
             ['👑 Kingpin',          'kingpin'],
+            ['⚔️ Last Stand',       'last-stand'],
         ];
 
         presets.forEach(([label, presetType]) => {
@@ -855,6 +843,8 @@
             }
         } else if (rules.respawnMode === 'WAVE') {
             tags.push(`🌊 Wave Respawn`);
+        } else if (rules.respawnMode === 'LAST_STANDING') {
+            tags.push({ text: '⚔️ Last Standing', highlight: true });
         }
         
         // Game modes
@@ -937,8 +927,6 @@
                 aiCheckIntervalMs: 10000,
                 enableAIFilling: true,
                 rules: {
-                    roundDuration: 120,
-                    restDuration: 10,
                     flagsPerTeam: 0,
                     scoreStyle: 'TOTAL_KILLS',
                     victoryCondition: 'TIME_LIMIT',
@@ -967,13 +955,10 @@
                 aiCheckIntervalMs: 10000,
                 enableAIFilling: true,
                 rules: {
-                    roundDuration: 120,
-                    restDuration: 10,
                     flagsPerTeam: 0,
                     scoreStyle: 'TOTAL_KILLS',
                     victoryCondition: 'SCORE_LIMIT',
                     scoreLimit: 25,  // First to 25 kills
-                    timeLimit: 600,
                     suddenDeath: false,
                     respawnMode: 'DELAYED',
                     respawnDelay: 3,  // Faster respawn for FFA
@@ -997,13 +982,10 @@
                 aiCheckIntervalMs: 10000,
                 enableAIFilling: true,
                 rules: {
-                    roundDuration: 300,         // 5 minute rounds
-                    restDuration: 15,           // 15 second rest
                     flagsPerTeam: 1,            // Classic CTF - 1 flag per team
                     scoreStyle: 'OBJECTIVE',    // Score by objectives only
                     victoryCondition: 'SCORE_LIMIT',  // first to the capture limit
                     scoreLimit: 5,              // First to 5 captures wins (more for 3 teams)
-                    timeLimit: 600,
                     suddenDeath: true,          // Sudden death if tied
                     respawnMode: 'WAVE',        // Wave respawns for coordinated pushes
                     respawnDelay: 5,
@@ -1027,13 +1009,10 @@
                 aiCheckIntervalMs: 10000,
                 enableAIFilling: true,
                 rules: {
-                    roundDuration: 240,         // 4 minute rounds
-                    restDuration: 15,
                     flagsPerTeam: 0,            // No flags in domination
                     scoreStyle: 'OBJECTIVE',    // Points from zone control only
                     victoryCondition: 'SCORE_LIMIT',
                     scoreLimit: 200,            // First to 200 points (zone control only)
-                    timeLimit: 900,             // 15 minute fallback
                     suddenDeath: true,
                     respawnMode: 'DELAYED',
                     respawnDelay: 4,
@@ -1053,13 +1032,10 @@
                 aiCheckIntervalMs: 10000,
                 enableAIFilling: true,
                 rules: {
-                    roundDuration: 0,           // No rounds - single continuous game
-                    restDuration: 10,
                     flagsPerTeam: 0,            // No flags
                     scoreStyle: 'TOTAL_KILLS',  // Kills matter for placement
                     victoryCondition: 'ELIMINATION',  // Last player standing wins!
                     scoreLimit: 50,
-                    timeLimit: 1200,            // 20 minute max (safety limit for 50 players)
                     suddenDeath: false,
                     lockGameAfterSeconds: 15,   // Lock game after 15s - no late joins in BR!
                     respawnMode: 'LIMITED',     // ONE LIFE (maxLives: 1) - Battle Royale style!
@@ -1091,13 +1067,10 @@
                 aiCheckIntervalMs: 10000,
                 enableAIFilling: true,
                 rules: {
-                    roundDuration: 180,         // 3 minute rounds
-                    restDuration: 12,
                     flagsPerTeam: 0,
                     scoreStyle: 'TOTAL_KILLS',
                     victoryCondition: 'ELIMINATION',  // Last team with lives wins
                     scoreLimit: 50,
-                    timeLimit: 600,             // 10 minute fallback
                     suddenDeath: true,          // Sudden death if time runs out
                     respawnMode: 'LIMITED',     // Limited lives per player
                     respawnDelay: 3,            // Quick respawn to keep action flowing
@@ -1121,13 +1094,10 @@
                 aiCheckIntervalMs: 10000,
                 enableAIFilling: true,
                 rules: {
-                    roundDuration: 0,           // No rounds - continuous battle
-                    restDuration: 10,
                     flagsPerTeam: 0,            // No flags in HQ assault
                     scoreStyle: 'TOTAL',        // Kills + HQ damage points
                     victoryCondition: 'SCORE_LIMIT',  // Win by destroying enemy HQ (HQ damage feeds the score limit)
                     scoreLimit: 300,            // Fallback score limit
-                    timeLimit: 900,             // 15 minute fallback
                     suddenDeath: false,
                     respawnMode: 'WAVE',        // Wave respawns for coordinated attacks
                     respawnDelay: 5,
@@ -1156,8 +1126,6 @@
                 aiCheckIntervalMs: 10000,
                 enableAIFilling: true,
                 rules: {
-                    roundDuration: 180,         // 3 minute rounds
-                    restDuration: 12,
                     flagsPerTeam: 0,
                     scoreStyle: 'TOTAL',        // All points count
                     victoryCondition: 'TIME_LIMIT',  // Survive the chaos for 10 minutes
@@ -1200,13 +1168,10 @@
                 aiCheckIntervalMs: 10000,
                 enableAIFilling: true,
                 rules: {
-                    roundDuration: 180,         // 3 minute rounds
-                    restDuration: 15,
                     flagsPerTeam: 0,            // No flags in oddball
                     scoreStyle: 'OBJECTIVE',    // Score by holding the ball
                     victoryCondition: 'SCORE_LIMIT',
                     scoreLimit: 150,            // First to 150 points (2.5 minutes of holding)
-                    timeLimit: 600,             // 10 minute fallback
                     suddenDeath: true,
                     respawnMode: 'DELAYED',
                     respawnDelay: 4,
@@ -1242,13 +1207,10 @@
                 aiCheckIntervalMs: 10000,
                 enableAIFilling: true,
                 rules: {
-                    roundDuration: 300,         // 5 minute rounds
-                    restDuration: 10,
                     flagsPerTeam: 0,
                     scoreStyle: 'OBJECTIVE',    // Only zone hold-time counts; kills are just harassment
                     victoryCondition: 'SCORE_LIMIT',
                     scoreLimit: 90,             // 90 pts ≈ 90 seconds of solo zone control
-                    timeLimit: 480,             // 8 minute hard cap
                     suddenDeath: true,
                     respawnMode: 'DELAYED',
                     respawnDelay: 3,            // Fast respawn — dying just costs you the zone
@@ -1291,13 +1253,10 @@
                 aiCheckIntervalMs: 10000,
                 enableAIFilling: true,
                 rules: {
-                    roundDuration: 240,         // 4 minute rounds
-                    restDuration: 15,
                     flagsPerTeam: 0,            // No flags - focus on VIP kills
                     scoreStyle: 'OBJECTIVE',    // Only VIP kills count!
                     victoryCondition: 'SCORE_LIMIT',
                     scoreLimit: 10,             // First to 10 VIP kills wins
-                    timeLimit: 720,             // 12 minute fallback
                     suddenDeath: true,
                     respawnMode: 'WAVE',        // Wave respawns for coordinated VIP protection/hunting
                     respawnDelay: 5,
@@ -1327,6 +1286,32 @@
                     oddballPointsPerSecond: 1.0,
                     enableVip: true,            // VIP MODE ENABLED!
                     obstacleDensity: 'DENSE'    // Dense obstacles for tactical VIP protection
+                }
+            };
+        } else if (presetType === 'last-stand') {
+            return {
+                maxPlayers: 12,
+                teamCount: 0,                   // FFA - every player for themselves
+                worldWidth: 1600,               // Tight arena keeps skirmishes fast
+                worldHeight: 1600,
+                playerMaxHealth: 100,
+                aiCheckIntervalMs: 10000,
+                enableAIFilling: true,
+                rules: {
+                    flagsPerTeam: 0,
+                    scoreStyle: 'TOTAL_KILLS',        // Kills win it
+                    victoryCondition: 'SCORE_LIMIT',
+                    scoreLimit: 20,                   // First to 20 kills across skirmishes
+                    suddenDeath: false,
+                    respawnMode: 'LAST_STANDING',     // Dead wait until one is left, then all respawn
+                    respawnDelay: 0,
+                    waveRespawnInterval: 30,
+                    maxLives: -1,                     // Unlimited lives - you always come back next round
+                    kothZones: 0,
+                    kothPointsPerSecond: 1.0,
+                    obstacleDensity: 'DENSE',         // Cover for tense final duels
+                    enableOddball: false,
+                    addHeadquarters: false
                 }
             };
         }
@@ -1418,8 +1403,6 @@
             // Populate rules fields from merged config
             const r = cfg.rules || {};
             if (r) {
-                document.getElementById('roundDuration').value = r.roundDuration ?? 0;
-                document.getElementById('restDuration').value = r.restDuration ?? 10;
                 document.getElementById('flagsPerTeam').value = r.flagsPerTeam ?? 0;
                 document.getElementById('pointsPerFlagCapture').value = r.pointsPerFlagCapture ?? 1;
                 document.getElementById('scoreStyle').value = r.scoreStyle || 'TOTAL_KILLS';
@@ -1522,7 +1505,7 @@
                 respawnDelayField.style.display = 'block';
                 maxLivesField.style.display = 'block';
                 break;
-            // NEXT_ROUND doesn't need extra fields
+            // LAST_STANDING has no extra fields (unlimited lives, event-driven respawn)
         }
     }
     
@@ -1540,8 +1523,6 @@
             aiCheckIntervalMs: 10000,
             enableAIFilling: document.getElementById('enableAIFilling').checked,
             rules: {
-                roundDuration: parseFloat(document.getElementById('roundDuration').value),
-                restDuration: parseFloat(document.getElementById('restDuration').value),
                 flagsPerTeam: parseInt(document.getElementById('flagsPerTeam').value),
                 pointsPerFlagCapture: parseInt(document.getElementById('pointsPerFlagCapture').value),
                 scoreStyle: document.getElementById('scoreStyle').value,

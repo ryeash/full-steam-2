@@ -17,16 +17,21 @@ public enum RespawnMode {
     WAVE,
 
     /**
-     * No respawn until the current round ends.
-     * Die once = spectate until next round. Tactical, high-stakes gameplay.
-     */
-    NEXT_ROUND,
-
-    /**
      * Limited number of lives per player.
      * Each death counts against your life pool. Once out of lives, eliminated.
      * Set maxLives = 1 for one-life / battle-royale style play.
      */
-    LIMITED
+    LIMITED,
+
+    /**
+     * Event-driven "last one standing" respawn. Players have unlimited lives but
+     * do not respawn on a timer — the dead are held out until the arena collapses
+     * to a single survivor (FFA) or a single team with anyone still alive (team
+     * mode), at which point everyone respawns together for the next skirmish.
+     * Produces a rapid series of duels-to-the-death with no round timer or rest
+     * period — a quicker battle-royale feel. Pairs with SCORE_LIMIT or TIME_LIMIT
+     * (never ELIMINATION, which would end the game the instant the field collapses).
+     */
+    LAST_STANDING
 }
 

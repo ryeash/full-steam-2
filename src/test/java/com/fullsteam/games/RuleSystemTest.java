@@ -41,8 +41,6 @@ class RuleSystemTest extends BaseTestClass {
         world = new World<>();
         GameConfig testConfig = GameConfig.builder()
                 .rules(Rules.builder()
-                        .roundDuration(60.0)
-                        .restDuration(10.0)
                         .victoryCondition(VictoryCondition.SCORE_LIMIT)
                         .scoreLimit(25)
                         .respawnMode(RespawnMode.DELAYED)
@@ -72,10 +70,9 @@ class RuleSystemTest extends BaseTestClass {
     }
 
     @Test
-    @DisplayName("Should start with round 1 and playing state")
+    @DisplayName("Should start in playing state")
     void testInitialRoundState() {
         // Assert
-        assertEquals(1, ruleSystem.getCurrentRound(), "Should start with round 1");
         assertEquals(GameState.PLAYING, ruleSystem.getGameState(), "Should start in PLAYING state");
         assertFalse(ruleSystem.isGameOver(), "Game should not be over initially");
     }
@@ -347,8 +344,7 @@ class RuleSystemTest extends BaseTestClass {
         // Assert
         assertNotNull(stateData, "State data should not be null");
         assertTrue(stateData.containsKey("gameState"), "Should include game state");
-        assertTrue(stateData.containsKey("currentRound"), "Should include current round");
-        assertTrue(stateData.containsKey("roundTimeRemaining"), "Should include round time");
+        assertTrue(stateData.containsKey("gameTimed"), "Should include game-timed flag");
         assertTrue(stateData.containsKey("gameOver"), "Should include game over status");
     }
 

@@ -4,13 +4,11 @@ import com.fullsteam.ai.AIWeaponSelector;
 import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.GameState;
 import com.fullsteam.model.RespawnMode;
-import com.fullsteam.model.RoundScore;
 import com.fullsteam.model.Rules;
 import com.fullsteam.model.Scoring;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.VictoryCondition;
 import com.fullsteam.model.WeaponConfig;
-import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
 import lombok.Getter;
@@ -41,16 +39,9 @@ public class RuleSystem {
     // Event system (optional)
     private EventSystem eventSystem = null;
 
-    // Round state
+    // Game state (always PLAYING; games run continuously until a victory condition ends them)
     @Getter
-    private GameState gameState = GameState.PLAYING;
-    @Getter
-    private int currentRound = 1;
-    @Getter
-    private long roundEndTime = 0L;
-    @Getter
-    private long restTimeEnd = 0L;
-    private final Map<Integer, RoundScore> roundScores = new HashMap<>();
+    private final GameState gameState = GameState.PLAYING;
 
     // Victory state
     @Getter
@@ -84,11 +75,6 @@ public class RuleSystem {
         this.gameEventManager = gameEventManager;
         this.broadcaster = broadcaster;
         this.teamCount = teamCount;
-
-        // Initialize round timer if rounds are enabled
-        if (rules.getRoundDuration() > 0) {
-            this.roundEndTime = (long) (System.currentTimeMillis() + (rules.getRoundDuration() * 1000));
-        }
 
         // Initialize VIP mode if enabled
         if (rules.hasVip()) {
@@ -234,14 +220,14 @@ public class RuleSystem {
             return;
         }
 
-        // Update round state if rounds are enabled
-        if (rules.getRoundDuration() > 0) {
-            updateRoundState();
-        }
-
         // Update wave respawn timer if using wave mode
         if (rules.usesWaveRespawn()) {
             updateWaveRespawn();
+        }
+
+        // Release the waiting group if the arena has collapsed to one survivor
+        if (rules.usesLastStanding()) {
+            updateLastStanding();
         }
 
         // Update event system if enabled
@@ -263,118 +249,48 @@ public class RuleSystem {
         checkVictoryConditions();
     }
 
-    private void updateRoundState() {
-        switch (gameState) {
-            case PLAYING:
-                updatePlayingState();
-                break;
-            case ROUND_END:
-                updateRoundEndState();
-                break;
-            case REST_PERIOD:
-                updateRestPeriodState();
-                break;
-        }
-    }
-
-    private void updatePlayingState() {
-        if (System.currentTimeMillis() > roundEndTime) {
-            endRound();
-        }
-    }
-
-    private void endRound() {
-        gameState = GameState.ROUND_END;
-        roundEndTime = 0;
-        restTimeEnd = (long) (System.currentTimeMillis() + (rules.getRestDuration() * 1000));
-
-        // Capture current scores
-        roundScores.clear();
-        for (Player player : gameEntities.getAllPlayers()) {
-            RoundScore score = RoundScore.builder()
-                    .playerId(player.getId())
-                    .playerName(player.getPlayerName())
-                    .team(player.getTeam())
-                    .kills(player.getKills())
-                    .deaths(player.getDeaths())
-                    .captures(player.getCaptures())
-                    // Objective/bonus points (KOTH, oddball, VIP, HQ) earned by this player.
-                    .bonusPoints(player.getScoring().bonusPoints(rules))
-                    // Full breakdown so the round-end screen can show every component.
-                    .score(buildScoreBreakdown(player))
-                    .build();
-            roundScores.put(player.getId(), score);
-        }
-
-        log.info("Round {} ended in game {}. {} players scored.", currentRound, gameId, roundScores.size());
-
-        // Broadcast round end event with scores
-        Map<String, Object> roundEndEvent = new HashMap<>();
-        roundEndEvent.put("type", "roundEnd");
-        roundEndEvent.put("round", currentRound);
-        roundEndEvent.put("scores", new ArrayList<>(roundScores.values()));
-        roundEndEvent.put("restDuration", rules.getRestDuration());
-        roundEndEvent.put("scoringConfig", buildScoringConfig());
-        broadcaster.accept(roundEndEvent);
-    }
-
-    private void updateRoundEndState() {
-        gameState = GameState.REST_PERIOD;
-    }
-
-    private void updateRestPeriodState() {
-        if (System.currentTimeMillis() > restTimeEnd) {
-            startNextRound();
-        }
-    }
-
-    /**
-     * Start the next round - to be called by GameManager for player reset logic.
-     * Returns true if a new round was started.
-     */
-    public void startNextRound() {
-        currentRound++;
-        gameState = GameState.PLAYING;
-        roundEndTime = (long) (System.currentTimeMillis() + (rules.getRoundDuration() * 1000));
-        restTimeEnd = 0;
-
-        // Reset player lives for stock mode (LIMITED respawn mode)
-        resetPlayerLivesForNewRound();
-
-        gameEntities.getPlayers().values().forEach(p -> {
-            // force a respawn of all players
-            p.setActive(false);
-            p.setRespawnTime(1L);
-            // reset all scoring for the new round
-            p.getScoring().reset();
-        });
-
-        gameEntities.getFlags().values().forEach(Flag::returnToHome);
-        gameEntities.clearEntitiesFromWorld(gameEntities.getDefenseLasers());
-        gameEntities.clearEntitiesFromWorld(gameEntities.getFieldEffects());
-        gameEntities.clearEntitiesFromWorld(gameEntities.getBeams());
-        gameEntities.clearEntitiesFromWorld(gameEntities.getProjectiles());
-
-        // Reassign VIPs for new round
-        if (rules.hasVip()) {
-            for (int team = 1; team <= teamCount; team++) {
-                selectVipForTeam(team);
-            }
-        }
-
-        // Broadcast round start event
-        Map<String, Object> roundStartEvent = new HashMap<>();
-        roundStartEvent.put("type", "roundStart");
-        roundStartEvent.put("round", currentRound);
-        roundStartEvent.put("duration", rules.getRoundDuration());
-        broadcaster.accept(roundStartEvent);
-    }
-
     private void updateWaveRespawn() {
         if (System.currentTimeMillis() >= waveRespawnTime) {
             // Broadcast wave respawn event
             gameEventManager.broadcastSystemMessage("⚡ Wave Respawn!");
             waveRespawnTime = (long) (System.currentTimeMillis() + (rules.getWaveRespawnInterval() * 1000));
+        }
+    }
+
+    /**
+     * "Last one standing" respawn: dead players are parked (no timer) until the
+     * arena resolves to a single survivor — one alive player in FFA, or one team
+     * with anyone still alive in team mode — then the whole waiting group respawns
+     * together. Requires at least one waiting player so it never fires at match
+     * start or with a lone participant in the lobby.
+     */
+    private void updateLastStanding() {
+        var all = gameEntities.getAllPlayers();
+
+        // Players held out awaiting the next skirmish (unlimited lives, so never eliminated).
+        List<Player> waiting = all.stream()
+                .filter(p -> !p.isActive() && !p.isEliminated())
+                .toList();
+        if (waiting.isEmpty()) {
+            return; // nothing to bring back yet — don't trigger at spawn
+        }
+
+        boolean collapsed;
+        if (teamCount > 0) {
+            // Last team standing == last man standing: only one team has anyone alive.
+            long teamsAlive = all.stream()
+                    .filter(Player::isActive)
+                    .map(Player::getTeam)
+                    .distinct()
+                    .count();
+            collapsed = teamsAlive <= 1;
+        } else {
+            collapsed = all.stream().filter(Player::isActive).count() <= 1;
+        }
+
+        if (collapsed) {
+            gameEventManager.broadcastSystemMessage("⚔️ Last one standing — respawning!");
+            waiting.forEach(p -> p.setRespawnTime(1L)); // release ASAP; GameManager respawns next tick
         }
     }
 
@@ -410,8 +326,10 @@ public class RuleSystem {
             case WAVE:
                 player.setRespawnTime(waveRespawnTime);
                 break;
-            case NEXT_ROUND:
-                player.setRespawnTime(roundEndTime);
+            case LAST_STANDING:
+                // Park indefinitely; updateLastStanding() releases the whole
+                // waiting group at once when the arena collapses to one survivor.
+                player.setRespawnTime(Long.MAX_VALUE);
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + rules.getRespawnMode());
@@ -806,15 +724,14 @@ public class RuleSystem {
     public Map<String, Object> getStateData() {
         Map<String, Object> data = new HashMap<>();
 
-        // Round data
-        if (rules.getRoundDuration() > 0) {
-            data.put("roundEnabled", true);
-            data.put("currentRound", currentRound);
-            data.put("gameState", gameState.name());
-            data.put("roundTimeRemaining", Math.max(0, (roundEndTime - System.currentTimeMillis()) / 1000));
-            data.put("restTimeRemaining", Math.max(0, (restTimeEnd - System.currentTimeMillis()) / 1000));
+        // Game timer data (single continuous timer; only present for time-limited games)
+        data.put("gameState", gameState.name());
+        if (rules.hasTimeLimit()) {
+            data.put("gameTimed", true);
+            long endTime = start + (long) (rules.getTimeLimit() * 1000);
+            data.put("gameTimeRemaining", Math.max(0, (endTime - System.currentTimeMillis()) / 1000));
         } else {
-            data.put("roundEnabled", false);
+            data.put("gameTimed", false);
         }
 
         // Victory data
@@ -851,25 +768,6 @@ public class RuleSystem {
         if (rules.hasLimitedLives()) {
             player.initializeLives(rules.getMaxLives());
             log.debug("Player {} initialized with {} lives", player.getId(), rules.getMaxLives());
-        }
-    }
-
-    /**
-     * Reset all player lives for a new round (stock mode).
-     * This ensures players get their lives back at the start of each round.
-     */
-    private void resetPlayerLivesForNewRound() {
-        if (rules.hasLimitedLives()) {
-            for (Player player : gameEntities.getAllPlayers()) {
-                player.initializeLives(rules.getMaxLives());
-                log.debug("Player {} lives reset to {} for round {}",
-                        player.getId(), rules.getMaxLives(), currentRound);
-            }
-
-            // Broadcast lives reset message
-            gameEventManager.broadcastSystemMessage(
-                    String.format("🔄 Round %d - All players have %d lives!",
-                            currentRound, rules.getMaxLives()));
         }
     }
 

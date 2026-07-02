@@ -60,7 +60,7 @@ class GameEngine {
             this.updateLoadingProgress(40, "Setting up UI...");
             this.setupUI();
             this.createConsolidatedHUD();
-            this.createRoundTimer();
+            this.createGameTimer();
             
             this.updateLoadingProgress(60, "Loading assets...");
             await this.loadAssets();
@@ -183,7 +183,7 @@ class GameEngine {
         // Handle window resize - store handler for cleanup
         this.eventHandlers.resize = () => {
             this.handleResize();
-            this.updateRoundTimerPosition();
+            this.updateGameTimerPosition();
         };
         window.addEventListener('resize', this.eventHandlers.resize);
     }
@@ -227,123 +227,95 @@ class GameEngine {
     /**
      * Create round timer display in top center of screen.
      */
-    createRoundTimer() {
-        this.roundTimerContainer = new PIXI.Container();
-        this.roundTimerContainer.zIndex = 200;
-        this.roundTimerContainer.visible = false; // Hidden by default, shown when rounds are enabled or team mode is active
-        
+    createGameTimer() {
+        this.gameTimerContainer = new PIXI.Container();
+        this.gameTimerContainer.zIndex = 200;
+        this.gameTimerContainer.visible = false; // Hidden by default; shown for timed games or when team scores exist
+
         // Wider background to accommodate team scores
         const bg = new PIXI.Graphics();
         bg.roundRect(0, 0, 400, 60, 8).fill({ color: 0x000000, alpha: 0.8 });
         bg.roundRect(0, 0, 400, 60, 8).stroke({ width: 2, color: 0xffaa00, alpha: 0.9 });
-        this.roundTimerContainer.addChild(bg);
-        this.roundTimerBackground = bg;
-        
-        // Round number text (center)
-        this.roundNumberText = new PIXI.Text('ROUND 1', {
-            fontSize: 14,
-            fill: 0xffaa00,
-            fontWeight: 'bold',
-            align: 'center'
-        });
-        this.roundNumberText.anchor.set(0.5, 0);
-        this.roundNumberText.position.set(200, 8);
-        this.roundTimerContainer.addChild(this.roundNumberText);
-        
+        this.gameTimerContainer.addChild(bg);
+        this.gameTimerBackground = bg;
+
         // Timer text (MM:SS) (center)
-        this.roundTimerText = new PIXI.Text('05:00', {
-            fontSize: 24,
+        this.gameTimerText = new PIXI.Text('10:00', {
+            fontSize: 26,
             fill: 0xffffff,
             fontWeight: 'bold',
             align: 'center'
         });
-        this.roundTimerText.anchor.set(0.5, 0);
-        this.roundTimerText.position.set(200, 28);
-        this.roundTimerContainer.addChild(this.roundTimerText);
-        
+        this.gameTimerText.anchor.set(0.5, 0.5);
+        this.gameTimerText.position.set(200, 30);
+        this.gameTimerContainer.addChild(this.gameTimerText);
+
         // Create team score containers (will be populated dynamically)
         this.teamScoreContainers = new Map();
-        
-        this.uiContainer.addChild(this.roundTimerContainer);
-        
+
+        this.uiContainer.addChild(this.gameTimerContainer);
+
         // Position at top center of screen
-        this.updateRoundTimerPosition();
+        this.updateGameTimerPosition();
     }
-    
+
     /**
-     * Update round timer position based on screen size.
+     * Update game timer position based on screen size.
      */
-    updateRoundTimerPosition() {
-        if (!this.roundTimerContainer) return;
-        this.roundTimerContainer.position.set(
+    updateGameTimerPosition() {
+        if (!this.gameTimerContainer) return;
+        this.gameTimerContainer.position.set(
             (this.app.screen.width / 2) - 200, // Center horizontally (wider now)
             10 // Top of screen with padding
         );
     }
-    
+
     /**
-     * Update round timer display with current round state and team scores.
+     * Update the game timer display with the remaining game time and team scores.
+     * Games run continuously to a single deadline (or forever); there are no rounds.
      */
-    updateRoundTimer(roundData) {
-        if (!this.roundTimerContainer) return;
-        
+    updateGameTimer(data) {
+        if (!this.gameTimerContainer) return;
+
         const hasTeams = this.teamCount > 0;
-        const hasTeamScores = roundData.teamScores && Object.keys(roundData.teamScores).length > 0;
-        
-        // Show if rounds are enabled OR if we have team scores to display
-        const shouldShow = roundData.roundEnabled || (hasTeams && hasTeamScores);
-        
+        const hasTeamScores = data.teamScores && Object.keys(data.teamScores).length > 0;
+
+        // Show if the game is timed OR if we have team scores to display
+        const shouldShow = data.gameTimed || (hasTeams && hasTeamScores);
+
         if (!shouldShow) {
-            this.roundTimerContainer.visible = false;
+            this.gameTimerContainer.visible = false;
             return;
         }
-        
-        this.roundTimerContainer.visible = true;
-        
-        // Update round number and timer (if rounds are enabled)
-        if (roundData.roundEnabled) {
-            this.roundNumberText.visible = true;
-            this.roundTimerText.visible = true;
-            
-            // Update round number
-            this.roundNumberText.text = `ROUND ${roundData.currentRound}`;
-            
-            // Update timer based on game state
-            let timeRemaining;
-            let timerColor;
-            
-            if (roundData.gameState === 'PLAYING') {
-                timeRemaining = roundData.roundTimeRemaining;
-                timerColor = timeRemaining <= 30 ? 0xff4444 : 0xffffff; // Red when under 30 seconds
-            } else if (roundData.gameState === 'REST_PERIOD') {
-                timeRemaining = roundData.restTimeRemaining;
-                timerColor = 0xffaa00; // Orange during rest
-                this.roundNumberText.text = 'REST PERIOD';
-            } else {
-                timeRemaining = 0;
-                timerColor = 0xffffff;
-            }
-            
+
+        this.gameTimerContainer.visible = true;
+
+        // Update the countdown (only present for timed games)
+        if (data.gameTimed) {
+            this.gameTimerText.visible = true;
+
+            const timeRemaining = data.gameTimeRemaining;
+            const timerColor = timeRemaining <= 30 ? 0xff4444 : 0xffffff; // Red when under 30 seconds
+
             // Format as MM:SS
             const minutes = Math.floor(Math.max(0, timeRemaining) / 60);
             const seconds = Math.floor(Math.max(0, timeRemaining) % 60);
-            this.roundTimerText.text = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            this.setTextFill(this.roundTimerText, timerColor);
+            this.gameTimerText.text = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            this.setTextFill(this.gameTimerText, timerColor);
         } else {
-            // Hide round/timer info if rounds are disabled
-            this.roundNumberText.visible = false;
-            this.roundTimerText.visible = false;
+            // No countdown for endless / score / elimination games
+            this.gameTimerText.visible = false;
         }
-        
+
         // Update team scores
-        this.updateTeamScores(roundData);
+        this.updateTeamScores(data);
     }
     
     /**
      * Update team score displays in the round timer container.
      */
     updateTeamScores(roundData) {
-        if (!this.roundTimerContainer || !roundData.teamScores) return;
+        if (!this.gameTimerContainer || !roundData.teamScores) return;
         
         const teamScores = roundData.teamScores;
         const teams = Object.keys(teamScores).map(t => parseInt(t)).sort((a, b) => a - b);
@@ -357,7 +329,7 @@ class GameEngine {
                 if (container.colorBar && container.colorBar.clear) {
                     container.colorBar.clear();
                 }
-                this.roundTimerContainer.removeChild(container);
+                this.gameTimerContainer.removeChild(container);
                 // children:true + default texture frees the scoreText Text's texture.
                 container.destroy({ children: true, context: true });
                 this.teamScoreContainers.delete(teamId);
@@ -414,7 +386,7 @@ class GameEngine {
                 container.addChild(scoreText);
                 container.scoreText = scoreText;
                 
-                this.roundTimerContainer.addChild(container);
+                this.gameTimerContainer.addChild(container);
                 this.teamScoreContainers.set(teamId, container);
             }
             
@@ -1056,12 +1028,6 @@ class GameEngine {
             case 'gameEvent':
                 this.handleGameEvent(data);
                 break;
-            case 'roundEnd':
-                this.handleRoundEnd(data);
-                break;
-            case 'roundStart':
-                this.handleRoundStart(data);
-                break;
             case 'gameOver':
                 this.showGameOverScreen(data);
                 break;
@@ -1383,9 +1349,9 @@ class GameEngine {
     handleGameState(data) {
         this.gameState = data;
         
-        // Update round timer if rounds are enabled
-        if (data.roundEnabled !== undefined) {
-            this.updateRoundTimer(data);
+        // Update the game timer (countdown for timed games, plus team scores)
+        if (data.gameState !== undefined) {
+            this.updateGameTimer(data);
         }
         
         if (data.players) {
@@ -1805,158 +1771,6 @@ class GameEngine {
         // CSS animation (.removing keyframe) plays the exit; remove from DOM after it finishes
         eventElement.classList.add('removing');
         this.safeSetTimeout(() => eventElement.parentNode?.removeChild(eventElement), 300);
-    }
-    
-    /**
-     * Handle round end event - display scores
-     */
-    handleRoundEnd(data) {
-        this.showRoundEndScreen(data);
-    }
-    
-    /**
-     * Handle round start event - clear round end screen
-     */
-    handleRoundStart(data) {
-        this.hideRoundEndScreen();
-    }
-    
-    /**
-     * Show round end screen with scores
-     */
-    showRoundEndScreen(data) {
-        let overlay = document.getElementById('round-end-overlay');
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.id = 'round-end-overlay';
-            document.body.appendChild(overlay);
-        }
-
-        const content = document.createElement('div');
-        content.className = 'round-end-content';
-
-        const title = document.createElement('h1');
-        title.className = 'round-end-title';
-        title.textContent = `ROUND ${data.round} COMPLETE`;
-        content.appendChild(title);
-
-        if (data.scores?.length > 0) {
-            const scoresContainer = document.createElement('div');
-            scoresContainer.className = 'scores-container';
-
-            // Columns are driven by the round's scoring rules (event-supplied).
-            const columns = this.activeScoreColumns(data.scores, data.scoringConfig);
-            const hasTeams = data.scores.some(s => s.team > 0);
-
-            if (hasTeams) {
-                const teams = {};
-                data.scores.forEach(score => {
-                    const t = score.team || 0;
-                    (teams[t] || (teams[t] = [])).push(score);
-                });
-
-                const teamTotal = list => list.reduce((s, p) => s + this.playerScoreTotal(p), 0);
-                const sortedTeams = Object.entries(teams).sort(([a, la], [b, lb]) => {
-                    if (parseInt(a) === 0) return 1;
-                    if (parseInt(b) === 0) return -1;
-                    return teamTotal(lb) - teamTotal(la);
-                });
-
-                sortedTeams.forEach(([teamNum, players]) => {
-                    const teamNumInt = parseInt(teamNum);
-                    const teamColor = this.getTeamColorCSS(teamNumInt);
-
-                    const teamHeader = document.createElement('div');
-                    teamHeader.className = 'team-header';
-                    teamHeader.style.borderLeftColor = teamColor;
-
-                    const teamName = document.createElement('h3');
-                    teamName.className = 'team-header-name';
-                    teamName.style.color = teamColor;
-                    teamName.textContent = teamNum == 0 ? 'No Team' : `Team ${teamNum}`;
-
-                    const teamStats = document.createElement('div');
-                    teamStats.className = 'team-header-stats';
-
-                    const scoreEl = document.createElement('span');
-                    scoreEl.className = 'stat-score';
-                    scoreEl.textContent = `${teamTotal(players)} pts`;
-                    teamStats.appendChild(scoreEl);
-                    // Per-component team totals, summing the same values shown per player.
-                    columns.forEach(c => {
-                        const span = document.createElement('span');
-                        span.className = 'stat-' + c.key;
-                        if (c.color) span.style.color = c.color;
-                        span.textContent = `${players.reduce((s, p) => s + (c.read(this.getBreakdown(p)) || 0), 0)} ${c.label}`;
-                        teamStats.appendChild(span);
-                    });
-
-                    teamHeader.append(teamName, teamStats);
-                    scoresContainer.appendChild(teamHeader);
-
-                    [...players]
-                        .sort((a, b) => this.playerScoreTotal(b) - this.playerScoreTotal(a))
-                        .forEach(score => scoresContainer.appendChild(this.createScoreRow(score, null, columns)));
-                });
-            } else {
-                [...data.scores]
-                    .sort((a, b) => this.playerScoreTotal(b) - this.playerScoreTotal(a))
-                    .forEach((score, i) => scoresContainer.appendChild(this.createScoreRow(score, i + 1, columns)));
-            }
-
-            content.appendChild(scoresContainer);
-        }
-
-        const nextRoundText = document.createElement('p');
-        nextRoundText.className = 'next-round-text';
-        nextRoundText.textContent = `Next round starts in ${Math.ceil(data.restDuration)} seconds…`;
-        content.appendChild(nextRoundText);
-
-        overlay.innerHTML = '';
-        overlay.appendChild(content);
-        overlay.classList.add('visible');
-    }
-    
-    /**
-     * Create a score row for a player (round-end scoreboard)
-     */
-    createScoreRow(score, rank = null, columns = []) {
-        const isLocalPlayer = score.playerId === this.myPlayerId;
-
-        const row = document.createElement('div');
-        row.className = 'score-row' + (isLocalPlayer ? ' local-player' : '');
-        row.style.borderLeftColor = this.getTeamColorCSS(score.team);
-
-        const nameSection = document.createElement('div');
-        nameSection.className = 'score-row-name';
-        nameSection.style.color = isLocalPlayer ? '#FFD700' : '#ffffff';
-        nameSection.textContent = (rank ? `#${rank} ` : '') + score.playerName;
-
-        const stats = document.createElement('div');
-        stats.className = 'score-row-stats';
-
-        // Total first, then a span per contributing component, then deaths (info).
-        const scoreSpan = document.createElement('span');
-        scoreSpan.className = 'stat-score';
-        scoreSpan.textContent = `${this.playerScoreTotal(score)} pts`;
-        stats.appendChild(scoreSpan);
-
-        this.appendScoreStats(stats, score, columns);
-
-        const deaths = document.createElement('span');
-        deaths.className = 'stat-deaths';
-        deaths.textContent = `${score.deaths || 0} D`;
-        stats.appendChild(deaths);
-
-        row.append(nameSection, stats);
-        return row;
-    }
-    
-    /**
-     * Hide round end screen
-     */
-    hideRoundEndScreen() {
-        document.getElementById('round-end-overlay')?.classList.remove('visible');
     }
     
     /**
@@ -5544,7 +5358,7 @@ class GameEngine {
 
     /**
      * Resolve the per-component score breakdown object for any scoreboard entry.
-     * Live gameState players and round-end rows carry it on {@code score} (an
+     * Live gameState players carry it on {@code score} (an
      * object); game-over finalScores rows carry it on {@code scoreBreakdown}
      * (since their {@code score} is the numeric total). Falls back to the entry
      * itself for legacy top-level fields.

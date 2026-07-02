@@ -6,7 +6,9 @@ class InputManager {
     constructor() {
         this.keys = {
             w: false, a: false, s: false, d: false,
-            shift: false, space: false
+            shift: false, space: false,
+            // Arrow keys = 8-way aim + fire (a mouse alternative)
+            arrowUp: false, arrowDown: false, arrowLeft: false, arrowRight: false
         };
         this.movement = {
             moveX: 0.0, // -1.0 = left, +1.0 = right
@@ -87,11 +89,12 @@ class InputManager {
     }
     
     handleKeyDown(e) {
-        // Prevent default for game keys to avoid browser actions
-        if (['w', 'a', 's', 'd', ' ', '1', '2', 'r'].includes(e.key.toLowerCase())) {
+        // Prevent default for game keys to avoid browser actions (arrows scroll the page)
+        if (['w', 'a', 's', 'd', ' ', '1', '2', 'r',
+             'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(e.key.toLowerCase())) {
             e.preventDefault();
         }
-        
+
         switch(e.key.toLowerCase()) {
             case 'w': this.keys.w = true; this.updateMovementAxes(); break;
             case 'a': this.keys.a = true; this.updateMovementAxes(); break;
@@ -100,6 +103,10 @@ class InputManager {
             case 'r': this.keys.r = true; break;
             case 'shift': this.keys.shift = true; break;
             case ' ': this.keys.space = true; break;
+            case 'arrowup': this.keys.arrowUp = true; break;
+            case 'arrowdown': this.keys.arrowDown = true; break;
+            case 'arrowleft': this.keys.arrowLeft = true; break;
+            case 'arrowright': this.keys.arrowRight = true; break;
         }
     }
 
@@ -112,6 +119,10 @@ class InputManager {
             case 'r': this.keys.r = false; break;
             case 'shift': this.keys.shift = false; break;
             case ' ': this.keys.space = false; break;
+            case 'arrowup': this.keys.arrowUp = false; break;
+            case 'arrowdown': this.keys.arrowDown = false; break;
+            case 'arrowleft': this.keys.arrowLeft = false; break;
+            case 'arrowright': this.keys.arrowRight = false; break;
         }
     }
     
@@ -365,6 +376,40 @@ class InputManager {
     /**
      * Update aiming from gamepad right stick
      */
+    /**
+     * 8-way "fire with arrow keys": while any arrow key is held, aim in that
+     * compass direction (relative to the player) and fire — a keyboard-only
+     * alternative to mouse aiming. Combining two arrows aims diagonally. Returns
+     * true while firing, so the caller can drive primary fire.
+     */
+    updateArrowAiming() {
+        const dx = (this.keys.arrowRight ? 1 : 0) - (this.keys.arrowLeft ? 1 : 0);
+        const dy = (this.keys.arrowUp ? 1 : 0) - (this.keys.arrowDown ? 1 : 0); // +y = up (world)
+        if (dx === 0 && dy === 0) {
+            return false;
+        }
+        const gameEngine = window.gameEngine;
+        const myPlayer = gameEngine && gameEngine.getMyPlayer ? gameEngine.getMyPlayer() : null;
+        if (!myPlayer) {
+            return false;
+        }
+        // Aim point offset from the player in the held direction (normalized so
+        // diagonals aim at a true 45°, matching cardinal reach).
+        const len = Math.hypot(dx, dy);
+        const aimRange = 200;
+        const aimX = myPlayer.x + (dx / len) * aimRange;
+        const aimY = myPlayer.y + (dy / len) * aimRange;
+        this.mouse.worldX = aimX;
+        this.mouse.worldY = aimY;
+        // Keep screen coords aligned so any screen-space aim UI matches.
+        if (gameEngine.gameContainer) {
+            const screenPos = gameEngine.gameContainer.toGlobal(new PIXI.Point(aimX, aimY));
+            this.mouse.x = screenPos.x;
+            this.mouse.y = screenPos.y;
+        }
+        return true;
+    }
+
     updateGamepadAiming() {
         if (!this.gamepad.connected || !window.gameEngine) return;
         
@@ -512,7 +557,10 @@ class InputManager {
                 // Use keyboard/mouse input
                 moveX = this.movement.moveX;
                 moveY = this.movement.moveY;
-                fire = this.mouse.left;
+                // Arrow keys give 8-way aim+fire; while held they set the aim
+                // direction (overriding the mouse) and fire.
+                const arrowFiring = this.updateArrowAiming();
+                fire = this.mouse.left || arrowFiring;
                 altFire = this.mouse.right || this.keys.space; // Right click OR space bar for utility
                 reload = this.keys.r;
             }
