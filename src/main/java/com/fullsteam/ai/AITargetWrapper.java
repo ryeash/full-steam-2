@@ -68,6 +68,13 @@ public class AITargetWrapper {
         return maxHealth > 0 ? maxHealth : entity.getHealth();
     }
 
+    /**
+     * Current health as a fraction of max (0..1), safe against a zero max.
+     */
+    public double healthPercent() {
+        return Math.max(0, getHealth() / getMaxHealth());
+    }
+
     public int getOwnerId() {
         if (entity instanceof Player player) {
             return player.getId(); // Players own themselves

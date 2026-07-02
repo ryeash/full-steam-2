@@ -95,7 +95,7 @@ public class CombatBehavior implements AIBehavior {
         double minRange = Math.min(weaponRange * 0.3, 80); // Don't get too close
 
         // Health-based tactics
-        double healthPercent = aiPlayer.getHealth() / 100.0;
+        double healthPercent = aiPlayer.healthPercent();
         boolean shouldRetreat = isRetreating || healthPercent < 0.3;
 
         if (shouldRetreat && !isRetreating) {
@@ -540,15 +540,15 @@ public class CombatBehavior implements AIBehavior {
 
             case DEFENSIVE:
                 // Use defensive utilities when health is low or under pressure
-                if (aiPlayer.getHealth() < 60 || isRetreating) {
+                if (aiPlayer.healthPercent() < 0.6 || isRetreating) {
                     usageChance = 0.5;
-                    if (aiPlayer.getHealth() < 30) usageChance += 0.3;
+                    if (aiPlayer.healthPercent() < 0.3) usageChance += 0.3;
                 }
                 break;
 
             case SUPPORT:
                 // Use support utilities when health is low or in good position
-                if (aiPlayer.getHealth() < 70 && distance > 200) {
+                if (aiPlayer.healthPercent() < 0.7 && distance > 200) {
                     usageChance = 0.3;
                 }
                 break;

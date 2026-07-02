@@ -31,7 +31,9 @@ public class GameWebSocketEndpoint {
 
     private final PlayerConnectionService connectionService;
     private final ObjectMapper objectMapper;
-    /** Permitted Origins for WS handshakes; empty = allow any (dev). See application.yml. */
+    /**
+     * Permitted Origins for WS handshakes; empty = allow any (dev). See application.yml.
+     */
     private final List<String> allowedOrigins;
 
     @Inject

@@ -67,7 +67,7 @@ public class PowerUpBehavior implements AIBehavior {
      */
     private void evaluateTargets(AIPlayer aiPlayer, GameEntities gameEntities) {
         Vector2 myPos = aiPlayer.getPosition();
-        double healthPercent = aiPlayer.getHealth() / 100.0;
+        double healthPercent = aiPlayer.healthPercent();
 
         // Find best power-up
         PowerUp bestPowerUp = null;
@@ -310,7 +310,7 @@ public class PowerUpBehavior implements AIBehavior {
         }
 
         Vector2 myPos = aiPlayer.getPosition();
-        double healthPercent = aiPlayer.getHealth() / 100.0;
+        double healthPercent = aiPlayer.healthPercent();
 
         // Higher priority when health is low and health regen is available
         for (PowerUp powerUp : gameEntities.getAllPowerUps()) {

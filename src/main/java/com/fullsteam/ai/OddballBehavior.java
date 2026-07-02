@@ -94,7 +94,7 @@ public class OddballBehavior implements AIBehavior {
         Vector2 myPos = aiPlayer.getPosition();
 
         // Find nearest enemy
-        Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
+        AITargetWrapper nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
 
         if (nearestEnemy != null && nearestEnemy.isActive()) {
             Vector2 enemyPos = nearestEnemy.getPosition();
@@ -161,7 +161,7 @@ public class OddballBehavior implements AIBehavior {
         Vector2 carrierPos = carrier.getPosition();
         double distanceToCarrier = myPos.distance(carrierPos);
 
-        Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
+        AITargetWrapper nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
 
         if (nearestEnemy != null && nearestEnemy.isActive()) {
             Vector2 enemyPos = nearestEnemy.getPosition();
@@ -284,7 +284,7 @@ public class OddballBehavior implements AIBehavior {
             }
 
             // Look for enemies
-            Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
+            AITargetWrapper nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
             if (nearestEnemy != null && nearestEnemy.isActive()) {
                 Vector2 enemyPos = nearestEnemy.getPosition();
                 input.setWorldX(enemyPos.x);
@@ -315,7 +315,7 @@ public class OddballBehavior implements AIBehavior {
         input.setWorldY(oddballPos.y);
 
         // Shoot at enemies who might contest the ball
-        Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
+        AITargetWrapper nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
         if (nearestEnemy != null && nearestEnemy.isActive()) {
             Vector2 enemyPos = nearestEnemy.getPosition();
             double distanceToEnemy = myPos.distance(enemyPos);
@@ -410,20 +410,18 @@ public class OddballBehavior implements AIBehavior {
     /**
      * Find the nearest enemy player.
      */
-    private Player findNearestEnemy(AIPlayer aiPlayer, GameEntities gameEntities) {
+    private AITargetWrapper findNearestEnemy(AIPlayer aiPlayer, GameEntities gameEntities) {
         Vector2 myPos = aiPlayer.getPosition();
-        int myTeam = aiPlayer.getTeam();
 
-        Player nearest = null;
+        AITargetWrapper nearest = null;
         double nearestDistance = Double.MAX_VALUE;
 
-        for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() != aiPlayer.getId() && player.isActive() && player.getTeam() != myTeam) {
-                double distance = myPos.distance(player.getPosition());
-                if (distance < nearestDistance) {
-                    nearestDistance = distance;
-                    nearest = player;
-                }
+        // Includes enemy turrets; teammate/FFA filtering handled by the wrapper.
+        for (AITargetWrapper target : collectEnemyTargets(aiPlayer, gameEntities)) {
+            double distance = myPos.distance(target.getPosition());
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearest = target;
             }
         }
 

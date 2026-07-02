@@ -65,7 +65,9 @@ class LastStandingRespawnTest extends BaseTestClass {
         return player;
     }
 
-    /** Kill a player the way GameManager does: die() then park via the rule system. */
+    /**
+     * Kill a player the way GameManager does: die() then park via the rule system.
+     */
     private void kill(RuleSystem ruleSystem, Player player) {
         player.die();
         ruleSystem.setRespawnTime(player);

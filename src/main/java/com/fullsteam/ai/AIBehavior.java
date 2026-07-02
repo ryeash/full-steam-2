@@ -2,6 +2,11 @@ package com.fullsteam.ai;
 
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.physics.GameEntities;
+import com.fullsteam.physics.Player;
+import com.fullsteam.physics.Turret;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Base interface for AI behavior strategies.
@@ -82,5 +87,41 @@ public interface AIBehavior {
         } else if (isSafe && currentAmmo < magazineSize * 0.3) {
             input.setReload(true);
         }
+    }
+
+    /**
+     * Collect every valid enemy target — active, non-teammate players AND enemy
+     * turrets — as {@link AITargetWrapper}s. Objective behaviors use this so an AI
+     * holding a zone/HQ will return fire on a turret instead of ignoring it, while
+     * still driving its movement from the objective.
+     *
+     * @param aiPlayer     The AI player evaluating targets
+     * @param gameEntities Current game state
+     * @return Mutable list of enemy target wrappers (players first, then turrets)
+     */
+    default List<AITargetWrapper> collectEnemyTargets(AIPlayer aiPlayer, GameEntities gameEntities) {
+        List<AITargetWrapper> targets = new ArrayList<>();
+
+        for (Player player : gameEntities.getAllPlayers()) {
+            if (player.getId() == aiPlayer.getId() || !player.isActive()) {
+                continue;
+            }
+            AITargetWrapper wrapper = AITargetWrapper.fromPlayer(player);
+            if (!wrapper.isTeammateOf(aiPlayer)) {
+                targets.add(wrapper);
+            }
+        }
+
+        for (Turret turret : gameEntities.getAllTurrets()) {
+            if (!turret.isActive()) {
+                continue;
+            }
+            AITargetWrapper wrapper = AITargetWrapper.fromTurret(turret);
+            if (!wrapper.isTeammateOf(aiPlayer)) {
+                targets.add(wrapper);
+            }
+        }
+
+        return targets;
     }
 }

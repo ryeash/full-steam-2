@@ -373,22 +373,15 @@ public class FlagBehavior implements AIBehavior {
      */
     private void engageNearbyEnemies(AIPlayer aiPlayer, GameEntities gameEntities, PlayerInput input, double maxRange) {
         Vector2 myPos = aiPlayer.getPosition();
-        Player nearestEnemy = null;
+        AITargetWrapper nearestEnemy = null;
         double nearestDistance = maxRange;
 
-        for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() == aiPlayer.getId() || !player.isActive()) {
-                continue;
-            }
-
-            if (aiPlayer.isTeammate(player)) {
-                continue;
-            }
-
-            double distance = myPos.distance(player.getPosition());
+        // Enemy players and turrets, so a flag runner returns fire on turrets too.
+        for (AITargetWrapper target : collectEnemyTargets(aiPlayer, gameEntities)) {
+            double distance = myPos.distance(target.getPosition());
             if (distance < nearestDistance) {
                 nearestDistance = distance;
-                nearestEnemy = player;
+                nearestEnemy = target;
             }
         }
 

@@ -148,7 +148,7 @@ public class HeadquartersBehavior implements AIBehavior {
         if (targetHQ == null) {
             // No enemy HQ to attack, just look for enemies
             currentRole = HQRole.DEFENDER;
-            Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities, 500.0);
+            AITargetWrapper nearestEnemy = findNearestEnemy(aiPlayer, gameEntities, 500.0);
             if (nearestEnemy != null && nearestEnemy.isActive()) {
                 Vector2 enemyPos = nearestEnemy.getPosition();
                 input.setWorldX(enemyPos.x);
@@ -202,7 +202,7 @@ public class HeadquartersBehavior implements AIBehavior {
         input.setWorldY(hqPos.y);
 
         // Shoot at HQ if in range and no immediate threats
-        Player nearbyEnemy = findNearestEnemy(aiPlayer, gameEntities, 250);
+        AITargetWrapper nearbyEnemy = findNearestEnemy(aiPlayer, gameEntities, 250);
         if (nearbyEnemy != null) {
             // Prioritize nearby enemies over HQ
             engageEnemy(aiPlayer, nearbyEnemy, input);
@@ -236,7 +236,7 @@ public class HeadquartersBehavior implements AIBehavior {
         if (myHQ == null) {
             // No HQ to defend, just look for enemies
             currentRole = HQRole.ATTACKER;
-            Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities, 500.0);
+            AITargetWrapper nearestEnemy = findNearestEnemy(aiPlayer, gameEntities, 500.0);
             if (nearestEnemy != null && nearestEnemy.isActive()) {
                 Vector2 enemyPos = nearestEnemy.getPosition();
                 input.setWorldX(enemyPos.x);
@@ -295,7 +295,7 @@ public class HeadquartersBehavior implements AIBehavior {
         }
 
         // Prioritize enemies threatening HQ
-        Player bestThreat = findBestThreatToHQ(aiPlayer, myHQ, gameEntities);
+        AITargetWrapper bestThreat = findBestThreatToHQ(aiPlayer, myHQ, gameEntities);
         if (bestThreat != null) {
             engageEnemy(aiPlayer, bestThreat, input);
 
@@ -306,7 +306,7 @@ public class HeadquartersBehavior implements AIBehavior {
             }
         } else {
             // No immediate threats, look for distant enemies
-            Player distantEnemy = findNearestEnemy(aiPlayer, gameEntities, 500);
+            AITargetWrapper distantEnemy = findNearestEnemy(aiPlayer, gameEntities, 500);
             if (distantEnemy != null) {
                 engageEnemy(aiPlayer, distantEnemy, input);
             }
@@ -317,9 +317,9 @@ public class HeadquartersBehavior implements AIBehavior {
     }
 
     /**
-     * Engage an enemy player with aiming and shooting.
+     * Engage an enemy (player or turret) with aiming and shooting.
      */
-    private void engageEnemy(AIPlayer aiPlayer, Player enemy, PlayerInput input) {
+    private void engageEnemy(AIPlayer aiPlayer, AITargetWrapper enemy, PlayerInput input) {
         Vector2 myPos = aiPlayer.getPosition();
         Vector2 enemyPos = enemy.getPosition();
         Vector2 enemyVel = enemy.getVelocity();
@@ -347,25 +347,18 @@ public class HeadquartersBehavior implements AIBehavior {
 
     /**
      * Find the best threat to the HQ (closest enemy or one attacking HQ).
+     * Considers enemy players and enemy turrets so defenders will return fire on
+     * a turret bombarding the HQ instead of ignoring it.
      */
-    private Player findBestThreatToHQ(AIPlayer aiPlayer, Headquarters hq, GameEntities gameEntities) {
+    private AITargetWrapper findBestThreatToHQ(AIPlayer aiPlayer, Headquarters hq, GameEntities gameEntities) {
         Vector2 hqPos = hq.getPosition();
-        int myTeam = aiPlayer.getTeam();
 
-        Player bestThreat = null;
+        AITargetWrapper bestThreat = null;
         double bestScore = -1;
 
-        for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() == aiPlayer.getId() || !player.isActive()) {
-                continue;
-            }
-
-            if (player.getTeam() == myTeam) {
-                continue;
-            }
-
-            double distanceToHQ = player.getPosition().distance(hqPos);
-            double distanceToMe = aiPlayer.getPosition().distance(player.getPosition());
+        for (AITargetWrapper target : collectEnemyTargets(aiPlayer, gameEntities)) {
+            double distanceToHQ = target.getPosition().distance(hqPos);
+            double distanceToMe = aiPlayer.getPosition().distance(target.getPosition());
 
             // Score based on threat level
             double score = 0;
@@ -382,13 +375,12 @@ public class HeadquartersBehavior implements AIBehavior {
             // Closer to me = easier to engage
             score += Math.max(0, (400 - distanceToMe) / 400) * 30;
 
-            // Low health enemies are easier to eliminate
-            double healthPercent = player.getHealth() / 100.0;
-            score += (1.0 - healthPercent) * 20;
+            // Low health enemies are easier to eliminate (ratio-based for any max health)
+            score += (1.0 - target.healthPercent()) * 20;
 
             if (score > bestScore) {
                 bestScore = score;
-                bestThreat = player;
+                bestThreat = target;
             }
         }
 
@@ -527,24 +519,18 @@ public class HeadquartersBehavior implements AIBehavior {
         return count;
     }
 
-    private Player findNearestEnemy(AIPlayer aiPlayer, GameEntities gameEntities, double maxRange) {
+    private AITargetWrapper findNearestEnemy(AIPlayer aiPlayer, GameEntities gameEntities, double maxRange) {
         Vector2 myPos = aiPlayer.getPosition();
-        int myTeam = aiPlayer.getTeam();
 
-        Player nearest = null;
+        AITargetWrapper nearest = null;
         double nearestDistance = maxRange;
 
-        for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() == aiPlayer.getId() || !player.isActive()) {
-                continue;
-            }
-
-            if (player.getTeam() != myTeam) {
-                double distance = myPos.distance(player.getPosition());
-                if (distance < nearestDistance) {
-                    nearestDistance = distance;
-                    nearest = player;
-                }
+        // Includes enemy turrets, and correctly excludes teammates in both FFA and team modes.
+        for (AITargetWrapper target : collectEnemyTargets(aiPlayer, gameEntities)) {
+            double distance = myPos.distance(target.getPosition());
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearest = target;
             }
         }
 

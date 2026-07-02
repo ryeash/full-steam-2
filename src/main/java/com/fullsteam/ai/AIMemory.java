@@ -100,9 +100,9 @@ public class AIMemory {
             snapshotThreat -= 0.1;
         }
 
-        if (player.getHealth() > 80) {
+        if (player.healthPercent() > 0.8) {
             snapshotThreat += 0.1;
-        } else if (player.getHealth() < 30) {
+        } else if (player.healthPercent() < 0.3) {
             snapshotThreat -= 0.15;
         }
 

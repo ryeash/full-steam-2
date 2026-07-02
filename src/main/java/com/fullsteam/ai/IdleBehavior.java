@@ -243,9 +243,9 @@ public class IdleBehavior implements AIBehavior {
         switch (utility.getCategory()) {
             case SUPPORT:
                 // Use support utilities when health is low or proactively
-                if (aiPlayer.getHealth() < 80) {
+                if (aiPlayer.healthPercent() < 0.8) {
                     usageChance = 0.3;
-                    if (aiPlayer.getHealth() < 50) usageChance += 0.4;
+                    if (aiPlayer.healthPercent() < 0.5) usageChance += 0.4;
                 } else if (nearestEnemy == null) {
                     // Proactive support usage when completely safe
                     usageChance = 0.1;
@@ -254,7 +254,7 @@ public class IdleBehavior implements AIBehavior {
 
             case DEFENSIVE:
                 // Use defensive utilities when health is low or preparing for combat
-                if (aiPlayer.getHealth() < 70) {
+                if (aiPlayer.healthPercent() < 0.7) {
                     usageChance = 0.4;
                 } else if (nearestEnemy != null && aiPlayer.getPosition().distance(nearestEnemy.getPosition()) < 400) {
                     // Prepare defenses when enemy is at medium range

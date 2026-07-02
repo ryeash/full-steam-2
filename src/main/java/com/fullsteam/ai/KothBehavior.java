@@ -246,20 +246,14 @@ public class KothBehavior implements AIBehavior {
         Vector2 myPos = aiPlayer.getPosition();
         Vector2 zonePos = zone.getPosition();
 
-        Player bestTarget = null;
+        AITargetWrapper bestTarget = null;
         double bestScore = -1;
 
-        for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() == aiPlayer.getId() || !player.isActive()) {
-                continue;
-            }
-
-            if (aiPlayer.isTeammate(player)) {
-                continue;
-            }
-
-            double distance = myPos.distance(player.getPosition());
-            double distanceToZone = player.getPosition().distance(zonePos);
+        // Consider enemy players AND enemy turrets, so the AI returns fire on a
+        // turret parked in its zone instead of tanking it while holding position.
+        for (AITargetWrapper target : collectEnemyTargets(aiPlayer, gameEntities)) {
+            double distance = myPos.distance(target.getPosition());
+            double distanceToZone = target.getPosition().distance(zonePos);
 
             // Prioritize enemies in or near zone
             double score = 0;
@@ -275,13 +269,12 @@ public class KothBehavior implements AIBehavior {
             // Closer enemies are easier to hit
             score += Math.max(0, (500 - distance) / 500) * 30;
 
-            // Prioritize low health enemies
-            double healthPercent = player.getHealth() / 100.0;
-            score += (1.0 - healthPercent) * 20;
+            // Prioritize low health enemies (ratio-based so it works at any max health)
+            score += (1.0 - target.healthPercent()) * 20;
 
             if (score > bestScore) {
                 bestScore = score;
-                bestTarget = player;
+                bestTarget = target;
             }
         }
 

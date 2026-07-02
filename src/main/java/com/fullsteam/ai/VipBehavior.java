@@ -100,7 +100,7 @@ public class VipBehavior implements AIBehavior {
     private void executeVipSurviveBehavior(AIPlayer aiPlayer, GameEntities gameEntities,
                                            PlayerInput input, double deltaTime) {
         Vector2 myPos = aiPlayer.getPosition();
-        Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
+        AITargetWrapper nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
 
         if (nearestEnemy != null) {
             Vector2 enemyPos = nearestEnemy.getPosition();
@@ -143,7 +143,7 @@ public class VipBehavior implements AIBehavior {
         Vector2 vipPos = ourVip.getPosition();
         double distToVip = myPos.distance(vipPos);
 
-        Player nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
+        AITargetWrapper nearestEnemy = findNearestEnemy(aiPlayer, gameEntities);
 
         if (nearestEnemy != null && nearestEnemy.isActive()) {
             Vector2 enemyPos = nearestEnemy.getPosition();
@@ -300,18 +300,17 @@ public class VipBehavior implements AIBehavior {
         return vip;
     }
 
-    private Player findNearestEnemy(AIPlayer aiPlayer, GameEntities gameEntities) {
+    private AITargetWrapper findNearestEnemy(AIPlayer aiPlayer, GameEntities gameEntities) {
         Vector2 myPos = aiPlayer.getPosition();
-        int myTeam = aiPlayer.getTeam();
-        Player nearest = null;
+        AITargetWrapper nearest = null;
         double nearestDist = Double.MAX_VALUE;
 
-        for (Player p : gameEntities.getAllPlayers()) {
-            if (p.getId() == aiPlayer.getId() || !p.isActive() || p.getTeam() == myTeam) continue;
-            double d = myPos.distance(p.getPosition());
+        // Includes enemy turrets; teammate/FFA filtering handled by the wrapper.
+        for (AITargetWrapper target : collectEnemyTargets(aiPlayer, gameEntities)) {
+            double d = myPos.distance(target.getPosition());
             if (d < nearestDist) {
                 nearestDist = d;
-                nearest = p;
+                nearest = target;
             }
         }
         return nearest;
