@@ -313,6 +313,13 @@ public class GameStateSerializer {
         s.put("deaths", scoring.getDeaths());
         s.put("captures", scoring.getFlagCaptures());
         s.put("respawnTime", Math.max(0, ((double) player.getRespawnTime() - System.currentTimeMillis()) / 1000));
+        // In LAST_STANDING the dead are parked (no timer) until the arena collapses to one
+        // survivor, so the client should show a "waiting" message rather than a bogus countdown.
+        boolean respawnWaiting = gameConfig.getRules().usesLastStanding()
+                && !player.isActive()
+                && !player.isEliminated()
+                && player.getRespawnTime() > System.currentTimeMillis();
+        s.put("respawnWaiting", respawnWaiting);
         s.put("livesRemaining", player.getLivesRemaining());
         s.put("eliminated", player.isEliminated());
 

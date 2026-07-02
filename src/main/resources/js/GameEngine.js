@@ -5620,46 +5620,57 @@ class GameEngine {
     
     showRespawnTimer(timeRemaining, playerData) {
         const deathScreen = document.getElementById('death-screen');
-        const countdown = document.getElementById('respawn-countdown');
+        const respawnTimer = document.getElementById('respawn-timer');
         const deathInfo = document.getElementById('death-info');
-        
-        if (deathScreen && countdown) {
-            deathScreen.style.display = 'flex';
-            
-            // Check if player is eliminated or out of lives
-            const livesRemaining = playerData?.livesRemaining || -1;
-            const isEliminated = playerData?.eliminated || false;
-            
-            if (isEliminated || livesRemaining === 0) {
-                // Player is eliminated - show elimination message
-                countdown.textContent = 'ELIMINATED';
-                countdown.style.color = '#ff4444';
-                countdown.style.fontWeight = 'bold';
-                
-                if (deathInfo) {
-                    deathInfo.innerHTML = `
-                        <p style="color: #ff6666; margin: 10px 0;">
-                            You have been eliminated from this round.
-                        </p>
-                        <p style="color: #cccccc; font-size: 14px;">
-                            Wait for the next round to respawn.
-                        </p>
-                    `;
-                }
-            } else {
-                // Normal respawn countdown
-                countdown.textContent = Math.ceil(timeRemaining);
-                countdown.style.color = '#f39c12';
-                countdown.style.fontWeight = 'normal';
-                
-                if (deathInfo && livesRemaining != -1) {
-                    const livesText = livesRemaining;
-                    deathInfo.innerHTML = `
-                        <p style="color: #cccccc; margin: 10px 0;">
-                            Lives remaining: <span style="color: #ffaa00; font-weight: bold;">${livesText}</span>
-                        </p>
-                    `;
-                }
+
+        if (!deathScreen || !respawnTimer) {
+            return;
+        }
+        deathScreen.style.display = 'flex';
+
+        const livesRemaining = playerData?.livesRemaining ?? -1;
+        const isEliminated = playerData?.eliminated || false;
+        const respawnWaiting = playerData?.respawnWaiting || false;
+
+        if (respawnWaiting) {
+            // LAST_STANDING: no countdown — held until the arena resolves to one survivor
+            const survivorNoun = this.teamCount > 0 ? 'team' : 'player';
+            respawnTimer.textContent = `Respawning when one ${survivorNoun} is left standing…`;
+            respawnTimer.style.color = '#f39c12';
+            respawnTimer.style.fontWeight = 'normal';
+
+            if (deathInfo) {
+                deathInfo.innerHTML = `
+                    <p style="color: #cccccc; margin: 10px 0;">
+                        Waiting for the round to resolve — you'll respawn with everyone else.
+                    </p>
+                `;
+            }
+        } else if (isEliminated || livesRemaining === 0) {
+            // Player is eliminated
+            respawnTimer.textContent = 'ELIMINATED';
+            respawnTimer.style.color = '#ff4444';
+            respawnTimer.style.fontWeight = 'bold';
+
+            if (deathInfo) {
+                deathInfo.innerHTML = `
+                    <p style="color: #ff6666; margin: 10px 0;">
+                        You have been eliminated from this round.
+                    </p>
+                `;
+            }
+        } else {
+            // Normal respawn countdown
+            respawnTimer.style.color = '#f39c12';
+            respawnTimer.style.fontWeight = 'normal';
+            respawnTimer.innerHTML = `Respawning in <span id="respawn-countdown">${Math.ceil(timeRemaining)}</span>s`;
+
+            if (deathInfo && livesRemaining != -1) {
+                deathInfo.innerHTML = `
+                    <p style="color: #cccccc; margin: 10px 0;">
+                        Lives remaining: <span style="color: #ffaa00; font-weight: bold;">${livesRemaining}</span>
+                    </p>
+                `;
             }
         }
     }
