@@ -273,9 +273,8 @@ public class BulletEffectProcessor {
                 perpendicularDirection.multiply(-1);
             }
             // If crossProduct > 0, target is to the left, steer left (no change needed)
-
             // Apply perpendicular steering force
-            double steeringForce = 3000.0;
+            double steeringForce = 4000.0;
             projectile.getBody().applyForce(perpendicularDirection.multiply(steeringForce));
         }
     }

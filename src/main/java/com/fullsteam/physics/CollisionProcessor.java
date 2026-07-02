@@ -24,6 +24,8 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
+import static com.fullsteam.Config.GRAVITY_WELL_CONSTANT;
+
 
 public class CollisionProcessor implements CollisionListener<Body, BodyFixture> {
 
@@ -118,54 +120,64 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             return handleProjectileFieldEffectCollision(projectile, fieldEffect);
         } else if (entity2 instanceof FieldEffect fieldEffect && entity1 instanceof Projectile projectile) {
             return handleProjectileFieldEffectCollision(projectile, fieldEffect);
+
         } else if (entity1 instanceof Projectile projectile && entity2 instanceof Turret turret) {
             return handleProjectileTurretCollision(projectile, turret);
         } else if (entity1 instanceof Turret turret && entity2 instanceof Projectile projectile) {
             return handleProjectileTurretCollision(projectile, turret);
+
         } else if (entity1 instanceof Beam beam && entity2 instanceof Turret turret) {
             handleBeamTurretCollision(beam, turret);
             return true;
         } else if (entity1 instanceof Turret turret && entity2 instanceof Beam beam) {
             handleBeamTurretCollision(beam, turret);
             return true;
+
         } else if (entity1 instanceof Turret turret && entity2 instanceof FieldEffect fieldEffect) {
             handleTurretFieldEffectCollision(turret, fieldEffect);
             return true; // Allow physics to handle overlaps (sensors should not resolve anyway)
         } else if (entity1 instanceof FieldEffect fieldEffect && entity2 instanceof Turret turret) {
             handleTurretFieldEffectCollision(turret, fieldEffect);
             return true; // Allow physics to handle overlaps (sensors should not resolve anyway)
+
         } else if (entity1 instanceof NetProjectile net) {
             return handleNetCollision(net, entity2);
         } else if (entity2 instanceof NetProjectile net) {
             return handleNetCollision(net, entity1);
+
         } else if (entity1 instanceof Player player && entity2 instanceof Flag flag) {
             handlePlayerFlagCollision(player, flag);
             return true; // Flags are sensors, no physics resolution
         } else if (entity1 instanceof Flag flag && entity2 instanceof Player player) {
             handlePlayerFlagCollision(player, flag);
             return true; // Flags are sensors, no physics resolution
+
         } else if (entity1 instanceof Player player && entity2 instanceof KothZone zone) {
             handlePlayerKothZoneCollision(player, zone);
             return true; // KOTH zones are sensors, no physics resolution
         } else if (entity1 instanceof KothZone zone && entity2 instanceof Player player) {
             handlePlayerKothZoneCollision(player, zone);
             return true; // KOTH zones are sensors, no physics resolution
+
         } else if (entity1 instanceof Player player && entity2 instanceof Workshop workshop) {
             handlePlayerWorkshopCollision(player, workshop);
             return true; // Workshops are sensors, no physics resolution
         } else if (entity1 instanceof Workshop workshop && entity2 instanceof Player player) {
             handlePlayerWorkshopCollision(player, workshop);
             return true; // Workshops are sensors, no physics resolution
+
         } else if (entity1 instanceof Player player && entity2 instanceof PowerUp powerUp) {
             handlePlayerPowerUpCollision(player, powerUp);
             return true; // Power-ups are sensors, no physics resolution
         } else if (entity1 instanceof PowerUp powerUp && entity2 instanceof Player player) {
             handlePlayerPowerUpCollision(player, powerUp);
             return true; // Power-ups are sensors, no physics resolution
+
         } else if (entity1 instanceof Projectile projectile && entity2 instanceof Headquarters hq) {
             return handleProjectileHeadquartersCollision(projectile, hq);
         } else if (entity1 instanceof Headquarters hq && entity2 instanceof Projectile projectile) {
             return handleProjectileHeadquartersCollision(projectile, hq);
+
         } else if (entity1 instanceof Beam beam && entity2 instanceof Headquarters hq) {
             handleBeamHeadquartersCollision(beam, hq);
             return true; // Beams continue through structures
@@ -193,8 +205,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         }
 
         // Process bullet effects before handling the hit
-        log.debug("Projectile {} hit player {} at ({}, {}) - processing effects",
-                projectile.getId(), player.getId(), player.getPosition().x, player.getPosition().y);
         bulletEffectProcessor.processEffectHit(projectile, player.getPosition());
 
         // Apply direct status effects from bullet on hit
@@ -395,20 +405,16 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             case SHIELD_BARRIER -> {
             }
             case GRAVITY_WELL -> {
-                Vector2 forceDirection = fieldEffect.getPosition()
-                        .subtract(player.getPosition())
-                        .getNormalized()
-                        .multiply(300000.0); // tuned up from 200000 — pull was a touch weak
-                if (!forceDirection.isZero()) {
-                    player.getBody().applyForce(forceDirection);
+                Vector2 delta = fieldEffect.getPosition().subtract(player.getPosition());
+                double distance = delta.getMagnitude();
+                if (distance > 0) {
+                    double distanceSq = Math.max(distance * distance, 200.0); // clamp: min 10 units
+                    player.getBody().applyForce(delta.getNormalized().multiply(GRAVITY_WELL_CONSTANT / distanceSq));
                 }
             }
-            case SPEED_BOOST -> {
-                StatusEffectManager.applySpeedBoost(player, 0, 2.0, String.valueOf(fieldEffect.getOwnerId()));
-            }
-            case SMOKE -> {
-                player.setVisionObscured(true);
-            }
+            case SPEED_BOOST ->
+                    StatusEffectManager.applySpeedBoost(player, 0, 2.0, String.valueOf(fieldEffect.getOwnerId()));
+            case SMOKE -> player.setVisionObscured(true);
             case PROXIMITY_MINE -> {
                 fieldEffect.setActive(false);
                 FieldEffect explosion = new FieldEffect(
@@ -426,11 +432,24 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     }
 
     private boolean handleProjectileFieldEffectCollision(Projectile projectile, FieldEffect fieldEffect) {
-        if (fieldEffect.getType() == FieldEffectType.SHIELD_BARRIER) {
-            Vector2 projectilePos = projectile.getInitialPosition();
-            Vector2 shieldCenter = fieldEffect.getPosition();
-            if (shieldCenter.distance(projectilePos) > fieldEffect.getBody().getRotationDiscRadius()) {
-                projectile.setActive(false);
+        switch (fieldEffect.getType()) {
+            case SHIELD_BARRIER -> {
+                Vector2 projectilePos = projectile.getInitialPosition();
+                Vector2 shieldCenter = fieldEffect.getPosition();
+                if (shieldCenter.distance(projectilePos) > fieldEffect.getBody().getRotationDiscRadius()) {
+                    projectile.setActive(false);
+                }
+            }
+            case GRAVITY_WELL -> {
+                Vector2 delta = fieldEffect.getPosition().subtract(projectile.getPosition());
+                double distance = delta.getMagnitude();
+                if (distance > 10) {
+                    double distanceSq = Math.max(distance * distance, 100.0); // clamp: min 10 units
+                    double force = GRAVITY_WELL_CONSTANT * (0.07) / distanceSq;
+                    projectile.getBody().applyForce(delta.getNormalized().multiply(force));
+                }
+            }
+            default -> {
             }
         }
         return true;
@@ -639,23 +658,28 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     }
 
     private boolean handleNetCollision(NetProjectile net, GameEntity entity) {
-        if (entity instanceof Player player) {
-            if (net.isActive() && net.canAffectPlayer(player)) {
-                net.hitPlayer(player);
-                return false;
+        switch (entity) {
+            case Player player -> {
+                if (net.isActive() && net.canAffectPlayer(player)) {
+                    net.hitPlayer(player);
+                    return false;
+                }
+                return true;
             }
-            return true;
-        } else if (entity instanceof Obstacle) {
-            net.setActive(false);
-            return false;
-        } else if (entity instanceof FieldEffect fe) {
-            if (fe.getType() == FieldEffectType.SHIELD_BARRIER) {
+            case Obstacle obstacle -> {
                 net.setActive(false);
                 return false;
             }
-            return true;
-        } else {
-            return !(entity instanceof Projectile);
+            case FieldEffect fe -> {
+                if (fe.getType() == FieldEffectType.SHIELD_BARRIER) {
+                    net.setActive(false);
+                    return false;
+                }
+                return true;
+            }
+            case null, default -> {
+                return !(entity instanceof Projectile);
+            }
         }
     }
 
