@@ -37,10 +37,6 @@ public class Turret extends GameEntity implements HasWeapon {
     private Player currentTarget;
     private Vector2 aimDirection = new Vector2(1, 0);
 
-    /**
-     * Full constructor — accepts a pre-built {@link Weapon} so callers can
-     * supply any stat loadout (e.g., a beam weapon for base-defender NPCs).
-     */
     public Turret(int ownerId, int ownerTeam, Vector2 position, double lifespan, Weapon weapon) {
         super(Config.nextEntityId(), createTurretBody(position), 50.0);
         this.ownerId = ownerId;
@@ -48,14 +44,6 @@ public class Turret extends GameEntity implements HasWeapon {
         this.weapon = weapon;
         this.expires = (long) (System.currentTimeMillis() + (lifespan * 1000));
         this.setRotation(Math.random() * 2 * Math.PI);
-    }
-
-    /**
-     * Convenience constructor using the default {@link WeaponConfig#BASIC_TURRET_PRESET}.
-     * Preserves the original turret behaviour (≈15 dmg, ≈3 shots/s, ≈400 range).
-     */
-    public Turret(int ownerId, int ownerTeam, Vector2 position, double lifespan) {
-        this(ownerId, ownerTeam, position, lifespan, WeaponConfig.BASIC_TURRET_PRESET.buildWeapon());
     }
 
     private static Body createTurretBody(Vector2 position) {

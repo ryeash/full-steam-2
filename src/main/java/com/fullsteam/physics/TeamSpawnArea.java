@@ -3,6 +3,7 @@ package com.fullsteam.physics;
 import lombok.Getter;
 import org.dyn4j.geometry.Vector2;
 
+import java.util.Collection;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -58,7 +59,7 @@ public class TeamSpawnArea {
      * @param minDistance     Minimum distance from other players
      * @return Safe spawn point, or random point if no safe location found
      */
-    public Vector2 findSafeSpawnPoint(java.util.Collection<Player> existingPlayers, double minDistance) {
+    public Vector2 findSafeSpawnPoint(Collection<Player> existingPlayers, double minDistance) {
         for (int attempts = 0; attempts < 20; attempts++) {
             Vector2 candidate = generateSpawnPoint();
 

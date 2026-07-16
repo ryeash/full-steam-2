@@ -85,15 +85,15 @@ public class TeamSpawnManager {
         double fullWidth = worldWidth * (1.0 - shrinkFactor);
         double halfHeight = (worldHeight / 2.0) * (1.0 - shrinkFactor);
 
-        // Team 1: Top center (moved further up)
+        // Team 1: Top center
         Vector2 team1Center = new Vector2(0, worldHeight * 0.35);
         teamAreas.put(1, new TeamSpawnArea(1, team1Center, fullWidth * 0.8, halfHeight));
 
-        // Team 2: Bottom left (moved further left and down)
+        // Team 2: Bottom left
         Vector2 team2Center = new Vector2(-worldWidth * 0.35, -worldHeight * 0.35);
         teamAreas.put(2, new TeamSpawnArea(2, team2Center, fullWidth / 2.0, halfHeight));
 
-        // Team 3: Bottom right (moved further right and down)
+        // Team 3: Bottom right
         Vector2 team3Center = new Vector2(worldWidth * 0.35, -worldHeight * 0.35);
         teamAreas.put(3, new TeamSpawnArea(3, team3Center, fullWidth / 2.0, halfHeight));
     }
@@ -107,19 +107,19 @@ public class TeamSpawnManager {
         double areaWidth = (worldWidth / 2.0) * (1.0 - shrinkFactor);
         double areaHeight = (worldHeight / 2.0) * (1.0 - shrinkFactor);
 
-        // Team 1: Top-left quadrant (moved further to corner)
+        // Team 1: Top-left quadrant
         Vector2 team1Center = new Vector2(-worldWidth * 0.35, worldHeight * 0.35);
         teamAreas.put(1, new TeamSpawnArea(1, team1Center, areaWidth, areaHeight));
 
-        // Team 2: Top-right quadrant (moved further to corner)
+        // Team 2: Top-right quadrant
         Vector2 team2Center = new Vector2(worldWidth * 0.35, worldHeight * 0.35);
         teamAreas.put(2, new TeamSpawnArea(2, team2Center, areaWidth, areaHeight));
 
-        // Team 3: Bottom-left quadrant (moved further to corner)
+        // Team 3: Bottom-left quadrant
         Vector2 team3Center = new Vector2(-worldWidth * 0.35, -worldHeight * 0.35);
         teamAreas.put(3, new TeamSpawnArea(3, team3Center, areaWidth, areaHeight));
 
-        // Team 4: Bottom-right quadrant (moved further to corner)
+        // Team 4: Bottom-right quadrant
         Vector2 team4Center = new Vector2(worldWidth * 0.35, -worldHeight * 0.35);
         teamAreas.put(4, new TeamSpawnArea(4, team4Center, areaWidth, areaHeight));
     }

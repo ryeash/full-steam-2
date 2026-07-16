@@ -5,6 +5,7 @@ import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.Ordinance;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
+import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
@@ -74,13 +75,13 @@ public class Projectile extends GameEntity {
         Body body = new Body();
         // Radius comes entirely from the weapon's caliber (baseline ×1.0 = BASE_RADIUS).
         Circle circle = new Circle(BASE_RADIUS * caliber);
-        body.addFixture(circle);
+        BodyFixture bodyFixture = body.addFixture(circle);
 
         // Set restitution for bouncy projectiles
         if (bulletEffects.contains(BulletEffect.BOUNCY)) {
-            body.getFixture(0).setRestitution(0.8); // High bounce - retains 80% of velocity
+            bodyFixture.setRestitution(0.8); // High bounce - retains 80% of velocity
         } else {
-            body.getFixture(0).setRestitution(0.0); // No bounce for non-bouncy projectiles
+            bodyFixture.setRestitution(0.0); // No bounce for non-bouncy projectiles
         }
 
         body.setMass(MassType.NORMAL);
