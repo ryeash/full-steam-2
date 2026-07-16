@@ -184,14 +184,20 @@ public class BulletEffectProcessor {
             double vx = Math.cos(angle) * fragmentSpeed;
             double vy = Math.sin(angle) * fragmentSpeed;
 
+            // Spawn slightly ahead along each fragment's own direction so the
+            // physics body doesn't immediately overlap the player that was hit.
+            double spawnOffset = 8.0;
+            double spawnX = position.x + Math.cos(angle) * spawnOffset;
+            double spawnY = position.y + Math.sin(angle) * spawnOffset;
+
             Set<BulletEffect> childEffects = new HashSet<>(projectile.getBulletEffects());
             childEffects.remove(BulletEffect.FRAGMENTING);
 
             // Create fragment projectile (smaller, shorter range)
             Projectile fragment = new Projectile(
                     projectile.getOwnerId(),
-                    position.x,
-                    position.y,
+                    spawnX,
+                    spawnY,
                     vx,
                     vy,
                     fragmentDamage,

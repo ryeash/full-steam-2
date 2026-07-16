@@ -2,6 +2,7 @@ package com.fullsteam.model;
 
 import lombok.Data;
 
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -150,5 +151,34 @@ public class Weapon {
 
     public Set<BulletEffect> getBulletEffects() {
         return new HashSet<>(bulletEffects);
+    }
+
+    public String getDisplayName() {
+        // If it's a preset weapon (not "Custom Weapon"), use the original name
+        if (!"Custom Weapon".equals(name)) {
+            return name;
+        }
+
+        // For custom weapons, generate a name based on ordinance and effects
+        StringBuilder displayName = new StringBuilder();
+
+        // Add ordinance name
+        String ordinanceTag = switch (ordinance) {
+            case PROJECTILE -> "Projectile";
+            case LASER -> "Laser";
+            case PLASMA_BEAM -> "Plasma Beam";
+        };
+        displayName.append(ordinanceTag);
+
+        // Add primary bullet effects
+        if (!bulletEffects.isEmpty()) {
+            displayName.append(" ");
+            bulletEffects.stream()
+                    .min(Comparator.comparing(BulletEffect::ordinal))
+                    .map(e -> "(" + e.toString().toLowerCase() + ")")
+                    .ifPresent(displayName::append);
+        }
+
+        return displayName.toString();
     }
 }

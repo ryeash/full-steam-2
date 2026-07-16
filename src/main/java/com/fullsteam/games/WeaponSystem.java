@@ -153,10 +153,6 @@ public class WeaponSystem {
     }
 
     /**
-     * Find where a beam intersects with obstacles, considering beam-specific piercing behavior.
-     * Returns the effective end point of the beam (either full range or obstacle intersection).
-     */
-    /**
      * Max reflections for a BOUNCY beam, and the nudge off a surface after a bounce.
      */
     private static final int MAX_BEAM_BOUNCES = 3;

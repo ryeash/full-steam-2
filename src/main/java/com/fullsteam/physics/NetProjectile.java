@@ -34,16 +34,17 @@ public class NetProjectile extends GameEntity {
         this.slowDuration = 2.0;
         this.pushbackForce = Config.NET_PUSHBACK_FORCE;
         this.expires = (long) (System.currentTimeMillis() + (timeToLive * 1000));
+        body.setLinearVelocity(velocity);
     }
 
     private static Body createNetProjectileBody(Vector2 position) {
         Body body = new Body();
-        Circle circle = new Circle(8.0); // Slightly larger than normal projectiles
+        Circle circle = new Circle(10.0); // Slightly larger than normal projectiles
         body.addFixture(circle);
         body.setMass(MassType.NORMAL);
         body.getTransform().setTranslation(position.x, position.y);
-        body.setLinearDamping(0.01); // Very little damping - nets fly far
-        body.setAngularVelocity(70); // Nets spin around
+        body.setLinearDamping(0.03); // Very little damping - nets fly far
+        body.setAngularVelocity(50); // Nets spin around
         return body;
     }
 
@@ -51,9 +52,6 @@ public class NetProjectile extends GameEntity {
     public void update(double deltaTime) {
         if (!active) {
             return;
-        }
-        if (!hasHit) {
-            body.setLinearVelocity(velocity.x, velocity.y);
         }
         super.update(deltaTime);
     }
@@ -95,22 +93,5 @@ public class NetProjectile extends GameEntity {
 
         // In team mode, can only affect players on different teams
         return ownerTeam != player.getTeam();
-    }
-
-    /**
-     * Get current velocity
-     */
-    public Vector2 getVelocity() {
-        return velocity.copy();
-    }
-
-    /**
-     * Set velocity (for physics updates)
-     */
-    public void setVelocity(Vector2 newVelocity) {
-        this.velocity = newVelocity.copy();
-        if (body != null) {
-            body.setLinearVelocity(newVelocity.x, newVelocity.y);
-        }
     }
 }

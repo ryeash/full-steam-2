@@ -51,7 +51,7 @@ public final class ObstacleAvoidance {
                 continue;
             }
 
-            double clearance = obstacle.getBoundingRadius() + agentRadius;
+            double clearance = obstacle.getRadius() + agentRadius;
             double surfaceDist = dist - clearance;
             if (surfaceDist > lookAhead) {
                 continue; // too far away to matter

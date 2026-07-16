@@ -35,7 +35,6 @@ import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.Turret;
 import com.fullsteam.physics.UtilityActivation;
-import com.fullsteam.util.WeaponFormatter;
 import io.micronaut.websocket.WebSocketSession;
 import io.micronaut.websocket.exceptions.WebSocketSessionException;
 import lombok.Getter;
@@ -202,7 +201,6 @@ public class GameManager {
         entitySpawner.createFlags();
         entitySpawner.createOddballNpcs();
         entitySpawner.createKothZones();
-        entitySpawner.createWorkshops();
         entitySpawner.createHeadquarters();
 
         // Initialize event system if enabled (must be after terrain generation)
@@ -760,7 +758,6 @@ public class GameManager {
             gameEntities.updateAll(deltaTime);
             updateCarriedFlags(); // Update flag positions for carried flags
             collisionProcessor.updateKothZones(deltaTime);
-            collisionProcessor.updateWorkshops(deltaTime);
             gameEntities.getProjectiles().entrySet().removeIf(entry -> {
                 Projectile projectile = entry.getValue();
                 if (!projectile.isActive()) {
@@ -903,7 +900,7 @@ public class GameManager {
 
     private void onSpectatorJoined(PlayerSession playerSession) {
         // Send spectator-specific initial game state
-        send(playerSession.getSession(), gameStateSerializer.createSpectatorInitialState());
+        send(playerSession.getSession(), gameStateSerializer.createSpectatorInitialState(getSpectatorCount()));
 
         log.debug("Spectator {} joined game {} successfully. Total spectators: {}",
                 playerSession.getPlayerId(), gameId, getSpectatorCount());
@@ -1176,7 +1173,7 @@ public class GameManager {
         // Check against all obstacles
         for (Obstacle obstacle : gameEntities.getAllObstacles()) {
             double distance = position.distance(obstacle.getPosition());
-            double minDistance = checkRadius + obstacle.getBoundingRadius();
+            double minDistance = checkRadius + obstacle.getRadius();
 
             if (distance < minDistance) {
                 return false; // Position is blocked
@@ -1282,7 +1279,7 @@ public class GameManager {
         session.setState(PlayerSessionState.SPECTATOR);
         send(session.getSession(), Map.of("type", "eliminated"));
         // Switch the client over to the spectator view (full game state).
-        send(session.getSession(), gameStateSerializer.createSpectatorInitialState());
+        send(session.getSession(), gameStateSerializer.createSpectatorInitialState(getSpectatorCount()));
         log.debug("Player {} eliminated in last-man-standing game; switched to SPECTATOR.",
                 victim.getId());
     }
@@ -1291,7 +1288,7 @@ public class GameManager {
         session.setState(PlayerSessionState.SPECTATOR);
         send(session.getSession(), Map.of("type", "lobbyTimeout"));
         // Switch the client over to the spectator view (full game state)
-        send(session.getSession(), gameStateSerializer.createSpectatorInitialState());
+        send(session.getSession(), gameStateSerializer.createSpectatorInitialState(getSpectatorCount()));
         log.debug("Lobby session {} timed out after {}ms; downgraded to SPECTATOR.",
                 session.getPlayerId(), LOBBY_TIMEOUT_MS);
     }
@@ -1385,7 +1382,7 @@ public class GameManager {
         // Broadcast kill event with team colors
         String killerName = shooter != null ? shooter.getPlayerName() : "Unknown";
         String victimName = victim.getPlayerName();
-        String weaponName = shooter != null ? WeaponFormatter.getDisplayName(shooter.getCurrentWeapon()) : "Unknown weapon";
+        String weaponName = shooter != null ? shooter.getCurrentWeapon().getDisplayName() : "Unknown weapon";
         Integer killerTeam = shooter != null ? shooter.getTeam() : null;
         Integer victimTeam = victim.getTeam();
 

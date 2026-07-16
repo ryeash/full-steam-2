@@ -9,21 +9,18 @@ import org.dyn4j.geometry.Vector2;
 
 /**
  * Power-up entity that can be collected by players to gain temporary abilities.
- * Power-ups spawn around workshops and can be picked up by walking over them.
  */
 @Getter
 @Setter
 public class PowerUp extends GameEntity {
 
     private final PowerUpType type;
-    private final int workshopId; // Which workshop spawned this power-up
-    private final double duration; // How long the effect lasts
-    private final double effectStrength; // Strength of the effect
+    private final double duration;
+    private final double effectStrength;
 
-    public PowerUp(int id, Vector2 position, PowerUpType type, int workshopId, double duration, double effectStrength) {
+    public PowerUp(int id, Vector2 position, PowerUpType type, double duration, double effectStrength) {
         super(id, createPowerUpBody(position), 1.0);
         this.type = type;
-        this.workshopId = workshopId;
         this.duration = duration;
         this.effectStrength = effectStrength;
     }

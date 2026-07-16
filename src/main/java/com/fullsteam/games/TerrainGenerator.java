@@ -112,7 +112,7 @@ public class TerrainGenerator {
      */
     private boolean isQuadrantObstaclePositionClear(Obstacle obstacle) {
         Vector2 position = obstacle.getPosition();
-        double radius = obstacle.getBoundingRadius();
+        double radius = obstacle.getRadius();
         double spacing = Math.max(10.0, radius * 0.1);
         double axisClearance = radius + spacing;
         if (Math.abs(position.x) < axisClearance || Math.abs(position.y) < axisClearance) {
@@ -126,7 +126,7 @@ public class TerrainGenerator {
      */
     private boolean isObstaclePositionClear(Obstacle obstacle) {
         Vector2 position = obstacle.getPosition();
-        double radius = obstacle.getBoundingRadius();
+        double radius = obstacle.getRadius();
 
         // Add minimum spacing buffer to prevent tight packing
         double spacing = Math.max(10.0, radius * 0.2); // At least 10 units or 20% of radius
@@ -135,7 +135,7 @@ public class TerrainGenerator {
         // Check against existing obstacles
         for (Obstacle existingObstacle : generatedObstacles) {
             double distance = position.distance(existingObstacle.getPosition());
-            double existingRadius = existingObstacle.getBoundingRadius();
+            double existingRadius = existingObstacle.getRadius();
             double existingSpacing = Math.max(10.0, existingRadius * 0.2);
             double minDistance = totalRadius + existingRadius + existingSpacing;
 
@@ -253,7 +253,7 @@ public class TerrainGenerator {
         double totalRadius = radius + spacing;
         for (Obstacle obstacle : generatedObstacles) {
             double distance = position.distance(obstacle.getPosition());
-            double obstacleRadius = obstacle.getBoundingRadius(); // Use the proper bounding radius
+            double obstacleRadius = obstacle.getRadius();
             double obstacleSpacing = Math.max(5.0, obstacleRadius * 0.1);
             if (distance < obstacleRadius + totalRadius + obstacleSpacing) {
                 return false;

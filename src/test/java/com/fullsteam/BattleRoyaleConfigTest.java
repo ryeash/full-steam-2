@@ -41,10 +41,6 @@ public class BattleRoyaleConfigTest extends BaseTestClass {
                 .maxLives(1)
                 .kothZones(0)
                 .kothPointsPerSecond(1.0)
-                .addWorkshops(true)  // Workshops for loot
-                .workshopCraftTime(8.0)
-                .workshopCraftRadius(100.0)
-                .maxPowerUpsPerWorkshop(4)
                 .obstacleDensity(EntityWorldDensity.CHOKED)  // Dense cover
                 .enableRandomEvents(true)  // Random events
                 .randomEventInterval(60.0)
@@ -89,7 +85,6 @@ public class BattleRoyaleConfigTest extends BaseTestClass {
         assertEquals(1, rules.getMaxLives(), "Battle royale is one life");
         assertEquals(VictoryCondition.ELIMINATION, rules.getVictoryCondition(), "Should use elimination victory");
         assertEquals(EntityWorldDensity.CHOKED, rules.getObstacleDensity(), "Should have choked obstacle density");
-        assertTrue(rules.hasWorkshops(), "Should have workshops for loot");
         assertTrue(rules.isEnableRandomEvents(), "Should have random events enabled");
         assertEquals(30.0, rules.getLockGameAfterSeconds(), "Should lock game after 30 seconds");
         assertFalse(rules.hasHeadquarters(), "Should not have headquarters");

@@ -52,7 +52,7 @@ public class DefenseLaser extends GameEntity {
 
     private static Body createDefenseLaserBody(Vector2 position) {
         Body body = new Body();
-        Circle circle = new Circle(20.0 * 0.8); // Slightly smaller than player (20.0 is player radius)
+        Circle circle = new Circle(Config.PLAYER_RADIUS * 0.8); // Slightly smaller than player
         body.addFixture(circle);
         body.setMass(MassType.INFINITE); // Stationary
         body.getTransform().setTranslation(position.x, position.y);
@@ -129,8 +129,6 @@ public class DefenseLaser extends GameEntity {
             offset.multiply(beamLength);
             beam.getEndPoint().set(center);
             beam.getEndPoint().add(offset);
-
-            // Note: Effective endpoint will be updated by WeaponSystem via updateBeamEffectiveEndpoints()
         }
     }
 

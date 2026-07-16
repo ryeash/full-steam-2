@@ -371,9 +371,8 @@ public class EventSystem {
                             Config.nextEntityId(),
                             location,
                             powerUpType,
-                            -1, // Not from a workshop
-                            30.0, // Duration
-                            1.5 // Strength
+                            30.0,
+                            1.5
                     );
                     gameEntities.add(powerUp);
                 });

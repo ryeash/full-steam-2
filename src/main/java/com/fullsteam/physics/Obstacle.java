@@ -22,12 +22,10 @@ public class Obstacle extends GameEntity {
     }
 
     private final ObstacleType type;
-    private final double boundingRadius;
 
     public Obstacle(int id, double x, double y, ObstacleType type, Body body) {
         super(id, body, Double.POSITIVE_INFINITY);
         this.type = type;
-        this.boundingRadius = getBody().getRotationDiscRadius();
         getBody().setMass(MassType.INFINITE);
         getBody().setUserData(this);
         getBody().translate(x, y);

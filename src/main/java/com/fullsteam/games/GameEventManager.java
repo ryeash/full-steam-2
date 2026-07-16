@@ -162,13 +162,6 @@ public class GameEventManager {
     }
 
     /**
-     * Convenience method to broadcast a capture event
-     */
-    public void broadcastCapture(String playerName, String locationName) {
-        broadcastEvent(GameEvent.createCaptureEvent(playerName, locationName));
-    }
-
-    /**
      * Convenience method to broadcast a system message
      */
     public void broadcastSystemMessage(String message) {
@@ -176,24 +169,10 @@ public class GameEventManager {
     }
 
     /**
-     * Convenience method to broadcast a team message
-     */
-    public void broadcastTeamMessage(String message, int teamId, GameEvent.EventCategory category) {
-        broadcastEvent(GameEvent.createTeamEvent(message, teamId, category));
-    }
-
-    /**
      * Convenience method to broadcast to a specific player
      */
     public void broadcastToPlayer(String message, int playerId, GameEvent.EventCategory category) {
         broadcastEvent(GameEvent.createPlayerEvent(message, playerId, category));
-    }
-
-    /**
-     * Convenience method to broadcast an achievement
-     */
-    public void broadcastAchievement(String playerName, String achievement) {
-        broadcastEvent(GameEvent.createAchievementEvent(playerName, achievement));
     }
 
     /**
@@ -208,38 +187,5 @@ public class GameEventManager {
      */
     public void broadcastElimination(String playerName, int teamNumber, int livesRemaining) {
         broadcastEvent(GameEvent.createEliminationEvent(playerName, teamNumber, livesRemaining));
-    }
-
-    /**
-     * Convenience method to broadcast a custom message with color
-     */
-    public void broadcastCustomMessage(String message, String color, GameEvent.EventTarget target) {
-        broadcastEvent(GameEvent.createCustomEvent(message, color, target));
-    }
-
-    /**
-     * Get statistics about current game state for debugging
-     */
-    public String getEventSystemStatus() {
-        int totalPlayers = getAllActivePlayerIds().size();
-        int spectators = getSpectatorPlayerIds().size();
-
-        StringBuilder status = new StringBuilder();
-        status.append("GameEventManager Status:\n");
-        status.append("  Active Players: ").append(totalPlayers).append("\n");
-        status.append("  Spectators: ").append(spectators).append("\n");
-
-        // Team breakdown
-        Set<Integer> teams = new HashSet<>();
-        for (Player player : gameEntities.getAllPlayers()) {
-            teams.add(player.getTeam());
-        }
-
-        for (Integer teamId : teams) {
-            int teamSize = getPlayersOnTeam(teamId).size();
-            status.append("  Team ").append(teamId).append(": ").append(teamSize).append(" players\n");
-        }
-
-        return status.toString();
     }
 }

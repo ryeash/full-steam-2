@@ -149,41 +149,6 @@ public class Rules {
     @Builder.Default
     private double kothPointsPerSecond = 1.0;
 
-    // ===== Workshop Rules =====
-
-    /**
-     * Whether to add workshops to the game. When enabled, each team gets one workshop in their spawn zone.
-     * Workshops allow players to craft power-ups by standing near them.
-     */
-    @NotNull
-    @JsonProperty("addWorkshops")
-    @Builder.Default
-    private boolean addWorkshops = false;
-
-    /**
-     * Time in seconds required to craft a power-up at a workshop.
-     */
-    @DecimalMin("1.0")
-    @DecimalMax("120.0")
-    @Builder.Default
-    private double workshopCraftTime = 10.0;
-
-    /**
-     * Radius around workshop where players can craft power-ups.
-     */
-    @DecimalMin("10.0")
-    @DecimalMax("500.0")
-    @Builder.Default
-    private double workshopCraftRadius = 80.0;
-
-    /**
-     * Maximum number of power-ups that can exist around a workshop.
-     */
-    @Min(1)
-    @Max(20)
-    @Builder.Default
-    private int maxPowerUpsPerWorkshop = 3;
-
     // ===== Oddball Rules =====
 
     // ===== Oddball NPC Rules =====
@@ -464,13 +429,6 @@ public class Rules {
      */
     public boolean hasKothZones() {
         return kothZones > 0;
-    }
-
-    /**
-     * Check if this game mode uses workshops.
-     */
-    public boolean hasWorkshops() {
-        return addWorkshops;
     }
 
     /**

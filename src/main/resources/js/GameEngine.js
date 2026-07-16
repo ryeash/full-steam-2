@@ -9,7 +9,7 @@ class GameEngine {
         this.obstacles = new Map();
         this.fieldEffects = new Map();
         this.beams = new Map();
-        this.utilityEntities = new Map(); // For turrets, nets, mines, defense lasers, workshops, headquarters, power-ups
+        this.utilityEntities = new Map(); // For turrets, nets, mines, defense lasers, headquarters, power-ups
         this.flags = new Map(); // CTF flags
         this.oddballNpcs = new Map(); // Oddball NPC entities
         this.kothZones = new Map(); // King of the Hill zones
@@ -137,14 +137,6 @@ class GameEngine {
                 }
             });
             
-            // Smoothly update workshop progress bars
-            this.utilityEntities.forEach((container, entityId) => {
-                if (container.progressBars) {
-                    container.progressBars.forEach((progressBar) => {
-                        this.updateProgressBarAnimation(progressBar, deltaTime);
-                    });
-                }
-            });
         };
         this.addTickerCallback(interpolationCallback);
 
@@ -1516,7 +1508,7 @@ class GameEngine {
             }
         }
         
-        // Handle utility entities (turrets, nets, mines, defense lasers, workshops, headquarters, power-ups)
+        // Handle utility entities (turrets, nets, mines, defense lasers, headquarters, power-ups)
         this.handleUtilityEntities(data);
         
         this.updateUI(data);
@@ -1572,18 +1564,6 @@ class GameEngine {
                     this.updateUtilityEntity(laserData);
                 } else {
                     this.createUtilityEntity(laserData);
-                }
-            });
-        }
-        
-        // Handle workshops
-        if (data.workshops) {
-            data.workshops.forEach(workshopData => {
-                currentEntityIds.add(workshopData.id);
-                if (this.utilityEntities.has(workshopData.id)) {
-                    this.updateUtilityEntity(workshopData);
-                } else {
-                    this.createUtilityEntity(workshopData);
                 }
             });
         }
@@ -2959,21 +2939,14 @@ class GameEngine {
         const obstacleType = obstacleData.type || 'BOULDER';
         const color = this.getObstacleColor(obstacleType);
         const outlineColor = this.darkenColor(color);
-
         const shapes = this.parseObstacleShapes(obstacleData.shapes);
-        if (shapes.length > 0) {
-            for (const shape of shapes) {
-                if (shape.type === 'circle') {
-                    graphics.circle(shape.cx, shape.cy, shape.r);
-                } else {
-                    graphics.poly(shape.points.flatMap(([x, y]) => [x, y]));
-                }
+        for (const shape of shapes) {
+            if (shape.type === 'circle') {
+                graphics.circle(shape.cx, shape.cy, shape.r);
+            } else {
+                graphics.poly(shape.points.flatMap(([x, y]) => [x, y]));
             }
-        } else {
-            // Fallback for missing shape data
-            graphics.circle(0, 0, obstacleData.boundingRadius || 20);
         }
-
         graphics.fill({ color, alpha: 0.8 });
         graphics.stroke({ width: 2, color: outlineColor });
         return graphics;
@@ -3683,8 +3656,6 @@ class GameEngine {
                 return this.createMineGraphics(graphics, entityData);
             case 'DEFENSE_LASER':
                 return this.createDefenseLaserGraphics(graphics, entityData);
-            case 'WORKSHOP':
-                return this.createWorkshopGraphics(graphics, entityData);
             case 'HEADQUARTERS':
                 return this.createHeadquartersGraphics(graphics, entityData);
             case 'POWERUP':
@@ -3979,105 +3950,6 @@ class GameEngine {
     }
     
     /**
-     * Create workshop graphics
-     */
-    createWorkshopGraphics(graphics, entityData) {
-        if (entityData.type !== 'WORKSHOP') {
-            return;
-        }
-
-        // Derive bounding dimensions from the compact shapes string so we don't
-        // rely on separate width/height fields from the server.
-        const shapes = this.parseObstacleShapes(entityData.shapes);
-        let halfWidth = entityData.craftRadius * 0.5 || 40;
-        let halfHeight = entityData.craftRadius * 0.4 || 30;
-
-        if (shapes.length > 0 && shapes[0].type === 'polygon') {
-            const xs = shapes[0].points.map(([x]) => x);
-            const ys = shapes[0].points.map(([, y]) => y);
-            halfWidth  = (Math.max(...xs) - Math.min(...xs)) / 2;
-            halfHeight = (Math.max(...ys) - Math.min(...ys)) / 2;
-        }
-
-        // Workshop base — drawn from shapes for consistency with obstacle rendering
-        if (shapes.length > 0) {
-            for (const shape of shapes) {
-                if (shape.type === 'circle') {
-                    graphics.circle(shape.cx, shape.cy, shape.r);
-                } else {
-                    graphics.poly(shape.points.flatMap(([x, y]) => [x, y]));
-                }
-            }
-        } else {
-            graphics.rect(-halfWidth, -halfHeight, halfWidth * 2, halfHeight * 2);
-        }
-        graphics.fill({ color: 0x555555, alpha: 0.9 });
-        graphics.stroke({ width: 3, color: 0x777777 });
-        
-        // Crafting radius indicator (subtle)
-        graphics.circle(0, 0, entityData.craftRadius || 80).stroke({ width: 1, color: 0x888888, alpha: 0.3 });
-        
-        // Workshop center - gear-like design
-        graphics.moveTo(-8, -8);
-        graphics.lineTo(8, 8);
-        graphics.moveTo(8, -8);
-        graphics.lineTo(-8, 8);
-        graphics.circle(0, 0, 6);
-        graphics.stroke({ width: 2, color: 0x999999 });
-        
-        // Add some workshop details to make it look more industrial
-        // Horizontal lines for workshop floor (scaled to actual dimensions)
-        const floorY1 = -halfHeight * 0.3;
-        const floorY2 = halfHeight * 0.3;
-        graphics.moveTo(-halfWidth * 0.8, floorY1);
-        graphics.lineTo(halfWidth * 0.8, floorY1);
-        graphics.moveTo(-halfWidth * 0.8, floorY2);
-        graphics.lineTo(halfWidth * 0.8, floorY2);
-        // Vertical lines for workshop walls (scaled to actual dimensions)
-        const wallX1 = -halfWidth * 0.6;
-        const wallX2 = halfWidth * 0.6;
-        graphics.moveTo(wallX1, -halfHeight * 0.8);
-        graphics.lineTo(wallX1, halfHeight * 0.8);
-        graphics.moveTo(wallX2, -halfHeight * 0.8);
-        graphics.lineTo(wallX2, halfHeight * 0.8);
-        graphics.stroke({ width: 1, color: 0x666666, alpha: 0.8 });
-        
-        // Add crafting progress indicators for active players
-        if (entityData.craftingProgress) {
-            const progressEntries = Object.entries(entityData.craftingProgress);
-            progressEntries.forEach(([playerId, progress], index) => {
-                if (progress > 0) {
-                    const angle = (index / progressEntries.length) * Math.PI * 2;
-                    const radius = Math.max(halfWidth, halfHeight) + 20; // Position further outside the workshop
-                    const x = Math.cos(angle) * radius;
-                    const y = Math.sin(angle) * radius;
-                    
-                    // Progress indicator dot (larger and more visible)
-                    graphics.circle(x, y, 8).fill({ color: 0x00AAFF });
-                    
-                    // Progress ring (outer) - thicker and more visible
-                    graphics.circle(x, y, 12).stroke({ width: 4, color: 0x00AAFF, alpha: progress });
-                    
-                    // Inner progress circle
-                    graphics.circle(x, y, 6).stroke({ width: 2, color: 0xFFFFFF, alpha: 0.8 });
-                    
-                    // Progress percentage indicator (pulsing dot)
-                    const pulseSize = 4 + (progress * 4);
-                    graphics.circle(x, y, pulseSize).fill({ color: 0xFFFFFF, alpha: 0.9 });
-                }
-            });
-        }
-        
-        // Add workshop activity indicator (pulsing center when active)
-        if (entityData.activeCrafters > 0) {
-            // Pulsing center circle to show workshop is active
-            graphics.circle(0, 0, 10).stroke({ width: 3, color: 0x00FF00 }); // Green for active - thicker and brighter
-        }
-        
-        return graphics;
-    }
-    
-    /**
      * Create headquarters graphics
      */
     createHeadquartersGraphics(graphics, entityData) {
@@ -4313,8 +4185,6 @@ class GameEngine {
                 return 9;  // Same as projectiles
             case 'MINE':
                 return 7;  // Above obstacles, below players
-            case 'WORKSHOP':
-                return 6;  // Above obstacles, below players
             case 'HEADQUARTERS':
                 return 5;  // Same as obstacles (HQ is a structure)
             case 'POWERUP':
@@ -4393,9 +4263,6 @@ class GameEngine {
             case 'DEFENSE_LASER':
                 this.updateDefenseLaserVisual(container, entityData);
                 break;
-            case 'WORKSHOP':
-                this.updateWorkshopVisual(container, entityData);
-                break;
             case 'HEADQUARTERS':
                 this.updateHeadquartersVisual(container, entityData);
                 break;
@@ -4445,93 +4312,6 @@ class GameEngine {
         const time = Date.now() * 0.003; // Slow pulse
         const pulseValue = 0.8 + 0.2 * Math.sin(time);
         container.alpha = pulseValue;
-    }
-    
-    /**
-     * Update workshop visual with crafting progress
-     */
-    updateWorkshopVisual(container, entityData) {
-        // Always update the progress data for smooth interpolation
-        container.craftingProgress = entityData.craftingProgress || {};
-        container.activeCrafters = entityData.activeCrafters || 0;
-        
-        // Create progress bars if they don't exist
-        if (!container.progressBars) {
-            container.progressBars = new Map();
-        }
-        
-        // Get current crafters
-        const currentCrafters = new Set(Object.keys(container.craftingProgress));
-        const existingCrafters = new Set(container.progressBars.keys());
-        
-        // Remove progress bars for players who stopped crafting
-        for (const playerId of existingCrafters) {
-            if (!currentCrafters.has(playerId)) {
-                const progressBar = container.progressBars.get(playerId);
-                if (progressBar && progressBar.parent) {
-                    container.removeChild(progressBar);
-                    progressBar.destroy({ context: true });
-                }
-                container.progressBars.delete(playerId);
-            }
-        }
-        
-        // Create or update progress bars for active crafters
-        let barIndex = 0;
-        for (const [playerId, progress] of Object.entries(container.craftingProgress)) {
-            if (progress > 0) {
-                let progressBar = container.progressBars.get(playerId);
-                
-                if (!progressBar) {
-                    // Create new progress bar
-                    progressBar = this.createWorkshopProgressBar();
-                    container.addChild(progressBar);
-                    container.progressBars.set(playerId, progressBar);
-                }
-                
-                // Position progress bar above workshop
-                const yOffset = -40 - (barIndex * 12); // Stack multiple bars
-                progressBar.position.set(0, yOffset);
-                
-                // Update progress bar fill (smooth interpolation happens in animation)
-                progressBar.targetProgress = progress;
-                
-                barIndex++;
-            }
-        }
-    }
-    
-    /**
-     * Create a simple horizontal progress bar for workshop crafting
-     */
-    createWorkshopProgressBar() {
-        const barContainer = new PIXI.Container();
-        
-        // Progress bar dimensions
-        const barWidth = 60;
-        const barHeight = 8;
-        
-        // Background (dark gray)
-        const background = new PIXI.Graphics();
-        background.roundRect(-barWidth/2, 0, barWidth, barHeight, 3).fill({ color: 0x222222, alpha: 0.8 });
-        
-        // Border
-        background.roundRect(-barWidth/2, 0, barWidth, barHeight, 3).stroke({ width: 1, color: 0x444444, alpha: 0.8 });
-        barContainer.addChild(background);
-        
-        // Progress fill (starts empty)
-        const progressFill = new PIXI.Graphics();
-        barContainer.addChild(progressFill);
-        
-        // Store references and state
-        barContainer.background = background;
-        barContainer.progressFill = progressFill;
-        barContainer.barWidth = barWidth;
-        barContainer.barHeight = barHeight;
-        barContainer.currentProgress = 0;
-        barContainer.targetProgress = 0;
-        
-        return barContainer;
     }
     
     /**

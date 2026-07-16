@@ -444,32 +444,6 @@
                 </div>
 
                 <div class="config-section">
-                    <h3>🏭 Workshops</h3>
-                    <div class="config-item">
-                        <label for="addWorkshops">Enable Workshops:</label>
-                        <input type="checkbox" id="addWorkshops">
-                        <small style="color: #888; font-size: 0.8em;">Each team gets one workshop in their spawn
-                            zone</small>
-                    </div>
-                    <div class="config-item">
-                        <label for="workshopCraftTime">Craft Time (seconds):</label>
-                        <input type="number" id="workshopCraftTime" min="1" max="120" step="1" value="10">
-                        <small style="color: #888; font-size: 0.8em;">Time required to craft a power-up</small>
-                    </div>
-                    <div class="config-item">
-                        <label for="workshopCraftRadius">Craft Radius:</label>
-                        <input type="number" id="workshopCraftRadius" min="10" max="500" step="10" value="80">
-                        <small style="color: #888; font-size: 0.8em;">Range around workshop for crafting</small>
-                    </div>
-                    <div class="config-item">
-                        <label for="maxPowerUpsPerWorkshop">Max Power-ups per Workshop:</label>
-                        <input type="number" id="maxPowerUpsPerWorkshop" min="1" max="20" value="3">
-                        <small style="color: #888; font-size: 0.8em;">Maximum power-ups that can exist around each
-                            workshop</small>
-                    </div>
-                </div>
-
-                <div class="config-section">
                     <h3>🏛️ Headquarters</h3>
                     <div class="config-item">
                         <label for="addHeadquarters">Enable Headquarters:</label>
@@ -877,9 +851,6 @@
         if (rules.enableVip) {
             tags.push({ text: `👑 VIP`, highlight: true });
         }
-        if (rules.addWorkshops) {
-            tags.push(`🏭 Workshops`);
-        }
         if (rules.addHeadquarters) {
             tags.push({ text: `🏛️ HQ Assault`, highlight: true });
         }
@@ -955,12 +926,7 @@
                     waveRespawnInterval: 30,
                     maxLives: -1,
                     kothZones: 0,
-                    kothPointsPerSecond: 1.0,
-                    workshops: 0,
-                    workshopCraftTime: 10,
-                    workshopCraftRadius: 80,
-                    maxPowerUpsPerWorkshop: 3
-                }
+                    kothPointsPerSecond: 1.0,                }
             };
         } else if (presetType === 'ffa') {
             return {
@@ -982,12 +948,7 @@
                     waveRespawnInterval: 30,
                     maxLives: -1,
                     kothZones: 0,
-                    kothPointsPerSecond: 1.0,
-                    workshops: 0,
-                    workshopCraftTime: 10,
-                    workshopCraftRadius: 80,
-                    maxPowerUpsPerWorkshop: 3
-                }
+                    kothPointsPerSecond: 1.0,                }
             };
         } else if (presetType === 'ctf') {
             return {
@@ -1009,12 +970,7 @@
                     waveRespawnInterval: 20,    // 20 second waves for CTF
                     maxLives: -1,
                     kothZones: 0,               // No KOTH zones in CTF
-                    kothPointsPerSecond: 1.0,
-                    workshops: 0,
-                    workshopCraftTime: 10,
-                    workshopCraftRadius: 80,
-                    maxPowerUpsPerWorkshop: 3
-                }
+                    kothPointsPerSecond: 1.0,                }
             };
         } else if (presetType === 'domination') {
             return {
@@ -1060,13 +1016,7 @@
                     waveRespawnInterval: 30,
                     maxLives: 1,
                     kothZones: 0,               // No KOTH zones - pure survival
-                    kothPointsPerSecond: 1.0,
-                    addWorkshops: true,         // Workshops for power-ups (loot spots!)
-                    workshopCraftTime: 8,       // Faster crafting for BR pace
-                    workshopCraftRadius: 100,   // Larger radius for easier access
-                    maxPowerUpsPerWorkshop: 4,  // More power-ups available (loot!)
-                    obstacleDensity: 'CHOKED',  // Dense obstacles for cover and tactics
-                    enableRandomEvents: true,   // Random events add BR excitement
+                    kothPointsPerSecond: 1.0,                    enableRandomEvents: true,   // Random events add BR excitement
                     randomEventInterval: 60,    // Event every ~60 seconds
                     randomEventIntervalVariance: 0.4,  // Good variance
                     eventWarningDuration: 4,    // 4 second warning for events
@@ -1093,12 +1043,7 @@
                     waveRespawnInterval: 30,
                     maxLives: 5,                // 5 stocks per player (like Smash Bros!)
                     kothZones: 0,
-                    kothPointsPerSecond: 1.0,
-                    workshops: 0,
-                    workshopCraftTime: 10,
-                    workshopCraftRadius: 80,
-                    maxPowerUpsPerWorkshop: 3
-                }
+                    kothPointsPerSecond: 1.0,                }
             };
         } else if (presetType === 'headquarters-assault') {
             return {
@@ -1120,13 +1065,7 @@
                     waveRespawnInterval: 25,    // 25 second waves
                     maxLives: -1,               // Infinite lives
                     kothZones: 0,               // No KOTH zones
-                    kothPointsPerSecond: 1.0,
-                    addWorkshops: true,         // Workshops enabled for power-up crafting
-                    workshopCraftTime: 12,      // 12 seconds to craft
-                    workshopCraftRadius: 80,
-                    maxPowerUpsPerWorkshop: 4,  // More power-ups for strategic gameplay
-                    addHeadquarters: true,      // Headquarters are the main objective
-                    headquartersMaxHealth: 1500,  // Durable headquarters
+                    kothPointsPerSecond: 1.0,                    headquartersMaxHealth: 1500,  // Durable headquarters
                     headquartersPointsPerDamage: 0.1,  // Points for damaging HQ
                     headquartersDestructionBonus: 150,  // Big bonus for destroying enemy HQ
                     headquartersDestructionEndsGame: true  // Game ends when HQ destroyed
@@ -1154,10 +1093,6 @@
                     maxLives: -1,
                     kothZones: 2,               // Some zones to fight over
                     kothPointsPerSecond: 1.5,
-                    addWorkshops: false,
-                    workshopCraftTime: 10,
-                    workshopCraftRadius: 80,
-                    maxPowerUpsPerWorkshop: 3,
                     addHeadquarters: false,
                     headquartersMaxHealth: 1000,
                     headquartersPointsPerDamage: 0.1,
@@ -1195,10 +1130,6 @@
                     maxLives: -1,
                     kothZones: 0,
                     kothPointsPerSecond: 1.0,
-                    addWorkshops: false,
-                    workshopCraftTime: 10,
-                    workshopCraftRadius: 80,
-                    maxPowerUpsPerWorkshop: 3,
                     addHeadquarters: false,
                     headquartersMaxHealth: 1000,
                     headquartersPointsPerDamage: 0.1,
@@ -1232,13 +1163,7 @@
                     respawnDelay: 3,            // Fast respawn — dying just costs you the zone
                     maxLives: -1,
                     kothZones: 1,               // Single central zone — everyone converges here
-                    kothPointsPerSecond: 1.0,   // 1 pt/s held → 90 s to win
-                    addWorkshops: false,        // No workshops — power-up balance would skew 1v1s
-                    workshopCraftTime: 10,
-                    workshopCraftRadius: 90,
-                    maxPowerUpsPerWorkshop: 2,
-                    addHeadquarters: false,
-                    headquartersMaxHealth: 1000,
+                    kothPointsPerSecond: 1.0,   // 1 pt/s held → 90 s to win                    headquartersMaxHealth: 1000,
                     headquartersPointsPerDamage: 0.1,
                     headquartersDestructionBonus: 0,
                     headquartersDestructionEndsGame: false,
@@ -1278,10 +1203,6 @@
                     maxLives: -1,
                     kothZones: 0,
                     kothPointsPerSecond: 0.5,
-                    addWorkshops: true,
-                    workshopCraftTime: 10,
-                    workshopCraftRadius: 90,
-                    maxPowerUpsPerWorkshop: 4,  // More power-ups for tactical play
                     addHeadquarters: false,     // No HQ - pure VIP assassination
                     headquartersMaxHealth: 1000,
                     headquartersPointsPerDamage: 0.1,
@@ -1438,10 +1359,6 @@
                 document.getElementById('enableRandomWeapons').checked = r.enableRandomWeapons ?? false;
                 document.getElementById('randomWeaponInterval').value = r.randomWeaponInterval ?? 30;
                 document.getElementById('obstacleDensity').value = r.obstacleDensity || 'RANDOM';
-                document.getElementById('addWorkshops').checked = r.addWorkshops ?? false;
-                document.getElementById('workshopCraftTime').value = r.workshopCraftTime ?? 10;
-                document.getElementById('workshopCraftRadius').value = r.workshopCraftRadius ?? 80;
-                document.getElementById('maxPowerUpsPerWorkshop').value = r.maxPowerUpsPerWorkshop ?? 3;
                 document.getElementById('addHeadquarters').checked = r.addHeadquarters ?? false;
                 document.getElementById('headquartersMaxHealth').value = r.headquartersMaxHealth ?? 1000;
                 document.getElementById('headquartersPointsPerDamage').value = r.headquartersPointsPerDamage ?? 0.1;
@@ -1563,10 +1480,6 @@
                 enableRandomWeapons: document.getElementById('enableRandomWeapons').checked,
                 randomWeaponInterval: parseFloat(document.getElementById('randomWeaponInterval').value),
                 obstacleDensity: document.getElementById('obstacleDensity').value,
-                addWorkshops: document.getElementById('addWorkshops').checked,
-                workshopCraftTime: parseFloat(document.getElementById('workshopCraftTime').value),
-                workshopCraftRadius: parseFloat(document.getElementById('workshopCraftRadius').value),
-                maxPowerUpsPerWorkshop: parseInt(document.getElementById('maxPowerUpsPerWorkshop').value),
                 addHeadquarters: document.getElementById('addHeadquarters').checked,
                 headquartersMaxHealth: parseFloat(document.getElementById('headquartersMaxHealth').value),
                 headquartersPointsPerDamage: parseFloat(document.getElementById('headquartersPointsPerDamage').value),

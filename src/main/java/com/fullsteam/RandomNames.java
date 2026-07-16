@@ -1,5 +1,7 @@
 package com.fullsteam;
 
+import lombok.Getter;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -7,6 +9,7 @@ import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.util.List;
 
+@Getter
 public final class RandomNames {
     private static final List<String> names;
 
@@ -31,9 +34,6 @@ public final class RandomNames {
         return names.get((int) (Math.random() * names.size()));
     }
 
-    /**
-     * Returns the full sorted list; callers must not mutate it.
-     */
     public static List<String> getNames() {
         return names;
     }

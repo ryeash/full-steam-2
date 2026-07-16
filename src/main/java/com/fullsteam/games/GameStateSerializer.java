@@ -19,7 +19,6 @@ import com.fullsteam.physics.PowerUp;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.Turret;
-import com.fullsteam.physics.Workshop;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.Convex;
@@ -95,10 +94,6 @@ public class GameStateSerializer {
             gameState.put("kothZones", createKothZoneStates());
         }
 
-        if (gameConfig.getRules().hasWorkshops()) {
-            gameState.put("workshops", createWorkshopStates());
-        }
-
         if (gameConfig.getRules().hasHeadquarters()) {
             gameState.put("headquarters", createHeadquartersStates());
         }
@@ -148,7 +143,7 @@ public class GameStateSerializer {
     /**
      * Create initial game state for a session in {@code LOBBY} (yet-to-spawn)
      * state. Includes the static world (terrain, obstacles, flag homes, KOTH
-     * zones, headquarters, workshops) so the client can render a minimal
+     * zones, headquarters) so the client can render a minimal
      * preview behind the customization modal, but no player or projectile data.
      *
      * @param lobbyTimeoutMs Milliseconds the server will wait before
@@ -184,7 +179,7 @@ public class GameStateSerializer {
     /**
      * Strip dynamic entity collections from a full game state for delivery to a
      * {@code LOBBY} session. The modal sits over a static map preview, so we
-     * only keep map geometry and objective-style entities (workshops, KOTH
+     * only keep map geometry and objective-style entities (KOTH
      * zones, headquarters, flag positions). All player/projectile/utility data
      * is replaced with empty lists.
      *
@@ -231,8 +226,10 @@ public class GameStateSerializer {
 
     /**
      * Create initial game state for spectators (no player entity).
+     *
+     * @param spectatorCount current number of spectators in this game session
      */
-    public Map<String, Object> createSpectatorInitialState() {
+    public Map<String, Object> createSpectatorInitialState(int spectatorCount) {
         Map<String, Object> state = new HashMap<>();
         state.put("type", "spectatorInit");
         state.put("worldWidth", gameConfig.getWorldWidth());
@@ -255,12 +252,7 @@ public class GameStateSerializer {
             state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
         }
 
-        // Spectator-specific data
-        state.put("spectatorData", Map.of(
-                "showAllHealth", true,
-                "showAllLoadouts", true,
-                "showDamageNumbers", true
-        ));
+        state.put("spectatorData", Map.of("spectatorCount", spectatorCount));
 
         return state;
     }
@@ -313,10 +305,9 @@ public class GameStateSerializer {
         scoreData.put("total", scoring.total(rules));
         s.put("score", scoreData);
 
-        // Top-level kills/deaths/captures retained for frontend backward compatibility.
+        // Top-level kills/deaths are read directly by scoreboard templates.
         s.put("kills", scoring.getKills());
         s.put("deaths", scoring.getDeaths());
-        s.put("captures", scoring.getFlagCaptures());
         s.put("respawnTime", Math.max(0, ((double) player.getRespawnTime() - System.currentTimeMillis()) / 1000));
         // In LAST_STANDING the dead are parked (no timer) until the arena collapses to one
         // survivor, so the client should show a "waiting" message rather than a bogus countdown.
@@ -356,9 +347,6 @@ public class GameStateSerializer {
             projState.put("y", pos.y);
             projState.put("vx", vel.x);
             projState.put("vy", vel.y);
-            projState.put("ownerId", projectile.getOwnerId());
-            projState.put("ownerTeam", projectile.getOwnerTeam());
-            projState.put("ordinance", projectile.getOrdinance().name());
             projState.put("caliber", projectile.getCaliber());
             projState.put("bulletEffects", projectile.getBulletEffects().stream()
                     .map(Enum::name).collect(Collectors.toList()));
@@ -376,7 +364,6 @@ public class GameStateSerializer {
             obsState.put("x", pos.x);
             obsState.put("y", pos.y);
             obsState.put("type", obstacle.getType().name());
-            obsState.put("boundingRadius", obstacle.getBoundingRadius());
             obsState.put("rotation", obstacle.getBody().getTransform().getRotation().toRadians());
             obsState.put("shapes", verticesShorthand(obstacle.getBody()));
             obstacleStates.add(obsState);
@@ -425,11 +412,8 @@ public class GameStateSerializer {
             effectState.put("x", pos.x);
             effectState.put("y", pos.y);
             effectState.put("radius", effect.getRadius());
-            effectState.put("duration", effect.getDuration());
-            effectState.put("timeRemaining", effect.getTimeRemaining());
             effectState.put("progress", effect.getProgress());
             effectState.put("active", effect.isActive());
-            effectState.put("ownerTeam", effect.getOwnerTeam());
             fieldEffectStates.add(effectState);
         }
         return fieldEffectStates;
@@ -447,7 +431,6 @@ public class GameStateSerializer {
             turretState.put("rotation", turret.getBody().getTransform().getRotation().toRadians());
             turretState.put("health", turret.healthPercent());
             turretState.put("active", turret.isActive());
-            turretState.put("ownerId", turret.getOwnerId());
             turretState.put("ownerTeam", turret.getOwnerTeam());
             turretStates.add(turretState);
         }
@@ -458,18 +441,13 @@ public class GameStateSerializer {
         List<Map<String, Object>> netStates = new ArrayList<>();
         for (NetProjectile net : gameEntities.getAllNetProjectiles()) {
             Vector2 pos = net.getPosition();
-            Vector2 vel = net.getVelocity();
             Map<String, Object> netState = new HashMap<>();
             netState.put("id", net.getId());
             netState.put("type", "NET");
             netState.put("x", pos.x);
             netState.put("y", pos.y);
-            netState.put("vx", vel.x);
-            netState.put("vy", vel.y);
             netState.put("rotation", net.getBody().getTransform().getRotation().toRadians());
             netState.put("active", net.isActive());
-            netState.put("ownerId", net.getOwnerId());
-            netState.put("ownerTeam", net.getOwnerTeam());
             netStates.add(netState);
         }
         return netStates;
@@ -488,7 +466,6 @@ public class GameStateSerializer {
             mineState.put("x", pos.x);
             mineState.put("y", pos.y);
             mineState.put("active", fieldEffect.isActive());
-            mineState.put("ownerId", fieldEffect.getOwnerId());
             mineState.put("ownerTeam", fieldEffect.getOwnerTeam());
             mineState.put("isArmed", fieldEffect.isArmed());
             mineStates.add(mineState);
@@ -506,9 +483,7 @@ public class GameStateSerializer {
             laserState.put("x", pos.x);
             laserState.put("y", pos.y);
             laserState.put("rotation", defenseLaser.getCurrentRotation());
-            laserState.put("health", defenseLaser.healthPercent());
             laserState.put("active", defenseLaser.isActive());
-            laserState.put("ownerId", defenseLaser.getOwnerId());
             laserState.put("ownerTeam", defenseLaser.getOwnerTeam());
             defenseLaserStates.add(laserState);
         }
@@ -539,9 +514,7 @@ public class GameStateSerializer {
                 points.add(pt);
             }
             beamState.put("points", points);
-            beamState.put("ownerId", beam.getOwnerId());
             beamState.put("ownerTeam", beam.getOwnerTeam());
-            beamState.put("damage", beam.getDamage());
             beamState.put("durationPercent", beam.getDurationPercent());
             beamStates.add(beamState);
         }
@@ -556,13 +529,9 @@ public class GameStateSerializer {
             powerUpState.put("id", powerUp.getId());
             powerUpState.put("type", "POWERUP");
             powerUpState.put("powerUpType", powerUp.getType().name());
-            powerUpState.put("displayName", powerUp.getType().getDisplayName());
-            powerUpState.put("renderHint", powerUp.getType().getRenderHint());
             powerUpState.put("x", pos.x);
             powerUpState.put("y", pos.y);
-            powerUpState.put("radius", powerUp.getBody().getRotationDiscRadius());
-            powerUpState.put("workshopId", powerUp.getWorkshopId());
-            powerUpState.put("duration", powerUp.getDuration());
+            powerUpState.put("radius", powerUp.getRadius());
             powerUpStates.add(powerUpState);
         }
         return powerUpStates;
@@ -611,11 +580,8 @@ public class GameStateSerializer {
                 effectState.put("x", ePos.x);
                 effectState.put("y", ePos.y);
                 effectState.put("radius", effect.getRadius());
-                effectState.put("duration", effect.getDuration());
-                effectState.put("timeRemaining", effect.getTimeRemaining());
                 effectState.put("progress", effect.getProgress());
                 effectState.put("active", effect.isActive());
-                effectState.put("ownerTeam", effect.getOwnerTeam());
                 smokeEffects.add(effectState);
             }
         }
@@ -635,35 +601,13 @@ public class GameStateSerializer {
             zoneState.put("zoneNumber", zone.getZoneNumber());
             zoneState.put("x", pos.x);
             zoneState.put("y", pos.y);
-            zoneState.put("radius", zone.getBody().getRotationDiscRadius());
+            zoneState.put("radius", zone.getRadius());
             zoneState.put("controllingTeam", zone.getControllingTeam());
-            zoneState.put("controllingPlayerId", zone.getControllingPlayerId());
             zoneState.put("state", zone.getState().name());
-            zoneState.put("captureProgress", zone.getCaptureProgress());
             zoneState.put("playerCount", zone.getTotalPlayerCount());
             zoneStates.add(zoneState);
         }
         return zoneStates;
-    }
-
-    private List<Map<String, Object>> createWorkshopStates() {
-        List<Map<String, Object>> workshopStates = new ArrayList<>();
-        for (Workshop workshop : gameEntities.getAllWorkshops()) {
-            Vector2 pos = workshop.getPosition();
-            Map<String, Object> workshopState = new HashMap<>();
-            workshopState.put("id", workshop.getId());
-            workshopState.put("type", "WORKSHOP");
-            workshopState.put("x", pos.x);
-            workshopState.put("y", pos.y);
-            workshopState.put("craftRadius", workshop.getBoundingRadius());
-            workshopState.put("craftTime", workshop.getCraftTime());
-            workshopState.put("maxPowerUps", workshop.getMaxPowerUps());
-            workshopState.put("activeCrafters", workshop.getActiveCrafters());
-            workshopState.put("craftingProgress", workshop.getAllCraftingProgress());
-            workshopState.put("shapes", verticesShorthand(workshop.getBody()));
-            workshopStates.add(workshopState);
-        }
-        return workshopStates;
     }
 
     private List<Map<String, Object>> createHeadquartersStates() {
@@ -695,7 +639,6 @@ public class GameStateSerializer {
             state.put("y", pos.y);
             state.put("personality", npc.getPersonality().name());
             state.put("radius", npc.getRadius());
-            state.put("behaviorMode", npc.getBehaviorMode().name());
             states.add(state);
         }
         return states;
@@ -711,7 +654,6 @@ public class GameStateSerializer {
             flagState.put("y", pos.y);
             flagState.put("ownerTeam", flag.getOwnerTeam());
             flagState.put("state", flag.getState().name());
-            flagState.put("oddball", flag.isOddball());
             flagStates.add(flagState);
         }
         return flagStates;

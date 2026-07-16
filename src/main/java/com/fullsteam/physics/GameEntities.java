@@ -44,7 +44,6 @@ public class GameEntities {
     private final Map<Integer, Flag> flags = new ConcurrentSkipListMap<>();
     private final Map<Integer, Oddball> oddballNpcs = new ConcurrentSkipListMap<>();
     private final Map<Integer, KothZone> kothZones = new ConcurrentSkipListMap<>();
-    private final Map<Integer, Workshop> workshops = new ConcurrentSkipListMap<>();
     private final Map<Integer, PowerUp> powerUps = new ConcurrentSkipListMap<>();
     private final Map<Integer, Headquarters> headquarters = new ConcurrentSkipListMap<>();
 
@@ -61,7 +60,6 @@ public class GameEntities {
             switch (gameEntity) {
                 case Player p -> players.put(p.getId(), p);
                 case Projectile projectile -> projectiles.put(projectile.getId(), projectile);
-                case Workshop workshop -> workshops.put(workshop.getId(), workshop);
                 case Obstacle obstacle -> obstacles.put(obstacle.getId(), obstacle);
                 case FieldEffect fieldEffect -> fieldEffects.put(fieldEffect.getId(), fieldEffect);
                 case Turret turret -> {
@@ -135,7 +133,7 @@ public class GameEntities {
     }
 
     public void updateAll(double deltaTime) {
-        Stream.of(players, projectiles, fieldEffects, turrets, defenseLasers, netProjectiles, beams, kothZones, workshops, powerUps, headquarters, oddballNpcs)
+        Stream.of(players, projectiles, fieldEffects, turrets, defenseLasers, netProjectiles, beams, kothZones, powerUps, headquarters, oddballNpcs)
                 .flatMap(m -> m.values().stream())
                 .forEach(e -> e.update(deltaTime));
     }
@@ -211,18 +209,6 @@ public class GameEntities {
         }
     }
 
-    public Workshop getWorkshop(int workshopId) {
-        return workshops.get(workshopId);
-    }
-
-    public Collection<Workshop> getAllWorkshops() {
-        return workshops.values();
-    }
-
-    public void removeWorkshop(int workshopId) {
-        workshops.remove(workshopId);
-    }
-
     public PowerUp getPowerUp(int powerUpId) {
         return powerUps.get(powerUpId);
     }
@@ -233,12 +219,6 @@ public class GameEntities {
 
     public void removePowerUp(int powerUpId) {
         powerUps.remove(powerUpId);
-    }
-
-    public Collection<PowerUp> getPowerUpsForWorkshop(int workshopId) {
-        return powerUps.values().stream()
-                .filter(powerUp -> powerUp.getWorkshopId() == workshopId)
-                .collect(Collectors.toList());
     }
 
     public Headquarters getHeadquarters(int hqId) {

@@ -9,7 +9,6 @@ import com.fullsteam.physics.KothZone;
 import com.fullsteam.physics.Oddball;
 import com.fullsteam.physics.TeamSpawnArea;
 import com.fullsteam.physics.TeamSpawnManager;
-import com.fullsteam.physics.Workshop;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.geometry.MassType;
@@ -21,7 +20,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Handles creation and spawning of all game entities.
- * Responsible for world boundaries, obstacles, flags, zones, workshops, and headquarters.
+ * Responsible for world boundaries, obstacles, flags, zones, and headquarters.
  */
 public class EntitySpawner {
     private static final Logger log = LoggerFactory.getLogger(EntitySpawner.class);
@@ -269,54 +268,6 @@ public class EntitySpawner {
                 double x = increment * (zoneIndex + 1) - (worldWidth / 2);
                 return new Vector2(x, 0);
             }
-        }
-    }
-
-    /**
-     * Create workshops if enabled in rules.
-     * Each team gets one workshop placed in their spawn zone.
-     */
-    public void createWorkshops() {
-        Rules rules = gameConfig.getRules();
-        if (!rules.hasWorkshops() || !gameConfig.isTeamMode()) {
-            return; // Workshops disabled or not in team mode
-        }
-        int teamCount = gameConfig.getTeamCount();
-        for (int teamNumber = 1; teamNumber <= teamCount; teamNumber++) {
-            TeamSpawnArea teamArea = teamSpawnManager.getTeamAreas().get(teamNumber);
-            if (teamArea == null) {
-                log.warn("No spawn area found for team {}, skipping workshop creation", teamNumber);
-                continue;
-            }
-            Vector2 workshopPosition = teamArea.getCenter().copy();
-            double offsetX = (Math.random() - 0.5) * 50; // ±25 units
-            double offsetY = (Math.random() - 0.5) * 50; // ±25 units
-            workshopPosition.add(offsetX, offsetY);
-
-            // Ensure workshop position is clear of obstacles
-            if (!terrainGenerator.isPositionClear(workshopPosition, 100.0)) {
-                // Try to find a nearby clear position within the team area
-                for (int attempt = 0; attempt < 10; attempt++) {
-                    double randomX = teamArea.getMinBounds().x + Math.random() *
-                            (teamArea.getMaxBounds().x - teamArea.getMinBounds().x);
-                    double randomY = teamArea.getMinBounds().y + Math.random() *
-                            (teamArea.getMaxBounds().y - teamArea.getMinBounds().y);
-                    Vector2 candidate = new Vector2(randomX, randomY);
-
-                    if (terrainGenerator.isPositionClear(candidate, 100.0)) {
-                        workshopPosition = candidate;
-                        break;
-                    }
-                }
-            }
-
-            Workshop workshop = new Workshop(
-                    Config.nextEntityId(),
-                    workshopPosition,
-                    rules.getWorkshopCraftTime(),
-                    rules.getMaxPowerUpsPerWorkshop()
-            );
-            gameEntities.add(workshop);
         }
     }
 

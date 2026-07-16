@@ -96,11 +96,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             handlePlayerProjectileCollision(a, b);
             return false;
 
-        } else if ((entity1 instanceof Projectile || entity1 instanceof Beam) && entity2 instanceof Workshop) {
-            return false; // Projectiles and beams pass through workshops (they're sensors)
-        } else if (entity1 instanceof Workshop && (entity2 instanceof Projectile || entity2 instanceof Beam)) {
-            return false; // Projectiles and beams pass through workshops (they're sensors)
-
         } else if (entity1 instanceof Projectile projectile && entity2 instanceof Obstacle obstacle) {
             return handleProjectileObstacleCollision(projectile, obstacle);
         } else if (entity1 instanceof Obstacle obstacle && entity2 instanceof Projectile projectile) {
@@ -146,10 +141,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         } else if (c.rectify(Player.class, KothZone.class)
                 instanceof TypedCollision<Player, KothZone>(Player a, KothZone b)) {
             return handlePlayerKothZoneCollision(a, b);
-
-        } else if (c.rectify(Player.class, Workshop.class)
-                instanceof TypedCollision<Player, Workshop>(Player a, Workshop b)) {
-            return handlePlayerWorkshopCollision(a, b);
 
         } else if (c.rectify(Player.class, PowerUp.class)
                 instanceof TypedCollision<Player, PowerUp>(Player a, PowerUp b)) {
@@ -422,7 +413,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             case SHIELD_BARRIER -> {
                 Vector2 projectilePos = projectile.getInitialPosition();
                 Vector2 shieldCenter = fieldEffect.getPosition();
-                if (shieldCenter.distance(projectilePos) > fieldEffect.getBody().getRotationDiscRadius()) {
+                if (shieldCenter.distance(projectilePos) > fieldEffect.getRadius()) {
                     projectile.setActive(false);
                 }
             }
@@ -748,23 +739,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     }
 
     /**
-     * Handle player entering/staying near a workshop.
-     * Triggers crafting mechanics when player is within craft radius.
-     */
-    boolean handlePlayerWorkshopCollision(Player player, Workshop workshop) {
-        if (!workshop.isActive() || !player.isActive()) {
-            return true;
-        }
-        workshop.addPlayer(player);
-        boolean completed = workshop.incrementProgress(player, gameEntities.getWorld().getTimeStep().getDeltaTime());
-        if (completed) {
-            spawnPowerUpForPlayer(workshop, player);
-            workshop.removePlayer(player);
-        }
-        return true;
-    }
-
-    /**
      * Handle player collecting a power-up.
      * Applies the power-up effect to the player and removes the power-up.
      */
@@ -956,79 +930,28 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      * Awards points to the player currently carrying the oddball.
      */
 
-    public void updateWorkshops(double deltaTime) {
-        for (Workshop workshop : gameEntities.getAllWorkshops()) {
-            if (!workshop.isActive()) {
-                continue;
-            }
-            // all present players should have been resolved
-            // remove progress for players who are not preset
-            Set<Integer> presentIds = workshop.getPresentPlayers().stream().map(GameEntity::getId).collect(Collectors.toSet());
-            workshop.getPlayerProgress().keySet().removeIf(id -> !presentIds.contains(id));
-            // then clear the present players so the set can be re-calculated next world step
-            workshop.getPresentPlayers().clear();
-        }
-    }
-
-    /**
-     * Spawn a power-up for a player at a workshop.
-     */
-    private void spawnPowerUpForPlayer(Workshop workshop, Player player) {
-        // Check if workshop has reached max power-ups
-        if (gameEntities.getPowerUpsForWorkshop(workshop.getId()).size() >= workshop.getMaxPowerUps()) {
-            return; // Workshop is full
-        }
-
-        // Randomly select a power-up type
-        PowerUpType[] powerUpTypes = PowerUpType.values();
-        PowerUpType selectedType = powerUpTypes[ThreadLocalRandom.current().nextInt(powerUpTypes.length)];
-
-        // Calculate spawn position around the workshop
-        Vector2 workshopPos = workshop.getPosition();
-        double spawnRadius = 40.0 + ThreadLocalRandom.current().nextDouble(20.0); // 40-60 units from workshop
-        double spawnAngle = ThreadLocalRandom.current().nextDouble(Math.PI * 2);
-
-        Vector2 spawnPos = new Vector2(
-                workshopPos.x + Math.cos(spawnAngle) * spawnRadius,
-                workshopPos.y + Math.sin(spawnAngle) * spawnRadius
-        );
-
-        // Create the power-up
-        PowerUp powerUp = new PowerUp(
-                Config.nextEntityId(),
-                spawnPos,
-                selectedType,
-                workshop.getId(),
-                12.0,
-                1.0   // Normal effect strength
-        );
-
-        // Add to game world
-        gameEntities.add(powerUp);
-    }
-
     /**
      * Apply a power-up effect to a player.
      */
     private void applyPowerUpEffect(Player player, PowerUpEffect effect) {
         switch (effect.type()) {
             case SPEED_BOOST:
-                StatusEffectManager.applySpeedBoost(player, effect.strength(), effect.duration(), "Workshop Power-up");
+                StatusEffectManager.applySpeedBoost(player, effect.strength(), effect.duration(), "Power-up");
                 break;
             case HEALTH_REGENERATION:
-                StatusEffectManager.applyHealthRegeneration(player, effect.strength(), effect.duration(), "Workshop Power-up");
+                StatusEffectManager.applyHealthRegeneration(player, effect.strength(), effect.duration(), "Power-up");
                 break;
             case DAMAGE_BOOST:
-                StatusEffectManager.applyDamageBoost(player, effect.strength(), effect.duration(), "Workshop Power-up");
+                StatusEffectManager.applyDamageBoost(player, effect.strength(), effect.duration(), "Power-up");
                 break;
             case DAMAGE_RESISTANCE:
-                StatusEffectManager.applyDamageResistance(player, effect.strength(), effect.duration(), "Workshop Power-up");
+                StatusEffectManager.applyDamageResistance(player, effect.strength(), effect.duration(), "Power-up");
                 break;
             case BERSERKER_MODE:
-                StatusEffectManager.applyBerserkerMode(player, effect.duration(), "Workshop Power-up");
+                StatusEffectManager.applyBerserkerMode(player, effect.duration(), "Power-up");
                 break;
             case INFINITE_AMMO:
-                StatusEffectManager.applyInfiniteAmmo(player, effect.duration(), "Workshop Power-up");
+                StatusEffectManager.applyInfiniteAmmo(player, effect.duration(), "Power-up");
                 break;
         }
     }

@@ -572,7 +572,7 @@ public class WeaponConfig {
     // Point allocation chosen to match: damage≈15, fireRate≈3 shots/s, range≈400,
     // projectileSpeed≈400, slight inaccuracy. Magazine/reload are ignored by the
     // turret (it fires continuously off the fire-rate clock, no ammo tracking).
-    public static final WeaponConfig BASIC_TURRET_PRESET = new WeaponConfig(
+    public static final WeaponConfig BASIC_TURRET = new WeaponConfig(
             "Turret Cannon",
             5,      // damage  → 15 units
             5,      // fireRate → ~3.2 shots/s
@@ -588,6 +588,120 @@ public class WeaponConfig {
             0,      // knockback
             Set.of(),
             Ordinance.PROJECTILE  // total: 13 pts well under 100-pt cap
+    );
+
+    // ── Oddball NPC weapons ────────────────────────────────────────────────────
+    //
+    // Seekers get fast, low-damage plasma beams; budget is tight because PLASMA_BEAM
+    // costs 45 pts and each effect adds another 14-18.
+    // Rampagers get slow, explosive projectiles that can take large chunks of health.
+
+    public static final WeaponConfig SEEKER_PLASMA_WHIP_PRESET = new WeaponConfig(
+            "Plasma Whip",
+            10,     // damage (lower — compensated by high fire rate)
+            18,     // fireRate → rapid beam pulses
+            7,      // range → medium reach
+            0,      // accuracy → straight on target
+            0,      // magazineSize — continuous beam cadence
+            0,      // reloadTime
+            0,      // projectileSpeed — beam, not used
+            0,      // bulletsPerShot
+            0,      // linearDamping
+            3,      // handling
+            3,      // caliber → slightly thicker beam
+            0,      // knockback
+            Set.of(BulletEffect.FREEZING),
+            Ordinance.PLASMA_BEAM  // total: 100 pts (attr 41 + fx 14 + ord 45)
+    );
+
+    public static final WeaponConfig SEEKER_SHOCK_BEAM_PRESET = new WeaponConfig(
+            "Shock Beam",
+            8,      // damage (lowest — chains to nearby enemies instead)
+            20,     // fireRate → fastest of the seekers
+            5,      // range → short-medium; get in close for chains
+            0,      // accuracy
+            0,      // magazineSize
+            0,      // reloadTime
+            0,      // projectileSpeed — beam
+            0,      // bulletsPerShot
+            0,      // linearDamping
+            4,      // handling
+            2,      // caliber
+            0,      // knockback
+            Set.of(BulletEffect.ELECTRIC),
+            Ordinance.PLASMA_BEAM  // total: 100 pts (attr 39 + fx 16 + ord 45)
+    );
+
+    public static final WeaponConfig SEEKER_SEAR_LANCE_PRESET = new WeaponConfig(
+            "Sear Lance",
+            6,      // damage (lowest raw — DoT via incendiary makes up for it)
+            10,     // fireRate → slowest seeker; punishes hesitation not spam
+            14,     // range → longest reach of the three
+            0,      // accuracy
+            0,      // magazineSize
+            0,      // reloadTime
+            0,      // projectileSpeed — beam
+            0,      // bulletsPerShot
+            0,      // linearDamping
+            5,      // handling
+            2,      // caliber
+            0,      // knockback
+            Set.of(BulletEffect.INCENDIARY),
+            Ordinance.PLASMA_BEAM  // total: 100 pts (attr 37 + fx 18 + ord 45)
+    );
+
+    public static final WeaponConfig RAMPAGE_MORTAR_PRESET = new WeaponConfig(
+            "Mortar",
+            30,     // damage → high burst
+            3,      // fireRate → very slow; each shot is a threat
+            15,     // range → good reach for a siege weapon
+            -5,     // accuracy → lobbed shells wobble
+            5,      // magazineSize → small clip; reload is punishing
+            8,      // reloadTime → slow reload reinforces the rhythm
+            5,      // projectileSpeed → slow arc
+            0,      // bulletsPerShot
+            -3,     // linearDamping → slight drag on the shell
+            -5,     // handling (heavy)
+            12,     // caliber → large shell radius
+            10,     // knockback → blast throws players
+            Set.of(BulletEffect.EXPLOSIVE),
+            Ordinance.PROJECTILE  // total: 100 pts (attr 75 + fx 25 + ord 0)
+    );
+
+    public static final WeaponConfig RAMPAGE_INCENDIARY_SHELL_PRESET = new WeaponConfig(
+            "Incendiary Shell",
+            28,     // damage → high, plus sustained DoT
+            7,      // fireRate → medium-slow
+            18,     // range → longest of the rampagers
+            -3,     // accuracy → shells drift slightly
+            8,      // magazineSize
+            8,      // reloadTime
+            8,      // projectileSpeed → moderate arc speed
+            0,      // bulletsPerShot
+            0,      // linearDamping
+            -3,     // handling (heavy)
+            5,      // caliber
+            6,      // knockback
+            Set.of(BulletEffect.INCENDIARY),
+            Ordinance.PROJECTILE  // total: 100 pts (attr 82 + fx 18 + ord 0)
+    );
+
+    public static final WeaponConfig RAMPAGE_FRAG_SHELL_PRESET = new WeaponConfig(
+            "Frag Shell",
+            12,     // damage per hit — area denial over raw burst
+            8,      // fireRate → medium
+            12,     // range
+            -2,     // accuracy → fragments scatter
+            5,      // magazineSize
+            5,      // reloadTime
+            8,      // projectileSpeed
+            0,      // bulletsPerShot
+            0,      // linearDamping
+            -3,     // handling (heavy)
+            5,      // caliber
+            3,      // knockback
+            Set.of(BulletEffect.FRAGMENTING, BulletEffect.EXPLOSIVE),
+            Ordinance.PROJECTILE  // total: 100 pts (attr 53 + fx 47 + ord 0)
     );
 
     public int getAttributePoints() {

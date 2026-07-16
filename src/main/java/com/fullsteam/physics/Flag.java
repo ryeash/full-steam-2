@@ -15,7 +15,7 @@ import org.dyn4j.geometry.Vector2;
 @Getter
 @Setter
 public class Flag extends GameEntity {
-    private static final double FLAG_RADIUS = 15.0; // Slightly larger than player for easy capture
+    private static final double FLAG_RADIUS = 15.0;
 
     private final int ownerTeam; // Team that owns/protects this flag
     private final Vector2 homePosition; // Original spawn position
