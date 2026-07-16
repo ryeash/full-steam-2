@@ -389,18 +389,24 @@
                 <div class="config-section">
                     <h3>⭐ Oddball</h3>
                     <div class="config-item">
-                        <label for="enableOddball">Enable Oddball:</label>
-                        <input type="checkbox" id="enableOddball">
-                        <small style="color: #888; font-size: 0.8em;">Neutral ball spawns at center - hold it to
-                            score!</small>
+                        <label for="enableOddballNpcs">NPC Oddball Mode:</label>
+                        <input type="checkbox" id="enableOddballNpcs">
+                        <small style="color: #888; font-size: 0.8em;">Invincible NPCs bounce around shooting at players — hit them to score!</small>
                     </div>
                     <div class="config-item">
-                        <label for="oddballPointsPerSecond">Points Per Second:</label>
-                        <input type="number" id="oddballPointsPerSecond" min="0.1" max="100" step="0.5" value="1.0">
-                        <small style="color: #888; font-size: 0.8em;">Points awarded for holding the ball</small>
+                        <label for="rampageBallCount">Rampage Balls:</label>
+                        <input type="number" id="rampageBallCount" min="0" max="5" value="1">
+                        <small style="color: #888; font-size: 0.8em;">Slow, heavy, high-DPS — primary target (2× points per hit)</small>
                     </div>
                     <div class="config-item">
-                        <small style="color: #ff9500; font-size: 0.8em;">⚠️ Ball carrier cannot fire weapons!</small>
+                        <label for="seekerBallCount">Seeker Balls:</label>
+                        <input type="number" id="seekerBallCount" min="0" max="10" value="2">
+                        <small style="color: #888; font-size: 0.8em;">Fast, light, harassing — secondary target (1× points)</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="oddballNpcPointsPerDamage">Points Per Damage:</label>
+                        <input type="number" id="oddballNpcPointsPerDamage" min="0.01" max="10" step="0.01" value="0.1">
+                        <small style="color: #888; font-size: 0.8em;">Score per 1 unit of damage dealt (0.1 = 1 pt per 10 dmg)</small>
                     </div>
                 </div>
 
@@ -863,8 +869,10 @@
         if (rules.kothZones > 0) {
             tags.push({ text: `👑 KOTH (${rules.kothZones})`, highlight: true });
         }
-        if (rules.enableOddball) {
-            tags.push({ text: `⭐ Oddball`, highlight: true });
+        if (rules.enableOddballNpcs) {
+            const rampageCount = rules.rampageBallCount ?? 1;
+            const seekerCount  = rules.seekerBallCount  ?? 2;
+            tags.push({ text: `⭐ NPC Oddball (${rampageCount}R+${seekerCount}S)`, highlight: true });
         }
         if (rules.enableVip) {
             tags.push({ text: `👑 VIP`, highlight: true });
@@ -1062,7 +1070,6 @@
                     randomEventInterval: 60,    // Event every ~60 seconds
                     randomEventIntervalVariance: 0.4,  // Good variance
                     eventWarningDuration: 4,    // 4 second warning for events
-                    enableOddball: false,       // No oddball in BR
                     addHeadquarters: false      // No headquarters in BR
                 }
             };
@@ -1170,23 +1177,23 @@
         } else if (presetType === 'oddball') {
             return {
                 maxPlayers: 12,
-                teamCount: 4,                   // 4 teams competing for the ball
-                worldWidth: 1800,
-                worldHeight: 1800,
+                teamCount: 4,
+                worldWidth: 2000,
+                worldHeight: 2000,
                 playerMaxHealth: 100,
                 aiCheckIntervalMs: 10000,
                 enableAIFilling: true,
                 rules: {
-                    flagsPerTeam: 0,            // No flags in oddball
-                    scoreStyle: 'OBJECTIVE',    // Score by holding the ball
+                    flagsPerTeam: 0,
+                    scoreStyle: 'OBJECTIVE',
                     victoryCondition: 'SCORE_LIMIT',
-                    scoreLimit: 150,            // First to 150 points (2.5 minutes of holding)
+                    scoreLimit: 1000,
                     suddenDeath: true,
                     respawnMode: 'DELAYED',
                     respawnDelay: 4,
                     waveRespawnInterval: 30,
                     maxLives: -1,
-                    kothZones: 0,               // No KOTH zones in oddball
+                    kothZones: 0,
                     kothPointsPerSecond: 1.0,
                     addWorkshops: false,
                     workshopCraftTime: 10,
@@ -1200,10 +1207,10 @@
                     enableRandomEvents: false,
                     randomEventInterval: 40,
                     eventWarningDuration: 3,
-                    meteorShowerCount: 8,
-                    supplyDropCount: 5,
-                    enableOddball: true,        // Enable oddball mode!
-                    oddballPointsPerSecond: 1.0 // 1 point per second for holding ball
+                    enableOddballNpcs: true,    // NPC oddball mode
+                    rampageBallCount: 1,        // One big angry ball
+                    seekerBallCount: 2,         // Two fast harassers
+                    oddballNpcPointsPerDamage: 0.1
                 }
             };
         } else if (presetType === 'kingpin') {
@@ -1244,8 +1251,6 @@
                     ionStormDensity: 'SPARSE',
                     earthquakeDensity: 'SPARSE',
                     blizzardDensity: 'SPARSE',
-                    enableOddball: false,
-                    oddballPointsPerSecond: 1.0,
                     enableVip: false,
                     obstacleDensity: 'DENSE',
                     pointsPerFlagCapture: 1,
@@ -1291,8 +1296,6 @@
                     ionStormDensity: 'DENSE',
                     earthquakeDensity: 'SPARSE',
                     blizzardDensity: 'SPARSE',
-                    enableOddball: false,
-                    oddballPointsPerSecond: 1.0,
                     enableVip: true,            // VIP MODE ENABLED!
                     obstacleDensity: 'DENSE'    // Dense obstacles for tactical VIP protection
                 }
@@ -1319,7 +1322,6 @@
                     kothZones: 0,
                     kothPointsPerSecond: 1.0,
                     obstacleDensity: 'DENSE',         // Cover for tense final duels
-                    enableOddball: false,
                     addHeadquarters: false
                 }
             };
@@ -1428,8 +1430,10 @@
                 document.getElementById('maxLives').value = r.maxLives ?? 3;
                 document.getElementById('kothZones').value = r.kothZones ?? 0;
                 document.getElementById('kothPointsPerSecond').value = r.kothPointsPerSecond ?? 1.0;
-                document.getElementById('enableOddball').checked = r.enableOddball ?? false;
-                document.getElementById('oddballPointsPerSecond').value = r.oddballPointsPerSecond ?? 1.0;
+                document.getElementById('enableOddballNpcs').checked = r.enableOddballNpcs ?? false;
+                document.getElementById('rampageBallCount').value = r.rampageBallCount ?? 1;
+                document.getElementById('seekerBallCount').value = r.seekerBallCount ?? 2;
+                document.getElementById('oddballNpcPointsPerDamage').value = r.oddballNpcPointsPerDamage ?? 0.1;
                 document.getElementById('enableVip').checked = r.enableVip ?? false;
                 document.getElementById('enableRandomWeapons').checked = r.enableRandomWeapons ?? false;
                 document.getElementById('randomWeaponInterval').value = r.randomWeaponInterval ?? 30;
@@ -1438,6 +1442,11 @@
                 document.getElementById('workshopCraftTime').value = r.workshopCraftTime ?? 10;
                 document.getElementById('workshopCraftRadius').value = r.workshopCraftRadius ?? 80;
                 document.getElementById('maxPowerUpsPerWorkshop').value = r.maxPowerUpsPerWorkshop ?? 3;
+                document.getElementById('addHeadquarters').checked = r.addHeadquarters ?? false;
+                document.getElementById('headquartersMaxHealth').value = r.headquartersMaxHealth ?? 1000;
+                document.getElementById('headquartersPointsPerDamage').value = r.headquartersPointsPerDamage ?? 0.1;
+                document.getElementById('headquartersDestructionBonus').value = r.headquartersDestructionBonus ?? 100;
+                document.getElementById('headquartersDestructionEndsGame').checked = r.headquartersDestructionEndsGame ?? true;
                 document.getElementById('enableRandomEvents').checked = r.enableRandomEvents ?? false;
                 document.getElementById('randomEventInterval').value = r.randomEventInterval ?? 40;
                 document.getElementById('eventWarningDuration').value = r.eventWarningDuration ?? 3;
@@ -1546,8 +1555,10 @@
                 maxLives: parseInt(document.getElementById('maxLives').value),
                 kothZones: parseInt(document.getElementById('kothZones').value),
                 kothPointsPerSecond: parseFloat(document.getElementById('kothPointsPerSecond').value),
-                enableOddball: document.getElementById('enableOddball').checked,
-                oddballPointsPerSecond: parseFloat(document.getElementById('oddballPointsPerSecond').value),
+                enableOddballNpcs: document.getElementById('enableOddballNpcs').checked,
+                rampageBallCount: parseInt(document.getElementById('rampageBallCount').value),
+                seekerBallCount: parseInt(document.getElementById('seekerBallCount').value),
+                oddballNpcPointsPerDamage: parseFloat(document.getElementById('oddballNpcPointsPerDamage').value),
                 enableVip: document.getElementById('enableVip').checked,
                 enableRandomWeapons: document.getElementById('enableRandomWeapons').checked,
                 randomWeaponInterval: parseFloat(document.getElementById('randomWeaponInterval').value),

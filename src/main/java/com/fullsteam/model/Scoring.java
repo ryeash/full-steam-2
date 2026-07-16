@@ -90,8 +90,7 @@ public class Scoring {
 
         double bonus = 0;
 
-        // Oddball points count whenever the mode is active (legacy behavior).
-        if (rules.hasOddball()) {
+        if (rules.hasOddballNpcs()) {
             bonus += oddball;
         }
 

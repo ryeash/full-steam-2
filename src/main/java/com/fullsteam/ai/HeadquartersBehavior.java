@@ -4,6 +4,7 @@ import com.fullsteam.model.PlayerInput;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Headquarters;
 import com.fullsteam.physics.Player;
+import com.fullsteam.physics.Turret;
 import org.dyn4j.geometry.Vector2;
 
 /**
@@ -21,16 +22,18 @@ public class HeadquartersBehavior implements AIBehavior {
     private double roleEvaluationTime = 0;
     private static final double ROLE_EVALUATION_INTERVAL = 8.0;
 
-    // Per-AI randomization for patrol patterns to prevent clustering
+    // Per-AI randomization for patrol and attack patterns to prevent clustering
     private final double patrolSpeedVariation;
     private final double patrolRadiusVariation;
     private final double patrolAngleOffset;
+    private final double attackAngleOffset;
 
     public HeadquartersBehavior() {
         // Initialize random variations per AI instance
         this.patrolSpeedVariation = 0.8 + Math.random() * 0.4; // 0.8 to 1.2
         this.patrolRadiusVariation = 0.85 + Math.random() * 0.3; // 0.85 to 1.15
         this.patrolAngleOffset = Math.random() * Math.PI * 2; // 0 to 2π
+        this.attackAngleOffset = Math.random() * Math.PI * 2; // 0 to 2π — spreads attackers around target
     }
 
     @Override
@@ -60,8 +63,6 @@ public class HeadquartersBehavior implements AIBehavior {
      */
     private void evaluateRole(AIPlayer aiPlayer, GameEntities gameEntities) {
         int myTeam = aiPlayer.getTeam();
-        Vector2 myPos = aiPlayer.getPosition();
-
         // Check own HQ status
         Headquarters myHQ = getTeamHeadquarters(myTeam, gameEntities);
         if (myHQ != null && myHQ.isActive()) {
@@ -187,8 +188,8 @@ public class HeadquartersBehavior implements AIBehavior {
             input.setMoveX(direction.x * 0.6);
             input.setMoveY(direction.y * 0.6);
         } else {
-            // Good position, strafe around HQ
-            double strafeAngle = (System.currentTimeMillis() / 2500.0) % (Math.PI * 2);
+            // Good position, strafe around HQ — attackAngleOffset spreads AIs to different positions
+            double strafeAngle = ((System.currentTimeMillis() / 2500.0) + attackAngleOffset) % (Math.PI * 2);
             Vector2 strafeDir = new Vector2(
                     Math.cos(strafeAngle),
                     Math.sin(strafeAngle)
@@ -363,8 +364,12 @@ public class HeadquartersBehavior implements AIBehavior {
             // Score based on threat level
             double score = 0;
 
+            double targetWeaponRange = target.getEntity() instanceof Player p
+                    ? p.getWeapon().getRange()
+                    : ((Turret) target.getEntity()).getWeapon().getRange();
+
             // Closer to HQ = higher threat
-            if (distanceToHQ < 200) {
+            if (distanceToHQ < targetWeaponRange) {
                 score += 50;
             } else if (distanceToHQ < 400) {
                 score += 30;

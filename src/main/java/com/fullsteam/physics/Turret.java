@@ -1,7 +1,9 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.Config;
-import com.fullsteam.model.Ordinance;
+import com.fullsteam.model.HasWeapon;
+import com.fullsteam.model.Weapon;
+import com.fullsteam.model.WeaponConfig;
 import lombok.Getter;
 import lombok.Setter;
 import org.dyn4j.dynamics.Body;
@@ -10,42 +12,57 @@ import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Automated defense turret that targets enemies within range
+ * Automated defense turret that targets enemies within range.
+ * <p>
+ * The turret's firing behaviour is fully described by a {@link Weapon} object,
+ * which normalises damage, fire-rate, range, accuracy, projectile speed,
+ * bullet effects, ordinance, and caliber through the same stat-resolution
+ * pipeline used for player weapons. Magazine / reload mechanics are intentionally
+ * bypassed — the turret fires continuously on its fire-rate clock.
+ * <p>
+ * Constructing with a custom {@link Weapon} (or {@link WeaponConfig}) is the
+ * extension point for future "base-defender" NPC turrets with varied firing
+ * systems (e.g., beam turrets, explosive-shell turrets).
  */
 @Getter
 @Setter
-public class Turret extends GameEntity {
+public class Turret extends GameEntity implements HasWeapon {
     private final int ownerId;
     private final int ownerTeam;
-    private final double detectionRange;
-    private final double fireRate;
-    private final double damage;
-    private final double projectileSpeed;
+    private final Weapon weapon;
     private long lastShotTime = 0;
     private Player currentTarget;
     private Vector2 aimDirection = new Vector2(1, 0);
 
-    public Turret(int ownerId, int ownerTeam, Vector2 position, double lifespan) {
+    /**
+     * Full constructor — accepts a pre-built {@link Weapon} so callers can
+     * supply any stat loadout (e.g., a beam weapon for base-defender NPCs).
+     */
+    public Turret(int ownerId, int ownerTeam, Vector2 position, double lifespan, Weapon weapon) {
         super(Config.nextEntityId(), createTurretBody(position), 50.0);
         this.ownerId = ownerId;
         this.ownerTeam = ownerTeam;
-        this.detectionRange = 400.0;
-        this.fireRate = 3.0;
-        this.damage = 15.0;
-        this.projectileSpeed = 400.0;
+        this.weapon = weapon;
         this.expires = (long) (System.currentTimeMillis() + (lifespan * 1000));
         this.setRotation(Math.random() * 2 * Math.PI);
     }
 
+    /**
+     * Convenience constructor using the default {@link WeaponConfig#BASIC_TURRET_PRESET}.
+     * Preserves the original turret behaviour (≈15 dmg, ≈3 shots/s, ≈400 range).
+     */
+    public Turret(int ownerId, int ownerTeam, Vector2 position, double lifespan) {
+        this(ownerId, ownerTeam, position, lifespan, WeaponConfig.BASIC_TURRET_PRESET.buildWeapon());
+    }
+
     private static Body createTurretBody(Vector2 position) {
         Body body = new Body();
-        Circle circle = new Circle(Config.PLAYER_RADIUS * .75); // Slightly smaller than player
+        Circle circle = new Circle(Config.PLAYER_RADIUS * .75);
         body.addFixture(circle);
-        body.setMass(MassType.INFINITE); // Stationary
+        body.setMass(MassType.INFINITE);
         body.getTransform().setTranslation(position.x, position.y);
         return body;
     }
@@ -56,19 +73,17 @@ public class Turret extends GameEntity {
         if (!active) {
             return;
         }
-
-        // Update target validity
         if (currentTarget != null && (!currentTarget.isActive() || !isValidTarget(currentTarget))) {
             currentTarget = null;
         }
     }
 
     /**
-     * Find and acquire a target from the list of players
+     * Find and acquire the nearest valid target from the supplied player list.
      */
     public void acquireTarget(List<Player> players) {
         if (currentTarget != null && isValidTarget(currentTarget)) {
-            return; // Keep current target if still valid
+            return;
         }
 
         Player closestTarget = null;
@@ -78,9 +93,8 @@ public class Turret extends GameEntity {
             if (!isValidTarget(player)) {
                 continue;
             }
-
             double distance = getPosition().distance(player.getPosition());
-            if (distance <= detectionRange && distance < closestDistance) {
+            if (distance <= weapon.getRange() && distance < closestDistance) {
                 closestTarget = player;
                 closestDistance = distance;
             }
@@ -88,7 +102,6 @@ public class Turret extends GameEntity {
 
         currentTarget = closestTarget;
 
-        // Update aim direction if we have a target
         if (currentTarget != null) {
             Vector2 turretPos = getPosition();
             Vector2 targetPos = currentTarget.getPosition();
@@ -101,88 +114,88 @@ public class Turret extends GameEntity {
     }
 
     /**
-     * Check if a player is a valid target for this turret
+     * Attempt to fire at the current target.
+     *
+     * @return a {@link Projectile} or {@link Beam} depending on the weapon's
+     * ordinance, or {@code null} if the turret cannot fire this tick.
      */
-    private boolean isValidTarget(Player player) {
-        double distance = getPosition().distance(player.getPosition());
-        if (!player.isActive() || player.getHealth() <= 0 || distance > detectionRange) {
-            return false;
-        }
-
-        // Can't target the owner
-        if (player.getId() == ownerId) {
-            return false;
-        }
-
-        // In FFA mode (team 0), can target anyone except owner
-        if (ownerTeam == 0 || player.getTeam() == 0) {
-            return true;
-        }
-
-        // In team mode, can only target players on different teams
-        return ownerTeam != player.getTeam();
-    }
-
-    /**
-     * Attempt to fire at the current target
-     */
-    public Projectile tryFire() {
+    public GameEntity tryFire() {
         if (currentTarget == null || !canFire()) {
             return null;
         }
 
         lastShotTime = System.currentTimeMillis();
 
-        // Aim straight at the target's current position (no movement leading).
         Vector2 targetPos = currentTarget.getPosition();
         Vector2 turretPos = getPosition();
-
         Vector2 fireDirection = new Vector2(targetPos.x - turretPos.x, targetPos.y - turretPos.y);
         if (fireDirection.getMagnitude() == 0) {
             return null;
         }
-
         fireDirection.normalize();
-
-        // Update turret rotation to face the target when firing
         setRotation(Math.atan2(fireDirection.y, fireDirection.x));
 
-        Vector2 velocity = fireDirection.multiply(projectileSpeed);
+        // Apply accuracy spread using the same formula as Player.java
+        double spread = (1.0 - weapon.getAccuracy()) * 0.17;
+        double angleOffset = (ThreadLocalRandom.current().nextDouble() - 0.5) * spread;
+        double firedAngle = Math.atan2(fireDirection.y, fireDirection.x) + angleOffset;
+        Vector2 firedDir = new Vector2(Math.cos(firedAngle), Math.sin(firedAngle));
 
-        // Add slight inaccuracy to make it less overpowered
-        double inaccuracy = 0.05; // 10% inaccuracy
-        double angleOffset = (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * inaccuracy;
-        double currentAngle = Math.atan2(velocity.y, velocity.x);
-        double newAngle = currentAngle + angleOffset;
-        velocity = new Vector2(Math.cos(newAngle) * projectileSpeed, Math.sin(newAngle) * projectileSpeed);
+        if (weapon.getOrdinance().isBeamType()) {
+            return fireBeam(turretPos, firedDir);
+        } else {
+            return fireProjectile(turretPos, firedDir);
+        }
+    }
 
+    private Beam fireBeam(Vector2 pos, Vector2 dir) {
+        Vector2 endPoint = pos.copy().add(dir.copy().multiply(weapon.getRange()));
+        Beam beam = new Beam(pos, dir, weapon.getRange(), weapon.getDamage(),
+                ownerId, ownerTeam, weapon.getOrdinance(), weapon.getBulletEffects(),
+                weapon.getCaliber());
+        beam.setPath(List.of(pos.copy(), endPoint));
+        return beam;
+    }
+
+    private Projectile fireProjectile(Vector2 pos, Vector2 dir) {
+        Vector2 velocity = dir.copy().multiply(weapon.getProjectileSpeed());
         return new Projectile(
                 ownerId,
-                turretPos.x,
-                turretPos.y,
+                pos.x,
+                pos.y,
                 velocity.x,
                 velocity.y,
-                damage,
-                detectionRange * 1.1,
+                weapon.getDamagePerBullet(),
+                weapon.getRange() * 1.1,
                 ownerTeam,
                 0.02,
-                Set.of(),
-                Ordinance.PROJECTILE,
-                1.0, // baseline caliber
-                0.0  // turrets apply no knockback
+                weapon.getBulletEffects(),
+                weapon.getOrdinance(),
+                weapon.getCaliber(),
+                weapon.getKnockbackPerBullet()
         );
     }
 
-    /**
-     * Check if the turret can fire
-     */
+    private boolean isValidTarget(Player player) {
+        double distance = getPosition().distance(player.getPosition());
+        if (!player.isActive() || player.getHealth() <= 0 || distance > weapon.getRange()) {
+            return false;
+        }
+        if (player.getId() == ownerId) {
+            return false;
+        }
+        if (ownerTeam == 0 || player.getTeam() == 0) {
+            return true;
+        }
+        return ownerTeam != player.getTeam();
+    }
+
     public boolean canFire() {
         if (!active || currentTarget == null) {
             return false;
         }
-
         long now = System.currentTimeMillis();
-        double fireInterval = 1000.0 / fireRate;
+        double fireInterval = 1000.0 / weapon.getFireRate();
         return (now - lastShotTime) >= fireInterval;
     }
 }

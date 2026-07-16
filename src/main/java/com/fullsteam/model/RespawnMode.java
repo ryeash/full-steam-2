@@ -17,7 +17,7 @@ public enum RespawnMode {
     WAVE,
 
     /**
-     * Limited number of lives per player.
+     * Similar to {@link #DELAYED} but limited number of lives per player.
      * Each death counts against your life pool. Once out of lives, eliminated.
      * Set maxLives = 1 for one-life / battle-royale style play.
      */

@@ -13,6 +13,7 @@ import com.fullsteam.physics.Headquarters;
 import com.fullsteam.physics.KothZone;
 import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Obstacle;
+import com.fullsteam.physics.Oddball;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.PowerUp;
 import com.fullsteam.physics.Projectile;
@@ -102,9 +103,13 @@ public class GameStateSerializer {
             gameState.put("headquarters", createHeadquartersStates());
         }
 
-        if (gameConfig.getRules().hasFlags() || gameConfig.getRules().hasOddball()) {
+        if (gameConfig.getRules().hasFlags()) {
             gameState.put("flags", createFlagStates());
             gameState.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
+        }
+
+        if (gameConfig.getRules().hasOddballNpcs()) {
+            gameState.put("oddballNpcs", createOddballNpcStates());
         }
 
         return gameState;
@@ -133,7 +138,7 @@ public class GameStateSerializer {
         // Add obstacles
         state.put("obstacles", createObstacleStates());
 
-        if (gameConfig.getRules().hasFlags() || gameConfig.getRules().hasOddball()) {
+        if (gameConfig.getRules().hasFlags()) {
             state.put("flags", createFlagStates());
             state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
         }
@@ -169,7 +174,7 @@ public class GameStateSerializer {
         }
         state.put("obstacles", createObstacleStates());
 
-        if (gameConfig.getRules().hasFlags() || gameConfig.getRules().hasOddball()) {
+        if (gameConfig.getRules().hasFlags()) {
             state.put("flags", createFlagStates());
             state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
         }
@@ -245,7 +250,7 @@ public class GameStateSerializer {
         // Add obstacles
         state.put("obstacles", createObstacleStates());
 
-        if (gameConfig.getRules().hasFlags() || gameConfig.getRules().hasOddball()) {
+        if (gameConfig.getRules().hasFlags()) {
             state.put("flags", createFlagStates());
             state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
         }
@@ -677,6 +682,23 @@ public class GameStateSerializer {
             hqStates.add(hqState);
         }
         return hqStates;
+    }
+
+    private List<Map<String, Object>> createOddballNpcStates() {
+        List<Map<String, Object>> states = new ArrayList<>();
+        for (Oddball npc : gameEntities.getAllOddballNpcs()) {
+            if (!npc.isActive()) continue;
+            org.dyn4j.geometry.Vector2 pos = npc.getPosition();
+            Map<String, Object> state = new HashMap<>();
+            state.put("id", npc.getId());
+            state.put("x", pos.x);
+            state.put("y", pos.y);
+            state.put("personality", npc.getPersonality().name());
+            state.put("radius", npc.getRadius());
+            state.put("behaviorMode", npc.getBehaviorMode().name());
+            states.add(state);
+        }
+        return states;
     }
 
     private List<Map<String, Object>> createFlagStates() {

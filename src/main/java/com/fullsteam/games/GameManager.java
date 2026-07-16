@@ -25,8 +25,10 @@ import com.fullsteam.physics.CollisionProcessor;
 import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
+import com.fullsteam.physics.GameEntity;
 import com.fullsteam.physics.Headquarters;
 import com.fullsteam.physics.Obstacle;
+import com.fullsteam.physics.Oddball;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.PowerUp;
 import com.fullsteam.physics.Projectile;
@@ -127,8 +129,6 @@ public class GameManager {
         this.aiCheckIntervalMs = gameConfig.getAiCheckIntervalMs();
         this.teamSpawnManager = new TeamSpawnManager(gameConfig.getWorldWidth(), gameConfig.getWorldHeight(), gameConfig.getTeamCount());
 
-        // Pass oddball info and obstacle density to terrain generator
-        boolean hasOddball = gameConfig.getRules().hasOddball();
         EntityWorldDensity obstacleDensity = gameConfig.getRules().getObstacleDensity();
 
         this.world = new World<>();
@@ -200,7 +200,7 @@ public class GameManager {
         entitySpawner.createWorldBoundaries();
         entitySpawner.createObstacles();
         entitySpawner.createFlags();
-        entitySpawner.createOddball();
+        entitySpawner.createOddballNpcs();
         entitySpawner.createKothZones();
         entitySpawner.createWorkshops();
         entitySpawner.createHeadquarters();
@@ -759,9 +759,8 @@ public class GameManager {
             gameEntities.getPlayerInputs().forEach(this::processPlayerInput);
             gameEntities.updateAll(deltaTime);
             updateCarriedFlags(); // Update flag positions for carried flags
-            collisionProcessor.updateKothZones(deltaTime); // Update KOTH zone control and award points (using proper deltaTime)
-            collisionProcessor.updateOddball(deltaTime); // Update oddball scoring (using proper deltaTime)
-            collisionProcessor.updateWorkshops(deltaTime); // Update workshop crafting mechanics (using proper deltaTime)
+            collisionProcessor.updateKothZones(deltaTime);
+            collisionProcessor.updateWorkshops(deltaTime);
             gameEntities.getProjectiles().entrySet().removeIf(entry -> {
                 Projectile projectile = entry.getValue();
                 if (!projectile.isActive()) {
@@ -830,9 +829,22 @@ public class GameManager {
 
             // Turret AI: acquire targets and fire
             turret.acquireTarget(gameEntities.getAllPlayers().stream().toList());
-            Projectile turretShot = turret.tryFire();
+            GameEntity turretShot = turret.tryFire();
             if (turretShot != null) {
                 gameEntities.add(turretShot);
+            }
+        }
+
+        // Update oddball NPCs: AI decision + movement steering + firing
+        List<Player> playerList = gameEntities.getAllPlayers().stream().toList();
+        for (Oddball npc : gameEntities.getAllOddballNpcs()) {
+            if (!npc.isActive()) {
+                continue;
+            }
+            npc.tickAI(playerList);
+            GameEntity npcShot = npc.tryFire();
+            if (npcShot != null) {
+                gameEntities.add(npcShot);
             }
         }
 
@@ -856,6 +868,16 @@ public class GameManager {
                         killPlayer(player, beamOwner);
                     }
                     break;
+                }
+            }
+
+            // PLASMA_BEAM: award continuous oddball points for hitting NPC oddballs
+            if (beam.getOrdinance() == Ordinance.PLASMA_BEAM && beamOwner != null) {
+                for (Oddball npc : getNpcsInBeamPath(beam)) {
+                    double dotPoints = beam.getDamage() * deltaTime
+                            * npc.getPointsMultiplier()
+                            * gameConfig.getRules().getOddballNpcPointsPerDamage();
+                    beamOwner.getScoring().addOddball(dotPoints);
                 }
             }
 
@@ -1047,6 +1069,32 @@ public class GameManager {
         return playersInPath;
     }
 
+    private List<Oddball> getNpcsInBeamPath(Beam beam) {
+        List<Oddball> npcsInPath = new ArrayList<>();
+        Set<Integer> seen = new HashSet<>();
+        List<Vector2> path = beam.getPath();
+        if (path == null || path.size() < 2) return npcsInPath;
+
+        for (int i = 0; i < path.size() - 1; i++) {
+            Vector2 segStart = path.get(i);
+            Vector2 direction = path.get(i + 1).copy().subtract(segStart);
+            double maxDistance = direction.getMagnitude();
+            if (maxDistance <= 0) continue;
+            direction.normalize();
+
+            Ray ray = new Ray(segStart, direction);
+            List<RaycastResult<Body, BodyFixture>> results =
+                    world.raycast(ray, maxDistance, new DetectFilter<>(true, true, null));
+            for (RaycastResult<Body, BodyFixture> result : results) {
+                if (result.getBody().getUserData() instanceof Oddball npc
+                        && npc.isActive() && seen.add(npc.getId())) {
+                    npcsInPath.add(npc);
+                }
+            }
+        }
+        return npcsInPath;
+    }
+
     protected void processPlayerConfigChange(PlayerSession playerSession, PlayerConfigRequest request) {
         applyPlayerNameFromRequest(playerSession, request);
         Player player = gameEntities.getPlayer(playerSession.getPlayerId());
@@ -1105,11 +1153,6 @@ public class GameManager {
                 } else {
                     // Carrier is no longer active, drop the flag
                     flag.drop();
-
-                    // Remove ball carrier status effect if this was the oddball
-                    if (flag.isOddball() && carrier != null) {
-                        StatusEffectManager.removeBallCarrier(carrier);
-                    }
 
                     log.debug("Flag {} dropped at ({}, {}) - carrier {} inactive",
                             flag.getId(), flag.getPosition().x, flag.getPosition().y, carrierId);
@@ -1333,12 +1376,6 @@ public class GameManager {
         for (Flag flag : gameEntities.getAllFlags()) {
             if (flag.isCarried() && flag.getCarriedByPlayerId() == victim.getId()) {
                 flag.drop();
-
-                // Remove ball carrier status effect if they were carrying the oddball
-                if (flag.isOddball()) {
-                    StatusEffectManager.removeBallCarrier(victim);
-                }
-
                 log.debug("Player {} died, dropped flag {}", victim.getId(), flag.getId());
             }
         }

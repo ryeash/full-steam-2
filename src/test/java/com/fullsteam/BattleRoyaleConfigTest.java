@@ -50,7 +50,6 @@ public class BattleRoyaleConfigTest extends BaseTestClass {
                 .randomEventInterval(60.0)
                 .randomEventIntervalVariance(0.4)
                 .eventWarningDuration(4.0)
-                .enableOddball(false)
                 .addHeadquarters(false)
                 .build();
 
@@ -94,7 +93,6 @@ public class BattleRoyaleConfigTest extends BaseTestClass {
         assertTrue(rules.isEnableRandomEvents(), "Should have random events enabled");
         assertEquals(30.0, rules.getLockGameAfterSeconds(), "Should lock game after 30 seconds");
         assertFalse(rules.hasHeadquarters(), "Should not have headquarters");
-        assertFalse(rules.hasOddball(), "Should not have oddball");
         assertFalse(rules.hasKothZones(), "Should not have KOTH zones");
         assertFalse(rules.hasFlags(), "Should not have flags");
     }

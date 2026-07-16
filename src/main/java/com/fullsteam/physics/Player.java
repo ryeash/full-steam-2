@@ -2,6 +2,7 @@ package com.fullsteam.physics;
 
 import com.fullsteam.Config;
 import com.fullsteam.model.AttributeModification;
+import com.fullsteam.model.HasWeapon;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.Scoring;
@@ -23,7 +24,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 @Getter
 @Setter
-public class Player extends GameEntity {
+public class Player extends GameEntity implements HasWeapon {
     private String playerName;
     private int team; // 0 = no team (FFA), 1+ = team number
     private Weapon weapon;

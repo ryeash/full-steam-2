@@ -303,7 +303,7 @@ public class WeaponSystem {
                     applyBeamDamage(beam, player);
                 }
             } else if (userData instanceof Turret turret) {
-                if (turret.isActive() && !beam.getAffectedPlayers().contains(turret.getId())) {
+                if (beam.canAffectTurret(turret) && !beam.getAffectedPlayers().contains(turret.getId())) {
                     applyBeamDamage(beam, turret);
                 }
             } else if (userData instanceof Obstacle) {

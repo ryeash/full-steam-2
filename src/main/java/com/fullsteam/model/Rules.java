@@ -186,21 +186,39 @@ public class Rules {
 
     // ===== Oddball Rules =====
 
+    // ===== Oddball NPC Rules =====
+
     /**
-     * Whether to enable Oddball mode. When enabled, a single ball spawns at the world center.
-     * Players score points by holding the ball, but cannot fire weapons while carrying it.
+     * Enable NPC oddball mode — invincible bouncing NPCs that shoot at players.
+     * Scoring = damage dealt to the NPCs. Mutually exclusive with enableOddball.
      */
     @NotNull
     @Builder.Default
-    private boolean enableOddball = false;
+    private boolean enableOddballNpcs = false;
 
     /**
-     * Points awarded per second for holding the oddball.
+     * Number of Rampage-type oddballs (slow, heavy, high DPS).
      */
-    @DecimalMin("0.1")
-    @DecimalMax("100.0")
+    @Min(0)
+    @Max(5)
     @Builder.Default
-    private double oddballPointsPerSecond = 1.0;
+    private int rampageBallCount = 1;
+
+    /**
+     * Number of Seeker-type oddballs (fast, light, harassing).
+     */
+    @Min(0)
+    @Max(10)
+    @Builder.Default
+    private int seekerBallCount = 2;
+
+    /**
+     * Points awarded per 1 unit of damage dealt to an oddball NPC.
+     */
+    @DecimalMin("0.01")
+    @DecimalMax("10.0")
+    @Builder.Default
+    private double oddballNpcPointsPerDamage = 0.1;
 
     // ===== VIP Rules =====
 
@@ -506,11 +524,8 @@ public class Rules {
         return victoryCondition == VictoryCondition.SCORE_LIMIT && scoreLimit > 0;
     }
 
-    /**
-     * Check if this game mode uses oddball.
-     */
-    public boolean hasOddball() {
-        return enableOddball;
+    public boolean hasOddballNpcs() {
+        return enableOddballNpcs && (rampageBallCount + seekerBallCount) > 0;
     }
 
     /**
@@ -543,8 +558,7 @@ public class Rules {
         if (objectiveScoring && hasKothZones()) {
             components.add("koth");
         }
-        // bonusPoints: oddball counts whenever the mode is active.
-        if (hasOddball()) {
+        if (hasOddballNpcs()) {
             components.add("oddball");
         }
         if (objectiveScoring && hasVip()) {

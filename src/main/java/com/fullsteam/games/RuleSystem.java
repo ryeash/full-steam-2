@@ -609,7 +609,7 @@ public class RuleSystem {
     private String getScoreTypeName() {
         return switch (rules.getScoreStyle()) {
             case TOTAL_KILLS -> "kills";
-            case OBJECTIVE -> "objectives";
+            case OBJECTIVE -> "objective points";
             case TOTAL -> "points";
         };
     }

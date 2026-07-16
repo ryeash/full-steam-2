@@ -19,6 +19,7 @@ import org.dyn4j.world.World;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -31,7 +32,6 @@ public class TerrainGenerator {
     private final World<Body> world;
     private final double worldWidth;
     private final double worldHeight;
-    private final boolean reserveCenterForOddball;
     private final EntityWorldDensity configuredDensity;
     private final List<Obstacle> generatedObstacles = new ArrayList<>();
 
@@ -39,7 +39,6 @@ public class TerrainGenerator {
         this.world = world;
         this.worldWidth = ((AxisAlignedBounds) world.getBounds()).getWidth();
         this.worldHeight = ((AxisAlignedBounds) world.getBounds()).getHeight();
-        this.reserveCenterForOddball = gameConfig.getRules().hasOddball();
         this.configuredDensity = gameConfig.getRules().getObstacleDensity();
         generateObstacles();
     }
@@ -128,15 +127,6 @@ public class TerrainGenerator {
     private boolean isObstaclePositionClear(Obstacle obstacle) {
         Vector2 position = obstacle.getPosition();
         double radius = obstacle.getBoundingRadius();
-
-        // If oddball is enabled, exclude center area (100 unit radius to be safe)
-        if (reserveCenterForOddball) {
-            double distanceFromCenter = position.distance(new Vector2(0, 0));
-            double oddballClearZone = 100.0; // Clear 100 units around center for oddball
-            if (distanceFromCenter < oddballClearZone + radius) {
-                return false; // Too close to oddball spawn
-            }
-        }
 
         // Add minimum spacing buffer to prevent tight packing
         double spacing = Math.max(10.0, radius * 0.2); // At least 10 units or 20% of radius
@@ -292,52 +282,51 @@ public class TerrainGenerator {
      * Create the appropriate shape based on obstacle type.
      */
     private static List<Convex> createShapeForType(Obstacle.ObstacleType type) {
-        ThreadLocalRandom random = ThreadLocalRandom.current();
         return switch (type) {
-            case BOULDER -> List.of(createCircularShape(random));
-            case HOUSE -> List.of(createRectangularShape(random));
-            case WALL_SEGMENT -> List.of(createWallShape(random));
-            case TRIANGLE_ROCK -> List.of(createTriangularShape(random));
-            case POLYGON_DEBRIS -> List.of(createIrregularPolygon(random));
-            case HEXAGON_CRYSTAL -> List.of(createRegularPolygon(ThreadLocalRandom.current().nextInt(4, 9), random));
-            case DIAMOND_STONE -> List.of(createDiamondShape(random));
-            case L_SHAPED_WALL -> createLShape(random);
-            case CROSS_BARRIER -> createCrossShape(random);
+            case BOULDER -> List.of(createCircularShape());
+            case HOUSE -> List.of(createRectangularShape());
+            case WALL_SEGMENT -> List.of(createWallShape());
+            case TRIANGLE_ROCK -> List.of(createTriangularShape());
+            case POLYGON_DEBRIS -> List.of(createIrregularPolygon());
+            case HEXAGON_CRYSTAL -> List.of(createRegularPolygon(ThreadLocalRandom.current().nextInt(4, 9)));
+            case DIAMOND_STONE -> List.of(createDiamondShape());
+            case L_SHAPED_WALL -> createLShape();
+            case CROSS_BARRIER -> createCrossShape();
         };
     }
 
-    private static Convex createCircularShape(ThreadLocalRandom random) {
-        double radius = random.nextDouble(25, 100);
+    private static Convex createCircularShape() {
+        double radius = random().nextDouble(25, 100);
         return new Circle(radius);
     }
 
-    private static Convex createRectangularShape(ThreadLocalRandom random) {
-        double width = random.nextDouble(80, 240);
-        double height = random.nextDouble(60, 200);
+    private static Convex createRectangularShape() {
+        double width = random().nextDouble(80, 240);
+        double height = random().nextDouble(60, 200);
         return new Rectangle(width, height);
     }
 
-    private static Convex createWallShape(ThreadLocalRandom random) {
-        double length = random.nextDouble(80, 180);
-        double thickness = random.nextDouble(16, 35);
+    private static Convex createWallShape() {
+        double length = random().nextDouble(80, 180);
+        double thickness = random().nextDouble(16, 35);
         return Geometry.createRectangle(length, thickness);
     }
 
-    private static Convex createTriangularShape(ThreadLocalRandom random) {
-        double baseSize = random.nextDouble(45, 180);
-        double type = random.nextDouble();
+    private static Convex createTriangularShape() {
+        double baseSize = random().nextDouble(45, 180);
+        double type = random().nextDouble();
         if (type < .33) {
             return Geometry.createEquilateralTriangle(baseSize);
         } else if (type < .66) {
             return Geometry.createIsoscelesTriangle(baseSize, baseSize / 2);
         } else {
-            return Geometry.createRightTriangle(baseSize, baseSize / 2, random.nextBoolean());
+            return Geometry.createRightTriangle(baseSize, baseSize / 2, random().nextBoolean());
         }
     }
 
-    private static Convex createIrregularPolygon(ThreadLocalRandom random) {
-        double size = random.nextDouble(45, 130);
-        double choice = random.nextDouble();
+    private static Convex createIrregularPolygon() {
+        double size = random().nextDouble(45, 130);
+        double choice = random().nextDouble();
         if (choice < .33) {
             return Geometry.createPolygonalEllipse(10, size, size / 3);
         } else if (choice < .66) {
@@ -347,29 +336,29 @@ public class TerrainGenerator {
         }
     }
 
-    private static Convex createRegularPolygon(int sides, ThreadLocalRandom random) {
-        double radius = random.nextDouble(50, 150);
+    private static Convex createRegularPolygon(int sides) {
+        double radius = random().nextDouble(50, 150);
         return Geometry.createPolygonalCircle(sides, radius);
     }
 
-    private static Convex createDiamondShape(ThreadLocalRandom random) {
-        double width = random.nextDouble(35, 150);
-        double height = random.nextDouble(35, 150);
+    private static Convex createDiamondShape() {
+        double width = random().nextDouble(35, 150);
+        double height = random().nextDouble(35, 150);
         return Geometry.createPolygonalEllipse(4, width, height);
     }
 
-    private static List<Convex> createLShape(ThreadLocalRandom random) {
-        double size = random.nextDouble(35, 180);
+    private static List<Convex> createLShape() {
+        double size = random().nextDouble(35, 180);
         Rectangle lower = Geometry.createRectangle(size, size / 4);
         lower.translate(size / 2, 0);
-        int multiplier = random.nextInt(1, 3);
+        int multiplier = random().nextInt(1, 3);
         Rectangle upper = Geometry.createRectangle(size / 4, size / multiplier);
-        upper.translate(0, size / 2);
+        upper.translate(0, size / 2 / multiplier);
         return List.of(upper, lower);
     }
 
-    private static List<Convex> createCrossShape(ThreadLocalRandom random) {
-        double size = random.nextDouble(50, 120);
+    private static List<Convex> createCrossShape() {
+        double size = random().nextDouble(50, 120);
         return List.of(
                 Geometry.createRectangle(size, size / 4),
                 Geometry.createRectangle(size / 4, size));
@@ -379,10 +368,13 @@ public class TerrainGenerator {
      * Factory method to create extra chaotic obstacles with maximum randomization.
      */
     public static Obstacle createChaoticObstacle(double x, double y) {
-        ThreadLocalRandom random = ThreadLocalRandom.current();
         Obstacle.ObstacleType type = Obstacle.ObstacleType.values()[ThreadLocalRandom.current().nextInt(Obstacle.ObstacleType.values().length)];
-        double xOffset = random.nextGaussian() * 15;
-        double yOffset = random.nextGaussian() * 15;
+        double xOffset = random().nextGaussian() * 15;
+        double yOffset = random().nextGaussian() * 15;
         return new Obstacle(Config.nextEntityId(), x + xOffset, y + yOffset, type, createObstacleBody(type));
+    }
+
+    private static Random random() {
+        return ThreadLocalRandom.current();
     }
 }

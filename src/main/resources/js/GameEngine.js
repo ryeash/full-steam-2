@@ -11,6 +11,7 @@ class GameEngine {
         this.beams = new Map();
         this.utilityEntities = new Map(); // For turrets, nets, mines, defense lasers, workshops, headquarters, power-ups
         this.flags = new Map(); // CTF flags
+        this.oddballNpcs = new Map(); // Oddball NPC entities
         this.kothZones = new Map(); // King of the Hill zones
         this.myPlayerId = null;
         this.gameState = null;
@@ -1478,6 +1479,24 @@ class GameEngine {
             }
         }
         
+        // Handle Oddball NPCs
+        if (data.oddballNpcs) {
+            const currentNpcIds = new Set();
+            data.oddballNpcs.forEach(npcData => {
+                currentNpcIds.add(npcData.id);
+                if (this.oddballNpcs.has(npcData.id)) {
+                    this.updateOddballNpc(npcData);
+                } else {
+                    this.createOddballNpc(npcData);
+                }
+            });
+            for (let [npcId] of this.oddballNpcs) {
+                if (!currentNpcIds.has(npcId)) {
+                    this.removeOddballNpc(npcId);
+                }
+            }
+        }
+
         // Handle KOTH zones
         if (data.kothZones) {
             const currentZoneIds = new Set();
@@ -3197,57 +3216,11 @@ class GameEngine {
     createFlag(flagData) {
         const flagContainer = new PIXI.Container();
         flagContainer.position.set(flagData.x, flagData.y);
-        const oddball = flagData.oddball;
-        if (oddball) {
-            this.createOddballGraphics(flagContainer, flagData);
-        } else {
-            this.createCTFFlagGraphics(flagContainer, flagData);
-        }
+        this.createCTFFlagGraphics(flagContainer, flagData);
         flagContainer.zIndex = 11;
         flagContainer.flagData = flagData;
-        flagContainer.oddball = oddball;
         this.flags.set(flagData.id, flagContainer);
         this.gameContainer.addChild(flagContainer);
-    }
-
-    createOddballGraphics(flagContainer, flagData) {
-        const ball = new PIXI.Graphics();
-        const ballColor = 0xFFFF00;
-        ball.circle(0, 0, 20).fill(ballColor);
-        ball.circle(0, 0, 20).stroke({ width: 2, color: 0xFFAA00 });
-        const starPoints = 3;
-        const outerRadius = 12;
-        const innerRadius = 5;
-        for (let i = 0; i < starPoints * 2; i++) {
-            const radius = i % 2 === 0 ? outerRadius : innerRadius;
-            const angle = (i * Math.PI) / starPoints - Math.PI / 2;
-            const x = Math.cos(angle) * radius;
-            const y = Math.sin(angle) * radius;
-            if (i === 0) {
-                ball.moveTo(x, y);
-            } else {
-                ball.lineTo(x, y);
-            }
-        }
-        ball.closePath();
-        ball.fill({ color: 0xFFFFFF, alpha: 0.9 });
-        for (let i = 0; i < starPoints * 2; i++) {
-            const radius = i % 2 === 0 ? outerRadius : innerRadius;
-            const angle = (i * Math.PI) / starPoints - Math.PI / 2;
-            const x = Math.cos(angle) * radius;
-            const y = Math.sin(angle) * radius;
-            
-            if (i === 0) {
-                ball.moveTo(x, y);
-            } else {
-                ball.lineTo(x, y);
-            }
-        }
-        ball.closePath();
-        ball.stroke({ width: 1.5, color: 0xFFAA00 });
-        
-        flagContainer.addChild(ball);
-        flagContainer.ballSprite = ball;
     }
     
     createCTFFlagGraphics(flagContainer, flagData) {
@@ -3277,18 +3250,89 @@ class GameEngine {
         flagContainer.flagSprite = flag;
     }
     
+    // ===== Oddball NPC Management =====
+
+    createOddballNpc(npcData) {
+        const container = new PIXI.Container();
+        container.position.set(npcData.x, npcData.y);
+        container.zIndex = 12;
+
+        const isRampage = npcData.personality === 'RAMPAGE';
+        const radius = npcData.radius;
+
+        const ball = new PIXI.Graphics();
+
+        if (isRampage) {
+            // Rampage: large dark-orange body with spiky ring — menacing
+            ball.circle(0, 0, radius).fill({ color: 0xCC4400, alpha: 0.95 });
+            ball.circle(0, 0, radius).stroke({ width: 3, color: 0xFF6600 });
+            // Spike ring
+            const spikes = 8;
+            for (let i = 0; i < spikes; i++) {
+                const angle = (i / spikes) * Math.PI * 2;
+                const inner = radius + 2;
+                const outer = radius + 10;
+                const ix = Math.cos(angle) * inner;
+                const iy = Math.sin(angle) * inner;
+                const ox = Math.cos(angle) * outer;
+                const oy = Math.sin(angle) * outer;
+                ball.moveTo(ix, iy).lineTo(ox, oy);
+                ball.stroke({ width: 2.5, color: 0xFF4400 });
+            }
+            // Eye — single menacing eye
+            ball.circle(0, -4, 5).fill(0xFFCC00);
+            ball.circle(0, -4, 5).stroke({ width: 1, color: 0xFF8800 });
+            ball.circle(0, -4, 2).fill(0x000000);
+        } else {
+            // Seeker: small fast-looking cyan circle with trailing arcs — quick, harassing
+            ball.circle(0, 0, radius).fill({ color: 0x005577, alpha: 0.92 });
+            ball.circle(0, 0, radius).stroke({ width: 2, color: 0x00CCFF });
+            // Arc accents suggesting motion
+            for (let i = 0; i < 3; i++) {
+                const startAngle = (i / 3) * Math.PI * 2;
+                const arcLen = Math.PI * 0.4;
+                ball.arc(0, 0, radius + 4, startAngle, startAngle + arcLen);
+                ball.stroke({ width: 1.5, color: 0x00BBEE, alpha: 0.7 });
+            }
+            // Small bright core
+            ball.circle(0, 0, radius * 0.35).fill(0x00FFFF);
+        }
+
+        container.addChild(ball);
+        container.ball = ball;
+        container.npcData = npcData;
+
+        this.oddballNpcs.set(npcData.id, container);
+        this.gameContainer.addChild(container);
+    }
+
+    updateOddballNpc(npcData) {
+        const container = this.oddballNpcs.get(npcData.id);
+        if (!container) return;
+        container.position.set(npcData.x, npcData.y);
+        container.npcData = npcData;
+    }
+
+    removeOddballNpc(npcId) {
+        const container = this.oddballNpcs.get(npcId);
+        if (container) {
+            this.gameContainer.removeChild(container);
+            container.destroy({ children: true });
+            this.oddballNpcs.delete(npcId);
+        }
+    }
+
     updateFlag(flagData) {
         const flagContainer = this.flags.get(flagData.id);
         if (!flagContainer) {
             return;
         }
-        
+
         // Update position (important for carried flags)
         flagContainer.position.set(flagData.x, flagData.y);
-        
+
         // Update visual state based on flag state
         const state = flagData.state;
-        const oddball = flagContainer.oddball;
 
         if (state === 'CARRIED') {
             flagContainer.alpha = 0.9;
@@ -3917,18 +3961,20 @@ class GameEngine {
      * Create defense laser graphics
      */
     createDefenseLaserGraphics(graphics, entityData) {
-        // Base structure - blue-gray circle
-        graphics.circle(0, 0, 15).fill({ color: 0x4444AA, alpha: 0.9 });
-        
-        // Central core - brighter blue
-        graphics.circle(0, 0, 8).fill({ color: 0x6666CC, alpha: 0.8 });
-        
-        // Rotating indicator - shows current beam direction
-        graphics.rect(-2, -12, 4, 6).fill({ color: 0x8888FF, alpha: 0.9 });
-        
-        // Outer ring to show it's active
-        graphics.circle(0, 0, 18).stroke({ width: 2, color: 0xAAAAFF, alpha: 0.8 });
-        
+        const teamColor = this.getTeamColor(entityData.ownerTeam || 0);
+
+        // Base structure - team-colored circle
+        graphics.circle(0, 0, 15).fill({ color: teamColor, alpha: 0.7 });
+
+        // Central core - solid team color
+        graphics.circle(0, 0, 8).fill({ color: teamColor, alpha: 0.95 });
+
+        // Rotating indicator - white for contrast so direction is readable on any team color
+        graphics.rect(-2, -12, 4, 6).fill({ color: 0xFFFFFF, alpha: 0.9 });
+
+        // Outer ring - team color
+        graphics.circle(0, 0, 18).stroke({ width: 2, color: teamColor, alpha: 0.8 });
+
         return graphics;
     }
     
@@ -5603,6 +5649,19 @@ class GameEngine {
             if (data.isVip) {
                 dots.circle(x, y, radius + 1.5).stroke({ width: 1, color: 0xFFD700 });
             }
+        });
+
+        // Draw oddball NPCs on minimap
+        this.oddballNpcs.forEach(container => {
+            const data = container.npcData;
+            if (!data) return;
+            const x = (data.x + this.worldBounds.width / 2) * scale + offsetX;
+            const y = (-data.y + this.worldBounds.height / 2) * scale + offsetY;
+            const isRampage = data.personality === 'RAMPAGE';
+            const color = isRampage ? 0xFF4400 : 0x00CCFF;
+            const r = isRampage ? 3.0 : 2.0;
+            dots.circle(x, y, r).fill(color);
+            dots.circle(x, y, r).stroke({ width: 1, color: 0xFFFFFF, alpha: 0.6 });
         });
     }
     

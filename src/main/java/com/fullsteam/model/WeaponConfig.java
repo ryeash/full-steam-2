@@ -568,6 +568,28 @@ public class WeaponConfig {
             Ordinance.PROJECTILE  // total: 100 pts (attr 55 + fx 45 + ord 0)
     );
 
+    // Default turret weapon — approximates the original hardcoded turret stats.
+    // Point allocation chosen to match: damage≈15, fireRate≈3 shots/s, range≈400,
+    // projectileSpeed≈400, slight inaccuracy. Magazine/reload are ignored by the
+    // turret (it fires continuously off the fire-rate clock, no ammo tracking).
+    public static final WeaponConfig BASIC_TURRET_PRESET = new WeaponConfig(
+            "Turret Cannon",
+            5,      // damage  → 15 units
+            5,      // fireRate → ~3.2 shots/s
+            4,      // range   → ~420 units
+            -3,     // accuracy → slight spread (FIRE_RATE coupling brings it to ~0.09 rad)
+            0,      // magazineSize — ignored by turret
+            0,      // reloadTime   — ignored by turret
+            2,      // projectileSpeed → ~408 units/s
+            0,      // bulletsPerShot → 1 bullet
+            0,      // linearDamping
+            0,      // handling
+            0,      // caliber → 1.0×
+            0,      // knockback
+            Set.of(),
+            Ordinance.PROJECTILE  // total: 13 pts well under 100-pt cap
+    );
+
     public int getAttributePoints() {
         return damage + fireRate + range + accuracy + magazineSize + reloadTime + projectileSpeed + bulletsPerShot + linearDamping + handling + caliber + knockback;
     }

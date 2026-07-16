@@ -42,6 +42,7 @@ public class GameEntities {
     private final Map<Integer, NetProjectile> netProjectiles = new ConcurrentSkipListMap<>();
     private final Map<Integer, Beam> beams = new ConcurrentSkipListMap<>();
     private final Map<Integer, Flag> flags = new ConcurrentSkipListMap<>();
+    private final Map<Integer, Oddball> oddballNpcs = new ConcurrentSkipListMap<>();
     private final Map<Integer, KothZone> kothZones = new ConcurrentSkipListMap<>();
     private final Map<Integer, Workshop> workshops = new ConcurrentSkipListMap<>();
     private final Map<Integer, PowerUp> powerUps = new ConcurrentSkipListMap<>();
@@ -79,6 +80,7 @@ public class GameEntities {
                 case NetProjectile netProjectile -> netProjectiles.put(netProjectile.getId(), netProjectile);
                 case Beam beam -> beams.put(beam.getId(), beam);
                 case Flag flag -> flags.put(flag.getId(), flag);
+                case Oddball npc -> oddballNpcs.put(npc.getId(), npc);
                 case KothZone kothZone -> kothZones.put(kothZone.getId(), kothZone);
                 case PowerUp powerUp -> powerUps.put(powerUp.getId(), powerUp);
                 case Headquarters hq -> headquarters.put(hq.getId(), hq);
@@ -133,7 +135,7 @@ public class GameEntities {
     }
 
     public void updateAll(double deltaTime) {
-        Stream.of(players, projectiles, fieldEffects, turrets, defenseLasers, netProjectiles, beams, kothZones, workshops, powerUps, headquarters)
+        Stream.of(players, projectiles, fieldEffects, turrets, defenseLasers, netProjectiles, beams, kothZones, workshops, powerUps, headquarters, oddballNpcs)
                 .flatMap(m -> m.values().stream())
                 .forEach(e -> e.update(deltaTime));
     }
@@ -168,6 +170,14 @@ public class GameEntities {
 
     public Collection<Flag> getAllFlags() {
         return flags.values();
+    }
+
+    public Collection<Oddball> getAllOddballNpcs() {
+        return oddballNpcs.values();
+    }
+
+    public Oddball getOddballNpc(int id) {
+        return oddballNpcs.get(id);
     }
 
     public KothZone getKothZone(int zoneId) {

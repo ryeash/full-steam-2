@@ -192,6 +192,16 @@ public class Beam extends GameEntity {
     }
 
     /**
+     * Check if this beam can affect a specific turret (same team/owner rules as canAffectPlayer).
+     */
+    public boolean canAffectTurret(Turret turret) {
+        if (!turret.isActive()) return false;
+        if (turret.getOwnerId() == ownerId) return false;
+        if (ownerTeam == 0 || turret.getOwnerTeam() == 0) return true;
+        return ownerTeam != turret.getOwnerTeam();
+    }
+
+    /**
      * Process continuous damage over time
      * Returns the damage amount to be applied by GameManager (negative for healing)
      */

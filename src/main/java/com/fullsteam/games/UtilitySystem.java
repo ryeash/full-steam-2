@@ -6,6 +6,7 @@ import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.UtilityWeapon;
+import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.GameEntities;
@@ -128,7 +129,8 @@ public class UtilitySystem {
                 activation.playerId(),
                 activation.team(),
                 placement,
-                15.0
+                15.0,
+                WeaponConfig.BASIC_TURRET_PRESET.buildWeapon()
         );
         gameEntities.add(turret);
     }

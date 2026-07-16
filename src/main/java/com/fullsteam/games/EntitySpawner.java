@@ -6,10 +6,12 @@ import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Headquarters;
 import com.fullsteam.physics.KothZone;
+import com.fullsteam.physics.Oddball;
 import com.fullsteam.physics.TeamSpawnArea;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.Workshop;
 import org.dyn4j.dynamics.Body;
+import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
@@ -54,28 +56,32 @@ public class EntitySpawner {
         double wallThickness = Config.WORLD_BOUNDARY_THICKNESS;
 
         Body topWall = new Body();
-        topWall.addFixture(new Rectangle(gameConfig.getWorldWidth() + wallThickness * 2, wallThickness));
+        BodyFixture topFixture = topWall.addFixture(new Rectangle(gameConfig.getWorldWidth() + wallThickness * 2, wallThickness));
+        topFixture.setRestitution(0.8);
         topWall.setMass(MassType.INFINITE);
         topWall.getTransform().setTranslation(0, halfHeight + wallThickness / 2.0);
         topWall.setUserData("boundary");
         world.addBody(topWall);
 
         Body bottomWall = new Body();
-        bottomWall.addFixture(new Rectangle(gameConfig.getWorldWidth() + wallThickness * 2, wallThickness));
+        BodyFixture bottomFixture = bottomWall.addFixture(new Rectangle(gameConfig.getWorldWidth() + wallThickness * 2, wallThickness));
+        bottomFixture.setRestitution(0.8);
         bottomWall.setMass(MassType.INFINITE);
         bottomWall.getTransform().setTranslation(0, -halfHeight - wallThickness / 2.0);
         bottomWall.setUserData("boundary");
         world.addBody(bottomWall);
 
         Body leftWall = new Body();
-        leftWall.addFixture(new Rectangle(wallThickness, gameConfig.getWorldHeight()));
+        BodyFixture leftFixture = leftWall.addFixture(new Rectangle(wallThickness, gameConfig.getWorldHeight()));
+        leftFixture.setRestitution(0.8);
         leftWall.setMass(MassType.INFINITE);
         leftWall.getTransform().setTranslation(-halfWidth - wallThickness / 2.0, 0);
         leftWall.setUserData("boundary");
         world.addBody(leftWall);
 
         Body rightWall = new Body();
-        rightWall.addFixture(new Rectangle(wallThickness, gameConfig.getWorldHeight()));
+        BodyFixture rightFixture = rightWall.addFixture(new Rectangle(wallThickness, gameConfig.getWorldHeight()));
+        rightFixture.setRestitution(0.8);
         rightWall.setMass(MassType.INFINITE);
         rightWall.getTransform().setTranslation(halfWidth + wallThickness / 2.0, 0);
         rightWall.setUserData("boundary");
@@ -157,30 +163,48 @@ public class EntitySpawner {
     }
 
     /**
-     * Create the oddball if oddball mode is enabled.
-     * The oddball is a neutral flag (team 0) spawned at the world center.
+     * Create NPC oddball entities (Rampage + Seeker personalities) when NPC oddball mode is enabled.
+     * Each NPC spawns at a random clear position near the map center.
      */
-    public void createOddball() {
-        if (!gameConfig.getRules().hasOddball()) {
-            return; // Oddball not enabled
+    public void createOddballNpcs() {
+        Rules rules = gameConfig.getRules();
+        if (!rules.hasOddballNpcs()) {
+            return;
         }
-        // Create oddball at world center (team 0 = neutral)
-        Vector2 centerPosition = new Vector2(0, 0);
-        // Ensure position is clear of obstacles
-        if (!terrainGenerator.isPositionClear(centerPosition, 30.0)) {
-            // Try to find a nearby clear position
-            for (int attempt = 0; attempt < 10; attempt++) {
-                double offsetX = (Math.random() - 0.5) * 200;
-                double offsetY = (Math.random() - 0.5) * 200;
-                Vector2 candidate = new Vector2(offsetX, offsetY);
-                if (terrainGenerator.isPositionClear(candidate, 30.0)) {
-                    centerPosition = candidate;
-                    break;
-                }
+
+        log.debug("Spawning {} Rampage + {} Seeker oddball NPCs",
+                rules.getRampageBallCount(), rules.getSeekerBallCount());
+
+        for (int i = 0; i < rules.getRampageBallCount(); i++) {
+            Vector2 pos = findClearSpawn(80.0);
+            Oddball npc = new Oddball(Oddball.Personality.RAMPAGE, pos.x, pos.y);
+            gameEntities.add(npc);
+        }
+
+        for (int i = 0; i < rules.getSeekerBallCount(); i++) {
+            Vector2 pos = findClearSpawn(50.0);
+            Oddball npc = new Oddball(Oddball.Personality.SEEKER, pos.x, pos.y);
+            gameEntities.add(npc);
+        }
+    }
+
+    /**
+     * Find a spawn point near map centre that is clear of obstacles.
+     */
+    private Vector2 findClearSpawn(double clearRadius) {
+        Vector2 center = new Vector2(0, 0);
+        if (terrainGenerator.isPositionClear(center, clearRadius)) {
+            return center;
+        }
+        for (int attempt = 0; attempt < 20; attempt++) {
+            double offsetX = (Math.random() - 0.5) * 400;
+            double offsetY = (Math.random() - 0.5) * 400;
+            Vector2 candidate = new Vector2(offsetX, offsetY);
+            if (terrainGenerator.isPositionClear(candidate, clearRadius)) {
+                return candidate;
             }
         }
-        Flag oddball = new Flag(0, centerPosition.x, centerPosition.y);
-        gameEntities.add(oddball);
+        return new Vector2((Math.random() - 0.5) * 200, (Math.random() - 0.5) * 200);
     }
 
     /**
