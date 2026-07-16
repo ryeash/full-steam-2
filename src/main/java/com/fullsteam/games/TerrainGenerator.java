@@ -349,11 +349,13 @@ public class TerrainGenerator {
 
     private static List<Convex> createLShape() {
         double size = random().nextDouble(35, 180);
-        Rectangle lower = Geometry.createRectangle(size, size / 4);
-        lower.translate(size / 2, 0);
+        double thickness = size / 4;
         int multiplier = random().nextInt(1, 3);
-        Rectangle upper = Geometry.createRectangle(size / 4, size / multiplier);
-        upper.translate(0, size / 2 / multiplier);
+        double vertHeight = size / multiplier;
+        Rectangle lower = Geometry.createRectangle(size, thickness);
+        lower.translate(size / 2, 0);
+        Rectangle upper = Geometry.createRectangle(thickness, vertHeight);
+        upper.translate(thickness / 2, thickness / 2 + vertHeight / 2);
         return List.of(upper, lower);
     }
 
