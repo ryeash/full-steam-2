@@ -1,11 +1,11 @@
 package com.fullsteam.physics;
 
-import com.fullsteam.Config;
 import com.fullsteam.games.GameManager;
 import com.fullsteam.games.StatusEffectManager;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
+import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.Rules;
 import com.fullsteam.model.ScoreStyle;
@@ -22,8 +22,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.stream.Collectors;
 
 import static com.fullsteam.Config.GRAVITY_WELL_CONSTANT;
 
@@ -70,54 +68,45 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             return false;
         }
         if (userData1 instanceof GameEntity a && userData2 instanceof GameEntity b) {
-            return handleEntityCollision(a, b);
+            if (a.isActive() && b.isActive()) {
+                return handleEntityCollision(a, b);
+            } else {
+                return false;
+            }
         }
         return true;
     }
 
     private boolean handleEntityCollision(GameEntity entity1, GameEntity entity2) {
-        // Early exit: ignore collisions involving inactive/dead players
-        if (entity1 instanceof Player player1 && !player1.isActive()) {
-            return false; // Don't process collisions for dead players
-        }
-        if (entity2 instanceof Player player2 && !player2.isActive()) {
-            return false; // Don't process collisions for dead players
-        }
-
-        // let the bouncy bullets interact with bullets
-        if (entity1 instanceof Projectile p1 && entity2 instanceof Projectile p2) {
-            return p1.getBulletEffects().contains(BulletEffect.BOUNCY) || p2.getBulletEffects().contains(BulletEffect.BOUNCY);
-        }
-
         Collision c = new Collision(entity1, entity2);
 
-        if (c.rectify(Player.class, Projectile.class)
+        if (c.rectify(Projectile.class, Projectile.class)
+                instanceof TypedCollision<Projectile, Projectile>(Projectile a, Projectile b)) {
+            return handlePlayerProjectileCollision(a, b);
+        } else if (c.rectify(Player.class, Projectile.class)
                 instanceof TypedCollision<Player, Projectile>(Player a, Projectile b)) {
             handlePlayerProjectileCollision(a, b);
             return false;
 
-        } else if (entity1 instanceof Projectile projectile && entity2 instanceof Obstacle obstacle) {
-            return handleProjectileObstacleCollision(projectile, obstacle);
-        } else if (entity1 instanceof Obstacle obstacle && entity2 instanceof Projectile projectile) {
-            return handleProjectileObstacleCollision(projectile, obstacle);
+        } else if (c.rectify(Projectile.class, Obstacle.class)
+                instanceof TypedCollision<Projectile, Obstacle>(Projectile a, Obstacle b)) {
+            return handleProjectileObstacleCollision(a, b);
 
-        } else if (entity1 instanceof Player player && entity2 instanceof FieldEffect fieldEffect) {
-            handlePlayerFieldEffectCollision(player, fieldEffect);
-            return true; // Allow physics to handle overlaps (sensors should not resolve anyway)
-        } else if (entity1 instanceof FieldEffect fieldEffect && entity2 instanceof Player player) {
-            handlePlayerFieldEffectCollision(player, fieldEffect);
+        } else if (c.rectify(Player.class, FieldEffect.class)
+                instanceof TypedCollision<Player, FieldEffect>(Player a, FieldEffect b)) {
+            handlePlayerFieldEffectCollision(a, b);
             return true; // Allow physics to handle overlaps (sensors should not resolve anyway)
 
-        } else if (entity1 instanceof FieldEffect fieldEffect && entity2 instanceof Projectile projectile) {
-            return handleProjectileFieldEffectCollision(projectile, fieldEffect);
-        } else if (entity2 instanceof FieldEffect fieldEffect && entity1 instanceof Projectile projectile) {
-            return handleProjectileFieldEffectCollision(projectile, fieldEffect);
+        } else if (c.rectify(Projectile.class, FieldEffect.class)
+                instanceof TypedCollision<Projectile, FieldEffect>(Projectile a, FieldEffect b)) {
+            return handleProjectileFieldEffectCollision(a, b);
 
         } else if (c.rectify(Projectile.class, Turret.class)
                 instanceof TypedCollision<Projectile, Turret>(Projectile a, Turret b)) {
             return handleProjectileTurretCollision(a, b);
 
-        } else if (c.rectify(Projectile.class, DefenseLaser.class) != null) {
+        } else if (c.rectify(Projectile.class, DefenseLaser.class) != null || c.rectify(Beam.class, DefenseLaser.class) != null) {
+            // defense laser is invincible
             return false;
 
         } else if (c.rectify(Beam.class, Turret.class)
@@ -163,15 +152,15 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             handleBeamOddballNpcCollision(a, b);
             return false; // beam passes through; NPC is invincible
         }
-
         return true;
     }
 
-    private void handlePlayerProjectileCollision(Player player, Projectile projectile) {
-        if (!player.isActive() || !projectile.isActive()) {
-            return;
-        }
+    private boolean handlePlayerProjectileCollision(Projectile projectile1, Projectile projectile2) {
+        // let the bouncy bullets interact with bullets
+        return projectile1.getBulletEffects().contains(BulletEffect.BOUNCY) || projectile2.getBulletEffects().contains(BulletEffect.BOUNCY);
+    }
 
+    private void handlePlayerProjectileCollision(Player player, Projectile projectile) {
         // if the player has already been hit with this projectile, skip them
         // particularly important for piercing projectiles
         if (!projectile.getAffectedPlayers().add(player.getId())) {
@@ -199,8 +188,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         }
 
         if (player.takeDamage(projectile.getDamage())) {
-            Player killer = gameEntities.getPlayer(projectile.getOwnerId());
-            gameManager.killPlayer(player, killer);
+            gameManager.killPlayer(player, projectile.getOwnerId());
         }
 
         // Check if projectile should pierce through the target
@@ -252,10 +240,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     }
 
     private boolean handleProjectileObstacleCollision(Projectile projectile, Obstacle obstacle) {
-        if (!projectile.isActive()) {
-            return true;
-        }
-
         // Check if this projectile has already hit this obstacle
         // This prevents piercing bullets from triggering effects multiple times on the same obstacle
         if (!projectile.getAffectedObstacles().add(obstacle.getId())) {
@@ -288,7 +272,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     }
 
     private void handlePlayerFieldEffectCollision(Player player, FieldEffect fieldEffect) {
-        if (!player.isActive() || !fieldEffect.isActive() || !fieldEffect.canAffect(player)) {
+        if (!fieldEffect.canAffect(player)) {
             return;
         }
 
@@ -305,7 +289,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                         fieldEffect.markAsAffected(player);
 
                         if (playerKilled) {
-                            gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                            gameManager.killPlayer(player, fieldEffect.getOwnerId());
                         }
                     }
                 }
@@ -316,7 +300,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                     return;
                 }
                 if (player.takeDamage(effectValue * deltaTime)) {
-                    gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                    gameManager.killPlayer(player, fieldEffect.getOwnerId());
                 }
                 StatusEffectManager.applyBurning(gameManager, player, effectValue * 0.3, 1.0, fieldEffect.getOwnerId());
 
@@ -327,7 +311,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                     return;
                 }
                 if (player.takeDamage(effectValue * deltaTime)) {
-                    gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                    gameManager.killPlayer(player, fieldEffect.getOwnerId());
                 }
                 StatusEffectManager.applySlowEffect(player, 5, 0.5,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Electric Field"));
@@ -339,7 +323,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                     return;
                 }
                 if (player.takeDamage(effectValue * deltaTime)) {
-                    gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                    gameManager.killPlayer(player, fieldEffect.getOwnerId());
                 }
                 StatusEffectManager.applySlowEffect(player, 5, 1.0,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Freeze Field"));
@@ -351,7 +335,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                     return;
                 }
                 if (player.takeDamage(effectValue * deltaTime)) {
-                    gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                    gameManager.killPlayer(player, fieldEffect.getOwnerId());
                 }
                 StatusEffectManager.applyPoison(gameManager, player, effectValue * 0.2, 1.5, fieldEffect.getOwnerId());
             }
@@ -362,7 +346,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 }
                 // Apply damage over time
                 if (player.takeDamage(effectValue * deltaTime)) {
-                    gameManager.killPlayer(player, gameEntities.getPlayer(fieldEffect.getOwnerId()));
+                    gameManager.killPlayer(player, fieldEffect.getOwnerId());
                 }
                 // Apply strong slowing effect (ground shaking makes movement difficult)
                 StatusEffectManager.applySlowEffect(player, 5, 0.7, "Earthquake");
@@ -431,10 +415,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     }
 
     private boolean handleProjectileTurretCollision(Projectile projectile, Turret turret) {
-        if (!projectile.isActive() || !turret.isActive()) {
-            return true;
-        }
-
         // Check if this projectile has already hit this turret
         // This prevents piercing bullets from triggering effects multiple times on the same turret
         if (!projectile.getAffectedObstacles().add(turret.getId())) {
@@ -492,7 +472,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      * Handle beam hitting a turret.
      */
     private void handleBeamTurretCollision(Beam beam, Turret turret) {
-        if (!beam.isActive() || !turret.isActive() || !beam.canAffectTurret(turret)) {
+        if (!beam.canAffectTurret(turret)) {
             return;
         }
         double deltaTime = gameEntities.getWorld().getTimeStep().getDeltaTime();
@@ -505,7 +485,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      * Handle field effect hitting a turret.
      */
     private void handleTurretFieldEffectCollision(Turret turret, FieldEffect fieldEffect) {
-        if (!turret.isActive() || !fieldEffect.isActive() || !fieldEffect.canAffect(turret)) {
+        if (!fieldEffect.canAffect(turret)) {
             return;
         }
 
@@ -586,13 +566,13 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     private boolean handleNetCollision(NetProjectile net, GameEntity entity) {
         switch (entity) {
             case Player player -> {
-                if (net.isActive() && net.canAffectPlayer(player)) {
+                if (net.canAffectPlayer(player)) {
                     net.hitPlayer(player);
                     return false;
                 }
                 return true;
             }
-            case Obstacle obstacle -> {
+            case Obstacle _ -> {
                 net.setActive(false);
                 return false;
             }
@@ -613,15 +593,12 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      * Handle player touching a flag - pickup or capture logic.
      */
     private boolean handlePlayerFlagCollision(Player player, Flag flag) {
-        if (!player.isActive()) {
-            return true;
-        }
-
         int playerTeam = player.getTeam();
         int flagTeam = flag.getOwnerTeam();
 
         // Check if player is already carrying a flag
-        boolean alreadyCarrying = gameEntities.getAllFlags().stream()
+        boolean alreadyCarrying = gameEntities.getAllFlags()
+                .stream()
                 .anyMatch(f -> f.isCarried() && f.getCarriedByPlayerId() == player.getId());
 
         if (alreadyCarrying) {
@@ -657,7 +634,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 String.format("%s picked up %s flag!",
                         player.getPlayerName(),
                         getTeamName(flag.getOwnerTeam())),
-                "FLAG_PICKUP",
+                GameEvent.EventCategory.INFO,
                 "#ffaa00"
         );
     }
@@ -679,10 +656,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         carriedFlag.capture();
 
         // Award points to player
-        gameManager.awardCapture(player, carriedFlag.getOwnerTeam());
-
-        log.debug("Player {} (team {}) captured flag {} (team {})!",
-                player.getId(), player.getTeam(), carriedFlag.getId(), carriedFlag.getOwnerTeam());
+        gameManager.awardCapture(player);
 
         // Broadcast capture event. When the rules give a flag more than one point
         // AND the active score style actually awards capture points, surface the
@@ -699,7 +673,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                         player.getPlayerName(),
                         getTeamName(carriedFlag.getOwnerTeam()),
                         captureText),
-                "FLAG_CAPTURE",
+                GameEvent.EventCategory.CAPTURE,
                 "#00ff00"
         );
     }
@@ -715,7 +689,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         // Broadcast return event
         gameManager.broadcastGameEvent(
                 String.format("%s flag returned!", getTeamName(flag.getOwnerTeam())),
-                "FLAG_RETURN",
+                GameEvent.EventCategory.INFO,
                 "#4444ff"
         );
     }
@@ -732,9 +706,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      * Tracks player presence for zone control calculations.
      */
     private boolean handlePlayerKothZoneCollision(Player player, KothZone zone) {
-        if (player.isActive()) {
-            zone.addPlayer(player);
-        }
+        zone.addPlayer(player);
         return true;
     }
 
@@ -743,10 +715,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      * Applies the power-up effect to the player and removes the power-up.
      */
     boolean handlePlayerPowerUpCollision(Player player, PowerUp powerUp) {
-        if (!player.isActive() || player.getHealth() <= 0 || !powerUp.isActive()) {
-            return true;
-        }
-
         // Check if power-up can be collected by this player
         if (powerUp.canBeCollectedBy(player)) {
             PowerUpEffect effect = powerUp.getEffect();
@@ -762,10 +730,10 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      * NPC-generated projectiles (ownerId < 0) are ignored — they can't score on each other.
      */
     private boolean handleProjectileOddballCollision(Projectile projectile, Oddball npc) {
-        if (!projectile.isActive() || !npc.isActive()) return true;
-
         // Only player-fired projectiles generate score
-        if (projectile.getOwnerId() <= 0) return true;
+        if (projectile.getOwnerId() <= 0) {
+            return true;
+        }
 
         Player attacker = gameEntities.getPlayer(projectile.getOwnerId());
         if (attacker != null && attacker.isActive()) {
@@ -784,10 +752,15 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      * PLASMA_BEAM continuous DOT scoring is handled per-tick in the GameManager beam loop instead.
      */
     private void handleBeamOddballNpcCollision(Beam beam, Oddball npc) {
-        if (!beam.isActive() || !npc.isActive()) return;
-        if (beam.getOwnerId() <= 0) return; // NPC-fired beams don't generate score
-        if (beam.getOrdinance() != Ordinance.LASER) return; // PLASMA_BEAM DOT is in GameManager
-        if (!beam.getAffectedPlayers().add(npc.getId())) return; // already scored this hit
+        if (beam.getOwnerId() <= 0) {
+            return; // NPC-fired beams don't generate score
+        }
+        if (beam.getOrdinance() != Ordinance.LASER) {
+            return; // PLASMA_BEAM DOT is in GameManager
+        }
+        if (!beam.getAffectedPlayers().add(npc.getId())) {
+            return; // already scored this hit
+        }
 
         Player attacker = gameEntities.getPlayer(beam.getOwnerId());
         if (attacker != null && attacker.isActive()) {
@@ -802,19 +775,15 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      * Handle projectile hitting a headquarters.
      */
     private boolean handleProjectileHeadquartersCollision(Projectile projectile, Headquarters hq) {
-        if (!projectile.isActive() || !hq.isActive()) {
-            return true;
+        // Check if projectile can damage this headquarters (team rules)
+        if (!canProjectileDamageHeadquarters(projectile, hq)) {
+            return false; // Friendly fire protection - let projectile pass through
         }
 
         // Check if this projectile has already hit this HQ
         if (!projectile.getAffectedObstacles().add(hq.getId())) {
             boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, hq);
             return !shouldPierce;
-        }
-
-        // Check if projectile can damage this headquarters (team rules)
-        if (!canProjectileDamageHeadquarters(projectile, hq)) {
-            return false; // Friendly fire protection - let projectile pass through
         }
 
         // Get hit position for effects
@@ -848,7 +817,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      * Handle beam hitting a headquarters.
      */
     private boolean handleBeamHeadquartersCollision(Beam beam, Headquarters hq) {
-        if (!beam.isActive() || !hq.isActive() || !canBeamDamageHeadquarters(beam, hq)) {
+        if (!canBeamDamageHeadquarters(beam, hq)) {
             return true;
         }
 
@@ -924,11 +893,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             }
         }
     }
-
-    /**
-     * Update oddball scoring - called once per physics step with proper deltaTime.
-     * Awards points to the player currently carrying the oddball.
-     */
 
     /**
      * Apply a power-up effect to a player.

@@ -313,7 +313,7 @@ public final class StatusEffectManager {
             public void update(Player player, double delta) {
                 double damage = damagePerSecond * (delta / 1000);
                 if (player.takeDamage(damage)) {
-                    gameManager.killPlayer(player, gameManager.getGameEntities().getPlayer(effectOwner));
+                    gameManager.killPlayer(player, effectOwner);
                 }
             }
         });

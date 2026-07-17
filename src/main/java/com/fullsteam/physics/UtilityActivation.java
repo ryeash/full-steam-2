@@ -11,6 +11,5 @@ public record UtilityActivation(
         Vector2 position,
         Vector2 direction,
         int playerId,
-        int team
-) {
+        int team) {
 }

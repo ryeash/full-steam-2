@@ -438,8 +438,7 @@
                         <small style="color: #888; font-size: 0.8em;">How often weapons change (30s default)</small>
                     </div>
                     <div class="config-item">
-                        <small style="color: #ff9500; font-size: 0.8em;">⚠️ Creates chaotic, unpredictable
-                            gameplay!</small>
+                        <small style="color: #ff9500; font-size: 0.8em;">⚠️ Creates chaotic, unpredictable gameplay!</small>
                     </div>
                 </div>
 
@@ -448,8 +447,7 @@
                     <div class="config-item">
                         <label for="addHeadquarters">Enable Headquarters:</label>
                         <input type="checkbox" id="addHeadquarters">
-                        <small style="color: #888; font-size: 0.8em;">Each team gets a destructible base in their spawn
-                            zone</small>
+                        <small style="color: #888; font-size: 0.8em;">Each team gets a destructible base in their spawn zone</small>
                     </div>
                     <div class="config-item">
                         <label for="headquartersMaxHealth">Max Health:</label>
@@ -1058,16 +1056,17 @@
                     flagsPerTeam: 0,            // No flags in HQ assault
                     scoreStyle: 'TOTAL',        // Kills + HQ damage points
                     victoryCondition: 'SCORE_LIMIT',  // Win by destroying enemy HQ (HQ damage feeds the score limit)
-                    scoreLimit: 300,            // Fallback score limit
+                    scoreLimit: 1000,            // Fallback score limit
                     suddenDeath: false,
                     respawnMode: 'WAVE',        // Wave respawns for coordinated attacks
                     respawnDelay: 5,
                     waveRespawnInterval: 25,    // 25 second waves
                     maxLives: -1,               // Infinite lives
                     kothZones: 0,               // No KOTH zones
-                    kothPointsPerSecond: 1.0,                    headquartersMaxHealth: 1500,  // Durable headquarters
+                    addHeadquarters: true,
+                    headquartersMaxHealth: 1500,  // Durable headquarters
                     headquartersPointsPerDamage: 0.1,  // Points for damaging HQ
-                    headquartersDestructionBonus: 150,  // Big bonus for destroying enemy HQ
+                    headquartersDestructionBonus: 1000,  // Big bonus for destroying enemy HQ
                     headquartersDestructionEndsGame: true  // Game ends when HQ destroyed
                 }
             };
@@ -1130,11 +1129,6 @@
                     maxLives: -1,
                     kothZones: 0,
                     kothPointsPerSecond: 1.0,
-                    addHeadquarters: false,
-                    headquartersMaxHealth: 1000,
-                    headquartersPointsPerDamage: 0.1,
-                    headquartersDestructionBonus: 100,
-                    headquartersDestructionEndsGame: false,
                     enableRandomEvents: false,
                     randomEventInterval: 40,
                     eventWarningDuration: 3,

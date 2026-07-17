@@ -18,6 +18,7 @@ public class Obstacle extends GameEntity {
         HEXAGON_CRYSTAL,  // Regular hexagonal formations
         DIAMOND_STONE,    // Diamond/rhombus shaped rocks
         L_SHAPED_WALL,    // L-shaped structural obstacles
+        T_SHAPED_WALL,    // L-shaped structural obstacles
         CROSS_BARRIER     // Cross/plus shaped obstacles
     }
 

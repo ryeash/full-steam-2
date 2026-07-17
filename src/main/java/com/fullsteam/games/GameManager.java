@@ -30,7 +30,6 @@ import com.fullsteam.physics.Headquarters;
 import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Oddball;
 import com.fullsteam.physics.Player;
-import com.fullsteam.physics.PowerUp;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.Turret;
@@ -862,7 +861,7 @@ public class GameManager {
                     double dotDamage = beam.processContinuousDamage(player, deltaTime);
                     // Apply damage and check if player died
                     if (player.takeDamage(dotDamage)) {
-                        killPlayer(player, beamOwner);
+                        killPlayer(player, beam.getOwnerId());
                     }
                     break;
                 }
@@ -1314,7 +1313,23 @@ public class GameManager {
         }
     }
 
-    public void killPlayer(Player victim, Player shooter) {
+    /**
+     * Resolve the entity that owns a piece of ordnance (projectile, beam, field
+     * effect, DoT tick) into a killer, then attribute the death. Players are keyed
+     * by their positive id; NPC-fired ordnance (e.g. an Oddball) uses a negative
+     * sentinel owner id, so those are looked up via {@link GameEntities#getOddballNpc}.
+     */
+    public void killPlayer(Player victim, int ownerId) {
+        Player shooter = gameEntities.getPlayer(ownerId);
+        if (shooter != null) {
+            killPlayer(victim, shooter, killerIdentityOf(shooter));
+            return;
+        }
+        Oddball oddball = ownerId < 0 ? gameEntities.getOddballNpc(-ownerId) : null;
+        killPlayer(victim, null, killerIdentityOf(oddball));
+    }
+
+    private void killPlayer(Player victim, Player shooter, KillerIdentity killer) {
         // Check if this was a VIP kill BEFORE calling die() (which clears status effects)
         boolean wasVip = gameConfig.getRules().hasVip() && StatusEffectManager.isVip(victim);
 
@@ -1327,15 +1342,9 @@ public class GameManager {
         if (wasVip) {
             if (shooter != null && shooter.getTeam() != victim.getTeam() && shooter.getTeam() > 0) {
                 shooter.getScoring().addVipKill();
-
                 // Broadcast VIP kill event
-                gameEventManager.broadcastSystemMessage(
-                        String.format("💀 %s eliminated the VIP %s! +1 OBJECTIVE",
-                                shooter.getPlayerName(), victim.getPlayerName()));
+                gameEventManager.broadcastSystemMessage(String.format("💀 %s eliminated the VIP %s! +1 OBJECTIVE", shooter.getPlayerName(), victim.getPlayerName()));
             }
-
-            // VIP died, need to select a new VIP for their team after respawn
-            // This will be handled in ensureVipForTeam during respawn
         }
 
         boolean wasEliminated = victim.loseLife() || victim.isEliminated();
@@ -1380,21 +1389,50 @@ public class GameManager {
         ruleSystem.setRespawnTime(victim);
 
         // Broadcast kill event with team colors
-        String killerName = shooter != null ? shooter.getPlayerName() : "Unknown";
         String victimName = victim.getPlayerName();
-        String weaponName = shooter != null ? shooter.getCurrentWeapon().getDisplayName() : "Unknown weapon";
-        Integer killerTeam = shooter != null ? shooter.getTeam() : null;
         Integer victimTeam = victim.getTeam();
 
-        gameEventManager.broadcastKill(killerName, victimName, weaponName, killerTeam, victimTeam);
+        gameEventManager.broadcastKill(killer.name(), victimName, killer.weaponName(), killer.team(), victimTeam);
 
         // Legacy death notification (keeping for compatibility)
         Map<String, Object> deathNotification = new HashMap<>();
         deathNotification.put("type", "playerKilled");
         deathNotification.put("victimId", victim.getId());
-        deathNotification.put("killerId", shooter != null ? shooter.getId() : null);
-        deathNotification.put("killerName", shooter != null ? shooter.getPlayerName() : null);
+        deathNotification.put("killerId", killer.entityId());
+        deathNotification.put("killerName", killer.entityId() != null ? killer.name() : null);
         broadcast(deathNotification);
+    }
+
+    /**
+     * Display + team info used to attribute a kill in the feed. The killer may be a
+     * {@link Player} or an NPC such as an {@link Oddball}; {@code entityId} is the
+     * source entity's id, or {@code null} when the killer is unknown/environmental.
+     */
+    private record KillerIdentity(String name, Integer team, String weaponName, Integer entityId) {
+        private static final KillerIdentity UNKNOWN =
+                new KillerIdentity("Unknown", null, "Unknown weapon", null);
+    }
+
+    private static KillerIdentity killerIdentityOf(Player shooter) {
+        if (shooter == null) {
+            return KillerIdentity.UNKNOWN;
+        }
+        return new KillerIdentity(
+                shooter.getPlayerName(),
+                shooter.getTeam(),
+                shooter.getCurrentWeapon().getDisplayName(),
+                shooter.getId());
+    }
+
+    private static KillerIdentity killerIdentityOf(Oddball oddball) {
+        if (oddball == null) {
+            return KillerIdentity.UNKNOWN;
+        }
+        return new KillerIdentity(
+                oddball.getDisplayName(),
+                null,
+                oddball.getWeapon().getDisplayName(),
+                oddball.getId());
     }
 
     /**
@@ -1420,10 +1458,6 @@ public class GameManager {
 
             // Create destruction effect
             createHeadquartersDestructionEffect(hq);
-
-            log.info("Team {} headquarters destroyed by team {}!",
-                    hq.getTeamNumber(), attacker != null ? attacker.getTeam() : "?");
-
             // Broadcast HQ destruction event
             if (attacker != null) {
                 gameEventManager.broadcastHeadquartersDestroyed(hq.getTeamNumber(), attacker.getTeam());
@@ -1447,53 +1481,35 @@ public class GameManager {
 
         // Create large explosion effect at HQ location
         FieldEffect explosion = new FieldEffect(
-                -1, // No owner
+                -1,
                 FieldEffectType.EXPLOSION,
                 pos,
-                100.0, // Large radius
-                100.0, // Large damage
-                2.0,   // 2 second duration
-                0      // No team
-        );
+                100.0,
+                100.0,
+                2.0,
+                0);
         gameEntities.add(explosion);
-    }
-
-    /**
-     * Add a power-up to the game world (used by event system).
-     */
-    @Deprecated
-    private void addPowerUpToWorld(PowerUp powerUp) {
-        gameEntities.add(powerUp);
     }
 
     /**
      * Broadcast a custom game event (convenience overload).
      */
-    public void broadcastGameEvent(String message, String category, String color) {
-        GameEvent.EventCategory eventCategory = GameEvent.EventCategory.INFO;
-        try {
-            eventCategory = GameEvent.EventCategory.valueOf(category);
-        } catch (IllegalArgumentException e) {
-            // Use default INFO category if invalid
-        }
-
-        GameEvent event = GameEvent.builder()
+    public void broadcastGameEvent(String message, GameEvent.EventCategory category, String color) {
+        gameEventManager.broadcastEvent(GameEvent.builder()
                 .message(message)
-                .category(eventCategory)
+                .category(category)
                 .color(color)
                 .target(GameEvent.EventTarget.builder()
                         .type(GameEvent.EventTarget.TargetType.ALL)
                         .build())
                 .displayDuration(5000L)
-                .build();
-        gameEventManager.broadcastEvent(event);
+                .build());
     }
 
     /**
      * Award a capture to a player and their team.
      */
-    public void awardCapture(Player player, int capturedFlagTeam) {
+    public void awardCapture(Player player) {
         player.addCapture();
     }
-
 }

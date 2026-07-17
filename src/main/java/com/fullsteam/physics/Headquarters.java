@@ -74,16 +74,13 @@ public class Headquarters extends GameEntity {
         if (!active) {
             return false;
         }
-
         health -= damage;
         totalDamageTaken += damage;
-
         if (health <= 0) {
             health = 0;
             active = false;
             return true; // Headquarters destroyed!
         }
-
         return false;
     }
 

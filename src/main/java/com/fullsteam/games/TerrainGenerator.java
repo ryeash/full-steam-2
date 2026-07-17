@@ -81,7 +81,7 @@ public class TerrainGenerator {
         double densityMultiplier = density.getMultiplier();
         int baseCount = (int) (worldArea * baseObstaclesPerUnit * densityMultiplier);
         int variation = (int) (baseCount * 0.2);
-        int finalCount = baseCount + ThreadLocalRandom.current().nextInt(variation * 2 + 1) - variation;
+        int finalCount = baseCount + random().nextInt(variation * 2 + 1) - variation;
         return Math.max(3, Math.min(finalCount, (int) (worldArea * 0.0001))); // Max 1 obstacle per 10,000 square units
     }
 
@@ -91,8 +91,8 @@ public class TerrainGenerator {
      */
     private Obstacle generateQuadrantObstacleWithCollisionCheck(int maxAttempts) {
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
-            double x = ThreadLocalRandom.current().nextDouble() * (worldWidth / 2.0 - 50);
-            double y = ThreadLocalRandom.current().nextDouble() * (worldHeight / 2.0 - 50);
+            double x = random().nextDouble() * (worldWidth / 2.0 - 50);
+            double y = random().nextDouble() * (worldHeight / 2.0 - 50);
             Obstacle candidate = createChaoticObstacle(x, y);
             if (isQuadrantObstaclePositionClear(candidate)) {
                 return candidate;
@@ -233,8 +233,8 @@ public class TerrainGenerator {
      */
     public Vector2 getSafeSpawnPosition(double radius) {
         for (int attempt = 0; attempt < 50; attempt++) {
-            double x = (ThreadLocalRandom.current().nextDouble() - 0.5) * worldWidth * 0.8;
-            double y = (ThreadLocalRandom.current().nextDouble() - 0.5) * worldHeight * 0.8;
+            double x = (random().nextDouble() - 0.5) * worldWidth * 0.8;
+            double y = (random().nextDouble() - 0.5) * worldHeight * 0.8;
             Vector2 candidate = new Vector2(x, y);
 
             if (isPositionClear(candidate, radius)) {
@@ -273,7 +273,7 @@ public class TerrainGenerator {
             bodyFixture.setRestitution(0.6);
         }
         body.setMass(MassType.INFINITE);
-        double rotation = ThreadLocalRandom.current().nextDouble(0, Math.PI * 2);
+        double rotation = random().nextDouble(0, Math.PI * 2);
         body.getTransform().setRotation(rotation);
         return body;
     }
@@ -288,9 +288,10 @@ public class TerrainGenerator {
             case WALL_SEGMENT -> List.of(createWallShape());
             case TRIANGLE_ROCK -> List.of(createTriangularShape());
             case POLYGON_DEBRIS -> List.of(createIrregularPolygon());
-            case HEXAGON_CRYSTAL -> List.of(createRegularPolygon(ThreadLocalRandom.current().nextInt(4, 9)));
+            case HEXAGON_CRYSTAL -> List.of(createRegularPolygon(random().nextInt(4, 9)));
             case DIAMOND_STONE -> List.of(createDiamondShape());
             case L_SHAPED_WALL -> createLShape();
+            case T_SHAPED_WALL -> createTShape();
             case CROSS_BARRIER -> createCrossShape();
         };
     }
@@ -359,6 +360,18 @@ public class TerrainGenerator {
         return List.of(upper, lower);
     }
 
+    private static List<Convex> createTShape() {
+        double size = random().nextDouble(Config.PLAYER_RADIUS * 2, 180);
+        double thickness = size / 4;
+        int multiplier = random().nextInt(1, 3);
+        double vertHeight = size / multiplier;
+        Rectangle lower = Geometry.createRectangle(size, thickness);
+        lower.translate(size / 2, 0);
+        Rectangle upper = Geometry.createRectangle(thickness, vertHeight);
+        upper.translate(size / 2, thickness / 2 + vertHeight / 2);
+        return List.of(upper, lower);
+    }
+
     private static List<Convex> createCrossShape() {
         double size = random().nextDouble(50, 120);
         return List.of(
@@ -370,7 +383,7 @@ public class TerrainGenerator {
      * Factory method to create extra chaotic obstacles with maximum randomization.
      */
     public static Obstacle createChaoticObstacle(double x, double y) {
-        Obstacle.ObstacleType type = Obstacle.ObstacleType.values()[ThreadLocalRandom.current().nextInt(Obstacle.ObstacleType.values().length)];
+        Obstacle.ObstacleType type = Obstacle.ObstacleType.values()[random().nextInt(Obstacle.ObstacleType.values().length)];
         double xOffset = random().nextGaussian() * 15;
         double yOffset = random().nextGaussian() * 15;
         return new Obstacle(Config.nextEntityId(), x + xOffset, y + yOffset, type, createObstacleBody(type));

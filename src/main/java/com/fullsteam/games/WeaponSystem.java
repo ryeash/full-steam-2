@@ -40,8 +40,9 @@ public class WeaponSystem {
     private final GameEntities gameEntities;
     private final World<Body> world;
     private final BulletEffectProcessor bulletEffectProcessor;
+    /** (victim, owner id of the killing ordnance). Owner id resolves to a Player or NPC killer. */
     @Setter
-    private BiConsumer<Player, Player> killCallback;
+    private BiConsumer<Player, Integer> killCallback;
 
     public WeaponSystem(GameEntities gameEntities, World<Body> world) {
         this.gameEntities = gameEntities;
@@ -323,8 +324,7 @@ public class WeaponSystem {
         bulletEffectProcessor.processBeamEffectHit(beam, entity.getPosition());
         // Handle kill if player died
         if (entity instanceof Player p && killed && killCallback != null) {
-            Player killer = gameEntities.getPlayer(beam.getOwnerId());
-            killCallback.accept(p, killer);
+            killCallback.accept(p, beam.getOwnerId());
         }
     }
 

@@ -124,6 +124,16 @@ public class Oddball extends GameEntity implements HasWeapon {
         return weapon;
     }
 
+    /**
+     * Human-readable identifier for kill-feed attribution (e.g. "Rampage Oddball").
+     */
+    public String getDisplayName() {
+        return switch (personality) {
+            case RAMPAGE -> "Rampage Oddball";
+            case SEEKER -> "Seeker Oddball";
+        };
+    }
+
     // ── Per-frame update (GameEntities.updateAll) ─────────────────────────────
 
     @Override
@@ -238,8 +248,14 @@ public class Oddball extends GameEntity implements HasWeapon {
 
         Vector2 myPos = getPosition();
         Vector2 targetPos = currentTarget.getPosition();
-        Vector2 dir = new Vector2(targetPos.x - myPos.x, targetPos.y - myPos.y);
-        if (dir.getMagnitude() == 0) {
+        boolean beamType = weapon.getOrdinance().isBeamType();
+
+        // Beams are hitscan, so aim straight at the target. Projectiles travel at a
+        // finite speed, so lead the target based on its velocity to intercept it.
+        Vector2 dir = beamType
+                ? new Vector2(targetPos.x - myPos.x, targetPos.y - myPos.y)
+                : predictInterceptDirection(myPos, targetPos, currentTarget.getVelocity(), weapon.getProjectileSpeed());
+        if (dir == null || dir.getMagnitude() == 0) {
             return null;
         }
         dir.normalize();
@@ -249,11 +265,63 @@ public class Oddball extends GameEntity implements HasWeapon {
         double angle = Math.atan2(dir.y, dir.x) + angleOffset;
         Vector2 aimDir = new Vector2(Math.cos(angle), Math.sin(angle));
 
-        if (weapon.getOrdinance().isBeamType()) {
+        if (beamType) {
             return fireBeam(myPos, aimDir);
         } else {
             return fireProjectile(myPos, aimDir);
         }
+    }
+
+    /**
+     * Compute the aim direction that leads a moving target so a projectile fired at
+     * {@code projectileSpeed} intercepts it. Solves the quadratic for the earliest
+     * positive intercept time; falls back to aiming at the target's current position
+     * when no valid intercept exists (e.g. target outrunning the projectile).
+     */
+    private Vector2 predictInterceptDirection(Vector2 shooterPos, Vector2 targetPos, Vector2 targetVel, double projectileSpeed) {
+        Vector2 toTarget = new Vector2(targetPos.x - shooterPos.x, targetPos.y - shooterPos.y);
+        if (projectileSpeed <= 0.0) {
+            return toTarget; // no meaningful travel time; aim directly
+        }
+
+        // Solve |toTarget + targetVel * t| = projectileSpeed * t for the smallest t > 0.
+        double a = targetVel.dot(targetVel) - projectileSpeed * projectileSpeed;
+        double b = 2.0 * toTarget.dot(targetVel);
+        double c = toTarget.dot(toTarget);
+
+        double t;
+        if (Math.abs(a) < 1e-6) {
+            // Target speed ~= projectile speed: quadratic degenerates to linear.
+            if (Math.abs(b) < 1e-6) {
+                return toTarget;
+            }
+            t = -c / b;
+        } else {
+            double disc = b * b - 4.0 * a * c;
+            if (disc < 0.0) {
+                return toTarget; // no real intercept
+            }
+            double sqrtDisc = Math.sqrt(disc);
+            double t1 = (-b - sqrtDisc) / (2.0 * a);
+            double t2 = (-b + sqrtDisc) / (2.0 * a);
+            // Prefer the earliest positive intercept time.
+            t = smallestPositive(t1, t2);
+        }
+
+        if (t <= 0.0 || !Double.isFinite(t)) {
+            return toTarget;
+        }
+
+        return new Vector2(
+                targetPos.x + targetVel.x * t - shooterPos.x,
+                targetPos.y + targetVel.y * t - shooterPos.y);
+    }
+
+    private static double smallestPositive(double t1, double t2) {
+        if (t1 > 0.0 && t2 > 0.0) {
+            return Math.min(t1, t2);
+        }
+        return Math.max(t1, t2);
     }
 
     private Beam fireBeam(Vector2 pos, Vector2 dir) {
