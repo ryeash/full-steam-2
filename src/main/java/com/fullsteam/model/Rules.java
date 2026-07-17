@@ -95,8 +95,6 @@ public class Rules {
     @Builder.Default
     private double lockGameAfterSeconds = 0.0;
 
-    // ===== Respawn Rules =====
-
     /**
      * How players respawn after death.
      */
@@ -130,8 +128,6 @@ public class Rules {
     @Builder.Default
     private double waveRespawnInterval = 30.0;
 
-    // ===== King of the Hill Rules =====
-
     /**
      * Number of King of the Hill zones. 0 = disabled, 1-4 = number of zones.
      * Zones are placed equidistant between team spawn areas for fairness.
@@ -148,10 +144,6 @@ public class Rules {
     @DecimalMax("100.0")
     @Builder.Default
     private double kothPointsPerSecond = 1.0;
-
-    // ===== Oddball Rules =====
-
-    // ===== Oddball NPC Rules =====
 
     /**
      * Enable NPC oddball mode — invincible bouncing NPCs that shoot at players.
@@ -185,8 +177,6 @@ public class Rules {
     @Builder.Default
     private double oddballNpcPointsPerDamage = 0.1;
 
-    // ===== VIP Rules =====
-
     /**
      * Whether to enable VIP mode. When enabled, one player per team is designated as the VIP.
      * Only kills of VIP players count towards the objective score.
@@ -195,8 +185,6 @@ public class Rules {
     @NotNull
     @Builder.Default
     private boolean enableVip = false;
-
-    // ===== Random Weapons Rules =====
 
     /**
      * Whether to enable random weapon rotation. When enabled, all players are assigned
@@ -216,8 +204,6 @@ public class Rules {
     @Builder.Default
     private double randomWeaponInterval = 30.0;
 
-    // ===== Terrain Rules =====
-
     /**
      * Obstacle density for terrain generation.
      * SPARSE = fewer obstacles, more open space
@@ -228,8 +214,6 @@ public class Rules {
     @NotNull
     @Builder.Default
     private EntityWorldDensity obstacleDensity = EntityWorldDensity.RANDOM;
-
-    // ===== Headquarters Rules =====
 
     /**
      * Whether to add headquarters to the game. When enabled, each team gets one headquarters in their spawn zone.
@@ -273,8 +257,6 @@ public class Rules {
     @Builder.Default
     private boolean headquartersDestructionEndsGame = true;
 
-    // ===== Event System Rules =====
-
     /**
      * Whether to enable random events during gameplay.
      */
@@ -289,7 +271,7 @@ public class Rules {
     @DecimalMin("5.0")
     @DecimalMax("600.0")
     @Builder.Default
-    private double randomEventInterval = 40.0; // 40 seconds default
+    private double randomEventInterval = 40.0;
 
     /**
      * Variance factor for event intervals (0.0 - 1.0).
@@ -316,8 +298,6 @@ public class Rules {
     @NotNull
     @Builder.Default
     private List<EnvironmentalEvent> enabledEvents = new ArrayList<>();
-
-    // ===== Event Density Settings =====
 
     /**
      * Density of meteor shower impact zones.
@@ -366,8 +346,6 @@ public class Rules {
     @NotNull
     @Builder.Default
     private EntityWorldDensity blizzardDensity = EntityWorldDensity.DENSE;
-
-    // ===== Event Intensity Settings =====
 
     /**
      * Damage per meteor impact.

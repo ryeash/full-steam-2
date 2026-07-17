@@ -344,8 +344,7 @@
                                    onchange="updateEventFields()">
                             Enable Random Events
                         </label>
-                        <small style="color: #888; font-size: 0.8em;">Dynamic hazards and supply drops during
-                            gameplay</small>
+                        <small style="color: #888; font-size: 0.8em;">Dynamic hazards during gameplay</small>
                     </div>
                 </div>
 
@@ -561,16 +560,6 @@
                                 <option value="SPARSE">Sparse (Few Meteors)</option>
                                 <option value="DENSE" selected>Dense (Normal)</option>
                                 <option value="CHOKED">Choked (Many Meteors)</option>
-                                <option value="RANDOM">Random (Varies)</option>
-                            </select>
-                            <small style="color: #888; font-size: 0.8em;">Scales with map size</small>
-                        </div>
-                        <div class="config-item">
-                            <label for="supplyDropDensity">Supply Drop Density:</label>
-                            <select id="supplyDropDensity">
-                                <option value="SPARSE" selected>Sparse (Few Drops)</option>
-                                <option value="DENSE">Dense (Normal)</option>
-                                <option value="CHOKED">Choked (Many Drops)</option>
                                 <option value="RANDOM">Random (Varies)</option>
                             </select>
                             <small style="color: #888; font-size: 0.8em;">Scales with map size</small>
@@ -1101,7 +1090,6 @@
                     randomEventInterval: 15,     // Events every 15 seconds on average
                     eventWarningDuration: 5,     // 5 second warning
                     meteorShowerDensity: 'CHOKED',  // Intense meteor showers
-                    supplyDropDensity: 'CHOKED',    // Generous supply drops
                     volcanicEruptionDensity: 'DENSE',
                     ionStormDensity: 'DENSE',
                     earthquakeDensity: 'DENSE',
@@ -1165,7 +1153,6 @@
                     randomEventInterval: 60,
                     eventWarningDuration: 4,
                     meteorShowerDensity: 'SPARSE',
-                    supplyDropDensity: 'SPARSE',
                     volcanicEruptionDensity: 'SPARSE',
                     ionStormDensity: 'SPARSE',
                     earthquakeDensity: 'SPARSE',
@@ -1206,7 +1193,6 @@
                     randomEventInterval: 50,    // Occasional events
                     eventWarningDuration: 4,
                     meteorShowerDensity: 'CHOKED',  // Really make it wild
-                    supplyDropDensity: 'DENSE',     // Supply drops create VIP hunting opportunities
                     volcanicEruptionDensity: 'SPARSE',
                     ionStormDensity: 'DENSE',
                     earthquakeDensity: 'SPARSE',
@@ -1362,7 +1348,6 @@
                 document.getElementById('randomEventInterval').value = r.randomEventInterval ?? 40;
                 document.getElementById('eventWarningDuration').value = r.eventWarningDuration ?? 3;
                 document.getElementById('meteorShowerDensity').value = r.meteorShowerDensity || 'DENSE';
-                document.getElementById('supplyDropDensity').value = r.supplyDropDensity || 'SPARSE';
                 document.getElementById('volcanicEruptionDensity').value = r.volcanicEruptionDensity || 'DENSE';
                 document.getElementById('ionStormDensity').value = r.ionStormDensity || 'DENSE';
                 document.getElementById('earthquakeDensity').value = r.earthquakeDensity || 'SPARSE';
@@ -1483,7 +1468,6 @@
                 randomEventInterval: parseFloat(document.getElementById('randomEventInterval').value),
                 eventWarningDuration: parseFloat(document.getElementById('eventWarningDuration').value),
                 meteorShowerDensity: document.getElementById('meteorShowerDensity').value,
-                supplyDropDensity: document.getElementById('supplyDropDensity').value,
                 volcanicEruptionDensity: document.getElementById('volcanicEruptionDensity').value,
                 ionStormDensity: document.getElementById('ionStormDensity').value,
                 earthquakeDensity: document.getElementById('earthquakeDensity').value,

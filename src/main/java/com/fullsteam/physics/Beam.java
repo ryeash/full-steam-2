@@ -42,19 +42,25 @@ public class Beam extends GameEntity {
     protected final double damage;
     protected final int ownerId;
     protected final int ownerTeam;
-    protected final Ordinance ordinance; // Type of beam (laser, plasma, heal, etc.)
-    protected final Set<BulletEffect> bulletEffects; // Special effects this beam has
-    protected final double caliber; // Size multiplier from the weapon's CALIBER attribute (1.0 = baseline)
+    protected final Ordinance ordinance;
+    protected final Set<BulletEffect> bulletEffects;
+    protected final double caliber;
 
     // Track affected players for DOT beams
     protected final Set<Integer> affectedPlayers = new HashSet<>();
     protected final Map<Integer, Long> lastDamageTime = new HashMap<>();
 
 
-    public Beam(Vector2 startPoint, Vector2 direction, double range, double damage,
-                int ownerId, int ownerTeam, Ordinance ordinance, Set<BulletEffect> bulletEffects,
+    public Beam(Vector2 startPoint,
+                Vector2 direction,
+                double range,
+                double damage,
+                int ownerId,
+                int ownerTeam,
+                Ordinance ordinance,
+                Set<BulletEffect> bulletEffects,
                 double caliber) {
-        super(Config.nextEntityId(), createBeamBody(startPoint, direction, range, caliber), Double.POSITIVE_INFINITY); // Beams don't have health
+        super(Config.nextEntityId(), createBeamBody(startPoint, direction, range, caliber), Double.POSITIVE_INFINITY);
         this.startPoint = startPoint.copy();
         this.direction = direction.copy();
         this.direction.normalize();
@@ -66,15 +72,7 @@ public class Beam extends GameEntity {
         this.bulletEffects = new HashSet<>(bulletEffects);
         this.caliber = caliber;
         this.expires = (long) (System.currentTimeMillis() + (1000 * ordinance.getBeamDuration()));
-
-        // Calculate end point
-        Vector2 offset = this.direction.copy();
-        offset = offset.multiply(range);
-        this.endPoint = startPoint.copy();
-        this.endPoint.add(offset);
-
-        // Initially, effective end point is the same as end point
-        // This will be updated by GameManager after obstacle collision detection
+        this.endPoint = startPoint.copy().add(this.direction.copy().multiply(range));
         this.effectiveEndPoint = this.endPoint.copy();
         this.path = new ArrayList<>(List.of(this.startPoint.copy(), this.endPoint.copy()));
     }

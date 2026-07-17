@@ -44,7 +44,6 @@ public class GameEntities {
     private final Map<Integer, Flag> flags = new ConcurrentSkipListMap<>();
     private final Map<Integer, Oddball> oddballNpcs = new ConcurrentSkipListMap<>();
     private final Map<Integer, KothZone> kothZones = new ConcurrentSkipListMap<>();
-    private final Map<Integer, PowerUp> powerUps = new ConcurrentSkipListMap<>();
     private final Map<Integer, Headquarters> headquarters = new ConcurrentSkipListMap<>();
 
     private final Map<Integer, Integer> teamVips = new ConcurrentSkipListMap<>();
@@ -80,11 +79,7 @@ public class GameEntities {
                 case Flag flag -> flags.put(flag.getId(), flag);
                 case Oddball npc -> oddballNpcs.put(npc.getId(), npc);
                 case KothZone kothZone -> kothZones.put(kothZone.getId(), kothZone);
-                case PowerUp powerUp -> powerUps.put(powerUp.getId(), powerUp);
                 case Headquarters hq -> headquarters.put(hq.getId(), hq);
-                case null -> {
-                    // noop
-                }
                 default -> throw new IllegalArgumentException("Unknown GameEntity type: " + gameEntity);
             }
             addPostUpdateHook(() -> world.addBody(gameEntity.getBody()));
@@ -120,7 +115,7 @@ public class GameEntities {
     }
 
     public void removeInactiveEntities() {
-        Stream.of(obstacles, fieldEffects, turrets, netProjectiles, defenseLasers, beams, powerUps)
+        Stream.of(obstacles, fieldEffects, turrets, netProjectiles, defenseLasers, beams)
                 .forEach(map ->
                         map.entrySet().removeIf(entry -> {
                             GameEntity o = entry.getValue();
@@ -133,7 +128,7 @@ public class GameEntities {
     }
 
     public void updateAll(double deltaTime) {
-        Stream.of(players, projectiles, fieldEffects, turrets, defenseLasers, netProjectiles, beams, kothZones, powerUps, headquarters, oddballNpcs)
+        Stream.of(players, projectiles, fieldEffects, turrets, defenseLasers, netProjectiles, beams, kothZones, headquarters, oddballNpcs)
                 .flatMap(m -> m.values().stream())
                 .forEach(e -> e.update(deltaTime));
     }
@@ -207,18 +202,6 @@ public class GameEntities {
         while ((hook = postWorldUpdateHooks.poll()) != null) {
             hook.run();
         }
-    }
-
-    public PowerUp getPowerUp(int powerUpId) {
-        return powerUps.get(powerUpId);
-    }
-
-    public Collection<PowerUp> getAllPowerUps() {
-        return powerUps.values();
-    }
-
-    public void removePowerUp(int powerUpId) {
-        powerUps.remove(powerUpId);
     }
 
     public Headquarters getHeadquarters(int hqId) {

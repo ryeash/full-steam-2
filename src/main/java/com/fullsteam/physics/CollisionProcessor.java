@@ -131,10 +131,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 instanceof TypedCollision<Player, KothZone>(Player a, KothZone b)) {
             return handlePlayerKothZoneCollision(a, b);
 
-        } else if (c.rectify(Player.class, PowerUp.class)
-                instanceof TypedCollision<Player, PowerUp>(Player a, PowerUp b)) {
-            return handlePlayerPowerUpCollision(a, b);
-
         } else if (c.rectify(Projectile.class, Headquarters.class)
                 instanceof TypedCollision<Projectile, Headquarters>(Projectile a, Headquarters b)) {
             return handleProjectileHeadquartersCollision(a, b);
@@ -711,20 +707,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     }
 
     /**
-     * Handle player collecting a power-up.
-     * Applies the power-up effect to the player and removes the power-up.
-     */
-    boolean handlePlayerPowerUpCollision(Player player, PowerUp powerUp) {
-        // Check if power-up can be collected by this player
-        if (powerUp.canBeCollectedBy(player)) {
-            PowerUpEffect effect = powerUp.getEffect();
-            applyPowerUpEffect(player, effect);
-            powerUp.setActive(false);
-        }
-        return true;
-    }
-
-    /**
      * Handle a player's projectile hitting an oddball NPC.
      * Awards oddball points to the attacker; oddball is invincible (never deactivated).
      * NPC-generated projectiles (ownerId < 0) are ignored — they can't score on each other.
@@ -893,33 +875,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             }
         }
     }
-
-    /**
-     * Apply a power-up effect to a player.
-     */
-    private void applyPowerUpEffect(Player player, PowerUpEffect effect) {
-        switch (effect.type()) {
-            case SPEED_BOOST:
-                StatusEffectManager.applySpeedBoost(player, effect.strength(), effect.duration(), "Power-up");
-                break;
-            case HEALTH_REGENERATION:
-                StatusEffectManager.applyHealthRegeneration(player, effect.strength(), effect.duration(), "Power-up");
-                break;
-            case DAMAGE_BOOST:
-                StatusEffectManager.applyDamageBoost(player, effect.strength(), effect.duration(), "Power-up");
-                break;
-            case DAMAGE_RESISTANCE:
-                StatusEffectManager.applyDamageResistance(player, effect.strength(), effect.duration(), "Power-up");
-                break;
-            case BERSERKER_MODE:
-                StatusEffectManager.applyBerserkerMode(player, effect.duration(), "Power-up");
-                break;
-            case INFINITE_AMMO:
-                StatusEffectManager.applyInfiniteAmmo(player, effect.duration(), "Power-up");
-                break;
-        }
-    }
-
 
     record Collision(Object a, Object b) {
         public <A, B> TypedCollision<A, B> rectify(Class<A> typeA, Class<B> typeB) {

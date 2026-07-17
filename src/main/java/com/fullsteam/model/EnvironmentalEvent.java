@@ -9,7 +9,6 @@ import lombok.Getter;
 @Getter
 public enum EnvironmentalEvent {
     METEOR_SHOWER("Meteor Shower", "☄️", 15.0, 5000),
-    SUPPLY_DROP("Supply Drop", "📦", 30.0, 5000),
     VOLCANIC_ERUPTION("Volcanic Eruption", "🌋", 20.0, 2000),
     EARTHQUAKE("Earthquake", "🌊", 12.0, 1000),
     ION_STORM("Ion Storm", "⚡", 15.0, 600),      // Electric field effects

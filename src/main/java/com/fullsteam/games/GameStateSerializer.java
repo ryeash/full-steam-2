@@ -15,7 +15,6 @@ import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Oddball;
 import com.fullsteam.physics.Player;
-import com.fullsteam.physics.PowerUp;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.Turret;
@@ -87,7 +86,6 @@ public class GameStateSerializer {
         gameState.put("mines", createMineStates());
         gameState.put("defenseLasers", createDefenseLaserStates());
         gameState.put("beams", createBeamStates());
-        gameState.put("powerUps", createPowerUpStates());
 
         // Add optional game mode states
         if (gameConfig.getRules().hasKothZones()) {
@@ -519,22 +517,6 @@ public class GameStateSerializer {
             beamStates.add(beamState);
         }
         return beamStates;
-    }
-
-    private List<Map<String, Object>> createPowerUpStates() {
-        List<Map<String, Object>> powerUpStates = new ArrayList<>();
-        for (PowerUp powerUp : gameEntities.getAllPowerUps()) {
-            Vector2 pos = powerUp.getPosition();
-            Map<String, Object> powerUpState = new HashMap<>();
-            powerUpState.put("id", powerUp.getId());
-            powerUpState.put("type", "POWERUP");
-            powerUpState.put("powerUpType", powerUp.getType().name());
-            powerUpState.put("x", pos.x);
-            powerUpState.put("y", pos.y);
-            powerUpState.put("radius", powerUp.getRadius());
-            powerUpStates.add(powerUpState);
-        }
-        return powerUpStates;
     }
 
     /**

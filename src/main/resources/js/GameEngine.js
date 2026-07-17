@@ -1568,18 +1568,6 @@ class GameEngine {
             });
         }
         
-        // Handle power-ups
-        if (data.powerUps) {
-            data.powerUps.forEach(powerUpData => {
-                currentEntityIds.add(powerUpData.id);
-                if (this.utilityEntities.has(powerUpData.id)) {
-                    this.updateUtilityEntity(powerUpData);
-                } else {
-                    this.createUtilityEntity(powerUpData);
-                }
-            });
-        }
-        
         // Handle headquarters
         if (data.headquarters) {
             data.headquarters.forEach(hqData => {
@@ -2044,9 +2032,6 @@ class GameEngine {
             this.updateUtilityCooldownBar(sprite.healthBar, playerData);
         }
 
-        // Update power-up visual indicators
-        this.updatePowerUpIndicators(sprite, playerData);
-
         sprite.playerData = playerData;
     }
     
@@ -2120,15 +2105,6 @@ class GameEngine {
             }
             sprite.deathMarker.destroy({ context: true });
             sprite.deathMarker = null;
-        }
-        
-        // Remove and destroy power-up container
-        if (sprite.powerUpContainer) {
-            if (sprite.powerUpContainer.parent) {
-                sprite.powerUpContainer.parent.removeChild(sprite.powerUpContainer);
-            }
-            sprite.powerUpContainer.destroy({ children: true, context: true });
-            sprite.powerUpContainer = null;
         }
         
         // Clear player data reference
@@ -2380,188 +2356,6 @@ class GameEngine {
         } else if (reloadContainer.reloadText) {
             reloadContainer.reloadText.alpha = 1.0; // Full opacity when not reloading
         }
-    }
-    
-    /**
-     * Update power-up visual indicators around player.
-     */
-    updatePowerUpIndicators(sprite, playerData) {
-        const activePowerUps = playerData.activePowerUps || [];
-        
-        // Create power-up container if it doesn't exist
-        if (!sprite.powerUpContainer) {
-            sprite.powerUpContainer = new PIXI.Container();
-            sprite.powerUpContainer._powerUpFingerprint = '';
-            this.gameContainer.addChild(sprite.powerUpContainer);
-        }
-        
-        // Update position to match player
-        sprite.powerUpContainer.position.set(sprite.x, sprite.y);
-        sprite.powerUpContainer.visible = playerData.active;
-        
-        // Build a fingerprint so we only rebuild graphics when the set of effects changes
-        const fingerprint = activePowerUps.join('|');
-        const changed = fingerprint !== sprite.powerUpContainer._powerUpFingerprint;
-        sprite.powerUpContainer._powerUpFingerprint = fingerprint;
-        
-        if (activePowerUps.length > 0) {
-            this.updatePowerUpVisuals(sprite.powerUpContainer, activePowerUps, sprite, changed);
-        } else if (changed) {
-            // Effects just cleared — destroy all children so nothing renders
-            const toDestroy = [...sprite.powerUpContainer.children];
-            toDestroy.forEach(child => {
-                sprite.powerUpContainer.removeChild(child);
-                child.destroy({ children: true, texture: false, baseTexture: false, context: true });
-            });
-            // Reset tracking arrays so the next activation starts fresh
-            sprite.powerUpContainer._auraSprites = [];
-            sprite.powerUpContainer._badgeContainer = null;
-        }
-    }
-    
-    /**
-     * Create/update power-up visual effects based on render hints.
-     * 
-     * RenderHint Format: "effect_name:#COLOR:animation_type:show_icon:Display Name:params"
-     * 
-     * Animation Types:
-     * - pulse/sparkle: Pulsing ring with rotating particles
-     *   Params: {particles, radius, particleDistance, particleSize}
-     * - shield: Polygonal shield pattern
-     *   Params: {sides, size}
-     * - slow: Dripping effect for debuffs
-     *   Params: {drops, radius, dropSize, dripAmount}
-     * - cloud: Billowing cloud effect (poison)
-     *   Params: {radius, puffs, wisps}
-     * - flame: Flickering fire particles (burning)
-     *   Params: {count, radius, height}
-     * - star: Orbiting stars (special status)
-     *   Params: {count, radius, size}
-     * - crown: VIP crown with sparkles
-     * 
-     * Examples:
-     * "poison:#8BC34A:cloud:true:Poison"
-     * "fire:#FF4500:flame:true:Burning:{\"count\":12,\"radius\":22,\"height\":10}"
-     */
-    updatePowerUpVisuals(container, activePowerUps, sprite, changed) {
-        // Parse render hints: "effect_name:#COLOR:animation_type:show_icon:Display Name:params"
-        const effects = activePowerUps.map(hint => {
-            const parts = hint.split(':');
-            let params = {};
-            if (parts.length > 5) {
-                try { params = JSON.parse(parts.slice(5).join(':')); } catch (e) { /* legacy */ }
-            }
-            return {
-                name: parts[0] || 'unknown',
-                color: parseInt(parts[1]?.replace('#', '') || 'FFFFFF', 16),
-                animation: parts[2] || 'pulse',
-                showIcon: parts[3] === 'true',
-                displayName: parts[4] || '',
-                params
-            };
-        });
-
-        // --- Aura layer: one tinted glow Sprite per active effect ---
-        // Sprites share the single glow texture, so they batch into ~1 draw call
-        // and allocate no geometry. We only rebuild the sprite set when the effect
-        // set changes; per-frame work is cheap transform updates (no clear/redraw).
-        if (!container._auraSprites) container._auraSprites = [];
-
-        if (changed) {
-            container._auraSprites.forEach(s => {
-                container.removeChild(s);
-                s.destroy({ children: true, texture: false, baseTexture: false });
-            });
-            container._auraSprites = effects.map(effect => {
-                const s = new PIXI.Sprite(this.glowTexture);
-                s.anchor.set(0.5);
-                s.tint = effect.color;
-                const p = effect.params || {};
-                const baseRadius = p.radius || p.size || 22;
-                s._baseScale = (baseRadius * 1.6) / (this.glowTextureRadius || 64);
-                s._animation = effect.animation;
-                container.addChildAt(s, 0); // keep auras beneath badge overlays
-                return s;
-            });
-        }
-
-        // Animate each aura sprite via transform only (rotation/scale/alpha).
-        const now = Date.now();
-        container._auraSprites.forEach((s, index) => {
-            const time = now * 0.003 + index;
-            const pulse = 0.9 + Math.sin(time) * 0.12;
-            s.scale.set(s._baseScale * pulse);
-            switch (s._animation) {
-                case 'flame':
-                case 'speed':
-                    s.alpha = 0.9 + Math.sin(time * 3) * 0.1;
-                    s.rotation = now * 0.002;
-                    break;
-                case 'star':
-                case 'crown':
-                    s.alpha = 0.95;
-                    s.rotation = now * 0.0015;
-                    break;
-                case 'cloud':
-                    s.alpha = 0.8 + Math.sin(time * 1.2) * 0.1;
-                    s.rotation = now * 0.0003;
-                    break;
-                default:
-                    s.alpha = 0.85 + Math.sin(time * 2) * 0.1;
-                    s.rotation = now * 0.0008;
-            }
-        });
-
-        // Badge overlays — kept in a dedicated sub-container, never mixed with aura Graphics
-        if (changed) {
-            if (!container._badgeContainer) {
-                container._badgeContainer = new PIXI.Container();
-                container.addChild(container._badgeContainer);
-            }
-            const bc = container._badgeContainer;
-            [...bc.children].forEach(child => {
-                bc.removeChild(child);
-                // Badges contain Text (auto-generated texture); free it on destroy.
-                child.destroy({ children: true, context: true });
-            });
-            if (sprite.playerData.id === this.myPlayerId) {
-                effects.forEach((effect, index) => {
-                    if (effect.showIcon) {
-                        bc.addChild(this.createPowerUpBadge(effect, index));
-                    }
-                });
-            }
-        }
-    }
-    
-    /**
-     * Create a small badge/icon for power-up status (shown only for local player).
-     */
-    createPowerUpBadge(effect, index) {
-        const badge = new PIXI.Container();
-        
-        // Position badges in a row above player
-        const offsetX = (index - 0.5) * 30;
-        badge.position.set(offsetX, -45);
-        
-        // Background circle
-        const bg = new PIXI.Graphics();
-        bg.circle(0, 0, 10).fill({ color: 0x000000, alpha: 0.7 });
-        bg.circle(0, 0, 10).stroke({ width: 2, color: effect.color });
-        badge.addChild(bg);
-        
-        // Icon letter (first letter of effect name)
-        const letter = effect.displayName.charAt(0) || '?';
-        const text = new PIXI.Text(letter, {
-            fontSize: 12,
-            fill: effect.color,
-            fontWeight: 'bold'
-        });
-        text.anchor.set(0.5);
-        text.scale.y = -1; // Flip Y-axis back so text is readable
-        badge.addChild(text);
-        
-        return badge;
     }
     
     createProjectile(projectileData) {
@@ -3658,8 +3452,6 @@ class GameEngine {
                 return this.createDefenseLaserGraphics(graphics, entityData);
             case 'HEADQUARTERS':
                 return this.createHeadquartersGraphics(graphics, entityData);
-            case 'POWERUP':
-                return this.createPowerUpGraphics(graphics, entityData);
             default:
                 return this.createGenericUtilityGraphics(graphics, entityData);
         }
@@ -4113,55 +3905,6 @@ class GameEngine {
     }
     
     /**
-     * Create power-up graphics
-     */
-    createPowerUpGraphics(graphics, entityData) {
-        const powerUpType = entityData.powerUpType || entityData.type || 'SPEED_BOOST';
-        
-        // Power-up base - larger circle for better visibility
-        graphics.circle(0, 0, 14).fill({ color: 0xFFFFFF, alpha: 0.9 });
-        
-        // Power-up outline (thicker for better visibility)
-        graphics.circle(0, 0, 14).stroke({ width: 3, color: 0xCCCCCC });
-        
-        // Type-specific visual indicators (larger inner circle)
-        switch (powerUpType) {
-            case 'SPEED_BOOST':
-                graphics.circle(0, 0, entityData.radius).fill({ color: 0x00FFFF, alpha: 0.8 });
-                break;
-            case 'HEALTH_REGENERATION':
-                graphics.circle(0, 0, entityData.radius).fill({ color: 0x00FF00, alpha: 0.8 });
-                break;
-            case 'DAMAGE_BOOST':
-                graphics.circle(0, 0, entityData.radius).fill({ color: 0xFF0000, alpha: 0.8 });
-                break;
-            case 'DAMAGE_RESISTANCE':
-                graphics.circle(0, 0, entityData.radius).fill({ color: 0xFFD700, alpha: 0.8 });
-                break;
-            case 'BERSERKER_MODE':
-                graphics.circle(0, 0, entityData.radius).fill({ color: 0xFF4500, alpha: 0.8 });
-                break;
-            case 'INFINITE_AMMO':
-                // Orange background circle
-                graphics.circle(0, 0, entityData.radius).fill({ color: 0xFFA500, alpha: 0.8 });
-                // Draw infinity symbol (∞) - two connected loops
-                graphics.circle(-3, 0, 3.5).stroke({ width: 1.5, color: 0xFFFFFF, alpha: 0.9 });
-                graphics.circle(3, 0, 3.5).stroke({ width: 1.5, color: 0xFFFFFF, alpha: 0.9 });
-                graphics.rect(-1, -1.5, 2, 3).fill({ color: 0xFFA500, alpha: 0.8 });
-                break;
-            case 'SLOW_EFFECT':
-                graphics.circle(0, 0, entityData.radius).fill({ color: 0x0066CC, alpha: 0.8 });
-                break;
-        }
-        
-        // Add larger sparkle effect for better visibility
-        graphics.circle(-5, -5, 3).fill({ color: 0xFFFFFF, alpha: 0.7 });
-        graphics.circle(5, 5, 3).fill({ color: 0xFFFFFF, alpha: 0.7 });
-        
-        return graphics;
-    }
-    
-    /**
      * Create generic utility graphics
      */
     createGenericUtilityGraphics(graphics, entityData) {
@@ -4187,8 +3930,6 @@ class GameEngine {
                 return 7;  // Above obstacles, below players
             case 'HEADQUARTERS':
                 return 5;  // Same as obstacles (HQ is a structure)
-            case 'POWERUP':
-                return 10; // Above players, below projectiles
             default:
                 return 8;
         }

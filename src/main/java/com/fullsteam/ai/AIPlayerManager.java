@@ -44,8 +44,7 @@ public class AIPlayerManager {
             KothBehavior::new,
             HeadquartersBehavior::new,
             OddballBehavior::new,
-            VipBehavior::new,
-            PowerUpBehavior::new
+            VipBehavior::new
     );
 
     private final GameConfig gameConfig;

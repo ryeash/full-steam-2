@@ -7,8 +7,6 @@ import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Rules;
 import com.fullsteam.physics.GameEntities;
-import com.fullsteam.physics.PowerUp;
-import com.fullsteam.physics.PowerUpType;
 import lombok.Getter;
 import org.dyn4j.geometry.Vector2;
 import org.slf4j.Logger;
@@ -168,12 +166,6 @@ public class EventSystem {
                 double multiplier = rules.getMeteorShowerDensity().getMultiplier();
                 yield (int) Math.max(3, Math.round(baseCount * multiplier));
             }
-            case SUPPLY_DROP -> {
-                // Base: 1 drop per 800,000 square units (more sparse)
-                double baseCount = mapArea / 800000.0;
-                double multiplier = rules.getSupplyDropDensity().getMultiplier();
-                yield (int) Math.max(2, Math.round(baseCount * multiplier));
-            }
             case VOLCANIC_ERUPTION -> {
                 // Base: 1 eruption per 1,000,000 square units
                 double baseCount = mapArea / 1000000.0;
@@ -256,7 +248,6 @@ public class EventSystem {
     private double getWarningRadius(EnvironmentalEvent eventType) {
         return switch (eventType) {
             case METEOR_SHOWER -> rules.getMeteorRadius();
-            case SUPPLY_DROP -> 50.0;
             case VOLCANIC_ERUPTION -> rules.getEruptionRadius();
             case EARTHQUAKE -> worldWidth * 0.3; // Large area
             case ION_STORM -> 80.0;
@@ -322,8 +313,6 @@ public class EventSystem {
                             event.getEventType().getBaseDuration(),
                             0
                     ));
-            // supply drop is special since the field effect leaves behind power ups
-            case SUPPLY_DROP -> triggerSupplyDropStaggered(event);
         }
     }
 
@@ -340,52 +329,6 @@ public class EventSystem {
                 });
             }, delay, TimeUnit.MILLISECONDS);
         }
-    }
-
-    /**
-     * Trigger supply drops with staggered timing.
-     * Drops arrive over 1-2 seconds.
-     */
-    private void triggerSupplyDropStaggered(ActiveGameEvent event) {
-        List<Vector2> locations = event.getTargetLocations();
-        double totalDuration = event.getEventType().getStaggerTime() + ThreadLocalRandom.current().nextDouble() * event.getEventType().getStaggerTime();
-        for (Vector2 location : locations) {
-            // Random delay within the total duration
-            long delay = (long) (ThreadLocalRandom.current().nextDouble() * totalDuration);
-            Config.EXECUTOR.schedule(() -> {
-                gameEntities.addPostUpdateHook(() -> {
-                    FieldEffect explosion = new FieldEffect(
-                            -1,
-                            FieldEffectType.EXPLOSION,
-                            location,
-                            50.0,
-                            0.0, // No damage
-                            FieldEffectType.EXPLOSION.getDefaultDuration(),
-                            0
-                    );
-                    gameEntities.add(explosion);
-
-                    // Spawn random power-up
-                    PowerUpType powerUpType = getRandomPowerUpType();
-                    PowerUp powerUp = new PowerUp(
-                            Config.nextEntityId(),
-                            location,
-                            powerUpType,
-                            30.0,
-                            1.5
-                    );
-                    gameEntities.add(powerUp);
-                });
-            }, delay, TimeUnit.MILLISECONDS);
-        }
-    }
-
-    /**
-     * Get a random power-up type for supply drops.
-     */
-    private PowerUpType getRandomPowerUpType() {
-        PowerUpType[] types = PowerUpType.values();
-        return types[ThreadLocalRandom.current().nextInt(types.length)];
     }
 
     /**
