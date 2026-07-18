@@ -3,6 +3,7 @@ package com.fullsteam.model;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.util.Set;
@@ -58,6 +59,7 @@ public class GameEvent {
     /**
      * Categories of game events for styling and organization
      */
+    @Getter
     public enum EventCategory {
         KILL("#E67E22"),           // Amber-orange for kills (avoids red/green pair)
         CAPTURE("#2EC4B6"),        // Teal for objectives (colorblind-safe)
@@ -71,10 +73,6 @@ public class GameEvent {
 
         EventCategory(String defaultColor) {
             this.defaultColor = defaultColor;
-        }
-
-        public String getDefaultColor() {
-            return defaultColor;
         }
     }
 

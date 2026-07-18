@@ -27,6 +27,7 @@ import org.dyn4j.geometry.Vector2;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
@@ -396,7 +397,7 @@ public class GameStateSerializer {
     }
 
     private List<Map<String, Object>> createFieldEffectStates() {
-        List<Map<String, Object>> fieldEffectStates = new ArrayList<>();
+        List<Map<String, Object>> fieldEffectStates = new LinkedList<>();
         for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
             // A delayed effect (e.g. a pending strike explosion) stays hidden until it
             // arms/fires. Mines have their own serializer + arming visuals, so exempt them.
@@ -412,6 +413,8 @@ public class GameStateSerializer {
             effectState.put("radius", effect.getRadius());
             effectState.put("progress", effect.getProgress());
             effectState.put("active", effect.isActive());
+            // TODO: change frontend to render shapes
+            effectState.put("shapes", verticesShorthand(effect.getBody()));
             fieldEffectStates.add(effectState);
         }
         return fieldEffectStates;
