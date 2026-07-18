@@ -229,8 +229,10 @@ public class EventSystem {
                     FieldEffectType.WARNING_ZONE,
                     location,
                     radius,
+                    radius,
                     0.0, // No damage
-                    rules.getEventWarningDuration(),
+                    (long) (System.currentTimeMillis() + rules.getEventWarningDuration() * 1000),
+                    0,
                     0 // No team
             );
 
@@ -267,8 +269,10 @@ public class EventSystem {
                             FieldEffectType.EXPLOSION,
                             l,
                             rules.getMeteorRadius(),
+                            rules.getMeteorRadius(),
                             rules.getMeteorDamage(),
-                            FieldEffectType.EXPLOSION.getDefaultDuration(),
+                            (long) FieldEffectType.EXPLOSION.getDefaultDuration(),
+                            0,
                             0 // No team
                     ));
             case VOLCANIC_ERUPTION -> triggerStaggeredEventFieldEffect(event, (e, l) ->
@@ -289,8 +293,10 @@ public class EventSystem {
                             FieldEffectType.EARTHQUAKE,
                             l,
                             worldWidth * 0.3, // Large radius
+                            worldWidth * 0.3, // Large radius
                             rules.getEarthquakeDamage(),
                             event.getEventType().getBaseDuration(),
+                            0,
                             0
                     ));
             case ION_STORM -> triggerStaggeredEventFieldEffect(event, (e, l) ->
@@ -299,8 +305,10 @@ public class EventSystem {
                             FieldEffectType.ELECTRIC,
                             l,
                             80.0,
+                            80.0,
                             rules.getIonStormDamage(),
                             event.getEventType().getBaseDuration(),
+                            0,
                             0
                     ));
             case BLIZZARD -> triggerStaggeredEventFieldEffect(event, (e, l) ->
@@ -309,8 +317,10 @@ public class EventSystem {
                             FieldEffectType.FREEZE,
                             l,
                             90.0,
+                            90.0,
                             20.0, // Moderate damage
                             event.getEventType().getBaseDuration(),
+                            0,
                             0
                     ));
         }

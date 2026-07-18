@@ -374,16 +374,18 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             case SMOKE -> player.setVisionObscured(true);
             case PROXIMITY_MINE -> {
                 fieldEffect.setActive(false);
-                FieldEffect explosion = new FieldEffect(
+                double radius = 80.0;
+                gameEntities.add(new FieldEffect(
                         fieldEffect.getOwnerId(),
                         FieldEffectType.EXPLOSION,
                         fieldEffect.getPosition(),
-                        80.0,
+                        radius,
+                        radius,
                         60.0,
                         FieldEffectType.EXPLOSION.getDefaultDuration(),
+                        0,
                         fieldEffect.getOwnerTeam()
-                );
-                gameEntities.add(explosion);
+                ));
             }
         }
     }
@@ -547,16 +549,18 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      * Create a visual explosion effect when a turret is destroyed.
      */
     private void createTurretDestructionExplosion(Turret turret) {
-        FieldEffect explosion = new FieldEffect(
+        double radius = turret.getBody().getFixture(0).getShape().getRadius();
+        gameEntities.add(new FieldEffect(
                 turret.getOwnerId(),
                 FieldEffectType.EXPLOSION,
                 turret.getPosition(),
-                turret.getBody().getFixture(0).getShape().getRadius(),
+                radius,
+                radius,
                 0.0, // Zero damage - purely visual
                 FieldEffectType.EXPLOSION.getDefaultDuration(),
+                0,
                 turret.getOwnerTeam()
-        );
-        gameEntities.add(explosion);
+        ));
     }
 
     private boolean handleNetCollision(NetProjectile net, GameEntity entity) {

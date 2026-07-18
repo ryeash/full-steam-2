@@ -67,16 +67,17 @@ public class UtilitySystem {
             offset.multiply(utility.getRange());
             targetPos.add(offset);
         }
-        FieldEffect fieldEffect = new FieldEffect(
+        gameEntities.add(new FieldEffect(
                 activation.playerId(),
                 effectType,
                 targetPos,
                 utility.getRadius(),
+                utility.getRadius(),
                 utility.getDamage(),
                 effectType.getDefaultDuration(),
+                0,
                 activation.team()
-        );
-        gameEntities.add(fieldEffect);
+        ));
     }
 
     /**

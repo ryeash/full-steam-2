@@ -33,26 +33,16 @@ public class FieldEffect extends GameEntity {
     private final Set<Integer> affectedEntities; // Track which entities have been affected
     private final Map<Integer, Long> lastDamageTime; // Track last damage time for each player (in milliseconds)
 
-    public FieldEffect(int ownerId, FieldEffectType type, Vector2 position, double radius, double damage, double duration, int ownerTeam) {
-        this(ownerId, type, position, radius, radius, damage, duration, 0, ownerTeam);
-    }
-
-    /**
-     * A delayed field effect: stays inert (deals no damage) and is not sent to
-     * clients until {@code delaySeconds} elapse, then activates for
-     * {@code durationSeconds}. Used for telegraphed strikes (e.g. the Strike Beacon's
-     * explosion lands after its warning zone). Damage gating is via {@link #isArmed()};
-     * the serializer skips unarmed effects so nothing renders during the delay.
-     */
-    public FieldEffect(int ownerId, FieldEffectType type, Vector2 position, double radius, double damage,
-                       double durationSeconds, double delaySeconds, int ownerTeam) {
-        this(ownerId, type, position, radius, radius, damage,
-                delaySeconds + durationSeconds,
-                (long) (System.currentTimeMillis() + delaySeconds * 1000), ownerTeam);
-    }
-
-    public FieldEffect(int ownerId, FieldEffectType type, Vector2 position, double radius, double maxRadius, double damage, double duration, long armingTime, int ownerTeam) {
-        super(Config.nextEntityId(), createFieldEffectBody(position, radius), Double.POSITIVE_INFINITY); // Field effects are indestructible
+    public FieldEffect(int ownerId,
+                       FieldEffectType type,
+                       Vector2 position,
+                       double radius,
+                       double maxRadius,
+                       double damage,
+                       double duration,
+                       long armingTime,
+                       int ownerTeam) {
+        super(Config.nextEntityId(), createFieldEffectCircle(position, radius), Double.POSITIVE_INFINITY); // Field effects are indestructible
         this.ownerId = ownerId;
         this.type = type;
         this.initialRadius = radius;
@@ -65,10 +55,9 @@ public class FieldEffect extends GameEntity {
         this.affectedEntities = new HashSet<>();
         this.lastDamageTime = new HashMap<>();
         this.active = true;
-        getBody().setUserData(this);
     }
 
-    private static Body createFieldEffectBody(Vector2 position, double radius) {
+    private static Body createFieldEffectCircle(Vector2 position, double radius) {
         Body body = new Body();
         Circle circle = new Circle(radius);
         BodyFixture fixture = body.addFixture(circle);
@@ -112,12 +101,10 @@ public class FieldEffect extends GameEntity {
      */
     private void updateBodyRadius(double newRadius) {
         Body body = getBody();
-
         // Remove old fixture
         if (body.getFixtureCount() > 0) {
             body.removeFixture(0);
         }
-
         // Add new fixture with updated radius
         Circle circle = new Circle(newRadius);
         BodyFixture fixture = body.addFixture(circle);
@@ -222,30 +209,6 @@ public class FieldEffect extends GameEntity {
     private long activePhaseStart() {
         return Math.max(created, armingTime);
     }
-
-//    /**
-//     * Trigger the mine and create an explosion field effect (for proximity mines)
-//     */
-//    public FieldEffect trigger() {
-//        if (type != FieldEffectType.PROXIMITY_MINE || hasTriggered) {
-//            return null;
-//        }
-//
-//        hasTriggered = true;
-//        active = false;
-//
-//        // Create explosion field effect
-//        return new FieldEffect(
-//                getId() + 10000, // Offset ID to avoid conflicts
-//                ownerId,
-//                FieldEffectType.EXPLOSION,
-//                getPosition(),
-//                explosionRadius,
-//                explosionDamage,
-//                FieldEffectType.EXPLOSION.getDefaultDuration(),
-//                ownerTeam
-//        );
-//    }
 
     /**
      * Check if the mine is armed (for proximity mines)

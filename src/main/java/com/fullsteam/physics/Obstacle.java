@@ -28,7 +28,6 @@ public class Obstacle extends GameEntity {
         super(id, body, Double.POSITIVE_INFINITY);
         this.type = type;
         getBody().setMass(MassType.INFINITE);
-        getBody().setUserData(this);
         getBody().translate(x, y);
     }
 

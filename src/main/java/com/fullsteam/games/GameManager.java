@@ -1471,18 +1471,17 @@ public class GameManager {
      * Create explosion effect when headquarters is destroyed.
      */
     private void createHeadquartersDestructionEffect(Headquarters hq) {
-        Vector2 pos = hq.getPosition();
-
         // Create large explosion effect at HQ location
-        FieldEffect explosion = new FieldEffect(
+        gameEntities.add(new FieldEffect(
                 -1,
                 FieldEffectType.EXPLOSION,
-                pos,
-                100.0,
+                hq.getPosition(),
+                hq.getRadius() * 1.5,
+                hq.getRadius() * 1.5,
                 100.0,
                 2.0,
-                0);
-        gameEntities.add(explosion);
+                0,
+                0));
     }
 
     /**
