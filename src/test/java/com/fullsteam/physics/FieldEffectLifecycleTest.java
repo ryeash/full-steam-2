@@ -247,8 +247,8 @@ class FieldEffectLifecycleTest extends BaseTestClass {
     private Projectile createTestProjectile(Set<BulletEffect> effects, int ownerId, int ownerTeam, double damage) {
         return new Projectile(
                 ownerId,
-                0.0, 0.0, // x, y
-                10.0, 0.0, // vx, vy
+                new Vector2(0, 0),
+                new Vector2(10.0, 0.0),
                 damage,
                 200.0, // maxRange
                 ownerTeam,

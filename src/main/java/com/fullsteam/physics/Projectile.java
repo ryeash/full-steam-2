@@ -41,11 +41,11 @@ public class Projectile extends GameEntity {
     private final Set<Integer> affectedPlayers;
     private final Set<Integer> affectedObstacles;
 
-    public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange,
+    public Projectile(int ownerId, Vector2 position, Vector2 velocity, double damage, double maxRange,
                       int ownerTeam, double linearDamping, Set<BulletEffect> bulletEffects, Ordinance ordinance,
                       double caliber, double knockback) {
-        super(Config.nextEntityId(), createProjectileBody(x, y, vx, vy, linearDamping, bulletEffects, caliber), 1.0);
-        this.initialPosition = new Vector2(x, y);
+        super(Config.nextEntityId(), createProjectileBody(position, velocity, linearDamping, bulletEffects, caliber), 1.0);
+        this.initialPosition = position.copy();
         this.ownerId = ownerId;
         this.ownerTeam = ownerTeam;
         this.damage = damage;
@@ -56,7 +56,7 @@ public class Projectile extends GameEntity {
         this.knockback = knockback;
 
         // Calculate time to live based on range and speed
-        double speed = new Vector2(vx, vy).getMagnitude();
+        double speed = velocity.copy().getMagnitude();
         if (speed > 0) {
             this.timeToLive = maxRange / speed;
         } else {
@@ -71,7 +71,7 @@ public class Projectile extends GameEntity {
      */
     private static final double BASE_RADIUS = 2.0;
 
-    private static Body createProjectileBody(double x, double y, double vx, double vy, double linearDamping, Set<BulletEffect> bulletEffects, double caliber) {
+    private static Body createProjectileBody(Vector2 position, Vector2 velocity, double linearDamping, Set<BulletEffect> bulletEffects, double caliber) {
         Body body = new Body();
         // Radius comes entirely from the weapon's caliber (baseline ×1.0 = BASE_RADIUS).
         Circle circle = new Circle(BASE_RADIUS * caliber);
@@ -85,8 +85,8 @@ public class Projectile extends GameEntity {
         }
 
         body.setMass(MassType.NORMAL);
-        body.getTransform().setTranslation(x, y);
-        body.setLinearVelocity(vx, vy);
+        body.getTransform().setTranslation(position);
+        body.setLinearVelocity(velocity);
         body.setBullet(true);
         body.setLinearDamping(linearDamping);
         return body;

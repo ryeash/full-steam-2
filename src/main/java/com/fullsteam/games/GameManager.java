@@ -126,9 +126,6 @@ public class GameManager {
         // Initialize AI management settings from config
         this.aiCheckIntervalMs = gameConfig.getAiCheckIntervalMs();
         this.teamSpawnManager = new TeamSpawnManager(gameConfig.getWorldWidth(), gameConfig.getWorldHeight(), gameConfig.getTeamCount());
-
-        EntityWorldDensity obstacleDensity = gameConfig.getRules().getObstacleDensity();
-
         this.world = new World<>();
 
         Settings settings = new Settings();
@@ -154,21 +151,9 @@ public class GameManager {
                 gameConfig.getTeamCount()
         );
 
-        // Initialize weapon system
-        this.weaponSystem = new WeaponSystem(gameEntities, world);
-        // Set kill callback for beam weapons
-        this.weaponSystem.setKillCallback(this::killPlayer);
-
+        this.weaponSystem = new WeaponSystem(gameEntities, world, this::killPlayer);
         this.terrainGenerator = new TerrainGenerator(world, gameConfig);
-
-        // Initialize utility system
-        this.utilitySystem = new UtilitySystem(
-                gameEntities,
-                world,
-                this::isPositionClearOfObstacles
-        );
-
-        // Initialize entity spawner
+        this.utilitySystem = new UtilitySystem(gameEntities, world, this::isPositionClearOfObstacles);
         this.entitySpawner = new EntitySpawner(
                 gameId,
                 gameConfig,
@@ -825,8 +810,7 @@ public class GameManager {
 
             // Turret AI: acquire targets and fire
             turret.acquireTarget(gameEntities.getAllPlayers().stream().toList());
-            GameEntity turretShot = turret.tryFire();
-            if (turretShot != null) {
+            for (GameEntity turretShot : turret.tryFire()) {
                 gameEntities.add(turretShot);
             }
         }
@@ -838,8 +822,7 @@ public class GameManager {
                 continue;
             }
             npc.tickAI(playerList);
-            GameEntity npcShot = npc.tryFire();
-            if (npcShot != null) {
+            for (GameEntity npcShot : npc.tryFire()) {
                 gameEntities.add(npcShot);
             }
         }

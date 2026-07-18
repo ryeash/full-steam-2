@@ -41,7 +41,8 @@ class WeaponSystemTest extends BaseTestClass {
         gameEntities = new GameEntities(testConfig, world);
 
         // Create weapon system
-        weaponSystem = new WeaponSystem(gameEntities, world);
+        weaponSystem = new WeaponSystem(gameEntities, world, (a, b) -> {
+        });
     }
 
     // ============================================================================

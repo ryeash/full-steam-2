@@ -14,7 +14,6 @@ import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.Turret;
-import lombok.Setter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.geometry.Ray;
@@ -40,13 +39,12 @@ public class WeaponSystem {
     private final GameEntities gameEntities;
     private final World<Body> world;
     private final BulletEffectProcessor bulletEffectProcessor;
-    /** (victim, owner id of the killing ordnance). Owner id resolves to a Player or NPC killer. */
-    @Setter
-    private BiConsumer<Player, Integer> killCallback;
+    private final BiConsumer<Player, Integer> killCallback;
 
-    public WeaponSystem(GameEntities gameEntities, World<Body> world) {
+    public WeaponSystem(GameEntities gameEntities, World<Body> world, BiConsumer<Player, Integer> killCallback) {
         this.gameEntities = gameEntities;
         this.world = world;
+        this.killCallback = killCallback;
         this.bulletEffectProcessor = new BulletEffectProcessor(gameEntities);
     }
 
@@ -71,9 +69,7 @@ public class WeaponSystem {
      * Handle firing of beam weapons. Supports multiple beams per shot.
      */
     private void handleBeamFire(Player player) {
-        List<Beam> beams = player.shootBeam();
-
-        for (Beam beam : beams) {
+        for (Beam beam : player.shootBeam()) {
             // Compute the beam's path — a straight [start, end] for normal beams, or
             // a reflected polyline for BOUNCY beams. setPath keeps effectiveEndPoint
             // (the last vertex) in sync for single-point consumers.
@@ -82,11 +78,6 @@ public class WeaponSystem {
             if (beam.getOrdinance() == Ordinance.LASER) {
                 processStandardBeamHit(beam);
             }
-        }
-
-        if (!beams.isEmpty()) {
-            log.debug("Player {} fired {} beam(s): {}", player.getId(),
-                    beams.size(), player.getCurrentWeapon().getName());
         }
     }
 

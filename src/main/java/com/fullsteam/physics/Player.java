@@ -244,12 +244,14 @@ public class Player extends GameEntity implements HasWeapon {
             Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
             Vector2 velocity = direction.multiply(weapon.getProjectileSpeed());
 
+            Vector2 jitter = new Vector2((i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0,
+                    (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0);
+            pos.add(jitter);
+
             toFire.add(new Projectile(
                     id,
-                    pos.x + ((i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0),
-                    pos.y + ((i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0),
-                    velocity.x,
-                    velocity.y,
+                    pos,
+                    velocity,
                     weapon.getDamagePerBullet(),
                     weapon.getRange(),
                     team,

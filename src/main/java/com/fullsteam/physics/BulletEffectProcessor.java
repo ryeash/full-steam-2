@@ -196,10 +196,8 @@ public class BulletEffectProcessor {
             // Create fragment projectile (smaller, shorter range)
             Projectile fragment = new Projectile(
                     projectile.getOwnerId(),
-                    spawnX,
-                    spawnY,
-                    vx,
-                    vy,
+                    new Vector2(spawnX, spawnY),
+                    new Vector2(vx, vy),
                     fragmentDamage,
                     100.0, // Short range for fragments
                     projectile.getOwnerTeam(),

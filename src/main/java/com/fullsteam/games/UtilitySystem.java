@@ -210,10 +210,8 @@ public class UtilitySystem {
         velocity.multiply(250.0);
         Projectile grenade = new Projectile(
                 activation.playerId(),
-                activation.position().x,
-                activation.position().y,
-                velocity.x,
-                velocity.y,
+                activation.position(),
+                velocity,
                 0.0,
                 activation.utilityWeapon().getRange(),
                 activation.team(),
@@ -238,10 +236,8 @@ public class UtilitySystem {
         velocity.multiply(350.0);
         Projectile beacon = new Projectile(
                 activation.playerId(),
-                activation.position().x,
-                activation.position().y,
-                velocity.x,
-                velocity.y,
+                activation.position(),
+                velocity,
                 0.0,
                 activation.utilityWeapon().getRange(),
                 activation.team(),

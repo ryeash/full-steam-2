@@ -11,6 +11,7 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -104,12 +105,17 @@ public class Turret extends GameEntity implements HasWeapon {
     /**
      * Attempt to fire at the current target.
      *
-     * @return a {@link Projectile} or {@link Beam} depending on the weapon's
-     * ordinance, or {@code null} if the turret cannot fire this tick.
+     * <p>Fires {@code weapon.getBulletsPerShot()} projectiles or beams (depending
+     * on the weapon's ordinance) with independent accuracy spread per shot,
+     * mirroring how {@link Player#shoot()} and {@link Player#shootBeam()} handle
+     * multi-shot weapons.
+     *
+     * @return a list of the {@link Projectile}s or {@link Beam}s fired this tick,
+     * or an empty list if the turret cannot fire.
      */
-    public GameEntity tryFire() {
+    public List<GameEntity> tryFire() {
         if (currentTarget == null || !canFire()) {
-            return null;
+            return List.of();
         }
 
         lastShotTime = System.currentTimeMillis();
@@ -118,22 +124,28 @@ public class Turret extends GameEntity implements HasWeapon {
         Vector2 turretPos = getPosition();
         Vector2 fireDirection = new Vector2(targetPos.x - turretPos.x, targetPos.y - turretPos.y);
         if (fireDirection.getMagnitude() == 0) {
-            return null;
+            return List.of();
         }
         fireDirection.normalize();
-        setRotation(Math.atan2(fireDirection.y, fireDirection.x));
+        double baseAngle = Math.atan2(fireDirection.y, fireDirection.x);
+        setRotation(baseAngle);
 
         // Apply accuracy spread using the same formula as Player.java
         double spread = (1.0 - weapon.getAccuracy()) * 0.17;
-        double angleOffset = (ThreadLocalRandom.current().nextDouble() - 0.5) * spread;
-        double firedAngle = Math.atan2(fireDirection.y, fireDirection.x) + angleOffset;
-        Vector2 firedDir = new Vector2(Math.cos(firedAngle), Math.sin(firedAngle));
+        boolean beamType = weapon.getOrdinance().isBeamType();
+        int shots = Math.max(1, weapon.getBulletsPerShot());
 
-        if (weapon.getOrdinance().isBeamType()) {
-            return fireBeam(turretPos, firedDir);
-        } else {
-            return fireProjectile(turretPos, firedDir);
+        List<GameEntity> fired = new ArrayList<>(shots);
+        double angle = baseAngle;
+        for (int i = 0; i < shots; i++) {
+            angle += (ThreadLocalRandom.current().nextDouble() - 0.5) * spread;
+            Vector2 firedDir = new Vector2(Math.cos(angle), Math.sin(angle));
+            Vector2 jitter = new Vector2(
+                    (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0,
+                    (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0);
+            fired.add(beamType ? fireBeam(turretPos, firedDir) : fireProjectile(turretPos.copy().add(jitter), firedDir));
         }
+        return fired;
     }
 
     private Beam fireBeam(Vector2 pos, Vector2 dir) {
@@ -149,10 +161,8 @@ public class Turret extends GameEntity implements HasWeapon {
         Vector2 velocity = dir.copy().multiply(weapon.getProjectileSpeed());
         return new Projectile(
                 ownerId,
-                pos.x,
-                pos.y,
-                velocity.x,
-                velocity.y,
+                pos,
+                velocity,
                 weapon.getDamagePerBullet(),
                 weapon.getRange() * 1.1,
                 ownerTeam,

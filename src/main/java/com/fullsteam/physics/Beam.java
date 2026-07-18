@@ -29,13 +29,7 @@ import java.util.Set;
 public class Beam extends GameEntity {
     protected final Vector2 startPoint;
     protected Vector2 endPoint;
-    protected Vector2 effectiveEndPoint; // Actual end point after obstacle collision
-    /**
-     * The beam's full path as a polyline: [start, bounce₁, …, end]. A plain
-     * (non-bouncing) beam is just [start, effectiveEnd]. BOUNCY beams add a vertex
-     * per reflection. Damage is applied per segment and the client renders it as a
-     * polyline. Kept in sync with {@link #effectiveEndPoint}.
-     */
+    protected Vector2 effectiveEndPoint;
     protected List<Vector2> path;
     protected final Vector2 direction;
     protected final double range;
@@ -49,7 +43,6 @@ public class Beam extends GameEntity {
     // Track affected players for DOT beams
     protected final Set<Integer> affectedPlayers = new HashSet<>();
     protected final Map<Integer, Long> lastDamageTime = new HashMap<>();
-
 
     public Beam(Vector2 startPoint,
                 Vector2 direction,
@@ -175,27 +168,28 @@ public class Beam extends GameEntity {
         if (!player.isActive() || player.getHealth() <= 0) {
             return false;
         }
-
         // Can't affect the owner
         if (player.getId() == ownerId) {
             return false;
         }
-
-        // Team-based logic
-        // Damage beams affect enemies
-        if (ownerTeam == 0 || player.getTeam() == 0) {
-            return true; // Damage anyone except self in FFA
-        }
-        return ownerTeam != player.getTeam(); // Damage enemies
+        return ownerTeam == 0
+                || player.getTeam() == 0
+                || ownerTeam != player.getTeam();
     }
 
     /**
      * Check if this beam can affect a specific turret (same team/owner rules as canAffectPlayer).
      */
     public boolean canAffectTurret(Turret turret) {
-        if (!turret.isActive()) return false;
-        if (turret.getOwnerId() == ownerId) return false;
-        if (ownerTeam == 0 || turret.getOwnerTeam() == 0) return true;
+        if (!turret.isActive()) {
+            return false;
+        }
+        if (turret.getOwnerId() == ownerId) {
+            return false;
+        }
+        if (ownerTeam == 0 || turret.getOwnerTeam() == 0) {
+            return true;
+        }
         return ownerTeam != turret.getOwnerTeam();
     }
 

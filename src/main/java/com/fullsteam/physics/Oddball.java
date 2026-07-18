@@ -12,6 +12,7 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -59,15 +60,15 @@ public class Oddball extends GameEntity implements HasWeapon {
     // ── Weapon pool ────────────────────────────────────────────────────────────
 
     private static final Weapon[] SEEKER_WEAPONS = {
-        WeaponConfig.SEEKER_PLASMA_WHIP_PRESET.buildWeapon(),
-        WeaponConfig.SEEKER_SHOCK_BEAM_PRESET.buildWeapon(),
-        WeaponConfig.SEEKER_SEAR_LANCE_PRESET.buildWeapon(),
+            WeaponConfig.SEEKER_PLASMA_WHIP_PRESET.buildWeapon(),
+            WeaponConfig.SEEKER_SHOCK_BEAM_PRESET.buildWeapon(),
+            WeaponConfig.SEEKER_SEAR_LANCE_PRESET.buildWeapon(),
     };
 
     private static final Weapon[] RAMPAGE_WEAPONS = {
-        WeaponConfig.RAMPAGE_MORTAR_PRESET.buildWeapon(),
-        WeaponConfig.RAMPAGE_INCENDIARY_SHELL_PRESET.buildWeapon(),
-        WeaponConfig.RAMPAGE_FRAG_SHELL_PRESET.buildWeapon(),
+            WeaponConfig.RAMPAGE_MORTAR_PRESET.buildWeapon(),
+            WeaponConfig.RAMPAGE_INCENDIARY_SHELL_PRESET.buildWeapon(),
+            WeaponConfig.RAMPAGE_FRAG_SHELL_PRESET.buildWeapon(),
     };
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -231,18 +232,21 @@ public class Oddball extends GameEntity implements HasWeapon {
 
     /**
      * Attempt to fire at the current target using the NPC's assigned weapon.
-     * Rate-gated by weapon fire rate; returns null if not ready or no target.
-     * Returned entity has ownerId = -getId() (NPC sentinel, never matches a player)
-     * and ownerTeam = 0 (damages all teams equally).
+     * Rate-gated by weapon fire rate; returns an empty list if not ready or no
+     * target. Fires {@code weapon.getBulletsPerShot()} beams/projectiles with
+     * independent accuracy spread per shot, mirroring {@link Player#shoot()} and
+     * {@link Player#shootBeam()}. Returned entities have ownerId = -getId() (NPC
+     * sentinel, never matches a player) and ownerTeam = 0 (damages all teams
+     * equally).
      */
-    public GameEntity tryFire() {
+    public List<GameEntity> tryFire() {
         if (currentTarget == null || !currentTarget.isActive()) {
-            return null;
+            return List.of();
         }
 
         long now = System.currentTimeMillis();
         if (now - lastShotTime < (long) (1000.0 / weapon.getFireRate())) {
-            return null;
+            return List.of();
         }
         lastShotTime = now;
 
@@ -255,21 +259,26 @@ public class Oddball extends GameEntity implements HasWeapon {
         Vector2 dir = beamType
                 ? new Vector2(targetPos.x - myPos.x, targetPos.y - myPos.y)
                 : predictInterceptDirection(myPos, targetPos, currentTarget.getVelocity(), weapon.getProjectileSpeed());
-        if (dir == null || dir.getMagnitude() == 0) {
-            return null;
+        if (dir.getMagnitude() == 0) {
+            return List.of();
         }
         dir.normalize();
 
+        double baseAngle = Math.atan2(dir.y, dir.x);
         double spread = (1.0 - weapon.getAccuracy()) * 0.17;
-        double angleOffset = (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * spread;
-        double angle = Math.atan2(dir.y, dir.x) + angleOffset;
-        Vector2 aimDir = new Vector2(Math.cos(angle), Math.sin(angle));
+        int shots = Math.max(1, weapon.getBulletsPerShot());
 
-        if (beamType) {
-            return fireBeam(myPos, aimDir);
-        } else {
-            return fireProjectile(myPos, aimDir);
+        List<GameEntity> fired = new ArrayList<>(shots);
+        double angle = baseAngle;
+        for (int i = 0; i < shots; i++) {
+            angle += (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * spread;
+            Vector2 aimDir = new Vector2(Math.cos(angle), Math.sin(angle));
+            Vector2 jitter = new Vector2(
+                    (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0,
+                    (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0);
+            fired.add(beamType ? fireBeam(myPos, aimDir) : fireProjectile(myPos.copy().add(jitter), aimDir));
         }
+        return fired;
     }
 
     /**
@@ -345,8 +354,8 @@ public class Oddball extends GameEntity implements HasWeapon {
         Vector2 vel = dir.copy().multiply(weapon.getProjectileSpeed());
         return new Projectile(
                 -getId(),
-                pos.x, pos.y,
-                vel.x, vel.y,
+                pos,
+                vel,
                 weapon.getDamagePerBullet(),
                 weapon.getRange(),
                 0,

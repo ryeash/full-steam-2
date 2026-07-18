@@ -52,17 +52,9 @@ public class HazardAvoidance {
      */
     public static boolean isDangerousEffect(FieldEffectType type) {
         return switch (type) {
-            // Damaging effects - avoid these
-            case EXPLOSION, FIRE, ELECTRIC, POISON, EARTHQUAKE -> true;
-            // Warning zones - avoid these (hazard incoming)
-            case WARNING_ZONE -> true;
-            // Slow fields and freeze - avoid when in combat or fleeing
-            case FREEZE, SLOW_FIELD, GRAVITY_WELL -> true;
-            // Proximity mines - definitely avoid
-            case PROXIMITY_MINE -> true;
-            // Smoke obscures vision - avoid unless intentionally using it
-            case SMOKE -> true;
-            // Safe or beneficial effects
+            case EXPLOSION, FIRE, ELECTRIC, POISON, EARTHQUAKE,
+                 WARNING_ZONE, FREEZE, SLOW_FIELD, GRAVITY_WELL,
+                 PROXIMITY_MINE, SMOKE -> true;
             case HEAL_ZONE, SPEED_BOOST, SHIELD_BARRIER, FRAGMENTATION -> false;
         };
     }
@@ -149,7 +141,7 @@ public class HazardAvoidance {
         } else {
             // If we're stuck, just move away from the nearest hazard
             if (!nearbyHazards.isEmpty()) {
-                FieldEffect nearest = nearbyHazards.get(0);
+                FieldEffect nearest = nearbyHazards.getFirst();
                 finalDirection = currentPos.copy().subtract(nearest.getPosition());
                 finalDirection.normalize();
             } else {
