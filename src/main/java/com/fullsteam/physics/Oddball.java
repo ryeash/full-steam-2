@@ -1,6 +1,7 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.Config;
+import com.fullsteam.games.WeaponSystem;
 import com.fullsteam.model.HasWeapon;
 import com.fullsteam.model.Weapon;
 import com.fullsteam.model.WeaponConfig;
@@ -12,7 +13,6 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -39,8 +39,6 @@ public class Oddball extends GameEntity implements HasWeapon {
         CHARGE        // Barrel directly at a player cluster (Rampage default)
     }
 
-    // ── Personality constants ──────────────────────────────────────────────────
-
     private static final double RAMPAGE_RADIUS = 20.0;
     private static final double SEEKER_RADIUS = 12.0;
     private static final double RAMPAGE_DENSITY = 3.0;
@@ -57,21 +55,17 @@ public class Oddball extends GameEntity implements HasWeapon {
     private static final double ROAM_CHANGE_MAX = 5.5;
     private static final double MIN_SPEED = 5.0;
 
-    // ── Weapon pool ────────────────────────────────────────────────────────────
-
     private static final Weapon[] SEEKER_WEAPONS = {
-            WeaponConfig.SEEKER_PLASMA_WHIP_PRESET.buildWeapon(),
-            WeaponConfig.SEEKER_SHOCK_BEAM_PRESET.buildWeapon(),
-            WeaponConfig.SEEKER_SEAR_LANCE_PRESET.buildWeapon(),
+            WeaponConfig.PLASMA_CANNON_PRESET.buildWeapon(),
+            WeaponConfig.SHOTGUN_PRESET.buildWeapon(),
+            WeaponConfig.SEEKER_DART_PRESET.buildWeapon(),
     };
 
     private static final Weapon[] RAMPAGE_WEAPONS = {
-            WeaponConfig.RAMPAGE_MORTAR_PRESET.buildWeapon(),
-            WeaponConfig.RAMPAGE_INCENDIARY_SHELL_PRESET.buildWeapon(),
-            WeaponConfig.RAMPAGE_FRAG_SHELL_PRESET.buildWeapon(),
+            WeaponConfig.CLUSTER_MORTAR_PRESET.buildWeapon(),
+            WeaponConfig.ROCKET_LAUNCHER_PRESET.buildWeapon(),
+            WeaponConfig.INCENDIARY_SHOTGUN_PRESET.buildWeapon(),
     };
-
-    // ── State ─────────────────────────────────────────────────────────────────
 
     private final Personality personality;
     private final double pointsMultiplier;
@@ -82,8 +76,6 @@ public class Oddball extends GameEntity implements HasWeapon {
     private double roamChangeTimer = 0.0;
     private double roamChangeInterval;
     private long lastShotTime = 0L;
-
-    // ── Construction ──────────────────────────────────────────────────────────
 
     public Oddball(Personality personality, double x, double y) {
         super(Config.nextEntityId(), buildBody(personality, x, y), Double.MAX_VALUE);
@@ -116,13 +108,6 @@ public class Oddball extends GameEntity implements HasWeapon {
         body.setAngularDamping(10.0);
         body.getTransform().setTranslation(x, y);
         return body;
-    }
-
-    // ── HasWeapon ─────────────────────────────────────────────────────────────
-
-    @Override
-    public Weapon getWeapon() {
-        return weapon;
     }
 
     /**
@@ -164,8 +149,6 @@ public class Oddball extends GameEntity implements HasWeapon {
         }
     }
 
-    // ── AI tick (GameManager.updateUtilityEntities) ───────────────────────────
-
     /**
      * Decide targeting / movement and apply steering force.
      * Called by GameManager once per game loop tick.
@@ -174,19 +157,14 @@ public class Oddball extends GameEntity implements HasWeapon {
         if (!active) {
             return;
         }
-
         Player nearest = nearestPlayer(players);
-
         switch (personality) {
             case RAMPAGE -> tickRampage(players, nearest);
             case SEEKER -> tickSeeker(players, nearest);
         }
-
         double force = personality == Personality.RAMPAGE ? RAMPAGE_FORCE : SEEKER_FORCE;
         double maxSpeed = personality == Personality.RAMPAGE ? RAMPAGE_MAX_SPEED : SEEKER_MAX_SPEED;
-
         body.applyForce(roamDirection.copy().multiply(force));
-
         Vector2 vel = body.getLinearVelocity();
         if (vel.getMagnitude() > maxSpeed) {
             body.setLinearVelocity(vel.getNormalized().multiply(maxSpeed));
@@ -262,23 +240,7 @@ public class Oddball extends GameEntity implements HasWeapon {
         if (dir.getMagnitude() == 0) {
             return List.of();
         }
-        dir.normalize();
-
-        double baseAngle = Math.atan2(dir.y, dir.x);
-        double spread = (1.0 - weapon.getAccuracy()) * 0.17;
-        int shots = Math.max(1, weapon.getBulletsPerShot());
-
-        List<GameEntity> fired = new ArrayList<>(shots);
-        double angle = baseAngle;
-        for (int i = 0; i < shots; i++) {
-            angle += (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * spread;
-            Vector2 aimDir = new Vector2(Math.cos(angle), Math.sin(angle));
-            Vector2 jitter = new Vector2(
-                    (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0,
-                    (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0);
-            fired.add(beamType ? fireBeam(myPos, aimDir) : fireProjectile(myPos.copy().add(jitter), aimDir));
-        }
-        return fired;
+        return WeaponSystem.fireWeapon(-getId(), 0, weapon, myPos, dir.getNormalized());
     }
 
     /**
@@ -332,42 +294,6 @@ public class Oddball extends GameEntity implements HasWeapon {
         }
         return Math.max(t1, t2);
     }
-
-    private Beam fireBeam(Vector2 pos, Vector2 dir) {
-        Vector2 endPoint = pos.copy().add(dir.copy().multiply(weapon.getRange()));
-        Beam beam = new Beam(
-                pos,
-                dir,
-                weapon.getRange(),
-                weapon.getDamage(),
-                -getId(),
-                0,
-                weapon.getOrdinance(),
-                weapon.getBulletEffects(),
-                weapon.getCaliber()
-        );
-        beam.setPath(List.of(pos.copy(), endPoint));
-        return beam;
-    }
-
-    private Projectile fireProjectile(Vector2 pos, Vector2 dir) {
-        Vector2 vel = dir.copy().multiply(weapon.getProjectileSpeed());
-        return new Projectile(
-                -getId(),
-                pos,
-                vel,
-                weapon.getDamagePerBullet(),
-                weapon.getRange(),
-                0,
-                0.0,
-                weapon.getBulletEffects(),
-                weapon.getOrdinance(),
-                weapon.getCaliber(),
-                weapon.getKnockbackPerBullet()
-        );
-    }
-
-    // ── Private helpers ────────────────────────────────────────────────────────
 
     private Player nearestPlayer(Collection<Player> players) {
         Player nearest = null;

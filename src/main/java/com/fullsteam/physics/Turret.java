@@ -1,6 +1,7 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.Config;
+import com.fullsteam.games.WeaponSystem;
 import com.fullsteam.model.HasWeapon;
 import com.fullsteam.model.Weapon;
 import com.fullsteam.model.WeaponConfig;
@@ -11,9 +12,7 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Automated defense turret that targets enemies within range.
@@ -117,9 +116,7 @@ public class Turret extends GameEntity implements HasWeapon {
         if (currentTarget == null || !canFire()) {
             return List.of();
         }
-
         lastShotTime = System.currentTimeMillis();
-
         Vector2 targetPos = currentTarget.getPosition();
         Vector2 turretPos = getPosition();
         Vector2 fireDirection = new Vector2(targetPos.x - turretPos.x, targetPos.y - turretPos.y);
@@ -129,49 +126,7 @@ public class Turret extends GameEntity implements HasWeapon {
         fireDirection.normalize();
         double baseAngle = Math.atan2(fireDirection.y, fireDirection.x);
         setRotation(baseAngle);
-
-        // Apply accuracy spread using the same formula as Player.java
-        double spread = (1.0 - weapon.getAccuracy()) * 0.17;
-        boolean beamType = weapon.getOrdinance().isBeamType();
-        int shots = Math.max(1, weapon.getBulletsPerShot());
-
-        List<GameEntity> fired = new ArrayList<>(shots);
-        double angle = baseAngle;
-        for (int i = 0; i < shots; i++) {
-            angle += (ThreadLocalRandom.current().nextDouble() - 0.5) * spread;
-            Vector2 firedDir = new Vector2(Math.cos(angle), Math.sin(angle));
-            Vector2 jitter = new Vector2(
-                    (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0,
-                    (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0);
-            fired.add(beamType ? fireBeam(turretPos, firedDir) : fireProjectile(turretPos.copy().add(jitter), firedDir));
-        }
-        return fired;
-    }
-
-    private Beam fireBeam(Vector2 pos, Vector2 dir) {
-        Vector2 endPoint = pos.copy().add(dir.copy().multiply(weapon.getRange()));
-        Beam beam = new Beam(pos, dir, weapon.getRange(), weapon.getDamage(),
-                ownerId, ownerTeam, weapon.getOrdinance(), weapon.getBulletEffects(),
-                weapon.getCaliber());
-        beam.setPath(List.of(pos.copy(), endPoint));
-        return beam;
-    }
-
-    private Projectile fireProjectile(Vector2 pos, Vector2 dir) {
-        Vector2 velocity = dir.copy().multiply(weapon.getProjectileSpeed());
-        return new Projectile(
-                ownerId,
-                pos,
-                velocity,
-                weapon.getDamagePerBullet(),
-                weapon.getRange() * 1.1,
-                ownerTeam,
-                0.02,
-                weapon.getBulletEffects(),
-                weapon.getOrdinance(),
-                weapon.getCaliber(),
-                weapon.getKnockbackPerBullet()
-        );
+        return WeaponSystem.fireWeapon(ownerId, ownerTeam, weapon, turretPos, fireDirection);
     }
 
     private boolean isValidTarget(Player player) {

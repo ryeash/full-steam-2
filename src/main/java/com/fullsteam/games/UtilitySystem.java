@@ -130,7 +130,7 @@ public class UtilitySystem {
                 activation.team(),
                 placement,
                 15.0,
-                WeaponConfig.BASIC_TURRET.buildWeapon()
+                WeaponConfig.ASSAULT_RIFLE_PRESET.buildWeapon()
         );
         gameEntities.add(turret);
     }

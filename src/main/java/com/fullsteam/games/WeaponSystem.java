@@ -5,12 +5,14 @@ import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerInput;
+import com.fullsteam.model.Weapon;
 import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.BulletEffectProcessor;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.GameEntity;
 import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Obstacle;
+import com.fullsteam.physics.Oddball;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.Turret;
@@ -27,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BiConsumer;
 
 /**
@@ -160,7 +163,7 @@ public class WeaponSystem {
      * until its range is spent. Only obstacles reflect; players/turrets are passed
      * through here and damaged later in the per-segment damage pass.
      */
-    private List<Vector2> computeBeamPath(Beam beam) {
+    public List<Vector2> computeBeamPath(Beam beam) {
         List<Vector2> path = new ArrayList<>();
         Vector2 p = beam.getStartPoint().copy();
         Vector2 d = beam.getDirection().copy();
@@ -229,8 +232,7 @@ public class WeaponSystem {
         return switch (entity) {
             // Projectiles should never block beams - they're small, fast-moving objects
             // Net projectiles should never block beams
-            case Player _, Projectile _, NetProjectile _, Turret _ -> false;
-            case null -> false;
+            case Player _, Projectile _, NetProjectile _, Turret _, Oddball _ -> false;
             case Obstacle _ -> !beam.getBulletEffects().contains(BulletEffect.PIERCING);
             case FieldEffect fieldEffect -> {
                 // Handle shield barriers - block non-piercing beams
@@ -243,6 +245,7 @@ public class WeaponSystem {
                 yield false;
                 // Other field effects don't block beams
             }
+            case null -> false;
             default -> true;
         };
     }
@@ -294,6 +297,10 @@ public class WeaponSystem {
                 if (beam.canAffectTurret(turret) && !beam.getAffectedPlayers().contains(turret.getId())) {
                     applyBeamDamage(beam, turret);
                 }
+            } else if (userData instanceof Oddball oddball) {
+                if (oddball.isActive() && beam.getOwnerTeam() != 0 && !beam.getAffectedPlayers().contains(oddball.getId())) {
+                    applyBeamDamage(beam, oddball);
+                }
             } else if (userData instanceof Obstacle) {
                 // Stop this segment at an obstacle unless the beam pierces. (For a
                 // bouncy beam the path already ends the segment at the wall, so this
@@ -329,4 +336,56 @@ public class WeaponSystem {
         bulletEffectProcessor.processBeamEffectHit(beam, position);
     }
 
+    public static List<GameEntity> fireWeapon(int ownerId, int ownerTeam, Weapon weapon, Vector2 position, Vector2 direction) {
+        double baseAngle = Math.atan2(direction.y, direction.x);
+        double spread = (1.0 - weapon.getAccuracy()) * 0.17;
+        int shots = Math.max(1, weapon.getBulletsPerShot());
+        List<GameEntity> fired = new ArrayList<>(shots);
+        double angle = baseAngle;
+        for (int i = 0; i < shots; i++) {
+            angle += (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * spread;
+            Vector2 aimDir = new Vector2(Math.cos(angle), Math.sin(angle));
+            Vector2 jitter = new Vector2(
+                    (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0,
+                    (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0);
+            fired.add(weapon.getOrdinance().isBeamType()
+                    ? fireBeam(ownerId, ownerTeam, weapon, position, aimDir)
+                    : fireProjectile(ownerId, ownerTeam, weapon, position.copy().add(jitter), aimDir));
+        }
+        return fired;
+    }
+
+    private static Beam fireBeam(int ownerId, int ownerTeam, Weapon weapon, Vector2 pos, Vector2 dir) {
+        Vector2 endPoint = pos.copy().add(dir.copy().multiply(weapon.getRange()));
+        Beam beam = new Beam(
+                pos,
+                dir,
+                weapon.getRange(),
+                weapon.getDamage(),
+                ownerId,
+                ownerTeam,
+                weapon.getOrdinance(),
+                weapon.getBulletEffects(),
+                weapon.getCaliber()
+        );
+        beam.setPath(List.of(pos.copy(), endPoint));
+        return beam;
+    }
+
+    private static Projectile fireProjectile(int ownerId, int ownerTeam, Weapon weapon, Vector2 pos, Vector2 dir) {
+        Vector2 vel = dir.copy().multiply(weapon.getProjectileSpeed());
+        return new Projectile(
+                ownerId,
+                pos,
+                vel,
+                weapon.getDamagePerBullet(),
+                weapon.getRange(),
+                ownerTeam,
+                weapon.getLinearDamping(),
+                weapon.getBulletEffects(),
+                weapon.getOrdinance(),
+                weapon.getCaliber(),
+                weapon.getKnockbackPerBullet()
+        );
+    }
 }

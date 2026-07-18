@@ -6,7 +6,6 @@ import com.fullsteam.RandomNames;
 import com.fullsteam.ai.AIGameHelper;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
-import com.fullsteam.model.EntityWorldDensity;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.GameEvent;
@@ -811,6 +810,12 @@ public class GameManager {
             // Turret AI: acquire targets and fire
             turret.acquireTarget(gameEntities.getAllPlayers().stream().toList());
             for (GameEntity turretShot : turret.tryFire()) {
+                if (turretShot instanceof Beam beam) {
+                    beam.setPath(weaponSystem.computeBeamPath(beam));
+                    if (beam.getOrdinance() == Ordinance.LASER) {
+                        weaponSystem.processStandardBeamHit(beam);
+                    }
+                }
                 gameEntities.add(turretShot);
             }
         }
@@ -823,6 +828,12 @@ public class GameManager {
             }
             npc.tickAI(playerList);
             for (GameEntity npcShot : npc.tryFire()) {
+                if (npcShot instanceof Beam beam) {
+                    beam.setPath(weaponSystem.computeBeamPath(beam));
+                    if (beam.getOrdinance() == Ordinance.LASER) {
+                        weaponSystem.processStandardBeamHit(beam);
+                    }
+                }
                 gameEntities.add(npcShot);
             }
         }

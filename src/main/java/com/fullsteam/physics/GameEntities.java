@@ -7,6 +7,8 @@ import com.fullsteam.model.PlayerSession;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.world.World;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Comparator;
@@ -28,6 +30,7 @@ import java.util.stream.Stream;
  */
 @Getter
 public class GameEntities {
+    private static final Logger log = LoggerFactory.getLogger(GameEntities.class);
 
     private final GameConfig config;
     private final World<Body> world;
@@ -82,7 +85,13 @@ public class GameEntities {
                 case Headquarters hq -> headquarters.put(hq.getId(), hq);
                 default -> throw new IllegalArgumentException("Unknown GameEntity type: " + gameEntity);
             }
-            addPostUpdateHook(() -> world.addBody(gameEntity.getBody()));
+            addPostUpdateHook(() -> {
+                try {
+                    world.addBody(gameEntity.getBody());
+                } catch (Throwable t) {
+                    log.error("error adding body of {}:{}", gameEntity.getClass().getSimpleName(), gameEntity, t);
+                }
+            });
         }
     }
 

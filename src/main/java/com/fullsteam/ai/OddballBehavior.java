@@ -105,7 +105,9 @@ public class OddballBehavior implements AIBehavior {
         Vector2 myPos = aiPlayer.getPosition();
 
         for (Oddball npc : gameEntities.getAllOddballNpcs()) {
-            if (!npc.isActive()) continue;
+            if (!npc.isActive()){
+                continue;
+            }
             double dist = myPos.distance(npc.getPosition());
             double score = npc.getPointsMultiplier() * 1000.0 / (dist + 1.0);
             if (score > bestScore) {
