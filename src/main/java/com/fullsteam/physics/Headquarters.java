@@ -1,5 +1,6 @@
 package com.fullsteam.physics;
 
+import com.fullsteam.Config;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.dyn4j.dynamics.Body;
@@ -8,9 +9,6 @@ import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
 
-import java.util.HashMap;
-import java.util.Map;
-
 /**
  * Headquarters entity - a destructible structure that teams must protect/attack.
  * Similar to Obstacle but with team ownership and scoring mechanics.
@@ -18,19 +16,17 @@ import java.util.Map;
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class Headquarters extends GameEntity {
-    private static final double HQ_WIDTH = 80.0;
-    private static final double HQ_HEIGHT = 60.0;
-    private static final double HQ_TURRET_RADIUS = 12.0;
+public class Headquarters extends OwnedGameEntity {
+    private static final double HQ_WIDTH = Config.PLAYER_RADIUS * 4;
+    private static final double HQ_HEIGHT = Config.PLAYER_RADIUS * 3;
+    private static final double HQ_TURRET_RADIUS = Config.PLAYER_RADIUS * .75;
 
-    private final int teamNumber;
     private final Vector2 homePosition;
     private final double maxHealth;
     private double totalDamageTaken = 0.0; // Track for scoring
 
-    public Headquarters(int id, int teamNumber, double x, double y, double maxHealth) {
-        super(id, createHeadquartersBody(x, y), maxHealth);
-        this.teamNumber = teamNumber;
+    public Headquarters(int id, int ownerTeam, double x, double y, double maxHealth) {
+        super(id, createHeadquartersBody(x, y), maxHealth, 0, ownerTeam);
         this.homePosition = new Vector2(x, y);
         this.maxHealth = maxHealth;
     }
@@ -82,17 +78,6 @@ public class Headquarters extends GameEntity {
             return true; // Headquarters destroyed!
         }
         return false;
-    }
-
-    /**
-     * Get shape data for client rendering.
-     */
-    public Map<String, Object> getShapeData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("shapeCategory", "RECTANGLE");
-        data.put("width", HQ_WIDTH);
-        data.put("height", HQ_HEIGHT);
-        return data;
     }
 }
 

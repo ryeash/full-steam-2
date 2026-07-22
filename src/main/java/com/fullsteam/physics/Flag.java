@@ -14,20 +14,27 @@ import org.dyn4j.geometry.Vector2;
  */
 @Getter
 @Setter
-public class Flag extends GameEntity {
+public class Flag extends OwnedGameEntity {
+
+    /**
+     * Flag state enum
+     */
+    public enum FlagState {
+        AT_HOME,    // Flag is at its home base
+        CARRIED,    // Flag is being carried by a player
+        DROPPED     // Flag was dropped and is waiting to be returned or captured
+    }
+
     private static final double FLAG_RADIUS = 15.0;
 
-    private final int ownerTeam; // Team that owns/protects this flag
     private final Vector2 homePosition; // Original spawn position
-
     private int carriedByPlayerId = -1; // -1 = not carried, otherwise player ID
     private FlagState state = FlagState.AT_HOME;
     private long lastCaptureTime = 0;
     private int captureCount = 0; // How many times this flag has been captured
 
     public Flag(int ownerTeam, double x, double y) {
-        super(Config.nextEntityId(), createFlagBody(x, y), Double.POSITIVE_INFINITY); // Flags are indestructible
-        this.ownerTeam = ownerTeam;
+        super(Config.nextEntityId(), createFlagBody(x, y), Double.POSITIVE_INFINITY, 0, ownerTeam); // Flags are indestructible
         this.homePosition = new Vector2(x, y);
     }
 
@@ -117,15 +124,6 @@ public class Flag extends GameEntity {
      */
     public boolean isOddball() {
         return ownerTeam == 0; // Team 0 = neutral oddball
-    }
-
-    /**
-     * Flag state enum
-     */
-    public enum FlagState {
-        AT_HOME,    // Flag is at its home base
-        CARRIED,    // Flag is being carried by a player
-        DROPPED     // Flag was dropped and is waiting to be returned or captured
     }
 }
 

@@ -4,6 +4,7 @@ import com.fullsteam.Config;
 import com.fullsteam.model.ActiveGameEvent;
 import com.fullsteam.model.EnvironmentalEvent;
 import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.FieldEffectCircle;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Rules;
 import com.fullsteam.physics.GameEntities;
@@ -224,7 +225,7 @@ public class EventSystem {
         for (Vector2 location : event.getTargetLocations()) {
             double radius = getWarningRadius(event.getEventType());
 
-            FieldEffect warningZone = new FieldEffect(
+            FieldEffect warningZone = new FieldEffectCircle(
                     -1, // No owner (system event)
                     FieldEffectType.WARNING_ZONE,
                     location,
@@ -264,7 +265,7 @@ public class EventSystem {
     private void triggerEvent(ActiveGameEvent event) {
         switch (event.getEventType()) {
             case METEOR_SHOWER -> triggerStaggeredEventFieldEffect(event, (e, l) ->
-                    new FieldEffect(
+                    new FieldEffectCircle(
                             -1, // System event
                             FieldEffectType.EXPLOSION,
                             l,
@@ -276,7 +277,7 @@ public class EventSystem {
                             0 // No team
                     ));
             case VOLCANIC_ERUPTION -> triggerStaggeredEventFieldEffect(event, (e, l) ->
-                    new FieldEffect(
+                    new FieldEffectCircle(
                             -1,
                             FieldEffectType.FIRE,
                             l,
@@ -288,7 +289,7 @@ public class EventSystem {
                             0
                     ));
             case EARTHQUAKE -> triggerStaggeredEventFieldEffect(event, (e, l) ->
-                    new FieldEffect(
+                    new FieldEffectCircle(
                             -1,
                             FieldEffectType.EARTHQUAKE,
                             l,
@@ -300,7 +301,7 @@ public class EventSystem {
                             0
                     ));
             case ION_STORM -> triggerStaggeredEventFieldEffect(event, (e, l) ->
-                    new FieldEffect(
+                    new FieldEffectCircle(
                             -1,
                             FieldEffectType.ELECTRIC,
                             l,
@@ -312,7 +313,7 @@ public class EventSystem {
                             0
                     ));
             case BLIZZARD -> triggerStaggeredEventFieldEffect(event, (e, l) ->
-                    new FieldEffect(
+                    new FieldEffectCircle(
                             -1,
                             FieldEffectType.FREEZE,
                             l,

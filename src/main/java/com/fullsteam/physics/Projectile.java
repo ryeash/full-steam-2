@@ -14,9 +14,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 @Getter
-public class Projectile extends GameEntity {
-    private final int ownerId;
-    private final int ownerTeam;
+public class Projectile extends OwnedGameEntity {
     private final double damage;
     private final Vector2 initialPosition;
     private double timeToLive;
@@ -26,15 +24,7 @@ public class Projectile extends GameEntity {
     private boolean hasExploded = false;
     private boolean dismissedByVelocity = false;
     private boolean dismissedByRange = false;
-
-    /**
-     * Size multiplier from the weapon's CALIBER attribute (1.0 = baseline).
-     */
     private final double caliber;
-
-    /**
-     * Per-hit impulse from the weapon's KNOCKBACK attribute (0 = no shove).
-     */
     private final double knockback;
 
     // prevent double hits
@@ -44,10 +34,8 @@ public class Projectile extends GameEntity {
     public Projectile(int ownerId, Vector2 position, Vector2 velocity, double damage, double maxRange,
                       int ownerTeam, double linearDamping, Set<BulletEffect> bulletEffects, Ordinance ordinance,
                       double caliber, double knockback) {
-        super(Config.nextEntityId(), createProjectileBody(position, velocity, linearDamping, bulletEffects, caliber), 1.0);
+        super(Config.nextEntityId(), createProjectileBody(position, velocity, linearDamping, bulletEffects, caliber), 1.0, ownerId, ownerTeam);
         this.initialPosition = position.copy();
-        this.ownerId = ownerId;
-        this.ownerTeam = ownerTeam;
         this.damage = damage;
         this.linearDamping = linearDamping;
         this.bulletEffects = new HashSet<>(bulletEffects);
@@ -126,22 +114,10 @@ public class Projectile extends GameEntity {
      * @return true if projectile can damage this player, false if teammate or self
      */
     public boolean canDamage(Player player) {
-        if (player == null) {
+        if (player == null || player.getId() == ownerId) {
             return false;
         }
-
-        // Can't damage self
-        if (player.getId() == ownerId) {
-            return false;
-        }
-
-        // In FFA mode (team 0), can damage anyone except self
-        if (ownerTeam == 0 || player.getTeam() == 0) {
-            return true;
-        }
-
-        // In team mode, can only damage players on different teams
-        return ownerTeam != player.getTeam();
+        return ownerTeam == 0 || player.getTeam() == 0 || ownerTeam != player.getTeam();
     }
 
     public boolean hasBulletEffect(BulletEffect effect) {

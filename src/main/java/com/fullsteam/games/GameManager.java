@@ -6,11 +6,11 @@ import com.fullsteam.RandomNames;
 import com.fullsteam.ai.AIGameHelper;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
-import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.FieldEffectCircle;
+import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.GameInfo;
-import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerConfigRequest;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
@@ -19,7 +19,6 @@ import com.fullsteam.model.Rules;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.VictoryCondition;
 import com.fullsteam.model.WeaponConfig;
-import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.CollisionProcessor;
 import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.Flag;
@@ -784,7 +783,7 @@ public class GameManager {
             // Calculate effective endpoints for all beams
             Vector2[] effectiveEndpoints = new Vector2[defenseLaser.getBeams().size()];
             for (int i = 0; i < defenseLaser.getBeams().size(); i++) {
-                Beam beam = defenseLaser.getBeams().get(i);
+                FieldEffectBeam beam = defenseLaser.getBeams().get(i);
                 Vector2 effectiveEnd = weaponSystem.findBeamObstacleIntersection(
                         beam.getStartPoint(),
                         beam.getEndPoint()
@@ -810,9 +809,9 @@ public class GameManager {
             // Turret AI: acquire targets and fire
             turret.acquireTarget(gameEntities.getAllPlayers().stream().toList());
             for (GameEntity turretShot : turret.tryFire()) {
-                if (turretShot instanceof Beam beam) {
+                if (turretShot instanceof FieldEffectBeam beam) {
                     beam.setPath(weaponSystem.computeBeamPath(beam));
-                    if (beam.getOrdinance() == Ordinance.LASER) {
+                    if (beam.getType() == FieldEffectType.LASER) {
                         weaponSystem.processStandardBeamHit(beam);
                     }
                 }
@@ -828,9 +827,9 @@ public class GameManager {
             }
             npc.tickAI(playerList);
             for (GameEntity npcShot : npc.tryFire()) {
-                if (npcShot instanceof Beam beam) {
+                if (npcShot instanceof FieldEffectBeam beam) {
                     beam.setPath(weaponSystem.computeBeamPath(beam));
-                    if (beam.getOrdinance() == Ordinance.LASER) {
+                    if (beam.getType() == FieldEffectType.LASER) {
                         weaponSystem.processStandardBeamHit(beam);
                     }
                 }
@@ -838,9 +837,11 @@ public class GameManager {
             }
         }
 
-        // Process beam damage for DOT beams
-        for (Beam beam : gameEntities.getAllBeams()) {
-            if (!beam.isActive()) {
+        // Process beam damage for PLASMA (DOT) beams via raycasting along their path.
+        // LASER beams deal instant damage at creation time (processStandardBeamHit) and
+        // are handled by the physics collision system thereafter.
+        for (FieldEffectBeam beam : gameEntities.getAllBeamEffects()) {
+            if (!beam.isActive() || beam.getType() != FieldEffectType.PLASMA) {
                 continue;
             }
 
@@ -848,12 +849,11 @@ public class GameManager {
 
             // Get players in beam path and apply damage based on beam type
             List<Player> playersInPath = getPlayersInBeamPath(beam);
-            boolean dotHitSomeone = false; // only ever set for DOT beams below
+            boolean dotHitSomeone = false;
             for (Player player : playersInPath) {
-                if (beam.canAffectPlayer(player) && beam.getOrdinance() == Ordinance.PLASMA_BEAM) {
+                if (beam.canAffectPlayer(player)) {
                     dotHitSomeone = true;
-                    double dotDamage = beam.processContinuousDamage(player, deltaTime);
-                    // Apply damage and check if player died
+                    double dotDamage = beam.getDamage() * deltaTime;
                     if (player.takeDamage(dotDamage)) {
                         killPlayer(player, beam.getOwnerId());
                     }
@@ -861,8 +861,8 @@ public class GameManager {
                 }
             }
 
-            // PLASMA_BEAM: award continuous oddball points for hitting NPC oddballs
-            if (beam.getOrdinance() == Ordinance.PLASMA_BEAM && beamOwner != null) {
+            // Award continuous oddball points for PLASMA beams hitting NPC oddballs
+            if (beamOwner != null) {
                 for (Oddball npc : getNpcsInBeamPath(beam)) {
                     double dotPoints = beam.getDamage() * deltaTime
                             * npc.getPointsMultiplier()
@@ -872,8 +872,7 @@ public class GameManager {
             }
 
             // Continuous beams leave a throttled trail of their AOE effects (fire,
-            // poison, smoke, ...) at the impact point while burning a target.
-            // Instant beams spawn their effects per-hit at creation time instead.
+            // poison, smoke, …) at the impact point while burning a target.
             if (dotHitSomeone
                     && !beam.getBulletEffects().isEmpty()
                     && beam.tryEmitAreaEffect(System.currentTimeMillis())) {
@@ -1023,7 +1022,7 @@ public class GameManager {
      * Get all players that intersect with a beam's path using dyn4j ray casting.
      * This method is used for continuous beam damage updates and handles different piercing behaviors.
      */
-    private List<Player> getPlayersInBeamPath(Beam beam) {
+    private List<Player> getPlayersInBeamPath(FieldEffectBeam beam) {
         List<Player> playersInPath = new ArrayList<>();
         Set<Integer> seen = new HashSet<>();
         List<Vector2> path = beam.getPath();
@@ -1059,7 +1058,7 @@ public class GameManager {
         return playersInPath;
     }
 
-    private List<Oddball> getNpcsInBeamPath(Beam beam) {
+    private List<Oddball> getNpcsInBeamPath(FieldEffectBeam beam) {
         List<Oddball> npcsInPath = new ArrayList<>();
         Set<Integer> seen = new HashSet<>();
         List<Vector2> path = beam.getPath();
@@ -1441,7 +1440,7 @@ public class GameManager {
         if (attacker != null) {
             attacker.getScoring().addHeadquarterDamage(damage);
             log.debug("Player {} (team {}) dealt {} damage to team {} headquarters",
-                    attacker.getId(), attacker.getTeam(), damage, hq.getTeamNumber());
+                    attacker.getId(), attacker.getTeam(), damage, hq.getOwnerTeam());
         }
 
         // Handle destruction
@@ -1454,7 +1453,7 @@ public class GameManager {
             createHeadquartersDestructionEffect(hq);
             // Broadcast HQ destruction event
             if (attacker != null) {
-                gameEventManager.broadcastHeadquartersDestroyed(hq.getTeamNumber(), attacker.getTeam());
+                gameEventManager.broadcastHeadquartersDestroyed(hq.getOwnerTeam(), attacker.getTeam());
             }
 
             // Check if this ends the game
@@ -1472,7 +1471,7 @@ public class GameManager {
      */
     private void createHeadquartersDestructionEffect(Headquarters hq) {
         // Create large explosion effect at HQ location
-        gameEntities.add(new FieldEffect(
+        gameEntities.add(new FieldEffectCircle(
                 -1,
                 FieldEffectType.EXPLOSION,
                 hq.getPosition(),

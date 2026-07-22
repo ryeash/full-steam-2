@@ -14,9 +14,7 @@ import org.dyn4j.geometry.Vector2;
  */
 @Getter
 @Setter
-public class NetProjectile extends GameEntity {
-    private final int ownerId;
-    private final int ownerTeam;
+public class NetProjectile extends OwnedGameEntity {
     private final double damage;
     private final double slowEffect; // Linear damping multiplier for slowing effect (higher = more slowed)
     private final double slowDuration; // How long the slow effect lasts
@@ -25,9 +23,7 @@ public class NetProjectile extends GameEntity {
     private boolean hasHit = false;
 
     public NetProjectile(int id, int ownerId, int ownerTeam, Vector2 position, Vector2 velocity, double timeToLive) {
-        super(id, createNetProjectileBody(position), 1);
-        this.ownerId = ownerId;
-        this.ownerTeam = ownerTeam;
+        super(id, createNetProjectileBody(position), 1, ownerId, ownerTeam);
         this.velocity = velocity.copy();
         this.damage = 0;
         this.slowEffect = 10.0;

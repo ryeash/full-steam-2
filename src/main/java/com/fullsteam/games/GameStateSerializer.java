@@ -2,10 +2,10 @@ package com.fullsteam.games;
 
 import com.fullsteam.model.AttributeModification;
 import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Rules;
 import com.fullsteam.model.Scoring;
-import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
@@ -84,9 +84,8 @@ public class GameStateSerializer {
         gameState.put("fieldEffects", createFieldEffectStates());
         gameState.put("turrets", createTurretStates());
         gameState.put("nets", createNetStates());
-        gameState.put("mines", createMineStates());
+        gameState.put("mines", createMineStates()); // TODO: these should merge into standard field effects
         gameState.put("defenseLasers", createDefenseLaserStates());
-        gameState.put("beams", createBeamStates());
 
         // Add optional game mode states
         if (gameConfig.getRules().hasKothZones()) {
@@ -404,6 +403,11 @@ public class GameStateSerializer {
             if (!effect.isArmed() && effect.getType() != FieldEffectType.PROXIMITY_MINE) {
                 continue;
             }
+            // Beams flow through fieldEffects with their own polyline shape data.
+            if (effect instanceof FieldEffectBeam beam) {
+                fieldEffectStates.add(beamStateMap(beam));
+                continue;
+            }
             Vector2 pos = effect.getPosition();
             Map<String, Object> effectState = new HashMap<>();
             effectState.put("id", effect.getId());
@@ -418,6 +422,32 @@ public class GameStateSerializer {
             fieldEffectStates.add(effectState);
         }
         return fieldEffectStates;
+    }
+
+    /** Serialise a beam into the wire format consumed by the JS beam renderer. */
+    private Map<String, Object> beamStateMap(FieldEffectBeam beam) {
+        Vector2 startPos = beam.getStartPoint();
+        Vector2 effectiveEndPos = beam.getEffectiveEndPoint();
+        Map<String, Object> beamState = new HashMap<>();
+        beamState.put("id", beam.getId());
+        beamState.put("type", beam.getType().name());
+        beamState.put("ordinance", beam.getOrdinance());
+        beamState.put("size", beam.getSize());
+        beamState.put("startX", startPos.x);
+        beamState.put("startY", startPos.y);
+        beamState.put("endX", effectiveEndPos.x);
+        beamState.put("endY", effectiveEndPos.y);
+        List<Map<String, Object>> points = new ArrayList<>();
+        for (Vector2 v : beam.getPath()) {
+            Map<String, Object> pt = new HashMap<>();
+            pt.put("x", v.x);
+            pt.put("y", v.y);
+            points.add(pt);
+        }
+        beamState.put("points", points);
+        beamState.put("ownerTeam", beam.getOwnerTeam());
+        beamState.put("durationPercent", beam.getDurationPercent());
+        return beamState;
     }
 
     private List<Map<String, Object>> createTurretStates() {
@@ -489,37 +519,6 @@ public class GameStateSerializer {
             defenseLaserStates.add(laserState);
         }
         return defenseLaserStates;
-    }
-
-    private List<Map<String, Object>> createBeamStates() {
-        List<Map<String, Object>> beamStates = new ArrayList<>();
-        for (Beam beam : gameEntities.getAllBeams()) {
-            Vector2 startPos = beam.getStartPoint();
-            Vector2 effectiveEndPos = beam.getEffectiveEndPoint();
-            Map<String, Object> beamState = new HashMap<>();
-            beamState.put("id", beam.getId());
-            beamState.put("ordinance", beam.getOrdinance());
-            beamState.put("size", beam.getSize());
-            beamState.put("startX", startPos.x);
-            beamState.put("startY", startPos.y);
-            beamState.put("endX", effectiveEndPos.x);
-            beamState.put("endY", effectiveEndPos.y);
-            // Full polyline for BOUNCY beams (single segment for everything else).
-            // The client renders this; startX/Y, endX/Y stay as first/last for
-            // any legacy consumer.
-            List<Map<String, Object>> points = new ArrayList<>();
-            for (Vector2 v : beam.getPath()) {
-                Map<String, Object> pt = new HashMap<>();
-                pt.put("x", v.x);
-                pt.put("y", v.y);
-                points.add(pt);
-            }
-            beamState.put("points", points);
-            beamState.put("ownerTeam", beam.getOwnerTeam());
-            beamState.put("durationPercent", beam.getDurationPercent());
-            beamStates.add(beamState);
-        }
-        return beamStates;
     }
 
     /**
@@ -602,7 +601,7 @@ public class GameStateSerializer {
             Map<String, Object> hqState = new HashMap<>();
             hqState.put("id", hq.getId());
             hqState.put("type", "HEADQUARTERS");
-            hqState.put("team", hq.getTeamNumber());
+            hqState.put("team", hq.getOwnerTeam());
             hqState.put("x", pos.x);
             hqState.put("y", pos.y);
             hqState.put("health", hq.healthPercent());

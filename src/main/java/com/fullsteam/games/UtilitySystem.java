@@ -3,11 +3,12 @@ package com.fullsteam.games;
 import com.fullsteam.Config;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.FieldEffectCircle;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.WeaponConfig;
-import com.fullsteam.physics.Beam;
+import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.NetProjectile;
@@ -67,7 +68,7 @@ public class UtilitySystem {
             offset.multiply(utility.getRange());
             targetPos.add(offset);
         }
-        gameEntities.add(new FieldEffect(
+        gameEntities.add(new FieldEffectCircle(
                 activation.playerId(),
                 effectType,
                 targetPos,
@@ -157,7 +158,7 @@ public class UtilitySystem {
      * Create a proximity mine entity.
      */
     private void createProximityMine(UtilityActivation activation) {
-        FieldEffect mine = new FieldEffect(
+        FieldEffect mine = new FieldEffectCircle(
                 activation.playerId(),
                 FieldEffectType.PROXIMITY_MINE,
                 activation.position(),
@@ -196,7 +197,7 @@ public class UtilitySystem {
                 world
         );
         gameEntities.add(defenseLaser);
-        for (Beam beam : defenseLaser.getBeams()) {
+        for (FieldEffectBeam beam : defenseLaser.getBeams()) {
             gameEntities.add(beam);
         }
     }

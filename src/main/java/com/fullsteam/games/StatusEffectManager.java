@@ -74,7 +74,7 @@ public final class StatusEffectManager {
     /**
      * Apply a speed boost effect to a player.
      */
-    public static void applySpeedBoost(Player player, double speedMultiplier, double durationSeconds, String source) {
+    public static void applySpeedBoost(Player player, double linearDamping, double durationSeconds, String source) {
         applyEffect(player, new BaseAttributeModification(System.currentTimeMillis() + (long) (durationSeconds * 1000)) {
             @Override
             public String uniqueKey() {
@@ -88,7 +88,7 @@ public final class StatusEffectManager {
 
             @Override
             public void update(Player player, double delta) {
-                player.getBody().setLinearDamping(0);
+                player.getBody().setLinearDamping(linearDamping);
             }
 
             @Override

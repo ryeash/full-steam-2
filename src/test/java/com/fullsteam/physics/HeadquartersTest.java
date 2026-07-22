@@ -72,7 +72,7 @@ class HeadquartersTest extends BaseTestClass {
             assertTrue(hq.isActive());
             assertEquals(1000.0, hq.getMaxHealth());
             assertEquals(1000.0, hq.getHealth());
-            assertTrue(hq.getTeamNumber() >= 1 && hq.getTeamNumber() <= 2);
+            assertTrue(hq.getOwnerTeam() >= 1 && hq.getOwnerTeam() <= 2);
             assertNotNull(hq.getPosition());
             assertEquals(0.0, hq.getTotalDamageTaken());
         }
@@ -87,8 +87,8 @@ class HeadquartersTest extends BaseTestClass {
 
         assertNotNull(team1HQ);
         assertNotNull(team2HQ);
-        assertEquals(1, team1HQ.getTeamNumber());
-        assertEquals(2, team2HQ.getTeamNumber());
+        assertEquals(1, team1HQ.getOwnerTeam());
+        assertEquals(2, team2HQ.getOwnerTeam());
         assertNotEquals(team1HQ.getId(), team2HQ.getId());
     }
 
@@ -157,19 +157,6 @@ class HeadquartersTest extends BaseTestClass {
         assertFalse(destroyed); // Already destroyed
         assertEquals(0.0, hq.getHealth()); // Health stays at 0
         assertEquals(totalDamage, hq.getTotalDamageTaken()); // Damage tracking doesn't change
-    }
-
-    @Test
-    @DisplayName("Headquarters has proper shape data for rendering")
-    void testHeadquartersShapeData() {
-        Headquarters hq = gameManager.getGameEntities().getAllHeadquarters().iterator().next();
-
-        var shapeData = hq.getShapeData();
-
-        assertNotNull(shapeData);
-        assertEquals("RECTANGLE", shapeData.get("shapeCategory"));
-        assertEquals(80.0, shapeData.get("width"));
-        assertEquals(60.0, shapeData.get("height"));
     }
 
     @Test

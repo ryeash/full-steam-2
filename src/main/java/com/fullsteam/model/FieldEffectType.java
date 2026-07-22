@@ -5,12 +5,14 @@ import lombok.Getter;
 @Getter
 public enum FieldEffectType {
     // Combat effects
-    EXPLOSION(0.5, true),      // Short duration, instant damage
-    FIRE(3.0, false),          // Long duration, damage over time
-    ELECTRIC(1.0, false),      // Medium duration, chain damage
-    FREEZE(2.0, false),        // Medium duration, slowing effect
-    FRAGMENTATION(0.3, true),  // Very short, creates multiple projectiles
-    POISON(4.0, false),        // Long duration, damage over time
+    EXPLOSION(0.5, true),                       // Short duration, instant damage
+    FIRE(3.0, false),                           // Long duration, damage over time
+    ELECTRIC(1.0, false),                       // Medium duration, chain damage
+    FREEZE(2.0, false),                         // Medium duration, slowing effect
+    FRAGMENTATION(0.3, true),                   // Very short, creates multiple projectiles
+    POISON(4.0, false),                         // Long duration, damage over time
+    LASER(Ordinance.LASER.getBeamDuration(), true),          // Short instant beam damage
+    PLASMA(Ordinance.PLASMA_BEAM.getBeamDuration(), false),  // damage over time beam damage
 
     // Utility effects
     HEAL_ZONE(5.0, false),     // Continuous healing area for allies
@@ -32,5 +34,14 @@ public enum FieldEffectType {
     FieldEffectType(double defaultDuration, boolean instantaneous) {
         this.defaultDuration = defaultDuration;
         this.instantaneous = instantaneous;
+    }
+
+    public double maxRadius(double radius) {
+        return switch (this) {
+            case FIRE -> radius * 1.75;
+            case POISON -> radius * 2.0;
+            case SMOKE -> radius * 1.25;
+            default -> radius;
+        };
     }
 }

@@ -7,19 +7,22 @@ import java.util.stream.Collectors;
 
 @Getter
 public enum BulletEffect {
-    EXPLOSIVE(25, "Projectiles explode on impact, dealing area damage", 50.0, 1.5, 1.0, true, true),
-    INCENDIARY(18, "Projectiles set targets on fire, dealing damage over time", 40.0, 0.6, 1.0, true, true),
-    ELECTRIC(16, "Projectiles chain lightning damage to nearby enemies", 60.0, 0.8, 1.0, true, true),
-    FREEZING(14, "Projectiles slow down hit targets temporarily", 35.0, 0.2, 1.0, true, true),
-    POISON(22, "Projectiles release poison gas, dealing area damage over time", 50.0, 0.5, 1.0, true, true),
-    BOUNCY(15, "Projectiles bounce off obstacles; beams reflect off walls", 0, 1.0, 1.0, true, true),
-    PIERCING(20, "Projectiles pass through enemies, hitting multiple targets", 0, 1.0, 1.0, true, true),
-    FRAGMENTING(22, "Projectiles split into multiple smaller projectiles on impact", 20, 0.0, 0.0, false, true),
-    HOMING(30, "Projectiles track towards nearby enemies", 0, 1.0, 1.0, false, true),
+    // dangerous after dismissal effects
+    EXPLOSIVE(25, "Projectiles explode on impact, dealing area damage", 50.0, 1.5, 1.2, true, true, FieldEffectType.EXPLOSION),
+    INCENDIARY(18, "Projectiles set targets on fire, dealing damage over time", 40.0, 0.6, 1.0, true, true, FieldEffectType.FIRE),
+    ELECTRIC(16, "Projectiles chain lightning damage to nearby enemies", 60.0, 0.8, 1.1, true, true, FieldEffectType.ELECTRIC),
+    FREEZING(14, "Projectiles slow down hit targets temporarily", 35.0, 0.2, 1.0, true, true, FieldEffectType.FREEZE),
+    POISON(22, "Projectiles release poison gas, dealing area damage over time", 50.0, 0.5, .9, true, true, FieldEffectType.POISON),
 
-    // Utility-only effects
-    STRIKE(0, "Calls in a delayed explosive strike where the projectile lands", 0, 0.0, 0.0, false, false),
-    SMOKE(0, "Projectiles create a vision-blocking smoke cloud on impact", 60.0, 0.0, 0.0, false, false);
+    // special ordinance behaviors
+    BOUNCY(15, "Projectiles bounce off obstacles; beams reflect off walls", 0, 1.0, 1.0, true, true, null),
+    PIERCING(20, "Projectiles pass through enemies, hitting multiple targets", 0, 1.0, 1.0, true, true, null),
+    FRAGMENTING(22, "Projectiles split into multiple smaller projectiles on impact", 20, 0.0, 0.0, false, true, null),
+    HOMING(30, "Projectiles track towards nearby enemies", 0, 1.0, 1.0, false, true, null),
+
+    // utility-only effects
+    STRIKE(0, "Calls in a delayed explosive strike where the projectile lands", 0, 0.0, 0.0, false, false, null),
+    SMOKE(0, "Projectiles create a vision-blocking smoke cloud on impact", 60.0, 0.0, 0.0, false, false, FieldEffectType.SMOKE);
 
     private final int pointCost;
     private final String description;
@@ -28,8 +31,9 @@ public enum BulletEffect {
     private final double damageModificationForSize;
     private final boolean validForBeams;
     private final boolean selectable;
+    private final FieldEffectType effectType;
 
-    BulletEffect(int pointCost, String description, double baseRadius, double damageModification, double damageModificationForSize, boolean validForBeams, boolean selectable) {
+    BulletEffect(int pointCost, String description, double baseRadius, double damageModification, double damageModificationForSize, boolean validForBeams, boolean selectable, FieldEffectType effectType) {
         this.pointCost = pointCost;
         this.description = description;
         this.baseRadius = baseRadius;
@@ -37,6 +41,7 @@ public enum BulletEffect {
         this.damageModificationForSize = damageModificationForSize;
         this.validForBeams = validForBeams;
         this.selectable = selectable;
+        this.effectType = effectType;
     }
 
     public double calculateRadius(double damage, Ordinance ordinance, double caliber) {

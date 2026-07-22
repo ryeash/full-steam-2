@@ -2,6 +2,8 @@ package com.fullsteam.physics;
 
 import com.fullsteam.Config;
 import com.fullsteam.model.AttributeModification;
+import com.fullsteam.model.FieldEffectBeam;
+import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.HasWeapon;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerInput;
@@ -270,9 +272,9 @@ public class Player extends GameEntity implements HasWeapon {
      * Shoot beam weapon(s). Supports multiple beams per shot with accuracy spread,
      * mirroring how shoot() handles multiple projectiles.
      *
-     * @return List of Beam objects (empty if weapon cannot fire)
+     * @return List of FieldEffectBeam objects (empty if weapon cannot fire)
      */
-    public List<Beam> shootBeam() {
+    public List<FieldEffectBeam> shootBeam() {
         Weapon weapon = this.getCurrentWeapon();
         if (!canShoot() || !weapon.getOrdinance().isBeamType()) {
             if (!isReloading && weapon.getCurrentAmmo() <= 0) {
@@ -291,18 +293,20 @@ public class Player extends GameEntity implements HasWeapon {
         baseDirection.normalize();
         double baseAngle = Math.atan2(baseDirection.y, baseDirection.x);
 
-        Ordinance ordinance = weapon.getOrdinance();
+        FieldEffectType beamType = weapon.getOrdinance() == Ordinance.PLASMA_BEAM
+                ? FieldEffectType.PLASMA
+                : FieldEffectType.LASER;
         double range = weapon.getRange() * 0.6;
         double damage = weapon.getDamagePerBullet();
         double maxAccuracySpread = (1.0 - weapon.getAccuracy()) * 0.17;
 
-        List<Beam> beams = new LinkedList<>();
+        List<FieldEffectBeam> beams = new LinkedList<>();
         double angle = baseAngle;
         for (int i = 0; i < beamsToFire; i++) {
             angle += (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * maxAccuracySpread;
             Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
-            beams.add(new Beam(pos, direction, range, damage, getId(), getTeam(),
-                    ordinance, weapon.getBulletEffects(), weapon.getCaliber()));
+            beams.add(new FieldEffectBeam(pos, direction, range, damage,
+                    getId(), getTeam(), beamType, weapon.getBulletEffects(), weapon.getCaliber()));
         }
         return beams;
     }

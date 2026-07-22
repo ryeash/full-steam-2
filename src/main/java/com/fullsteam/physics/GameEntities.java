@@ -2,6 +2,7 @@ package com.fullsteam.physics;
 
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
 import lombok.Getter;
@@ -43,7 +44,6 @@ public class GameEntities {
     private final Map<Integer, Turret> turrets = new ConcurrentSkipListMap<>();
     private final Map<Integer, DefenseLaser> defenseLasers = new ConcurrentSkipListMap<>();
     private final Map<Integer, NetProjectile> netProjectiles = new ConcurrentSkipListMap<>();
-    private final Map<Integer, Beam> beams = new ConcurrentSkipListMap<>();
     private final Map<Integer, Flag> flags = new ConcurrentSkipListMap<>();
     private final Map<Integer, Oddball> oddballNpcs = new ConcurrentSkipListMap<>();
     private final Map<Integer, KothZone> kothZones = new ConcurrentSkipListMap<>();
@@ -78,7 +78,6 @@ public class GameEntities {
                 }
                 case DefenseLaser defenseLaser -> defenseLasers.put(defenseLaser.getId(), defenseLaser);
                 case NetProjectile netProjectile -> netProjectiles.put(netProjectile.getId(), netProjectile);
-                case Beam beam -> beams.put(beam.getId(), beam);
                 case Flag flag -> flags.put(flag.getId(), flag);
                 case Oddball npc -> oddballNpcs.put(npc.getId(), npc);
                 case KothZone kothZone -> kothZones.put(kothZone.getId(), kothZone);
@@ -124,7 +123,7 @@ public class GameEntities {
     }
 
     public void removeInactiveEntities() {
-        Stream.of(obstacles, fieldEffects, turrets, netProjectiles, defenseLasers, beams)
+        Stream.of(obstacles, fieldEffects, turrets, netProjectiles, defenseLasers)
                 .forEach(map ->
                         map.entrySet().removeIf(entry -> {
                             GameEntity o = entry.getValue();
@@ -137,7 +136,7 @@ public class GameEntities {
     }
 
     public void updateAll(double deltaTime) {
-        Stream.of(players, projectiles, fieldEffects, turrets, defenseLasers, netProjectiles, beams, kothZones, headquarters, oddballNpcs)
+        Stream.of(players, projectiles, fieldEffects, turrets, defenseLasers, netProjectiles, kothZones, headquarters, oddballNpcs)
                 .flatMap(m -> m.values().stream())
                 .forEach(e -> e.update(deltaTime));
     }
@@ -162,8 +161,11 @@ public class GameEntities {
         return netProjectiles.values();
     }
 
-    public Collection<Beam> getAllBeams() {
-        return beams.values();
+    public Collection<FieldEffectBeam> getAllBeamEffects() {
+        return fieldEffects.values().stream()
+                .filter(fe -> fe instanceof FieldEffectBeam)
+                .map(fe -> (FieldEffectBeam) fe)
+                .toList();
     }
 
     public Flag getFlag(int flagId) {
@@ -223,7 +225,7 @@ public class GameEntities {
 
     public Headquarters getTeamHeadquarters(int teamNumber) {
         return headquarters.values().stream()
-                .filter(hq -> hq.getTeamNumber() == teamNumber)
+                .filter(hq -> hq.getOwnerTeam() == teamNumber)
                 .findFirst()
                 .orElse(null);
     }

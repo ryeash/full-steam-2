@@ -2,11 +2,11 @@ package com.fullsteam.games;
 
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.Weapon;
-import com.fullsteam.physics.Beam;
 import com.fullsteam.physics.BulletEffectProcessor;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.GameEntity;
@@ -60,7 +60,6 @@ public class WeaponSystem {
             return;
         }
 
-        // Check if weapon fires beams or projectiles
         if (player.getCurrentWeapon().getOrdinance().isBeamType()) {
             handleBeamFire(player);
         } else {
@@ -70,15 +69,15 @@ public class WeaponSystem {
 
     /**
      * Handle firing of beam weapons. Supports multiple beams per shot.
+     * Each beam has its path computed (straight, obstacle-blocked, or BOUNCY-reflected),
+     * is registered as a FieldEffect, and — for LASER — has its instant damage applied
+     * immediately.
      */
     private void handleBeamFire(Player player) {
-        for (Beam beam : player.shootBeam()) {
-            // Compute the beam's path — a straight [start, end] for normal beams, or
-            // a reflected polyline for BOUNCY beams. setPath keeps effectiveEndPoint
-            // (the last vertex) in sync for single-point consumers.
+        for (FieldEffectBeam beam : player.shootBeam()) {
             beam.setPath(computeBeamPath(beam));
             gameEntities.add(beam);
-            if (beam.getOrdinance() == Ordinance.LASER) {
+            if (beam.getType() == FieldEffectType.LASER) {
                 processStandardBeamHit(beam);
             }
         }
@@ -113,7 +112,6 @@ public class WeaponSystem {
 
         Ray ray = new Ray(startPoint, direction);
 
-        // Raycast to find obstacles
         List<RaycastResult<Body, BodyFixture>> results = world.raycast(
                 ray,
                 maxDistance,
@@ -126,13 +124,11 @@ public class WeaponSystem {
             return endPoint; // No obstacles, beam reaches full range
         }
 
-        // Find the closest obstacle intersection
         double closestDistance = maxDistance;
         for (RaycastResult<Body, ?> result : results) {
             Body body = result.getBody();
             Object userData = body.getUserData();
 
-            // Only obstacles block beams (not players or other entities)
             if (userData instanceof Obstacle) {
                 double distance = result.getRaycast().getDistance();
                 if (distance < closestDistance) {
@@ -141,7 +137,6 @@ public class WeaponSystem {
             }
         }
 
-        // Calculate effective end point
         Vector2 effectiveEnd = startPoint.copy();
         effectiveEnd.add(direction.copy().multiply(closestDistance));
         return effectiveEnd;
@@ -163,7 +158,7 @@ public class WeaponSystem {
      * until its range is spent. Only obstacles reflect; players/turrets are passed
      * through here and damaged later in the per-segment damage pass.
      */
-    public List<Vector2> computeBeamPath(Beam beam) {
+    public List<Vector2> computeBeamPath(FieldEffectBeam beam) {
         List<Vector2> path = new ArrayList<>();
         Vector2 p = beam.getStartPoint().copy();
         Vector2 d = beam.getDirection().copy();
@@ -207,7 +202,7 @@ public class WeaponSystem {
     /**
      * Closest obstacle that blocks {@code beam} along ray (p, d) within maxDistance, or null.
      */
-    private RaycastResult<Body, ?> closestBlockingObstacle(Beam beam, Vector2 p, Vector2 d, double maxDistance) {
+    private RaycastResult<Body, ?> closestBlockingObstacle(FieldEffectBeam beam, Vector2 p, Vector2 d, double maxDistance) {
         Ray ray = new Ray(p, d);
         List<RaycastResult<Body, BodyFixture>> results = world.raycast(
                 ray, maxDistance, new DetectFilter<>(true, true, null));
@@ -228,35 +223,26 @@ public class WeaponSystem {
     /**
      * Check if an entity should block a beam based on the beam's piercing behavior.
      */
-    private boolean shouldEntityBlockBeam(Beam beam, Object entity) {
+    private boolean shouldEntityBlockBeam(FieldEffectBeam beam, Object entity) {
         return switch (entity) {
-            // Projectiles should never block beams - they're small, fast-moving objects
-            // Net projectiles should never block beams
-            case Player _, Projectile _, NetProjectile _, Turret _, Oddball _ -> false;
             case Obstacle _ -> !beam.getBulletEffects().contains(BulletEffect.PIERCING);
             case FieldEffect fieldEffect -> {
-                // Handle shield barriers - block non-piercing beams
                 if (fieldEffect.getType() == FieldEffectType.SHIELD_BARRIER) {
-                    // Shield barriers block non-piercing beams
-                    // but allow piercing beams to pass through
                     yield !beam.getBulletEffects().contains(BulletEffect.PIERCING);
                 }
-                // Other field effects don't block beams
                 yield false;
-                // Other field effects don't block beams
             }
+            case Player _, Projectile _, NetProjectile _, Turret _, Oddball _ -> false;
             case null -> false;
             default -> true;
         };
     }
 
     /**
-     * Process standard beam hits (laser, etc.)
+     * Process standard beam hits (LASER instant damage).
+     * Walks each segment of the path; {@code affectedPlayers} deduplicates entities.
      */
-    public void processStandardBeamHit(Beam beam) {
-        // Walk each segment of the beam's path (one for a straight beam, more for a
-        // BOUNCY beam). The beam's affectedPlayers set dedups entities that lie on
-        // more than one segment so nothing is hit twice by the same beam.
+    public void processStandardBeamHit(FieldEffectBeam beam) {
         List<Vector2> path = beam.getPath();
         if (path == null || path.size() < 2) {
             return;
@@ -269,7 +255,7 @@ public class WeaponSystem {
     /**
      * Apply a beam's instant damage to every affectable entity along one segment.
      */
-    private void damageAlongSegment(Beam beam, Vector2 segStart, Vector2 segEnd) {
+    private void damageAlongSegment(FieldEffectBeam beam, Vector2 segStart, Vector2 segEnd) {
         Vector2 direction = segEnd.copy().subtract(segStart);
         double distance = direction.getMagnitude();
         if (distance <= 0) {
@@ -283,13 +269,11 @@ public class WeaponSystem {
         if (results.isEmpty()) {
             return;
         }
-        // Sort by distance for proper piercing order along this segment.
         results.sort(Comparator.comparingDouble(r -> r.getRaycast().getDistance()));
 
         for (RaycastResult<Body, ?> result : results) {
             Object userData = result.getBody().getUserData();
             if (userData instanceof Player player) {
-                // applyBeamDamage records the id; skip if already hit this beam.
                 if (beam.canAffectPlayer(player) && !beam.getAffectedPlayers().contains(player.getId())) {
                     applyBeamDamage(beam, player);
                 }
@@ -302,9 +286,6 @@ public class WeaponSystem {
                     applyBeamDamage(beam, oddball);
                 }
             } else if (userData instanceof Obstacle) {
-                // Stop this segment at an obstacle unless the beam pierces. (For a
-                // bouncy beam the path already ends the segment at the wall, so this
-                // is the piercing/terminal guard for the final straight run.)
                 if (!beam.getBulletEffects().contains(BulletEffect.PIERCING)) {
                     break;
                 }
@@ -313,14 +294,12 @@ public class WeaponSystem {
     }
 
     /**
-     * Apply beam damage to a player
+     * Apply beam damage to an entity and trigger AOE bullet effects at the hit point.
      */
-    private void applyBeamDamage(Beam beam, GameEntity entity) {
+    private void applyBeamDamage(FieldEffectBeam beam, GameEntity entity) {
         beam.getAffectedPlayers().add(entity.getId());
         boolean killed = entity.takeDamage(beam.getDamage());
-        // Process AOE bullet effects for beam weapons
         bulletEffectProcessor.processBeamEffectHit(beam, entity.getPosition());
-        // Handle kill if player died
         if (entity instanceof Player p && killed && killCallback != null) {
             killCallback.accept(p, beam.getOwnerId());
         }
@@ -328,14 +307,16 @@ public class WeaponSystem {
 
     /**
      * Spawn a continuous (DOT) beam's AOE field effects at a point. Throttling is
-     * the caller's responsibility (see {@link Beam#tryEmitAreaEffect}). Instant
-     * beams spawn their effects per-hit via {@link #applyBeamDamage}; this is the
-     * equivalent entry point for the continuous-damage loop in GameManager.
+     * the caller's responsibility (see {@link FieldEffectBeam#tryEmitAreaEffect}).
      */
-    public void processBeamAreaEffects(Beam beam, Vector2 position) {
+    public void processBeamAreaEffects(FieldEffectBeam beam, Vector2 position) {
         bulletEffectProcessor.processBeamEffectHit(beam, position);
     }
 
+    /**
+     * Shared firing helper used by Turret, Oddball, and any other non-player entity.
+     * Returns the list of newly created game entities (Projectile or FieldEffectBeam).
+     */
     public static List<GameEntity> fireWeapon(int ownerId, int ownerTeam, Weapon weapon, Vector2 position, Vector2 direction) {
         double baseAngle = Math.atan2(direction.y, direction.x);
         double spread = (1.0 - weapon.getAccuracy()) * 0.17;
@@ -355,20 +336,22 @@ public class WeaponSystem {
         return fired;
     }
 
-    private static Beam fireBeam(int ownerId, int ownerTeam, Weapon weapon, Vector2 pos, Vector2 dir) {
-        Vector2 endPoint = pos.copy().add(dir.copy().multiply(weapon.getRange()));
-        Beam beam = new Beam(
+    private static FieldEffectBeam fireBeam(int ownerId, int ownerTeam, Weapon weapon, Vector2 pos, Vector2 dir) {
+        FieldEffectType type = weapon.getOrdinance() == Ordinance.PLASMA_BEAM
+                ? FieldEffectType.PLASMA
+                : FieldEffectType.LASER;
+        FieldEffectBeam beam = new FieldEffectBeam(
                 pos,
                 dir,
                 weapon.getRange(),
                 weapon.getDamage(),
                 ownerId,
                 ownerTeam,
-                weapon.getOrdinance(),
+                type,
                 weapon.getBulletEffects(),
                 weapon.getCaliber()
         );
-        beam.setPath(List.of(pos.copy(), endPoint));
+        beam.setPath(List.of(pos.copy(), pos.copy().add(dir.copy().multiply(weapon.getRange()))));
         return beam;
     }
 

@@ -29,18 +29,14 @@ import java.util.List;
  */
 @Getter
 @Setter
-public class Turret extends GameEntity implements HasWeapon {
-    private final int ownerId;
-    private final int ownerTeam;
+public class Turret extends OwnedGameEntity implements HasWeapon {
     private final Weapon weapon;
     private long lastShotTime = 0;
     private Player currentTarget;
     private Vector2 aimDirection = new Vector2(1, 0);
 
     public Turret(int ownerId, int ownerTeam, Vector2 position, double lifespan, Weapon weapon) {
-        super(Config.nextEntityId(), createTurretBody(position), 50.0);
-        this.ownerId = ownerId;
-        this.ownerTeam = ownerTeam;
+        super(Config.nextEntityId(), createTurretBody(position), 50.0, ownerId, ownerTeam);
         this.weapon = weapon;
         this.expires = (long) (System.currentTimeMillis() + (lifespan * 1000));
         this.setRotation(Math.random() * 2 * Math.PI);
@@ -109,7 +105,7 @@ public class Turret extends GameEntity implements HasWeapon {
      * mirroring how {@link Player#shoot()} and {@link Player#shootBeam()} handle
      * multi-shot weapons.
      *
-     * @return a list of the {@link Projectile}s or {@link Beam}s fired this tick,
+     * @return a list of the {@link Projectile}s or {@link com.fullsteam.model.FieldEffectBeam}s fired this tick,
      * or an empty list if the turret cannot fire.
      */
     public List<GameEntity> tryFire() {

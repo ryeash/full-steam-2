@@ -54,7 +54,7 @@ public class HazardAvoidance {
         return switch (type) {
             case EXPLOSION, FIRE, ELECTRIC, POISON, EARTHQUAKE,
                  WARNING_ZONE, FREEZE, SLOW_FIELD, GRAVITY_WELL,
-                 PROXIMITY_MINE, SMOKE -> true;
+                 PROXIMITY_MINE, SMOKE, LASER, PLASMA -> true;
             case HEAL_ZONE, SPEED_BOOST, SHIELD_BARRIER, FRAGMENTATION -> false;
         };
     }

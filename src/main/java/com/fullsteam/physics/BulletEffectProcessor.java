@@ -2,6 +2,8 @@ package com.fullsteam.physics;
 
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.FieldEffectBeam;
+import com.fullsteam.model.FieldEffectCircle;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.Weapon;
@@ -32,120 +34,14 @@ public class BulletEffectProcessor {
 
     public void processEffectHit(Projectile projectile, Vector2 hitPosition) {
         for (BulletEffect effect : projectile.getBulletEffects()) {
-            switch (effect) {
-                case EXPLOSIVE -> createExplosion(projectile, hitPosition);
-                case INCENDIARY -> createFireEffect(projectile, hitPosition);
-                case ELECTRIC -> createElectricEffect(projectile, hitPosition);
-                case FREEZING -> createFreezeEffect(projectile, hitPosition);
-                case FRAGMENTING -> createFragmentation(projectile, hitPosition);
-                case POISON -> createPoisonEffect(projectile, hitPosition);
-                case SMOKE -> createSmokeEffect(projectile, hitPosition);
-                case STRIKE -> createStrikeEffect(projectile, hitPosition);
-                case PIERCING -> {
-                    // Piercing is handled in collision detection - projectile continues
-                }
-                case HOMING -> {
-                    // Homing is handled during projectile flight
-                }
-                case BOUNCY -> {
-                    // Bouncy is handled in collision detection
-                }
+            if (effect == BulletEffect.STRIKE) {
+                createStrikeEffect(projectile, hitPosition);
+            } else if (effect == BulletEffect.FRAGMENTING) {
+                createFragmentation(projectile, hitPosition);
+            } else {
+                spawnEffect(projectile, projectile.getOrdinance(), effect, projectile.getDamage(), projectile.getCaliber(), hitPosition);
             }
         }
-    }
-
-    public void createExplosion(Projectile projectile, Vector2 position) {
-        double radius = BulletEffect.EXPLOSIVE.calculateRadius(projectile.getDamage(), projectile.getOrdinance(), projectile.getCaliber());
-        FieldEffect explosion = new FieldEffect(
-                projectile.getOwnerId(),
-                FieldEffectType.EXPLOSION,
-                position,
-                radius,
-                radius,
-                BulletEffect.EXPLOSIVE.calculateDamage(projectile.getDamage()),
-                FieldEffectType.EXPLOSION.getDefaultDuration(),
-                0,
-                projectile.getOwnerTeam()
-        );
-        gameEntities.add(explosion);
-    }
-
-    public void createFireEffect(Projectile projectile, Vector2 position) {
-        double radius = BulletEffect.INCENDIARY.calculateRadius(projectile.getDamage(), projectile.getOrdinance(), projectile.getCaliber());
-        gameEntities.add(new FieldEffect(
-                projectile.getOwnerId(),
-                FieldEffectType.FIRE,
-                position,
-                radius,
-                radius,
-                BulletEffect.INCENDIARY.calculateDamage(projectile.getDamage()),
-                FieldEffectType.FIRE.getDefaultDuration(),
-                0,
-                projectile.getOwnerTeam()
-        ));
-    }
-
-    public void createElectricEffect(Projectile projectile, Vector2 position) {
-        double radius = BulletEffect.ELECTRIC.calculateRadius(projectile.getDamage(), projectile.getOrdinance(), projectile.getCaliber());
-        gameEntities.add(new FieldEffect(
-                projectile.getOwnerId(),
-                FieldEffectType.ELECTRIC,
-                position,
-                radius,
-                radius,
-                BulletEffect.ELECTRIC.calculateDamage(projectile.getDamage()),
-                FieldEffectType.ELECTRIC.getDefaultDuration(),
-                0,
-                projectile.getOwnerTeam()
-        ));
-    }
-
-    public void createFreezeEffect(Projectile projectile, Vector2 position) {
-        double radius = BulletEffect.FREEZING.calculateRadius(projectile.getDamage(), projectile.getOrdinance(), projectile.getCaliber());
-        FieldEffect freeze = new FieldEffect(
-                projectile.getOwnerId(),
-                FieldEffectType.FREEZE,
-                position,
-                radius,
-                radius,
-                BulletEffect.FREEZING.calculateDamage(projectile.getDamage()),
-                FieldEffectType.FREEZE.getDefaultDuration(),
-                0,
-                projectile.getOwnerTeam()
-        );
-        gameEntities.add(freeze);
-    }
-
-    public void createPoisonEffect(Projectile projectile, Vector2 position) {
-        double radius = BulletEffect.POISON.calculateRadius(projectile.getDamage(), projectile.getOrdinance(), projectile.getCaliber());
-        FieldEffect poison = new FieldEffect(
-                projectile.getOwnerId(),
-                FieldEffectType.POISON,
-                position,
-                radius,
-                radius,
-                BulletEffect.POISON.calculateDamage(projectile.getDamage()),
-                FieldEffectType.POISON.getDefaultDuration(),
-                0,
-                projectile.getOwnerTeam()
-        );
-        gameEntities.add(poison);
-    }
-
-    public void createSmokeEffect(Projectile projectile, Vector2 position) {
-        double radius = BulletEffect.SMOKE.calculateRadius(projectile.getDamage(), projectile.getOrdinance(), projectile.getCaliber());
-        FieldEffect smoke = new FieldEffect(
-                projectile.getOwnerId(),
-                FieldEffectType.SMOKE,
-                position,
-                radius,
-                radius,
-                0.0,
-                FieldEffectType.SMOKE.getDefaultDuration(),
-                0,
-                projectile.getOwnerTeam()
-        );
-        gameEntities.add(smoke);
     }
 
     /**
@@ -158,7 +54,7 @@ public class BulletEffectProcessor {
         int owner = projectile.getOwnerId();
         int team = projectile.getOwnerTeam();
         // Telegraph: warning zone for the full delay window.
-        gameEntities.add(new FieldEffect(owner,
+        gameEntities.add(new FieldEffectCircle(owner,
                 FieldEffectType.WARNING_ZONE,
                 position.copy(),
                 STRIKE_RADIUS,
@@ -168,7 +64,7 @@ public class BulletEffectProcessor {
                 0,
                 team));
         // The strike: a delayed explosion that detonates when the warning ends.
-        gameEntities.add(new FieldEffect(owner,
+        gameEntities.add(new FieldEffectCircle(owner,
                 FieldEffectType.EXPLOSION,
                 position.copy(),
                 STRIKE_RADIUS,
@@ -182,7 +78,7 @@ public class BulletEffectProcessor {
     private void createFragmentation(Projectile projectile, Vector2 position) {
         // Create visual fragmentation effect first
         double radius = BulletEffect.FRAGMENTING.calculateRadius(projectile.getDamage(), projectile.getOrdinance(), projectile.getCaliber());
-        FieldEffect fragmentation = new FieldEffect(
+        gameEntities.add(new FieldEffectCircle(
                 projectile.getOwnerId(),
                 FieldEffectType.FRAGMENTATION,
                 position,
@@ -192,13 +88,12 @@ public class BulletEffectProcessor {
                 FieldEffectType.FRAGMENTATION.getDefaultDuration(),
                 0,
                 projectile.getOwnerTeam()
-        );
-        gameEntities.add(fragmentation);
+        ));
 
         // Create multiple smaller projectiles
         int fragmentCount = 3 + (int) (projectile.getDamage() / 15); // More fragments for higher damage
-        double fragmentDamage = projectile.getDamage() * 0.4; // Each fragment does less damage
-        double fragmentSpeed = projectile.getBody().getLinearVelocity().getMagnitude() * 0.6;
+        double fragmentDamage = projectile.getDamage() * 0.3; // Each fragment does less damage
+        double fragmentSpeed = projectile.getBody().getLinearVelocity().getMagnitude() * 0.6; // each fragment is slower
         double randomStartAngle = ThreadLocalRandom.current().nextDouble(0, 2 * Math.PI);
 
         for (int i = 0; i < fragmentCount; i++) {
@@ -260,7 +155,7 @@ public class BulletEffectProcessor {
             return;
         }
 
-        // Find nearest enemy player
+        // Find nearest enemy player (**only** players, not turrets, NPCs, etc.)
         Player nearestEnemy = findNearestEnemy(projectile);
         if (nearestEnemy == null) {
             return;
@@ -279,9 +174,7 @@ public class BulletEffectProcessor {
 
         // Get current velocity to calculate perpendicular steering
         Vector2 currentVelocity = projectile.getBody().getLinearVelocity();
-        if (currentVelocity.getMagnitude() < 0.1) {
-            // no-homing
-        } else {
+        if (currentVelocity.getMagnitude() > 0.1) {
             // Calculate perpendicular steering force
             Vector2 velocityDirection = currentVelocity.copy();
             velocityDirection.normalize();
@@ -325,140 +218,27 @@ public class BulletEffectProcessor {
     /**
      * Process bullet effects for beam weapons when they hit targets
      */
-    public void processBeamEffectHit(Beam beam, Vector2 hitPosition) {
-        // Process AOE effects for beam weapons
+    public void processBeamEffectHit(FieldEffectBeam beam, Vector2 hitPosition) {
         for (BulletEffect effect : beam.getBulletEffects()) {
-            switch (effect) {
-                case EXPLOSIVE:
-                    createExplosionForBeam(beam, hitPosition);
-                    break;
-                case INCENDIARY:
-                    createFireEffectForBeam(beam, hitPosition);
-                    break;
-                case ELECTRIC:
-                    createElectricEffectForBeam(beam, hitPosition);
-                    break;
-                case FREEZING:
-                    createFreezeEffectForBeam(beam, hitPosition);
-                    break;
-                case POISON:
-                    createPoisonEffectForBeam(beam, hitPosition);
-                    break;
-                case SMOKE:
-                    createSmokeEffectForBeam(beam, hitPosition);
-                    break;
-                // nothing else triggers
-                default:
-                    break;
-            }
+            spawnEffect(beam, beam.getOrdinance(), effect, beam.getDamage(), beam.getCaliber(), hitPosition);
         }
     }
 
-    /**
-     * Create explosion effect for beam weapons
-     */
-    private void createExplosionForBeam(Beam beam, Vector2 position) {
-        double radius = BulletEffect.EXPLOSIVE.calculateRadius(beam.getDamage(), beam.getOrdinance(), beam.getCaliber());
-        gameEntities.add(new FieldEffect(
-                beam.getOwnerId(),
-                FieldEffectType.EXPLOSION,
-                position,
-                radius,
-                radius,
-                BulletEffect.EXPLOSIVE.calculateDamage(beam.getDamage()),
-                FieldEffectType.EXPLOSION.getDefaultDuration(),
-                0,
-                beam.getOwnerTeam()
-        ));
-    }
-
-    /**
-     * Create fire effect for beam weapons
-     */
-    private void createFireEffectForBeam(Beam beam, Vector2 position) {
-        double radius = BulletEffect.INCENDIARY.calculateRadius(beam.getDamage(), beam.getOrdinance(), beam.getCaliber());
-        gameEntities.add(new FieldEffect(
-                beam.getOwnerId(),
-                FieldEffectType.FIRE,
-                position,
-                radius,
-                radius,
-                BulletEffect.INCENDIARY.calculateDamage(beam.getDamage()),
-                FieldEffectType.FIRE.getDefaultDuration(),
-                0,
-                beam.getOwnerTeam()
-        ));
-    }
-
-    /**
-     * Create electric effect for beam weapons
-     */
-    private void createElectricEffectForBeam(Beam beam, Vector2 position) {
-        double radius = BulletEffect.ELECTRIC.calculateRadius(beam.getDamage(), beam.getOrdinance(), beam.getCaliber());
-        gameEntities.add(new FieldEffect(
-                beam.getOwnerId(),
-                FieldEffectType.ELECTRIC,
-                position,
-                radius,
-                radius,
-                BulletEffect.ELECTRIC.calculateDamage(beam.getDamage()),
-                FieldEffectType.ELECTRIC.getDefaultDuration(),
-                0,
-                beam.getOwnerTeam()
-        ));
-    }
-
-    /**
-     * Create freeze effect for beam weapons
-     */
-    private void createFreezeEffectForBeam(Beam beam, Vector2 position) {
-        double radius = BulletEffect.FREEZING.calculateRadius(beam.getDamage(), beam.getOrdinance(), beam.getCaliber());
-        gameEntities.add(new FieldEffect(
-                beam.getOwnerId(),
-                FieldEffectType.FREEZE,
-                position,
-                radius,
-                radius,
-                BulletEffect.FREEZING.calculateDamage(beam.getDamage()),
-                FieldEffectType.FREEZE.getDefaultDuration(),
-                0,
-                beam.getOwnerTeam()
-        ));
-    }
-
-    /**
-     * Create poison effect for beam weapons
-     */
-    private void createPoisonEffectForBeam(Beam beam, Vector2 position) {
-        double radius = BulletEffect.POISON.calculateRadius(beam.getDamage(), beam.getOrdinance(), beam.getCaliber());
-        gameEntities.add(new FieldEffect(
-                beam.getOwnerId(),
-                FieldEffectType.POISON,
-                position,
-                radius,
-                radius,
-                BulletEffect.POISON.calculateDamage(beam.getDamage()),
-                FieldEffectType.POISON.getDefaultDuration(),
-                0,
-                beam.getOwnerTeam()
-        ));
-    }
-
-    /**
-     * Create a vision-blocking smoke cloud at a beam's impact point
-     */
-    private void createSmokeEffectForBeam(Beam beam, Vector2 position) {
-        double radius = BulletEffect.SMOKE.calculateRadius(beam.getDamage(), beam.getOrdinance(), beam.getCaliber());
-        gameEntities.add(new FieldEffect(
-                beam.getOwnerId(),
-                FieldEffectType.SMOKE,
-                position,
-                radius,
-                radius,
-                0.0,
-                FieldEffectType.SMOKE.getDefaultDuration(),
-                0,
-                beam.getOwnerTeam()
-        ));
+    private void spawnEffect(OwnedGameEntity source, Ordinance ordinance, BulletEffect bulletEffect, double damage, double caliber, Vector2 position) {
+        FieldEffectType effectType = bulletEffect.getEffectType();
+        if (effectType != null) {
+            double radius = bulletEffect.calculateRadius(damage, ordinance, caliber);
+            gameEntities.add(new FieldEffectCircle(
+                    source.getOwnerId(),
+                    effectType,
+                    position,
+                    radius,
+                    effectType.maxRadius(radius),
+                    bulletEffect.calculateDamage(damage),
+                    effectType.getDefaultDuration(),
+                    0,
+                    source.getOwnerTeam()
+            ));
+        }
     }
 }

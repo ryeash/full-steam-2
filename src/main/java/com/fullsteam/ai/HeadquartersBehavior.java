@@ -139,7 +139,7 @@ public class HeadquartersBehavior implements AIBehavior {
         Headquarters targetHQ = gameEntities.getHeadquarters(targetHQId);
 
         // Validate target
-        if (targetHQ == null || !targetHQ.isActive() || targetHQ.getTeamNumber() == aiPlayer.getTeam()) {
+        if (targetHQ == null || !targetHQ.isActive() || targetHQ.getOwnerTeam() == aiPlayer.getTeam()) {
             targetHQ = findNearestEnemyHQ(aiPlayer, gameEntities);
             if (targetHQ != null) {
                 targetHQId = targetHQ.getId();
@@ -227,7 +227,7 @@ public class HeadquartersBehavior implements AIBehavior {
         Headquarters myHQ = gameEntities.getHeadquarters(targetHQId);
 
         // Validate target
-        if (myHQ == null || !myHQ.isActive() || myHQ.getTeamNumber() != aiPlayer.getTeam()) {
+        if (myHQ == null || !myHQ.isActive() || myHQ.getOwnerTeam() != aiPlayer.getTeam()) {
             myHQ = getTeamHeadquarters(aiPlayer.getTeam(), gameEntities);
             if (myHQ != null) {
                 targetHQId = myHQ.getId();
@@ -454,7 +454,7 @@ public class HeadquartersBehavior implements AIBehavior {
 
     private Headquarters getTeamHeadquarters(int team, GameEntities gameEntities) {
         for (Headquarters hq : gameEntities.getAllHeadquarters()) {
-            if (hq.getTeamNumber() == team && hq.isActive()) {
+            if (hq.getOwnerTeam() == team && hq.isActive()) {
                 return hq;
             }
         }
@@ -469,7 +469,7 @@ public class HeadquartersBehavior implements AIBehavior {
         double nearestDistance = Double.MAX_VALUE;
 
         for (Headquarters hq : gameEntities.getAllHeadquarters()) {
-            if (hq.getTeamNumber() != myTeam && hq.isActive()) {
+            if (hq.getOwnerTeam() != myTeam && hq.isActive()) {
                 double distance = myPos.distance(hq.getPosition());
                 if (distance < nearestDistance) {
                     nearestDistance = distance;

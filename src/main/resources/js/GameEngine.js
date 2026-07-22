@@ -8,7 +8,6 @@ class GameEngine {
         this.projectileInterpolators = new Map();
         this.obstacles = new Map();
         this.fieldEffects = new Map();
-        this.beams = new Map();
         this.utilityEntities = new Map(); // For turrets, nets, mines, defense lasers, headquarters, power-ups
         this.flags = new Map(); // CTF flags
         this.oddballNpcs = new Map(); // Oddball NPC entities
@@ -1431,27 +1430,6 @@ class GameEngine {
             }
         }
 
-        // Beams: same pattern
-        {
-            const currentBeamIds = new Set();
-            if (data.beams) {
-                data.beams.forEach(beamData => {
-                    currentBeamIds.add(beamData.id);
-                    if (this.beams.has(beamData.id)) {
-                        this.updateBeam(beamData);
-                    } else {
-                        this.createBeam(beamData);
-                    }
-                });
-            }
-
-            for (let [beamId, beam] of this.beams) {
-                if (!currentBeamIds.has(beamId)) {
-                    this.removeBeam(beamId);
-                }
-            }
-        }
-        
         // Handle flags (CTF mode)
         if (data.flags) {
             const currentFlagIds = new Set();
@@ -2793,6 +2771,18 @@ class GameEngine {
      * Create a field effect (explosion, fire, electric, etc.)
      */
     createFieldEffect(effectData) {
+        // Beam types (LASER / PLASMA) use the polyline renderer, not the sprite renderer.
+        if (effectData.type === 'LASER' || effectData.type === 'PLASMA') {
+            const beamContainer = new PIXI.Container();
+            beamContainer.position.set(0, 0);
+            beamContainer.zIndex = 9;
+            this._renderBeamSegments(beamContainer, effectData);
+            beamContainer.beamData = effectData;
+            this.fieldEffects.set(effectData.id, beamContainer);
+            this.gameContainer.addChild(beamContainer);
+            return;
+        }
+
         const effectContainer = new PIXI.Container();
         effectContainer.position.set(effectData.x, effectData.y);
         
@@ -2848,6 +2838,18 @@ class GameEngine {
         if (!effectContainer) {
             return;
         }
+
+        // Beam types: rebuild geometry when the path changes, fade by durationPercent.
+        if (effectData.type === 'LASER' || effectData.type === 'PLASMA') {
+            const sig = this._beamSignature(this._beamPoints(effectData));
+            if (sig !== effectContainer.beamSig) {
+                this._renderBeamSegments(effectContainer, effectData);
+            }
+            const intensity = effectData.durationPercent || 1.0;
+            effectContainer.alpha = Math.max(0.3, intensity);
+            effectContainer.beamData = effectData;
+            return;
+        }
         
         // Update position (in case effect moves)
         effectContainer.position.set(effectData.x, effectData.y);
@@ -2878,6 +2880,14 @@ class GameEngine {
             }
             effectContainer._removing = true;
 
+            // Beam containers are torn down immediately — no ticker to unregister,
+            // no fade-out animation needed (beams disappear on the next tick anyway).
+            if (effectContainer.beamData) {
+                this.cleanupBeamContainer(effectContainer);
+                if (effectContainer.parent) effectContainer.parent.removeChild(effectContainer);
+                return;
+            }
+
             // Clean up animation ticker first
             if (effectContainer.animationFunction) {
                 this.removeTickerCallback(effectContainer.animationFunction);
@@ -2894,22 +2904,6 @@ class GameEngine {
         }
     }
     
-    /**
-     * Create a beam weapon effect
-     */
-    createBeam(beamData) {
-        // The container sits at world origin; each segment graphic is placed at its
-        // absolute world coords. A straight beam has one segment; a BOUNCY beam has
-        // one per leg of its reflected path.
-        const beamContainer = new PIXI.Container();
-        beamContainer.position.set(0, 0);
-        beamContainer.zIndex = 9; // above projectiles, below players
-        this._renderBeamSegments(beamContainer, beamData);
-        beamContainer.beamData = beamData;
-        this.beams.set(beamData.id, beamContainer);
-        this.gameContainer.addChild(beamContainer);
-    }
-
     /** Beam path vertices: server-supplied polyline, or [start, end] fallback. */
     _beamPoints(beamData) {
         if (Array.isArray(beamData.points) && beamData.points.length >= 2) {
@@ -2919,7 +2913,7 @@ class GameEngine {
                 { x: beamData.endX, y: beamData.endY }];
     }
 
-    /** Cheap geometry signature so updateBeam only rebuilds when the path changes. */
+    /** Cheap geometry signature so segment geometry is only rebuilt when the path changes. */
     _beamSignature(points) {
         return points.map(p => `${Math.round(p.x)},${Math.round(p.y)}`).join(';');
     }
@@ -2946,36 +2940,6 @@ class GameEngine {
             beamContainer.segments.push(seg);
         }
         beamContainer.beamSig = this._beamSignature(pts);
-    }
-    
-    /**
-     * Update a beam weapon effect
-     */
-    updateBeam(beamData) {
-        const beamContainer = this.beams.get(beamData.id);
-        if (!beamContainer) return;
-
-        // Rebuild segment geometry only when the path actually changes (e.g. the
-        // rotating defense laser). Player beams have a fixed path, so this is a
-        // no-op after the first frame.
-        const sig = this._beamSignature(this._beamPoints(beamData));
-        if (sig !== beamContainer.beamSig) {
-            this._renderBeamSegments(beamContainer, beamData);
-        }
-
-        // Fade the whole container (all segments) as the beam nears expiry.
-        const intensity = beamData.durationPercent || 1.0;
-        beamContainer.alpha = Math.max(0.3, intensity);
-        beamContainer.beamData = beamData;
-    }
-    
-    removeBeam(beamId) {
-        const beamContainer = this.beams.get(beamId);
-        if (beamContainer) {
-            this.cleanupBeamContainer(beamContainer);
-            this.gameContainer.removeChild(beamContainer);
-            this.beams.delete(beamId);
-        }
     }
     
     // ===== Flag Management (CTF Mode) =====
@@ -5427,12 +5391,11 @@ class GameEngine {
             projectiles: this.projectiles.size,
             obstacles: this.obstacles.size,
             fieldEffects: this.fieldEffects.size,
-            beams: this.beams.size,
             utilityEntities: this.utilityEntities.size,
             flags: this.flags.size,
             kothZones: this.kothZones.size,
             totalEntities: this.players.size + this.projectiles.size + this.obstacles.size + 
-                          this.fieldEffects.size + this.beams.size + this.utilityEntities.size + 
+                          this.fieldEffects.size + this.utilityEntities.size + 
                           this.flags.size + this.kothZones.size
         };
         return stats;
@@ -5563,11 +5526,14 @@ class GameEngine {
         this.players.forEach(player => this.cleanupPlayerSprite(player));
         this.players.clear();
         
-        this.fieldEffects.forEach(effect => this.cleanupFieldEffectContainer(effect));
+        this.fieldEffects.forEach(container => {
+            if (container.beamData) {
+                this.cleanupBeamContainer(container);
+            } else {
+                this.cleanupFieldEffectContainer(container);
+            }
+        });
         this.fieldEffects.clear();
-        
-        this.beams.forEach(beam => this.cleanupBeamContainer(beam));
-        this.beams.clear();
         
         this.utilityEntities.forEach(entity => this.cleanupUtilityEntityContainer(entity));
         this.utilityEntities.clear();
