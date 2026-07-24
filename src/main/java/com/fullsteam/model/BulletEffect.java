@@ -8,11 +8,11 @@ import java.util.stream.Collectors;
 @Getter
 public enum BulletEffect {
     // dangerous after dismissal effects
-    EXPLOSIVE(25, "Projectiles explode on impact, dealing area damage", 50.0, 1.5, 1.2, true, true, FieldEffectType.EXPLOSION),
-    INCENDIARY(18, "Projectiles set targets on fire, dealing damage over time", 40.0, 0.6, 1.0, true, true, FieldEffectType.FIRE),
-    ELECTRIC(16, "Projectiles chain lightning damage to nearby enemies", 60.0, 0.8, 1.1, true, true, FieldEffectType.ELECTRIC),
-    FREEZING(14, "Projectiles slow down hit targets temporarily", 35.0, 0.2, 1.0, true, true, FieldEffectType.FREEZE),
-    POISON(22, "Projectiles release poison gas, dealing area damage over time", 50.0, 0.5, .9, true, true, FieldEffectType.POISON),
+    EXPLOSIVE(25, "Projectiles explode on impact, dealing area damage", 50.0, 1.5, 1.2, false, true, FieldEffectType.EXPLOSION),
+    INCENDIARY(18, "Projectiles set targets on fire, dealing damage over time", 40.0, 0.6, 1.0, false, true, FieldEffectType.FIRE),
+    ELECTRIC(16, "Projectiles chain lightning damage to nearby enemies", 60.0, 0.8, 1.1, false, true, FieldEffectType.ELECTRIC),
+    FREEZING(14, "Projectiles slow down hit targets temporarily", 35.0, 0.2, 1.0, false, true, FieldEffectType.FREEZE),
+    POISON(22, "Projectiles release poison gas, dealing area damage over time", 50.0, 0.5, .9, false, true, FieldEffectType.POISON),
 
     // special ordinance behaviors
     BOUNCY(15, "Projectiles bounce off obstacles; beams reflect off walls", 0, 1.0, 1.0, true, true, null),

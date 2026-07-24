@@ -281,13 +281,6 @@ public final class StatusEffectManager {
     }
 
     /**
-     * Apply burning effect to a player.
-     */
-    public static void applyBurning(GameManager gameManager, Player player, double damagePerSecond, double durationSeconds, int effectOwner) {
-        applyHealthDegeneration(gameManager, "fire:#FF4500:flame:true:Burning:{\"count\":12,\"radius\":22,\"height\":10}", player, damagePerSecond, durationSeconds, effectOwner);
-    }
-
-    /**
      * Apply poison effect to a player.
      */
     public static void applyPoison(GameManager gameManager, Player player, double damagePerSecond, double durationSeconds, int effectOwner) {

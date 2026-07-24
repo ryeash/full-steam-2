@@ -27,7 +27,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BiConsumer;
@@ -75,12 +74,28 @@ public class WeaponSystem {
      */
     private void handleBeamFire(Player player) {
         for (FieldEffectBeam beam : player.shootBeam()) {
-            beam.setPath(computeBeamPath(beam));
-            gameEntities.add(beam);
-            if (beam.getType() == FieldEffectType.LASER) {
-                processStandardBeamHit(beam);
-            }
+            handleBeamFire(beam);
         }
+    }
+
+    /**
+     * Handles ray-casting and bouncy/piercing traits of the beam.
+     */
+    public void handleBeamFire(FieldEffectBeam beam) {
+        List<Vector2> vector2s = computeBeamPath(beam);
+        for (int i = 0; i < vector2s.size() - 1; i++) {
+            Vector2 start = vector2s.get(i);
+            Vector2 end = vector2s.get(i + 1);
+            FieldEffectBeam beamSegment = createBeamSegment(start, end, beam);
+            gameEntities.add(beamSegment);
+        }
+    }
+
+    public FieldEffectBeam createBeamSegment(Vector2 start, Vector2 end, FieldEffectBeam beam) {
+        double range = start.distance(end);
+        Vector2 direction = end.copy().subtract(start);
+        return new FieldEffectBeam(start, direction, range, beam.getDamage(),
+                beam.getOwnerId(), beam.getOwnerTeam(), beam.getType(), beam.getBulletEffects(), beam.getCaliber());
     }
 
     /**
@@ -239,81 +254,6 @@ public class WeaponSystem {
     }
 
     /**
-     * Process standard beam hits (LASER instant damage).
-     * Walks each segment of the path; {@code affectedPlayers} deduplicates entities.
-     */
-    public void processStandardBeamHit(FieldEffectBeam beam) {
-        List<Vector2> path = beam.getPath();
-        if (path == null || path.size() < 2) {
-            return;
-        }
-        for (int i = 0; i < path.size() - 1; i++) {
-            damageAlongSegment(beam, path.get(i), path.get(i + 1));
-        }
-    }
-
-    /**
-     * Apply a beam's instant damage to every affectable entity along one segment.
-     */
-    private void damageAlongSegment(FieldEffectBeam beam, Vector2 segStart, Vector2 segEnd) {
-        Vector2 direction = segEnd.copy().subtract(segStart);
-        double distance = direction.getMagnitude();
-        if (distance <= 0) {
-            return;
-        }
-        direction.normalize();
-
-        Ray ray = new Ray(segStart, direction);
-        List<RaycastResult<Body, BodyFixture>> results = world.raycast(
-                ray, distance, new DetectFilter<>(true, true, null));
-        if (results.isEmpty()) {
-            return;
-        }
-        results.sort(Comparator.comparingDouble(r -> r.getRaycast().getDistance()));
-
-        for (RaycastResult<Body, ?> result : results) {
-            Object userData = result.getBody().getUserData();
-            if (userData instanceof Player player) {
-                if (beam.canAffectPlayer(player) && !beam.getAffectedPlayers().contains(player.getId())) {
-                    applyBeamDamage(beam, player);
-                }
-            } else if (userData instanceof Turret turret) {
-                if (beam.canAffectTurret(turret) && !beam.getAffectedPlayers().contains(turret.getId())) {
-                    applyBeamDamage(beam, turret);
-                }
-            } else if (userData instanceof Oddball oddball) {
-                if (oddball.isActive() && beam.getOwnerTeam() != 0 && !beam.getAffectedPlayers().contains(oddball.getId())) {
-                    applyBeamDamage(beam, oddball);
-                }
-            } else if (userData instanceof Obstacle) {
-                if (!beam.getBulletEffects().contains(BulletEffect.PIERCING)) {
-                    break;
-                }
-            }
-        }
-    }
-
-    /**
-     * Apply beam damage to an entity and trigger AOE bullet effects at the hit point.
-     */
-    private void applyBeamDamage(FieldEffectBeam beam, GameEntity entity) {
-        beam.getAffectedPlayers().add(entity.getId());
-        boolean killed = entity.takeDamage(beam.getDamage());
-        bulletEffectProcessor.processBeamEffectHit(beam, entity.getPosition());
-        if (entity instanceof Player p && killed && killCallback != null) {
-            killCallback.accept(p, beam.getOwnerId());
-        }
-    }
-
-    /**
-     * Spawn a continuous (DOT) beam's AOE field effects at a point. Throttling is
-     * the caller's responsibility (see {@link FieldEffectBeam#tryEmitAreaEffect}).
-     */
-    public void processBeamAreaEffects(FieldEffectBeam beam, Vector2 position) {
-        bulletEffectProcessor.processBeamEffectHit(beam, position);
-    }
-
-    /**
      * Shared firing helper used by Turret, Oddball, and any other non-player entity.
      * Returns the list of newly created game entities (Projectile or FieldEffectBeam).
      */
@@ -351,7 +291,8 @@ public class WeaponSystem {
                 weapon.getBulletEffects(),
                 weapon.getCaliber()
         );
-        beam.setPath(List.of(pos.copy(), pos.copy().add(dir.copy().multiply(weapon.getRange()))));
+        // TODO: how to path this?
+//        beam.setPath(List.of(pos.copy(), pos.copy().add(dir.copy().multiply(weapon.getRange()))));
         return beam;
     }
 

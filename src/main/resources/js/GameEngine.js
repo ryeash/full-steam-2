@@ -2771,20 +2771,9 @@ class GameEngine {
      * Create a field effect (explosion, fire, electric, etc.)
      */
     createFieldEffect(effectData) {
-        // Beam types (LASER / PLASMA) use the polyline renderer, not the sprite renderer.
-        if (effectData.type === 'LASER' || effectData.type === 'PLASMA') {
-            const beamContainer = new PIXI.Container();
-            beamContainer.position.set(0, 0);
-            beamContainer.zIndex = 9;
-            this._renderBeamSegments(beamContainer, effectData);
-            beamContainer.beamData = effectData;
-            this.fieldEffects.set(effectData.id, beamContainer);
-            this.gameContainer.addChild(beamContainer);
-            return;
-        }
-
         const effectContainer = new PIXI.Container();
         effectContainer.position.set(effectData.x, effectData.y);
+        effectContainer.rotation = effectData.rotation || 0;
         
         // Set z-index based on effect type
         // Ground effects (heal zones, speed boosts) should render beneath players
@@ -2839,26 +2828,9 @@ class GameEngine {
             return;
         }
 
-        // Beam types: rebuild geometry when the path changes, fade by durationPercent.
-        if (effectData.type === 'LASER' || effectData.type === 'PLASMA') {
-            const sig = this._beamSignature(this._beamPoints(effectData));
-            if (sig !== effectContainer.beamSig) {
-                this._renderBeamSegments(effectContainer, effectData);
-            }
-            const intensity = effectData.durationPercent || 1.0;
-            effectContainer.alpha = Math.max(0.3, intensity);
-            effectContainer.beamData = effectData;
-            return;
-        }
-        
-        // Update position (in case effect moves)
+        // Update position and rotation (in case effect moves or rotates)
         effectContainer.position.set(effectData.x, effectData.y);
-        
-        // Growing effects (e.g. FIRE/ERUPTION): rescale the shared glow sprite to
-        // match the server radius. The animate*() container pulse multiplies on top.
-        if (effectData.type === 'FIRE' && effectContainer.effectGraphics) {
-            effectContainer.effectGraphics.scale.set(effectData.radius / (this.fieldTextureRadius || 64));
-        }
+        effectContainer.rotation = effectData.rotation || 0;
         
         // Update visual based on effect progress/intensity
         this.updateEffectVisual(effectContainer, effectData);
@@ -2880,14 +2852,6 @@ class GameEngine {
             }
             effectContainer._removing = true;
 
-            // Beam containers are torn down immediately — no ticker to unregister,
-            // no fade-out animation needed (beams disappear on the next tick anyway).
-            if (effectContainer.beamData) {
-                this.cleanupBeamContainer(effectContainer);
-                if (effectContainer.parent) effectContainer.parent.removeChild(effectContainer);
-                return;
-            }
-
             // Clean up animation ticker first
             if (effectContainer.animationFunction) {
                 this.removeTickerCallback(effectContainer.animationFunction);
@@ -2902,44 +2866,6 @@ class GameEngine {
                 }
             });
         }
-    }
-    
-    /** Beam path vertices: server-supplied polyline, or [start, end] fallback. */
-    _beamPoints(beamData) {
-        if (Array.isArray(beamData.points) && beamData.points.length >= 2) {
-            return beamData.points;
-        }
-        return [{ x: beamData.startX, y: beamData.startY },
-                { x: beamData.endX, y: beamData.endY }];
-    }
-
-    /** Cheap geometry signature so segment geometry is only rebuilt when the path changes. */
-    _beamSignature(points) {
-        return points.map(p => `${Math.round(p.x)},${Math.round(p.y)}`).join(';');
-    }
-
-    /** (Re)build one beam graphic per path segment, positioned/rotated in world space. */
-    _renderBeamSegments(beamContainer, beamData) {
-        if (beamContainer.segments) {
-            beamContainer.segments.forEach(seg => { beamContainer.removeChild(seg); seg.destroy({ children: true }); });
-        }
-        beamContainer.segments = [];
-        const pts = this._beamPoints(beamData);
-        for (let i = 0; i < pts.length - 1; i++) {
-            const a = pts[i], b = pts[i + 1];
-            const dx = b.x - a.x, dy = b.y - a.y;
-            const length = Math.sqrt(dx * dx + dy * dy);
-            const seg = new PIXI.Container();
-            seg.position.set(a.x, a.y);
-            seg.rotation = Math.atan2(dy, dx);
-            seg.addChild(this.createBeamGraphics(beamData, length));
-            if (beamData.ordinance === 'PLASMA_BEAM') {
-                this.addBeamEffects(seg, beamData, length, 0); // seg is already rotated
-            }
-            beamContainer.addChild(seg);
-            beamContainer.segments.push(seg);
-        }
-        beamContainer.beamSig = this._beamSignature(pts);
     }
     
     // ===== Flag Management (CTF Mode) =====
@@ -3325,80 +3251,7 @@ class GameEngine {
         }
     }
     
-    /**
-     * Create beam graphics based on beam type and properties
-     */
-    createBeamGraphics(beamData, length) {
-        const graphics = new PIXI.Graphics();
-        this.drawBeamGraphics(graphics, beamData, length);
-        return graphics;
-    }
-    
-    drawBeamGraphics(graphics, beamData, length) {
-        let beamType = beamData.ordinance || 'LASER';
-        switch (beamType) {
-            case 'LASER':
-                this.createLaserGraphics(graphics, length, beamData); break;
-            case 'PLASMA_BEAM':
-                this.createPlasmaBeamGraphics(graphics, length, beamData); break;
-        }
-    }
-    
-    /**
-     * Create laser beam graphics
-     */
-    createLaserGraphics(graphics, length, beamData) {
-        const color = this.getTeamColor(beamData.ownerTeam)
-
-        // Soft outer glow + bright white core. Two strokes instead of three.
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        graphics.stroke({ width: beamData.size * 1.5, color: color, alpha: 0.35 });
-
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        graphics.stroke({ width: beamData.size / 2, color: 0xffffff });
-
-        return graphics;
-    }
-    
-    /**
-     * Create plasma beam graphics
-     */
-    createPlasmaBeamGraphics(graphics, length, beamData) {
-        const color = this.getTeamColor(beamData.ownerTeam)
-
-        // Colored body + bright core. Dropped the per-segment instability loop
-        // (lots of tiny strokes) in favor of two clean strokes.
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        graphics.stroke({ width: beamData.size, color: color, alpha: 0.8 });
-
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        graphics.stroke({ width: beamData.size / 2, color: 0xaaffff });
-
-        return graphics;
-    }
-    
-    /**
-     * Add special effects to beams (for DOT types)
-     */
-    addBeamEffects(beamContainer, beamData, length, angle) {
-        // Add pulsing or crackling effects for continuous beams
-        if (beamData.ordinance === 'PLASMA_BEAM') {
-            // Add continuous energy effect
-            const energyEffect = new PIXI.Graphics();
-            energyEffect.moveTo(0, 0);
-            energyEffect.lineTo(length, 0);
-            energyEffect.stroke({ width: 8, color: 0x4488ff, alpha: 0.1 });
-            energyEffect.rotation = angle;
-            beamContainer.addChild(energyEffect);
-            
-            // Store for animation
-            beamContainer.energyEffect = energyEffect;
-        }
-    }
+    // ===== Utility Entity Management =====
     
     /**
      * Create graphics for utility entities based on type
@@ -4124,31 +3977,6 @@ class GameEngine {
     }
     
     /**
-     * Clean up beam container to prevent memory leaks
-     */
-    cleanupBeamContainer(beamContainer) {
-        // Clean up beam graphics
-        if (beamContainer.beamGraphics) {
-            beamContainer.beamGraphics.destroy({ context: true });
-            beamContainer.beamGraphics = null;
-        }
-        
-        // Clean up energy effects
-        if (beamContainer.energyEffect) {
-            beamContainer.energyEffect.destroy({ context: true });
-            beamContainer.energyEffect = null;
-        }
-        
-        // Clear all references
-        beamContainer.beamData = null;
-        beamContainer.beamLength = null;
-        beamContainer.beamAngle = null;
-        
-        // Destroy the container
-        beamContainer.destroy({ children: true, texture: false, baseTexture: false, context: true });
-    }
-    
-    /**
      * Thoroughly clean up a field effect container to prevent memory leaks
      */
     cleanupFieldEffectContainer(effectContainer) {
@@ -4201,20 +4029,27 @@ class GameEngine {
      * Create the main graphics for a field effect based on its type
      */
     createEffectGraphics(effectData) {
-        // Every field effect is now a single tinted Sprite of the shared glow
-        // texture. The existing animate*() methods drive scale/alpha/rotation on
-        // the parent container, so we keep all motion with zero geometry churn.
-        const radius = effectData.radius || 50;
+        const graphics = new PIXI.Graphics();
         const style = this.getFieldEffectStyle(effectData.type);
-
-        const sprite = new PIXI.Sprite(this.fieldTexture);
-        sprite.anchor.set(0.5);
-        sprite.tint = style.color;
-        sprite.alpha = style.alpha;
-        // Map the texture's full extent onto the physics radius so the disc fills
-        // its area but never renders larger than the real radius.
-        sprite.scale.set(radius / (this.fieldTextureRadius || 64));
-        return sprite;
+        
+        if (effectData.shapes && effectData.shapes.length > 0) {
+            const shapes = this.parseObstacleShapes(effectData.shapes);
+            for (const shape of shapes) {
+                if (shape.type === 'circle') {
+                    graphics.circle(shape.cx, shape.cy, shape.r);
+                } else {
+                    graphics.poly(shape.points.flatMap(([x, y]) => [x, y]));
+                }
+            }
+        } else {
+            // Fallback
+            const radius = effectData.radius || 50;
+            graphics.circle(0, 0, radius);
+        }
+        
+        graphics.fill({ color: style.color, alpha: style.alpha });
+        
+        return graphics;
     }
 
     /**
@@ -4259,6 +4094,8 @@ class GameEngine {
             case 'SMOKE':          return { color: 0x888888, alpha: 0.6 };
             case 'WARNING_ZONE':   return { color: 0xff4444, alpha: 0.5 };
             case 'EARTHQUAKE':     return { color: 0xaa7744, alpha: 0.6 };
+            case 'LASER':          return { color: 0xff3333, alpha: 0.8 };
+            case 'PLASMA':         return { color: 0x33ffff, alpha: 0.8 };
             default:               return { color: 0xffffff, alpha: 0.6 };
         }
     }
@@ -5526,13 +5363,7 @@ class GameEngine {
         this.players.forEach(player => this.cleanupPlayerSprite(player));
         this.players.clear();
         
-        this.fieldEffects.forEach(container => {
-            if (container.beamData) {
-                this.cleanupBeamContainer(container);
-            } else {
-                this.cleanupFieldEffectContainer(container);
-            }
-        });
+        this.fieldEffects.forEach(effect => this.cleanupFieldEffectContainer(effect));
         this.fieldEffects.clear();
         
         this.utilityEntities.forEach(entity => this.cleanupUtilityEntityContainer(entity));

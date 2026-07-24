@@ -62,11 +62,10 @@ public enum WeaponAttribute {
     // Bullets per shot: stepped, one extra pellet per 5 points. 0→1, 5→2, … 35→8.
     BULLETS_PER_SHOT(0, 35, stepped(1, 1, 5)),
 
-    // Linear damping (dyn4j drag coefficient): NOW TWO-SIDED. 0 pts → 0.09 (light
+    // Linear damping (dyn4j drag coefficient): 0 pts → 0.09 (light
     // drag baseline). Positive points buy zippier rounds toward 0 drag (and trigger
     // the LINEAR_DAMPING→HANDLING kickback coupling — fast rounds buck the frame);
-    // negative points add drag (rounds slow over distance) and refund budget. The
-    // negative end is tuned to land near the old values so existing presets barely move.
+    // negative points add drag (rounds slow over distance) and refund budget.
     // -10 → 0.39, -5 → 0.24, 0 → 0.09, +10 → 0.0.
     LINEAR_DAMPING(-10, 10, linear(0.09, -0.03).clamp(0.0, 0.45)),
 
@@ -106,8 +105,7 @@ public enum WeaponAttribute {
 
     /**
      * Whether this attribute does anything on beam ordnance. KNOCKBACK is a
-     * physical impulse applied to projectile hits (see CollisionProcessor); beams
-     * are instant rays and never apply it, so the customizer disables it for them.
+     * physical impulse applied to projectile hits (see CollisionProcessor).
      */
     public boolean appliesToBeams() {
         return this != KNOCKBACK;

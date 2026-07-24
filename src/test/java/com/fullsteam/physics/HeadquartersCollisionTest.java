@@ -75,7 +75,6 @@ class HeadquartersCollisionTest extends BaseTestClass {
         // HQ should have taken damage
         assertTrue(team1HQ.getHealth() < initialHealth);
         assertEquals(900.0, team1HQ.getHealth());
-        assertEquals(100.0, team1HQ.getTotalDamageTaken());
     }
 
     @Test
@@ -106,7 +105,6 @@ class HeadquartersCollisionTest extends BaseTestClass {
 
         // Total: 450 damage
         assertEquals(550.0, team1HQ.getHealth());
-        assertEquals(450.0, team1HQ.getTotalDamageTaken());
     }
 
     @Test

@@ -23,10 +23,9 @@ public class Headquarters extends OwnedGameEntity {
 
     private final Vector2 homePosition;
     private final double maxHealth;
-    private double totalDamageTaken = 0.0; // Track for scoring
 
     public Headquarters(int id, int ownerTeam, double x, double y, double maxHealth) {
-        super(id, createHeadquartersBody(x, y), maxHealth, 0, ownerTeam);
+        super(id, createHeadquartersBody(x, y), maxHealth, id, ownerTeam);
         this.homePosition = new Vector2(x, y);
         this.maxHealth = maxHealth;
     }
@@ -71,7 +70,6 @@ public class Headquarters extends OwnedGameEntity {
             return false;
         }
         health -= damage;
-        totalDamageTaken += damage;
         if (health <= 0) {
             health = 0;
             active = false;

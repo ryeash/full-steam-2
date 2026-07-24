@@ -83,7 +83,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
         if (c.rectify(Projectile.class, Projectile.class)
                 instanceof TypedCollision<Projectile, Projectile>(Projectile a, Projectile b)) {
-            return handlePlayerProjectileCollision(a, b);
+            return handleProjectileProjectileCollision(a, b);
         } else if (c.rectify(Player.class, Projectile.class)
                 instanceof TypedCollision<Player, Projectile>(Player a, Projectile b)) {
             handlePlayerProjectileCollision(a, b);
@@ -148,7 +148,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         return true;
     }
 
-    private boolean handlePlayerProjectileCollision(Projectile projectile1, Projectile projectile2) {
+    private boolean handleProjectileProjectileCollision(Projectile projectile1, Projectile projectile2) {
         // let the bouncy bullets interact with bullets
         return projectile1.getBulletEffects().contains(BulletEffect.BOUNCY) || projectile2.getBulletEffects().contains(BulletEffect.BOUNCY);
     }
@@ -396,7 +396,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         }
 
         // Check if field effect can damage the turret (team rules)
-        if (!canFieldEffectDamageTurret(fieldEffect, turret)) {
+        if (fieldEffect.isFriendy(turret)) {
             return; // Friendly fire protection
         }
 
@@ -429,8 +429,8 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     /**
      * Check if a field effect can damage a turret (team protection).
      */
-    private boolean canFieldEffectDamageTurret(FieldEffect fieldEffect, Turret turret) {
-        // Can't damage own turret
+    private boolean canFieldEffectDamage(FieldEffect fieldEffect, OwnedGameEntity turret) {
+        // Can't damage own entity
         if (fieldEffect.getOwnerId() == turret.getOwnerId()) {
             return false;
         }
@@ -637,7 +637,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
      * LASER deals instant damage once; PLASMA deals DOT each tick.
      */
     private void handleFieldEffectHeadquartersCollision(FieldEffect fieldEffect, Headquarters hq) {
-        if (!canFieldEffectDamageHeadquarters(fieldEffect, hq)) {
+        if (fieldEffect.isFriendy(hq)) {
             return;
         }
 
@@ -665,10 +665,6 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             }
             default -> { /* Non-damaging field effects don't affect HQ */ }
         }
-    }
-
-    private boolean canFieldEffectDamageHeadquarters(FieldEffect fieldEffect, Headquarters hq) {
-        return fieldEffect.getOwnerTeam() != hq.getOwnerTeam();
     }
 
     /**

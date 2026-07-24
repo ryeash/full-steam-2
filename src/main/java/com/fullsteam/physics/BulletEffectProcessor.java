@@ -1,7 +1,6 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.model.BulletEffect;
-import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.FieldEffectCircle;
 import com.fullsteam.model.FieldEffectType;
@@ -222,6 +221,7 @@ public class BulletEffectProcessor {
         for (BulletEffect effect : beam.getBulletEffects()) {
             spawnEffect(beam, beam.getOrdinance(), effect, beam.getDamage(), beam.getCaliber(), hitPosition);
         }
+        beam.getBulletEffects().clear();
     }
 
     private void spawnEffect(OwnedGameEntity source, Ordinance ordinance, BulletEffect bulletEffect, double damage, double caliber, Vector2 position) {

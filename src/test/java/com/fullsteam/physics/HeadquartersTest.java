@@ -23,9 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class HeadquartersTest extends BaseTestClass {
 
     private GameManager gameManager;
-    private GameConfig gameConfig;
-    private Player team1Player;
-    private Player team2Player;
 
     @BeforeEach
     void setUp() {
@@ -38,7 +35,7 @@ class HeadquartersTest extends BaseTestClass {
                 .headquartersDestructionEndsGame(true)
                 .build();
 
-        gameConfig = GameConfig.builder()
+        GameConfig gameConfig = GameConfig.builder()
                 .maxPlayers(10)
                 .teamCount(2)
                 .worldWidth(2000.0)
@@ -51,8 +48,8 @@ class HeadquartersTest extends BaseTestClass {
         gameManager = new GameManager("test_game", gameConfig, null);
 
         // Create test players on different teams
-        team1Player = new Player(1, "Team1Player", 0, 0, 1, 100.0);
-        team2Player = new Player(2, "Team2Player", 100, 100, 2, 100.0);
+        Player team1Player = new Player(1, "Team1Player", 0, 0, 1, 100.0);
+        Player team2Player = new Player(2, "Team2Player", 100, 100, 2, 100.0);
         gameManager.getGameEntities().add(team1Player);
         gameManager.getGameEntities().add(team2Player);
     }
@@ -74,7 +71,6 @@ class HeadquartersTest extends BaseTestClass {
             assertEquals(1000.0, hq.getHealth());
             assertTrue(hq.getOwnerTeam() >= 1 && hq.getOwnerTeam() <= 2);
             assertNotNull(hq.getPosition());
-            assertEquals(0.0, hq.getTotalDamageTaken());
         }
     }
 
@@ -99,14 +95,12 @@ class HeadquartersTest extends BaseTestClass {
 
         double initialHealth = hq.getHealth();
         assertEquals(1000.0, initialHealth);
-        assertEquals(0.0, hq.getTotalDamageTaken());
 
         // Apply damage
         boolean destroyed = hq.takeDamage(250.0);
 
         assertFalse(destroyed); // Should not be destroyed yet
         assertEquals(750.0, hq.getHealth());
-        assertEquals(250.0, hq.getTotalDamageTaken());
         assertTrue(hq.isActive());
     }
 
@@ -120,7 +114,6 @@ class HeadquartersTest extends BaseTestClass {
 
         assertTrue(destroyed);
         assertEquals(0.0, hq.getHealth());
-        assertEquals(1000.0, hq.getTotalDamageTaken());
         assertFalse(hq.isActive()); // Should be inactive after destruction
     }
 
@@ -131,13 +124,10 @@ class HeadquartersTest extends BaseTestClass {
 
         // Apply multiple hits
         hq.takeDamage(100.0);
-        assertEquals(100.0, hq.getTotalDamageTaken());
 
         hq.takeDamage(150.0);
-        assertEquals(250.0, hq.getTotalDamageTaken());
 
         hq.takeDamage(200.0);
-        assertEquals(450.0, hq.getTotalDamageTaken());
         assertEquals(550.0, hq.getHealth());
     }
 
@@ -151,12 +141,10 @@ class HeadquartersTest extends BaseTestClass {
         assertFalse(hq.isActive());
 
         // Try to apply more damage
-        double totalDamage = hq.getTotalDamageTaken();
         boolean destroyed = hq.takeDamage(100.0);
 
         assertFalse(destroyed); // Already destroyed
         assertEquals(0.0, hq.getHealth()); // Health stays at 0
-        assertEquals(totalDamage, hq.getTotalDamageTaken()); // Damage tracking doesn't change
     }
 
     @Test

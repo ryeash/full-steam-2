@@ -178,12 +178,12 @@ public class AIPlayerManager {
     /**
      * Create an AI player with a specific personality type, team, and personality-appropriate weapons.
      */
-    public static AIPlayer createAIPlayerWithPersonality(int id, double x, double y, String personalityType, int team, double maxHealth) {
-        AIPersonality personality = switch (personalityType.toLowerCase()) {
-            case "aggressive" -> AIPersonality.createAggressive();
-            case "defensive" -> AIPersonality.createDefensive();
-            case "sniper" -> AIPersonality.createSniper();
-            case "rusher" -> AIPersonality.createRusher();
+    public static AIPlayer createAIPlayerWithPersonality(int id, double x, double y, AIPersonality.Type personalityType, int team, double maxHealth) {
+        AIPersonality personality = switch (personalityType) {
+            case aggressive -> AIPersonality.createAggressive();
+            case defensive -> AIPersonality.createDefensive();
+            case sniper -> AIPersonality.createSniper();
+            case rusher -> AIPersonality.createRusher();
             default -> AIPersonality.createBalanced();
         };
 
@@ -309,5 +309,4 @@ public class AIPlayerManager {
         // Apply reaction speed delays (not implemented in this simple version)
         // Could add input delays based on reaction speed trait
     }
-
 }

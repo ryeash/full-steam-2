@@ -2,6 +2,7 @@ package com.fullsteam.ai;
 
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Obstacle;
+import org.dyn4j.Epsilon;
 import org.dyn4j.geometry.Vector2;
 
 /**
@@ -15,8 +16,6 @@ import org.dyn4j.geometry.Vector2;
  * ignored so the AI isn't pushed off course by things it isn't heading toward.
  */
 public final class ObstacleAvoidance {
-
-    private static final double EPSILON = 1e-4;
 
     private ObstacleAvoidance() {
     }
@@ -33,7 +32,7 @@ public final class ObstacleAvoidance {
      */
     public static Vector2 steer(Vector2 currentPos, Vector2 desiredDirection,
                                 GameEntities gameEntities, double lookAhead, double agentRadius) {
-        if (desiredDirection.getMagnitude() < EPSILON) {
+        if (desiredDirection.getMagnitude() < Epsilon.E) {
             return desiredDirection.copy();
         }
 
@@ -47,7 +46,7 @@ public final class ObstacleAvoidance {
 
             Vector2 toObstacle = obstacle.getPosition().subtract(currentPos);
             double dist = toObstacle.getMagnitude();
-            if (dist < EPSILON) {
+            if (dist < Epsilon.E) {
                 continue;
             }
 
@@ -79,7 +78,7 @@ public final class ObstacleAvoidance {
             avoidance.add(dirToObstacle.multiply(-strength * proximity));
         }
 
-        if (avoidance.getMagnitude() < EPSILON) {
+        if (avoidance.getMagnitude() < Epsilon.E) {
             return desired;
         }
 
@@ -87,7 +86,7 @@ public final class ObstacleAvoidance {
         double avoidWeight = Math.min(1.5, avoidance.getMagnitude());
         Vector2 result = desired.copy().add(avoidance.getNormalized().multiply(avoidWeight));
 
-        if (result.getMagnitude() < EPSILON) {
+        if (result.getMagnitude() < Epsilon.E) {
             // Desired and avoidance cancelled out (obstacle dead ahead) — go fully tangential.
             return avoidance.getNormalized();
         }

@@ -69,17 +69,17 @@ public class WeaponConfig {
     public static final WeaponConfig HAND_CANNON_PRESET = new WeaponConfig(
             "Hand Cannon",
             40,
-            21,     // fire rate (6 pts → knockback)
+            21,
             9,
             0,
-            10,
-            9,
-            10,
+            4,
+            14,
+            12,
             0,
             0,
-            -5,     // handling (heavy)
-            0,      // caliber (size mult)
-            6,      // knockback → 240k (hard-hitting pistol punch)
+            -5,
+            3,
+            5,
             Set.of(),
             Ordinance.PROJECTILE  // total: 100 pts (attr 100 + fx 0 + ord 0)
     );
@@ -89,18 +89,18 @@ public class WeaponConfig {
     // Trade-offs: Very slow fire rate, small magazine, long reload
     public static final WeaponConfig SNIPER_RIFLE_PRESET = new WeaponConfig(
             "Sniper Rifle",
-            40,     // damage 50
-            2,      // Very slow fire rate (0.9 shots/sec)
-            27,     // range ~1240 units (6 pts → knockback)
-            0,      // Perfect accuracy (1.0)
-            10,     // magazine 10 rounds
-            5,     // reload ~2.55s
-            15,     // speed ~799 units/sec
-            0,      // Single shot
-            0,      // No damping (bullets maintain speed)
-            -5,     // handling (heavy)
-            0,      // caliber (size mult)
-            6,      // knockback → 240k (high-velocity round punches)
+            40,
+            2,
+            27,
+            0,
+            5,
+            5,
+            25,
+            0,
+            -2,
+            -5,
+            0,
+            1,
             Set.of(),
             Ordinance.PROJECTILE  // total: 100 pts (attr 100 + fx 0 + ord 0)
     );
@@ -112,10 +112,10 @@ public class WeaponConfig {
             "Minigun",
             10,     // damage 20 (low per-bullet, compensated by volume)
             30,     // Maximum fire rate (insane rate of fire)
-            14,     // range ~969 units
+            10,     // range ~969 units
             -10,    // Terrible accuracy (massive spread)
-            40,     // Maximum magazine size (never stop shooting)
-            5,     // reload ~2.55s
+            47,     // Maximum magazine size (never stop shooting)
+            2,     // reload ~2.55s
             16,     // speed ~815 units/sec
             0,      // 5 bullets per shot (multi-barrel spin-up)
             -5,      // No damping
@@ -391,25 +391,6 @@ public class WeaponConfig {
             0,      // knockback (no recoil)
             Set.of(),  // no effects
             Ordinance.PLASMA_BEAM  // total: 100 pts (attr 55 + fx 0 + ord 45)
-    );
-
-    // Arc Laser - Instant-hit laser that arcs lightning to nearby enemies on hit
-    public static final WeaponConfig ARC_LASER_PRESET = new WeaponConfig(
-            "Arc Laser",
-            14,     // damage ~24
-            6,      // Medium fire rate
-            6,      // range ~573 units
-            0,      // Perfect accuracy (beams are always accurate)
-            12,     // magazine
-            3,      // reload ~3.04s
-            0,      // speed (unused for beams)
-            0,      // Single beam
-            -10,    // Not used for beams (reclaims budget)
-            0,      // handling
-            3,      // caliber ×1.15 → beam width 2.30
-            0,      // knockback (no recoil)
-            Set.of(BulletEffect.ELECTRIC),  // chains lightning on hit
-            Ordinance.LASER  // total: 100 pts (attr 34 + fx 16 + ord 50)
     );
 
     // Railgun - Slow, heavy piercing plasma beam that punches through a whole line

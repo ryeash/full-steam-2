@@ -403,17 +403,14 @@ public class GameStateSerializer {
             if (!effect.isArmed() && effect.getType() != FieldEffectType.PROXIMITY_MINE) {
                 continue;
             }
-            // Beams flow through fieldEffects with their own polyline shape data.
-            if (effect instanceof FieldEffectBeam beam) {
-                fieldEffectStates.add(beamStateMap(beam));
-                continue;
-            }
             Vector2 pos = effect.getPosition();
             Map<String, Object> effectState = new HashMap<>();
             effectState.put("id", effect.getId());
             effectState.put("type", effect.getType().name());
+            effectState.put("ownerTeam", effect.getOwnerTeam());
             effectState.put("x", pos.x);
             effectState.put("y", pos.y);
+            effectState.put("rotation", effect.getBody().getTransform().getRotation().toRadians());
             effectState.put("radius", effect.getRadius());
             effectState.put("progress", effect.getProgress());
             effectState.put("active", effect.isActive());
@@ -422,32 +419,6 @@ public class GameStateSerializer {
             fieldEffectStates.add(effectState);
         }
         return fieldEffectStates;
-    }
-
-    /** Serialise a beam into the wire format consumed by the JS beam renderer. */
-    private Map<String, Object> beamStateMap(FieldEffectBeam beam) {
-        Vector2 startPos = beam.getStartPoint();
-        Vector2 effectiveEndPos = beam.getEffectiveEndPoint();
-        Map<String, Object> beamState = new HashMap<>();
-        beamState.put("id", beam.getId());
-        beamState.put("type", beam.getType().name());
-        beamState.put("ordinance", beam.getOrdinance());
-        beamState.put("size", beam.getSize());
-        beamState.put("startX", startPos.x);
-        beamState.put("startY", startPos.y);
-        beamState.put("endX", effectiveEndPos.x);
-        beamState.put("endY", effectiveEndPos.y);
-        List<Map<String, Object>> points = new ArrayList<>();
-        for (Vector2 v : beam.getPath()) {
-            Map<String, Object> pt = new HashMap<>();
-            pt.put("x", v.x);
-            pt.put("y", v.y);
-            points.add(pt);
-        }
-        beamState.put("points", points);
-        beamState.put("ownerTeam", beam.getOwnerTeam());
-        beamState.put("durationPercent", beam.getDurationPercent());
-        return beamState;
     }
 
     private List<Map<String, Object>> createTurretStates() {

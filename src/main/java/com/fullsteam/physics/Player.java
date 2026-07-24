@@ -26,7 +26,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 @Getter
 @Setter
-public class Player extends GameEntity implements HasWeapon {
+public class Player extends OwnedGameEntity implements HasWeapon {
     private String playerName;
     private int team; // 0 = no team (FFA), 1+ = team number
     private Weapon weapon;
@@ -50,7 +50,7 @@ public class Player extends GameEntity implements HasWeapon {
     private int placement = 0; // Final placement in elimination modes (1 = winner, 2 = 2nd place, etc.)
 
     public Player(int id, String playerName, double x, double y, int team, double maxHealth) {
-        super(id, createPlayerBody(x, y), maxHealth);
+        super(id, createPlayerBody(x, y), maxHealth, id, team);
         this.playerName = playerName != null ? playerName : "Player " + id;
         this.team = team;
         this.respawnPoint = new Vector2(x, y);
@@ -302,10 +302,12 @@ public class Player extends GameEntity implements HasWeapon {
 
         List<FieldEffectBeam> beams = new LinkedList<>();
         double angle = baseAngle;
+        double radius = getRadius();
         for (int i = 0; i < beamsToFire; i++) {
             angle += (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * maxAccuracySpread;
             Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
-            beams.add(new FieldEffectBeam(pos, direction, range, damage,
+            Vector2 startPos = pos.copy().add(direction.copy().multiply(radius));
+            beams.add(new FieldEffectBeam(startPos, direction, range, damage,
                     getId(), getTeam(), beamType, weapon.getBulletEffects(), weapon.getCaliber()));
         }
         return beams;

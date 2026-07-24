@@ -38,22 +38,6 @@ public class AIWeaponSelector {
             WeaponConfig.SHRAPNEL_CANNON_PRESET
     );
 
-    private static final List<WeaponConfig> BEAM_WEAPONS = List.of(
-            WeaponConfig.LASER_RIFLE_PRESET,
-            WeaponConfig.PLASMA_CANNON_PRESET,
-            WeaponConfig.ARC_LASER_PRESET,
-            WeaponConfig.RAILGUN_PRESET,
-            WeaponConfig.RICOCHET_LASER_PRESET
-    );
-
-    private static final List<WeaponConfig> COMBO_WEAPONS = List.of(
-            WeaponConfig.NAPALM_LAUNCHER_PRESET,
-            WeaponConfig.STORM_CALLER_PRESET,
-            WeaponConfig.VENOM_NEEDLER_PRESET,
-            WeaponConfig.FROST_LANCE_PRESET,
-            WeaponConfig.PHANTOM_NEEDLES_PRESET
-    );
-
     private static final List<WeaponConfig> ALL_WEAPONS = List.of(
             // Kinetic
             WeaponConfig.ASSAULT_RIFLE_PRESET,
@@ -77,7 +61,6 @@ public class AIWeaponSelector {
             // Beams
             WeaponConfig.LASER_RIFLE_PRESET,
             WeaponConfig.PLASMA_CANNON_PRESET,
-            WeaponConfig.ARC_LASER_PRESET,
             WeaponConfig.RAILGUN_PRESET,
             WeaponConfig.RICOCHET_LASER_PRESET,
 

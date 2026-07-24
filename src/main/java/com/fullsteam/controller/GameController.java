@@ -173,7 +173,6 @@ public class GameController {
         // Beam weapon presets
         presets.put("LASER_RIFLE", createPresetData(WeaponConfig.LASER_RIFLE_PRESET));
         presets.put("PLASMA_CANNON", createPresetData(WeaponConfig.PLASMA_CANNON_PRESET));
-        presets.put("ARC_LASER", createPresetData(WeaponConfig.ARC_LASER_PRESET));
         presets.put("RAILGUN", createPresetData(WeaponConfig.RAILGUN_PRESET));
         presets.put("RICOCHET_LASER", createPresetData(WeaponConfig.RICOCHET_LASER_PRESET));
 

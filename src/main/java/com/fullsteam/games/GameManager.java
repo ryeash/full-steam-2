@@ -3,11 +3,11 @@ package com.fullsteam.games;
 import com.fullsteam.Config;
 import com.fullsteam.GameLobby;
 import com.fullsteam.RandomNames;
-import com.fullsteam.ai.AIGameHelper;
+import com.fullsteam.ai.AIPersonality;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
-import com.fullsteam.model.FieldEffectCircle;
 import com.fullsteam.model.FieldEffectBeam;
+import com.fullsteam.model.FieldEffectCircle;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.GameInfo;
@@ -37,25 +37,19 @@ import io.micronaut.websocket.exceptions.WebSocketSessionException;
 import lombok.Getter;
 import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
-import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.dynamics.Settings;
-import org.dyn4j.geometry.Ray;
 import org.dyn4j.geometry.Vector2;
-import org.dyn4j.world.DetectFilter;
 import org.dyn4j.world.World;
-import org.dyn4j.world.result.RaycastResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
+import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -195,7 +189,7 @@ public class GameManager {
         // Add initial AI players to make the game more interesting from the start (if enabled)
         if (gameConfig.isEnableAIFilling()) {
             int initialAICount = getMaxPlayers();
-            int added = AIGameHelper.addMixedAIPlayers(this, initialAICount);
+            int added = addMixedAIPlayers(initialAICount);
             if (added > 0) {
                 log.debug("Added {} initial AI players to game {} for better gameplay", added, gameId);
             }
@@ -231,6 +225,27 @@ public class GameManager {
         gameEntities.addPlayerSession(playerSession);
         onPlayerJoined(playerSession);
         return true;
+    }
+
+    /**
+     * Add a balanced mix of AI players with different personalities.
+     *
+     * @param count Number of AI players to add
+     * @return Number of AI players actually added
+     */
+    public int addMixedAIPlayers(int count) {
+        int added = 0;
+        for (int i = 0; i < count; i++) {
+            AIPersonality.Type personality = AIPersonality.Type.values()[i % AIPersonality.Type.values().length];
+            if (addAIPlayer(personality)) {
+                added++;
+            } else {
+                log.warn("Could not add AI player {} of {} - game may be full", i + 1, count);
+                break;
+            }
+        }
+        log.debug("Added {} AI players to game {}", added, getGameId());
+        return added;
     }
 
     /**
@@ -437,7 +452,7 @@ public class GameManager {
     /**
      * Add an AI player with a specific personality type.
      */
-    public boolean addAIPlayer(String personalityType) {
+    public boolean addAIPlayer(AIPersonality.Type personalityType) {
         if (gameEntities.getAllPlayers().size() >= getMaxPlayers()) {
             return false;
         }
@@ -459,10 +474,6 @@ public class GameManager {
 
         // Add to AI manager
         aiPlayerManager.addAIPlayer(aiPlayer);
-
-        log.debug("Added AI player {} ({}) with {} personality on team {} at spawn point ({}, {})",
-                aiPlayer.getId(), aiPlayer.getPlayerName(), personalityType,
-                assignedTeam, spawnPoint.x, spawnPoint.y);
 
         // Ensure VIP is assigned for this team if VIP mode is enabled
         if (gameConfig.getRules().hasVip()) {
@@ -588,7 +599,7 @@ public class GameManager {
         // Step 1 – adjust total count.
         if (totalPlayers < getMaxPlayers()) {
             int aiToAdd = getMaxPlayers() - totalPlayers;
-            int added = AIGameHelper.addMixedAIPlayers(this, aiToAdd);
+            int added = addMixedAIPlayers(aiToAdd);
             if (added > 0) {
                 log.debug("Auto-filled {} AI players (total: {})", added, totalPlayers + added);
             }
@@ -649,7 +660,7 @@ public class GameManager {
             int aiToMove = aiOnMaxTeam.getFirst();
             removeAIPlayer(aiToMove);
             // assignPlayerToTeam() will now direct the replacement to minTeam.
-            AIGameHelper.addMixedAIPlayers(this, 1);
+            addMixedAIPlayers(1);
             log.debug("Rebalanced AI: moved one player from team {} ({}) to team {} ({})",
                     maxTeam, teamCounts[maxTeam], minTeam, teamCounts[minTeam]);
         }
@@ -810,73 +821,25 @@ public class GameManager {
             turret.acquireTarget(gameEntities.getAllPlayers().stream().toList());
             for (GameEntity turretShot : turret.tryFire()) {
                 if (turretShot instanceof FieldEffectBeam beam) {
-                    beam.setPath(weaponSystem.computeBeamPath(beam));
-                    if (beam.getType() == FieldEffectType.LASER) {
-                        weaponSystem.processStandardBeamHit(beam);
-                    }
+                    weaponSystem.handleBeamFire(beam);
+                } else {
+                    gameEntities.add(turretShot);
                 }
-                gameEntities.add(turretShot);
             }
         }
 
         // Update oddball NPCs: AI decision + movement steering + firing
-        List<Player> playerList = gameEntities.getAllPlayers().stream().toList();
         for (Oddball npc : gameEntities.getAllOddballNpcs()) {
             if (!npc.isActive()) {
                 continue;
             }
-            npc.tickAI(playerList);
+            npc.tickAI(Collections.unmodifiableCollection(gameEntities.getAllPlayers()));
             for (GameEntity npcShot : npc.tryFire()) {
                 if (npcShot instanceof FieldEffectBeam beam) {
-                    beam.setPath(weaponSystem.computeBeamPath(beam));
-                    if (beam.getType() == FieldEffectType.LASER) {
-                        weaponSystem.processStandardBeamHit(beam);
-                    }
+                    weaponSystem.handleBeamFire(beam);
+                } else {
+                    gameEntities.add(npcShot);
                 }
-                gameEntities.add(npcShot);
-            }
-        }
-
-        // Process beam damage for PLASMA (DOT) beams via raycasting along their path.
-        // LASER beams deal instant damage at creation time (processStandardBeamHit) and
-        // are handled by the physics collision system thereafter.
-        for (FieldEffectBeam beam : gameEntities.getAllBeamEffects()) {
-            if (!beam.isActive() || beam.getType() != FieldEffectType.PLASMA) {
-                continue;
-            }
-
-            Player beamOwner = gameEntities.getPlayer(beam.getOwnerId());
-
-            // Get players in beam path and apply damage based on beam type
-            List<Player> playersInPath = getPlayersInBeamPath(beam);
-            boolean dotHitSomeone = false;
-            for (Player player : playersInPath) {
-                if (beam.canAffectPlayer(player)) {
-                    dotHitSomeone = true;
-                    double dotDamage = beam.getDamage() * deltaTime;
-                    if (player.takeDamage(dotDamage)) {
-                        killPlayer(player, beam.getOwnerId());
-                    }
-                    break;
-                }
-            }
-
-            // Award continuous oddball points for PLASMA beams hitting NPC oddballs
-            if (beamOwner != null) {
-                for (Oddball npc : getNpcsInBeamPath(beam)) {
-                    double dotPoints = beam.getDamage() * deltaTime
-                            * npc.getPointsMultiplier()
-                            * gameConfig.getRules().getOddballNpcPointsPerDamage();
-                    beamOwner.getScoring().addOddball(dotPoints);
-                }
-            }
-
-            // Continuous beams leave a throttled trail of their AOE effects (fire,
-            // poison, smoke, …) at the impact point while burning a target.
-            if (dotHitSomeone
-                    && !beam.getBulletEffects().isEmpty()
-                    && beam.tryEmitAreaEffect(System.currentTimeMillis())) {
-                weaponSystem.processBeamAreaEffects(beam, beam.getEffectiveEndPoint());
             }
         }
     }
@@ -1016,72 +979,6 @@ public class GameManager {
                 }
             }
         }
-    }
-
-    /**
-     * Get all players that intersect with a beam's path using dyn4j ray casting.
-     * This method is used for continuous beam damage updates and handles different piercing behaviors.
-     */
-    private List<Player> getPlayersInBeamPath(FieldEffectBeam beam) {
-        List<Player> playersInPath = new ArrayList<>();
-        Set<Integer> seen = new HashSet<>();
-        List<Vector2> path = beam.getPath();
-        if (path == null || path.size() < 2) {
-            return playersInPath;
-        }
-
-        // Walk each segment of the (possibly reflected) beam path, collecting each
-        // affectable player once. Order is by segment then distance, which matches
-        // the order the beam actually travels.
-        for (int i = 0; i < path.size() - 1; i++) {
-            Vector2 segStart = path.get(i);
-            Vector2 direction = path.get(i + 1).copy().subtract(segStart);
-            double maxDistance = direction.getMagnitude();
-            if (maxDistance <= 0) {
-                continue;
-            }
-            direction.normalize();
-
-            Ray ray = new Ray(segStart, direction);
-            List<RaycastResult<Body, BodyFixture>> results =
-                    world.raycast(ray, maxDistance, new DetectFilter<>(true, true, null));
-            results.sort(Comparator.comparingDouble(r -> r.getRaycast().getDistance()));
-
-            for (RaycastResult<Body, BodyFixture> result : results) {
-                if (result.getBody().getUserData() instanceof Player player
-                        && player.isActive() && player.getHealth() > 0
-                        && seen.add(player.getId())) {
-                    playersInPath.add(player);
-                }
-            }
-        }
-        return playersInPath;
-    }
-
-    private List<Oddball> getNpcsInBeamPath(FieldEffectBeam beam) {
-        List<Oddball> npcsInPath = new ArrayList<>();
-        Set<Integer> seen = new HashSet<>();
-        List<Vector2> path = beam.getPath();
-        if (path == null || path.size() < 2) return npcsInPath;
-
-        for (int i = 0; i < path.size() - 1; i++) {
-            Vector2 segStart = path.get(i);
-            Vector2 direction = path.get(i + 1).copy().subtract(segStart);
-            double maxDistance = direction.getMagnitude();
-            if (maxDistance <= 0) continue;
-            direction.normalize();
-
-            Ray ray = new Ray(segStart, direction);
-            List<RaycastResult<Body, BodyFixture>> results =
-                    world.raycast(ray, maxDistance, new DetectFilter<>(true, true, null));
-            for (RaycastResult<Body, BodyFixture> result : results) {
-                if (result.getBody().getUserData() instanceof Oddball npc
-                        && npc.isActive() && seen.add(npc.getId())) {
-                    npcsInPath.add(npc);
-                }
-            }
-        }
-        return npcsInPath;
     }
 
     protected void processPlayerConfigChange(PlayerSession playerSession, PlayerConfigRequest request) {

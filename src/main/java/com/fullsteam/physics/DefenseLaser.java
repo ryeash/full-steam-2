@@ -123,6 +123,7 @@ public class DefenseLaser extends OwnedGameEntity {
             Vector2 offset = direction.copy().multiply(beamLength);
             beam.getEndPoint().set(center);
             beam.getEndPoint().add(offset);
+            beam.updateBodyTransform();
         }
     }
 
@@ -135,9 +136,9 @@ public class DefenseLaser extends OwnedGameEntity {
         if (effectiveEndpoints.length != beams.size()) {
             throw new IllegalArgumentException("Effective endpoints array size must match beam count");
         }
-
         for (int i = 0; i < beams.size(); i++) {
-            beams.get(i).setEffectiveEndPoint(effectiveEndpoints[i]);
+            beams.get(i).setEndPoint(effectiveEndpoints[i]);
+            beams.get(i).updateBodyTransform();
         }
     }
 }

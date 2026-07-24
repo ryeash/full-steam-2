@@ -10,6 +10,15 @@ import lombok.Getter;
 @Getter
 @Builder
 public class AIPersonality {
+
+    public enum Type {
+        aggressive,
+        defensive,
+        sniper,
+        rusher,
+        balanced
+    }
+
     @Builder.Default
     private double aggressiveness = 0.5; // 0.0 = passive, 1.0 = very aggressive
 

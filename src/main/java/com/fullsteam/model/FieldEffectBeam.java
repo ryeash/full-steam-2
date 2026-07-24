@@ -8,9 +8,7 @@ import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Rectangle;
 import org.dyn4j.geometry.Vector2;
 
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -20,10 +18,6 @@ import java.util.Set;
  * damage once to every entity they intersect and then linger visually until they expire.
  * PLASMA beams ({@link FieldEffectType#PLASMA}) are continuous DOT weapons that deal
  * {@code damage * deltaTime} each physics tick to every entity in their path.
- *
- * <p>Both types support BOUNCY reflections and PIERCING pass-through via the
- * {@link #bulletEffects} set. The {@link #path} polyline records each reflected segment so
- * raycasting in WeaponSystem / GameManager covers the full travel path.
  *
  * <p>{@link #startPoint}, {@link #direction}, and {@link #endPoint} are intentionally
  * mutable {@link Vector2} instances so that {@code DefenseLaser} can rotate the arm beams
@@ -41,8 +35,6 @@ public class FieldEffectBeam extends FieldEffect {
 
     protected final Vector2 startPoint;
     protected Vector2 endPoint;
-    protected Vector2 effectiveEndPoint;
-    protected List<Vector2> path;
     protected final Vector2 direction;
     protected final double range;
     protected final Set<BulletEffect> bulletEffects;
@@ -87,32 +79,7 @@ public class FieldEffectBeam extends FieldEffect {
         this.bulletEffects = new HashSet<>(bulletEffects);
         this.expires = (long) (System.currentTimeMillis() + (type.getDefaultDuration() * 1000));
         this.endPoint = this.startPoint.copy().add(this.direction.copy().multiply(range));
-        this.effectiveEndPoint = this.endPoint.copy();
-        this.path = new ArrayList<>(List.of(this.startPoint.copy(), this.endPoint.copy()));
         this.active = true;
-    }
-
-    // ── Path management ────────────────────────────────────────────────────────
-
-    /**
-     * Set a single-segment effective endpoint (no bounces). Keeps {@link #path} in
-     * sync as a straight [start, end] polyline. Used by straight beams and the
-     * DefenseLaser.
-     */
-    public void setEffectiveEndPoint(Vector2 effectiveEndPoint) {
-        this.effectiveEndPoint = effectiveEndPoint;
-        this.path = new ArrayList<>(List.of(startPoint.copy(), effectiveEndPoint.copy()));
-    }
-
-    /**
-     * Set the full reflected polyline (BOUNCY beams). The last vertex becomes the
-     * effective endpoint so existing single-point consumers keep working.
-     */
-    public void setPath(List<Vector2> path) {
-        this.path = path;
-        if (path != null && !path.isEmpty()) {
-            this.effectiveEndPoint = path.getLast().copy();
-        }
     }
 
     /**
@@ -195,6 +162,34 @@ public class FieldEffectBeam extends FieldEffect {
             return;
         }
         super.update(deltaTime);
+    }
+
+    /**
+     * Recalculates and updates the physics body's translation, rotation, and fixture shape
+     * based on the current {@link #startPoint} and {@link #endPoint}.
+     */
+    public void updateBodyTransform() {
+        Vector2 start = startPoint;
+        Vector2 end = endPoint;
+        double currentLength = start.distance(end);
+        Vector2 dir = end.copy().subtract(start);
+        if (dir.getMagnitudeSquared() > 0.0001) {
+            dir.normalize();
+            this.direction.set(dir);
+        } else {
+            dir = this.direction.copy().getNormalized();
+        }
+        Vector2 center = start.copy().add(dir.multiply(currentLength / 2.0));
+        Body body = getBody();
+        body.getTransform().setTranslation(center.x, center.y);
+        body.getTransform().setRotation(Math.atan2(dir.y, dir.x));
+
+        if (body.getFixtureCount() > 0) {
+            body.removeFixture(0);
+            Rectangle rect = new Rectangle(currentLength, BASE_WIDTH * caliber);
+            BodyFixture fixture = body.addFixture(rect);
+            fixture.setSensor(true);
+        }
     }
 
     private static Body createBeamBody(Vector2 startPoint, Vector2 direction, double range, double caliber) {

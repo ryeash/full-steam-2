@@ -91,7 +91,6 @@ public class HeadquartersScoringTest extends BaseTestClass {
         // Verify points were added (this is tracked internally in RuleSystem)
         // We can't directly check the bonus points, but we can verify the HQ took damage
         assertEquals(900.0, team1HQ.getHealth());
-        assertEquals(100.0, team1HQ.getTotalDamageTaken());
     }
 
     @Test
@@ -191,7 +190,6 @@ public class HeadquartersScoringTest extends BaseTestClass {
         // Total damage: 450
         // Total points: 45 (at 0.1 per damage)
         assertEquals(550.0, team1HQ.getHealth());
-        assertEquals(450.0, team1HQ.getTotalDamageTaken());
     }
 
     @Test
@@ -208,8 +206,6 @@ public class HeadquartersScoringTest extends BaseTestClass {
         // Both HQs should have taken their respective damage
         assertEquals(800.0, team2HQ.getHealth());
         assertEquals(700.0, team1HQ.getHealth());
-        assertEquals(200.0, team2HQ.getTotalDamageTaken());
-        assertEquals(300.0, team1HQ.getTotalDamageTaken());
     }
 
     @Test

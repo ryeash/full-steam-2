@@ -6,6 +6,7 @@ import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
 import org.dyn4j.geometry.Vector2;
 
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -330,8 +331,7 @@ public class FlagBehavior implements AIBehavior {
         // Find our team's flag to capture at
         Flag myTeamFlag = gameEntities.getAllFlags().stream()
                 .filter(flag -> flag.getOwnerTeam() == myTeam)
-                .filter(flag -> !flag.isOddball())
-                .filter(flag -> flag.isAtHome()) // Must be at home to capture
+                .filter(Flag::isAtHome) // Must be at home to capture
                 .findFirst()
                 .orElse(null);
 
@@ -484,10 +484,6 @@ public class FlagBehavior implements AIBehavior {
     private boolean isCarryingFlag(AIPlayer aiPlayer, GameEntities gameEntities) {
         for (Flag flag : gameEntities.getAllFlags()) {
             if (flag.isCarried() && flag.getCarriedByPlayerId() == aiPlayer.getId()) {
-                // Ignore oddball - that's handled by OddballBehavior
-                if (flag.isOddball()) {
-                    continue;
-                }
                 return true;
             }
         }
@@ -497,10 +493,6 @@ public class FlagBehavior implements AIBehavior {
     private Flag getCarriedFlag(AIPlayer aiPlayer, GameEntities gameEntities) {
         for (Flag flag : gameEntities.getAllFlags()) {
             if (flag.isCarried() && flag.getCarriedByPlayerId() == aiPlayer.getId()) {
-                // Ignore oddball - that's handled by OddballBehavior
-                if (flag.isOddball()) {
-                    continue;
-                }
                 return flag;
             }
         }
@@ -510,7 +502,6 @@ public class FlagBehavior implements AIBehavior {
     private List<Flag> getTeamFlags(int team, GameEntities gameEntities) {
         return gameEntities.getAllFlags().stream()
                 .filter(flag -> flag.getOwnerTeam() == team)
-                .filter(flag -> !flag.isOddball()) // Ignore oddball
                 .toList();
     }
 
@@ -520,11 +511,7 @@ public class FlagBehavior implements AIBehavior {
 
         return gameEntities.getAllFlags().stream()
                 .filter(flag -> flag.getOwnerTeam() == myTeam)
-                .filter(flag -> !flag.isOddball()) // Ignore oddball
-                .min((f1, f2) -> Double.compare(
-                        myPos.distance(f1.getPosition()),
-                        myPos.distance(f2.getPosition())
-                ))
+                .min(Comparator.comparingDouble(f -> myPos.distance(f.getPosition())))
                 .orElse(null);
     }
 
@@ -562,12 +549,8 @@ public class FlagBehavior implements AIBehavior {
 
         return gameEntities.getAllFlags().stream()
                 .filter(flag -> flag.getOwnerTeam() == myTeam)
-                .filter(flag -> !flag.isOddball()) // Ignore oddball
                 .filter(flag -> flag.getState() == Flag.FlagState.DROPPED)
-                .min((f1, f2) -> Double.compare(
-                        myPos.distance(f1.getPosition()),
-                        myPos.distance(f2.getPosition())
-                ))
+                .min(Comparator.comparingDouble(f -> myPos.distance(f.getPosition())))
                 .orElse(null);
     }
 

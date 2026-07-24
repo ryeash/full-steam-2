@@ -18,6 +18,8 @@ import java.util.Set;
 @AllArgsConstructor
 public class GameEvent {
 
+    public static final long STANDARD_DISPLAY_TIME = 4000L;
+
     /**
      * The type of message for WebSocket routing
      */
@@ -147,7 +149,7 @@ public class GameEvent {
                 .category(EventCategory.KILL)
                 .color(EventCategory.KILL.getDefaultColor())
                 .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
-                .displayDuration(3000L)
+                .displayDuration(STANDARD_DISPLAY_TIME)
                 .build();
     }
 
@@ -185,36 +187,7 @@ public class GameEvent {
                 .category(EventCategory.SYSTEM)
                 .color(EventCategory.SYSTEM.getDefaultColor())
                 .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
-                .displayDuration(3000L)
-                .build();
-    }
-
-    /**
-     * Create a capture event
-     */
-    public static GameEvent createCaptureEvent(String playerName, String locationName) {
-        return GameEvent.builder()
-                .message(String.format("%s captured %s", playerName, locationName))
-                .category(EventCategory.CAPTURE)
-                .color(EventCategory.CAPTURE.getDefaultColor())
-                .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
-                .displayDuration(3000L)
-                .build();
-    }
-
-    /**
-     * Create a team-specific event
-     */
-    public static GameEvent createTeamEvent(String message, int teamId, EventCategory category) {
-        return GameEvent.builder()
-                .message(message)
-                .category(category)
-                .color(category.getDefaultColor())
-                .target(EventTarget.builder()
-                        .type(EventTarget.TargetType.TEAM)
-                        .teamIds(Set.of(teamId))
-                        .build())
-                .displayDuration(3000L)
+                .displayDuration(STANDARD_DISPLAY_TIME)
                 .build();
     }
 
@@ -227,7 +200,7 @@ public class GameEvent {
                 .category(EventCategory.SYSTEM)
                 .color(EventCategory.SYSTEM.getDefaultColor())
                 .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
-                .displayDuration(3000L)
+                .displayDuration(STANDARD_DISPLAY_TIME)
                 .build();
     }
 
@@ -243,20 +216,7 @@ public class GameEvent {
                         .type(EventTarget.TargetType.SPECIFIC)
                         .playerIds(Set.of(playerId))
                         .build())
-                .displayDuration(3000L)
-                .build();
-    }
-
-    /**
-     * Create an achievement event
-     */
-    public static GameEvent createAchievementEvent(String playerName, String achievement) {
-        return GameEvent.builder()
-                .message(String.format("%s earned: %s", playerName, achievement))
-                .category(EventCategory.ACHIEVEMENT)
-                .color(EventCategory.ACHIEVEMENT.getDefaultColor())
-                .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
-                .displayDuration(3000L)
+                .displayDuration(STANDARD_DISPLAY_TIME)
                 .build();
     }
 
@@ -273,7 +233,7 @@ public class GameEvent {
                 .category(EventCategory.CAPTURE)
                 .color(teamColor)
                 .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
-                .displayDuration(5000L) // Longer display for major event
+                .displayDuration(STANDARD_DISPLAY_TIME + 1000L) // Longer display for major event
                 .build();
     }
 
@@ -305,20 +265,7 @@ public class GameEvent {
                 .category(EventCategory.WARNING)
                 .color(EventCategory.WARNING.getDefaultColor())
                 .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
-                .displayDuration(4000L) // Longer display for elimination
-                .build();
-    }
-
-    /**
-     * Create a custom event with full control
-     */
-    public static GameEvent createCustomEvent(String message, String color, EventTarget target) {
-        return GameEvent.builder()
-                .message(message)
-                .color(color)
-                .category(EventCategory.INFO)
-                .target(target)
-                .displayDuration(3000L)
+                .displayDuration(STANDARD_DISPLAY_TIME)
                 .build();
     }
 }

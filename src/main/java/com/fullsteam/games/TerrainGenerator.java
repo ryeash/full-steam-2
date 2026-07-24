@@ -113,7 +113,7 @@ public class TerrainGenerator {
     private boolean isQuadrantObstaclePositionClear(Obstacle obstacle) {
         Vector2 position = obstacle.getPosition();
         double radius = obstacle.getRadius();
-        double spacing = Math.max(10.0, radius * 0.1);
+        double spacing = Math.max(Config.PLAYER_RADIUS + 5, radius * 0.1);
         double axisClearance = radius + spacing;
         if (Math.abs(position.x) < axisClearance || Math.abs(position.y) < axisClearance) {
             return false; // Too close to an axis; would overlap its mirror image
@@ -129,14 +129,14 @@ public class TerrainGenerator {
         double radius = obstacle.getRadius();
 
         // Add minimum spacing buffer to prevent tight packing
-        double spacing = Math.max(10.0, radius * 0.2); // At least 10 units or 20% of radius
+        double spacing = Math.max(Config.PLAYER_RADIUS, radius * 0.2); // At least 10 units or 20% of radius
         double totalRadius = radius + spacing;
 
         // Check against existing obstacles
         for (Obstacle existingObstacle : generatedObstacles) {
             double distance = position.distance(existingObstacle.getPosition());
             double existingRadius = existingObstacle.getRadius();
-            double existingSpacing = Math.max(10.0, existingRadius * 0.2);
+            double existingSpacing = Math.max(Config.PLAYER_RADIUS, existingRadius * 0.2);
             double minDistance = totalRadius + existingRadius + existingSpacing;
 
             if (distance < minDistance) {

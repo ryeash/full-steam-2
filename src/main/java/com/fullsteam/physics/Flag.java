@@ -57,16 +57,10 @@ public class Flag extends OwnedGameEntity {
      * Check if this flag can be captured by a player from the given team.
      */
     public boolean canBeCapturedBy(int team) {
-        // Oddball can be picked up by anyone
-        if (isOddball()) {
-            return state == FlagState.AT_HOME || state == FlagState.DROPPED;
-        }
-
         // Can't capture your own flag
         if (team == ownerTeam) {
             return false;
         }
-
         // Can only capture if flag is at home or dropped (not already being carried)
         return state == FlagState.AT_HOME || state == FlagState.DROPPED;
     }
@@ -117,13 +111,6 @@ public class Flag extends OwnedGameEntity {
      */
     public boolean isAtHome() {
         return state == FlagState.AT_HOME;
-    }
-
-    /**
-     * Check if this is an oddball (neutral flag for oddball mode).
-     */
-    public boolean isOddball() {
-        return ownerTeam == 0; // Team 0 = neutral oddball
     }
 }
 

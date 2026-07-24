@@ -59,33 +59,6 @@ public class AIMemory {
         updateThreatLevel(playerId, player);
     }
 
-    public Vector2 getLastKnownPosition(int playerId) {
-        Vector2 pos = lastKnownPlayerPositions.get(playerId);
-        return pos != null ? pos.copy() : null;
-    }
-
-    public boolean hasSeenPlayerRecently(int playerId, long withinMilliseconds) {
-        Long lastSeen = lastSeenPlayerTimes.get(playerId);
-        if (lastSeen == null) return false;
-        return System.currentTimeMillis() - lastSeen <= withinMilliseconds;
-    }
-
-    public double getThreatLevel(int playerId) {
-        return playerThreatLevels.getOrDefault(playerId, 0.5);
-    }
-
-    public PlayerBehaviorPattern getBehaviorPattern(int playerId) {
-        return playerBehaviors.get(playerId);
-    }
-
-    public boolean isLocationHotlyContested(int locationId) {
-        Long lastChanged = locationLastChanged.get(locationId);
-        if (lastChanged == null) return false;
-
-        // Consider a location contested if control changed recently
-        return System.currentTimeMillis() - lastChanged < 30000; // 30 seconds
-    }
-
     private void updateThreatLevel(int playerId, Player player) {
         // Calculate a snapshot-based threat score rather than accumulating,
         // so it doesn't saturate to 1.0 over long games.
@@ -155,17 +128,14 @@ public class AIMemory {
 
         private void updateBehavioralFlags(Player player) {
             // Simple heuristics for behavior classification
-            double killDeathRatio = player.getDeaths() > 0 ?
-                    (double) player.getKills() / player.getDeaths() : player.getKills();
+            double killDeathRatio = player.getDeaths() > 0
+                    ? (double) player.getKills() / player.getDeaths()
+                    : player.getKills();
 
             isAggressive = killDeathRatio > 1.5 && averageSpeed > 80;
             isDefensive = killDeathRatio < 0.8 && averageSpeed < 40;
 
             // Additional behavioral analysis could be added here
-        }
-
-        public boolean isStale(long maxAgeMillis) {
-            return System.currentTimeMillis() - lastObservationTime > maxAgeMillis;
         }
     }
 }
