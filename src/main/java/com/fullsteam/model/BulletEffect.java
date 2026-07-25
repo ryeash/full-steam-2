@@ -22,7 +22,7 @@ public enum BulletEffect {
 
     // utility-only effects
     STRIKE(0, "Calls in a delayed explosive strike where the projectile lands", 0, 0.0, 0.0, false, false, null),
-    SMOKE(0, "Projectiles create a vision-blocking smoke cloud on impact", 60.0, 0.0, 0.0, false, false, FieldEffectType.SMOKE);
+    SMOKE(0, "Projectiles create a vision-blocking smoke cloud on impact", 125.0, 0.0, 0.0, false, false, FieldEffectType.SMOKE);
 
     private final int pointCost;
     private final String description;

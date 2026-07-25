@@ -3,12 +3,12 @@ package com.fullsteam.games;
 import com.fullsteam.Config;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.FieldEffectCircle;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.WeaponConfig;
-import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.NetProjectile;
@@ -208,12 +208,10 @@ public class UtilitySystem {
      * field effect via BulletEffectProcessor when dismissed.
      */
     private void createSmokeProjectile(UtilityActivation activation) {
-        Vector2 velocity = activation.direction().copy();
-        velocity.multiply(250.0);
-        Projectile grenade = new Projectile(
+        gameEntities.add(new Projectile(
                 activation.playerId(),
                 activation.position(),
-                velocity,
+                activation.direction().copy().multiply(250.0),
                 0.0,
                 activation.utilityWeapon().getRange(),
                 activation.team(),
@@ -222,8 +220,7 @@ public class UtilitySystem {
                 Ordinance.PROJECTILE,
                 1.5, // caliber preserves the old GRENADE projectile size (2.0 * 1.5 = 3.0)
                 0.0  // smoke grenade applies no knockback
-        );
-        gameEntities.add(grenade);
+        ));
     }
 
     /**

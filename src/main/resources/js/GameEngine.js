@@ -962,6 +962,11 @@ class GameEngine {
         this.backgroundContainer.scale.set(this.zoomLevel, -this.zoomLevel); // Also Y-flip background
         this.backgroundContainer.pivot.x = this.camera.x;
         this.backgroundContainer.pivot.y = this.camera.y;
+
+        // Keep smoke overlay centered on the camera in world coordinates
+        if (this.smokeOverlay && this.camera) {
+            this.smokeOverlay.position.set(this.camera.x, this.camera.y);
+        }
     }
     
     // Coordinate conversion functions removed - no longer needed!
@@ -1575,17 +1580,24 @@ class GameEngine {
     updateVisionObscuredOverlay(isObscured) {
         if (isObscured && !this.smokeOverlay) {
             this.smokeOverlay = new PIXI.Graphics();
+            const overlaySize = 10000;
             this.smokeOverlay.rect(
-                -this.app.screen.width,
-                -this.app.screen.height,
-                this.app.screen.width * 3,
-                this.app.screen.height * 3
+                -overlaySize / 2,
+                -overlaySize / 2,
+                overlaySize,
+                overlaySize
             ).fill({ color: 0x888888, alpha: 0.75 });
             this.smokeOverlay.zIndex = 45; // Above game objects, below HUD
             this.gameContainer.addChild(this.smokeOverlay);
+            if (this.camera) {
+                this.smokeOverlay.position.set(this.camera.x, this.camera.y);
+            }
         } else if (isObscured && this.smokeOverlay) {
-            // Keep it visible, follow camera
+            // Keep it visible and follow camera position
             this.smokeOverlay.visible = true;
+            if (this.camera) {
+                this.smokeOverlay.position.set(this.camera.x, this.camera.y);
+            }
         } else if (!isObscured && this.smokeOverlay) {
             this.gameContainer.removeChild(this.smokeOverlay);
             this.smokeOverlay.destroy({ children: true, context: true });
@@ -5387,6 +5399,15 @@ class GameEngine {
             zone.destroy({ children: true, context: true });
         });
         this.kothZones.clear();
+
+        // Clean up smoke overlay
+        if (this.smokeOverlay) {
+            if (this.smokeOverlay.parent) {
+                this.smokeOverlay.parent.removeChild(this.smokeOverlay);
+            }
+            this.smokeOverlay.destroy({ children: true, context: true });
+            this.smokeOverlay = null;
+        }
         
         // Close WebSocket connection
         if (this.websocket) {
