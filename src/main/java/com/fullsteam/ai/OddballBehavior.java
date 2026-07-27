@@ -168,7 +168,7 @@ public class OddballBehavior implements AIBehavior {
             input.setMoveY(-toNpc.y * 0.8);
         } else if (dist > OPTIMAL_RANGE_MAX) {
             // Too far — advance with obstacle avoidance
-            Vector2 move = HazardAvoidance.calculateSafeMovement(myPos, toNpc, gameEntities, 80.0);
+            Vector2 move = HazardAvoidance.calculateSafeMovement(aiPlayer, myPos, toNpc, gameEntities, 80.0);
             input.setMoveX(move.x);
             input.setMoveY(move.y);
         } else {
@@ -194,7 +194,7 @@ public class OddballBehavior implements AIBehavior {
 
         // Perpendicular direction (left or right of the NPC's approach axis)
         Vector2 strafe = new Vector2(-toNpc.y * strafeSign, toNpc.x * strafeSign);
-        Vector2 move = HazardAvoidance.calculateSafeMovement(myPos, strafe, gameEntities, 80.0);
+        Vector2 move = HazardAvoidance.calculateSafeMovement(aiPlayer, myPos, strafe, gameEntities, 80.0);
         input.setMoveX(move.x);
         input.setMoveY(move.y);
 
@@ -209,7 +209,7 @@ public class OddballBehavior implements AIBehavior {
         Vector2 toward = new Vector2(0, 0).subtract(myPos);
         if (toward.getMagnitude() > 50) {
             toward.normalize();
-            Vector2 move = HazardAvoidance.calculateSafeMovement(myPos, toward, gameEntities, 80.0);
+            Vector2 move = HazardAvoidance.calculateSafeMovement(aiPlayer, myPos, toward, gameEntities, 80.0);
             input.setMoveX(move.x * 0.6);
             input.setMoveY(move.y * 0.6);
         }

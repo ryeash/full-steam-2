@@ -68,7 +68,7 @@ public class WeaponConfig {
 
     public static final WeaponConfig HAND_CANNON_PRESET = new WeaponConfig(
             "Hand Cannon",
-            40,
+            37,
             21,
             9,
             0,

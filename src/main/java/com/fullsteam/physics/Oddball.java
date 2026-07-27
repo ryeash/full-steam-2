@@ -1,7 +1,6 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.Config;
-import com.fullsteam.games.WeaponSystem;
 import com.fullsteam.model.HasWeapon;
 import com.fullsteam.model.Weapon;
 import com.fullsteam.model.WeaponConfig;
@@ -14,7 +13,6 @@ import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
 import java.util.Collection;
-import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -206,93 +204,6 @@ public class Oddball extends GameEntity implements HasWeapon {
         currentTarget = leader != null ? leader : nearest;
         Vector2 targetDir = directionTo(currentTarget.getPosition());
         roamDirection = roamDirection.copy().multiply(0.5).add(targetDir.multiply(0.5)).getNormalized();
-    }
-
-    /**
-     * Attempt to fire at the current target using the NPC's assigned weapon.
-     * Rate-gated by weapon fire rate; returns an empty list if not ready or no
-     * target. Fires {@code weapon.getBulletsPerShot()} beams/projectiles with
-     * independent accuracy spread per shot, mirroring {@link Player#shoot()} and
-     * {@link Player#shootBeam()}. Returned entities have ownerId = -getId() (NPC
-     * sentinel, never matches a player) and ownerTeam = 0 (damages all teams
-     * equally).
-     */
-    public List<GameEntity> tryFire() {
-        if (currentTarget == null || !currentTarget.isActive()) {
-            return List.of();
-        }
-
-        long now = System.currentTimeMillis();
-        if (now - lastShotTime < (long) (1000.0 / weapon.getFireRate())) {
-            return List.of();
-        }
-        lastShotTime = now;
-
-        Vector2 myPos = getPosition();
-        Vector2 targetPos = currentTarget.getPosition();
-        boolean beamType = weapon.getOrdinance().isBeamType();
-
-        // Beams are hitscan, so aim straight at the target. Projectiles travel at a
-        // finite speed, so lead the target based on its velocity to intercept it.
-        Vector2 dir = beamType
-                ? new Vector2(targetPos.x - myPos.x, targetPos.y - myPos.y)
-                : predictInterceptDirection(myPos, targetPos, currentTarget.getVelocity(), weapon.getProjectileSpeed());
-        if (dir.getMagnitude() == 0) {
-            return List.of();
-        }
-        return WeaponSystem.fireWeapon(-getId(), 0, weapon, myPos, dir.getNormalized());
-    }
-
-    /**
-     * Compute the aim direction that leads a moving target so a projectile fired at
-     * {@code projectileSpeed} intercepts it. Solves the quadratic for the earliest
-     * positive intercept time; falls back to aiming at the target's current position
-     * when no valid intercept exists (e.g. target outrunning the projectile).
-     */
-    private Vector2 predictInterceptDirection(Vector2 shooterPos, Vector2 targetPos, Vector2 targetVel, double projectileSpeed) {
-        Vector2 toTarget = new Vector2(targetPos.x - shooterPos.x, targetPos.y - shooterPos.y);
-        if (projectileSpeed <= 0.0) {
-            return toTarget; // no meaningful travel time; aim directly
-        }
-
-        // Solve |toTarget + targetVel * t| = projectileSpeed * t for the smallest t > 0.
-        double a = targetVel.dot(targetVel) - projectileSpeed * projectileSpeed;
-        double b = 2.0 * toTarget.dot(targetVel);
-        double c = toTarget.dot(toTarget);
-
-        double t;
-        if (Math.abs(a) < 1e-6) {
-            // Target speed ~= projectile speed: quadratic degenerates to linear.
-            if (Math.abs(b) < 1e-6) {
-                return toTarget;
-            }
-            t = -c / b;
-        } else {
-            double disc = b * b - 4.0 * a * c;
-            if (disc < 0.0) {
-                return toTarget; // no real intercept
-            }
-            double sqrtDisc = Math.sqrt(disc);
-            double t1 = (-b - sqrtDisc) / (2.0 * a);
-            double t2 = (-b + sqrtDisc) / (2.0 * a);
-            // Prefer the earliest positive intercept time.
-            t = smallestPositive(t1, t2);
-        }
-
-        if (t <= 0.0 || !Double.isFinite(t)) {
-            return toTarget;
-        }
-
-        return new Vector2(
-                targetPos.x + targetVel.x * t - shooterPos.x,
-                targetPos.y + targetVel.y * t - shooterPos.y);
-    }
-
-    private static double smallestPositive(double t1, double t2) {
-        if (t1 > 0.0 && t2 > 0.0) {
-            return Math.min(t1, t2);
-        }
-        return Math.max(t1, t2);
     }
 
     private Player nearestPlayer(Collection<Player> players) {

@@ -124,21 +124,7 @@ public class DefenseLaser extends OwnedGameEntity {
             beam.getEndPoint().set(center);
             beam.getEndPoint().add(offset);
             beam.updateBodyTransform();
-        }
-    }
-
-    /**
-     * Update the effective (obstacle-clipped) endpoints of all arm beams.
-     * Called by {@code GameManager.updateDefenseLaserBeamEndpoints()} after
-     * obstacle raycasting.
-     */
-    public void updateBeamEffectiveEndpoints(Vector2[] effectiveEndpoints) {
-        if (effectiveEndpoints.length != beams.size()) {
-            throw new IllegalArgumentException("Effective endpoints array size must match beam count");
-        }
-        for (int i = 0; i < beams.size(); i++) {
-            beams.get(i).setEndPoint(effectiveEndpoints[i]);
-            beams.get(i).updateBodyTransform();
+            // TODO: WRONG
         }
     }
 }

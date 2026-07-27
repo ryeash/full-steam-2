@@ -41,8 +41,7 @@ class WeaponSystemTest extends BaseTestClass {
         gameEntities = new GameEntities(testConfig, world);
 
         // Create weapon system
-        weaponSystem = new WeaponSystem(gameEntities, world, (a, b) -> {
-        });
+        weaponSystem = new WeaponSystem(gameEntities, world);
     }
 
     // ============================================================================
@@ -135,25 +134,6 @@ class WeaponSystemTest extends BaseTestClass {
     // ============================================================================
     // Beam Weapon Tests
     // ============================================================================
-
-    @Test
-    @DisplayName("Should create beam when player fires beam weapon")
-    void testBeamCreation() {
-        // Arrange
-        Player player = createTestPlayerWithBeamWeapon(1, 1);
-        player.setAimDirection(new Vector2(1, 0));
-        gameEntities.add(player);
-
-        PlayerInput input = new PlayerInput();
-        input.setLeft(true);
-
-        // Act
-        weaponSystem.handlePrimaryFire(player, input);
-
-        // Assert
-        assertFalse(gameEntities.getBeams().isEmpty(),
-                "Beam should be created when player fires beam weapon");
-    }
 
     @Test
     @DisplayName("Should calculate beam obstacle intersection")

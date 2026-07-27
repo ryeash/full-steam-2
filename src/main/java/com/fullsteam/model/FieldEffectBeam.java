@@ -33,7 +33,7 @@ public class FieldEffectBeam extends FieldEffect {
     public static final double BASE_WIDTH = 2.0;
     private static final long AREA_EFFECT_INTERVAL_MS = 350;
 
-    protected final Vector2 startPoint;
+    protected Vector2 startPoint;
     protected Vector2 endPoint;
     protected final Vector2 direction;
     protected final double range;

@@ -82,6 +82,7 @@ public class EventSystem {
             // Trigger the actual event when warning phase ends
             if (currentEvent.isActive() && warningZonesSpawned) {
                 triggerEvent(currentEvent);
+                dismissWarningZones(currentEvent);
                 warningZonesSpawned = false; // Reset for next event
             }
 
@@ -232,7 +233,7 @@ public class EventSystem {
                     radius,
                     radius,
                     0.0, // No damage
-                    (long) (System.currentTimeMillis() + rules.getEventWarningDuration() * 1000),
+                    rules.getEventWarningDuration(),
                     0,
                     0 // No team
             );
@@ -243,6 +244,19 @@ public class EventSystem {
 
         log.debug("Game {} - Spawned {} warning zones for {}", gameId,
                 event.getTargetLocations().size(), event.getEventType().name());
+    }
+
+    /**
+     * Dismiss warning zones associated with an event.
+     */
+    private void dismissWarningZones(ActiveGameEvent event) {
+        for (int warningId : event.getWarningZoneIds()) {
+            for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
+                if (effect.getId() == warningId) {
+                    effect.setActive(false);
+                }
+            }
+        }
     }
 
     /**
@@ -272,7 +286,7 @@ public class EventSystem {
                             rules.getMeteorRadius(),
                             rules.getMeteorRadius(),
                             rules.getMeteorDamage(),
-                            (long) FieldEffectType.EXPLOSION.getDefaultDuration(),
+                            FieldEffectType.EXPLOSION.getDefaultDuration(),
                             0,
                             0 // No team
                     ));

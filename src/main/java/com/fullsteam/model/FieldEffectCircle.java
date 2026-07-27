@@ -31,7 +31,8 @@ public class FieldEffectCircle extends FieldEffect {
         this.radius = radius;
         this.initialRadius = radius;
         this.maxRadius = maxRadius;
-        this.expires = (long) (System.currentTimeMillis() + (duration * 1000)); // duration in seconds
+        long startMs = Math.max(System.currentTimeMillis(), armingTime);
+        this.expires = (long) (startMs + (duration * 1000)); // duration in seconds
         this.active = true;
     }
 

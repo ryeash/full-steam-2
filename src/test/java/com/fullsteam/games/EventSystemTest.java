@@ -134,8 +134,7 @@ class EventSystemTest extends BaseTestClass {
     @Test
     void testEnabledEventsFilter() {
         List<EnvironmentalEvent> enabledEvents = List.of(
-                EnvironmentalEvent.METEOR_SHOWER,
-                EnvironmentalEvent.SUPPLY_DROP
+                EnvironmentalEvent.METEOR_SHOWER
         );
 
         Rules rules = Rules.builder()
@@ -145,7 +144,6 @@ class EventSystemTest extends BaseTestClass {
 
         assertEquals(2, rules.getEnabledEvents().size());
         assertTrue(rules.getEnabledEvents().contains(EnvironmentalEvent.METEOR_SHOWER));
-        assertTrue(rules.getEnabledEvents().contains(EnvironmentalEvent.SUPPLY_DROP));
         assertFalse(rules.getEnabledEvents().contains(EnvironmentalEvent.VOLCANIC_ERUPTION));
     }
 

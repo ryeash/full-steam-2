@@ -190,7 +190,7 @@ public class KothBehavior implements AIBehavior {
         }
 
         // Apply hazard avoidance
-        direction = HazardAvoidance.calculateSafeMovement(myPos, direction, gameEntities, 100.0);
+        direction = HazardAvoidance.calculateSafeMovement(aiPlayer, myPos, direction, gameEntities, 100.0);
 
         double moveIntensity = 0.8 + (aiPlayer.getPersonality().getMobility() * 0.2);
         input.setMoveX(direction.x * moveIntensity);
@@ -232,7 +232,7 @@ public class KothBehavior implements AIBehavior {
             double moveIntensity = 0.6 * aiPlayer.getPersonality().getMobility();
 
             // Apply hazard avoidance
-            strafeDirection = HazardAvoidance.calculateSafeMovement(myPos, strafeDirection, gameEntities, 80.0);
+            strafeDirection = HazardAvoidance.calculateSafeMovement(aiPlayer, myPos, strafeDirection, gameEntities, 80.0);
 
             input.setMoveX(strafeDirection.x * moveIntensity);
             input.setMoveY(strafeDirection.y * moveIntensity);

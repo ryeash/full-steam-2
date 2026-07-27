@@ -210,7 +210,7 @@ public class UtilitySystem {
     private void createSmokeProjectile(UtilityActivation activation) {
         gameEntities.add(new Projectile(
                 activation.playerId(),
-                activation.position(),
+                activation.position().add(activation.direction().getNormalized().multiply(Config.PLAYER_RADIUS)),
                 activation.direction().copy().multiply(250.0),
                 0.0,
                 activation.utilityWeapon().getRange(),
@@ -218,8 +218,8 @@ public class UtilitySystem {
                 0.87,
                 Set.of(BulletEffect.SMOKE),
                 Ordinance.PROJECTILE,
-                1.5, // caliber preserves the old GRENADE projectile size (2.0 * 1.5 = 3.0)
-                0.0  // smoke grenade applies no knockback
+                2.0,
+                0.0
         ));
     }
 

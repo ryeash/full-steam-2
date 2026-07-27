@@ -23,7 +23,6 @@ import com.fullsteam.physics.CollisionProcessor;
 import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
-import com.fullsteam.physics.GameEntity;
 import com.fullsteam.physics.Headquarters;
 import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Oddball;
@@ -143,7 +142,7 @@ public class GameManager {
                 gameConfig.getTeamCount()
         );
 
-        this.weaponSystem = new WeaponSystem(gameEntities, world, this::killPlayer);
+        this.weaponSystem = new WeaponSystem(gameEntities, world);
         this.terrainGenerator = new TerrainGenerator(world, gameConfig);
         this.utilitySystem = new UtilitySystem(gameEntities, world, this::isPositionClearOfObstacles);
         this.entitySpawner = new EntitySpawner(
@@ -790,20 +789,12 @@ public class GameManager {
             if (!defenseLaser.isActive()) {
                 continue;
             }
-
-            // Calculate effective endpoints for all beams
-            Vector2[] effectiveEndpoints = new Vector2[defenseLaser.getBeams().size()];
             for (int i = 0; i < defenseLaser.getBeams().size(); i++) {
                 FieldEffectBeam beam = defenseLaser.getBeams().get(i);
-                Vector2 effectiveEnd = weaponSystem.findBeamObstacleIntersection(
-                        beam.getStartPoint(),
-                        beam.getEndPoint()
-                );
-                effectiveEndpoints[i] = effectiveEnd;
+                List<Vector2> path = weaponSystem.computeBeamPath(beam);
+                beam.setEndPoint(path.get(1));
+                beam.updateBodyTransform();
             }
-
-            // Update the DefenseLaser with the calculated effective endpoints
-            defenseLaser.updateBeamEffectiveEndpoints(effectiveEndpoints);
         }
     }
 
@@ -811,35 +802,17 @@ public class GameManager {
      * Update utility entities and handle their special behaviors
      */
     private void updateUtilityEntities(double deltaTime) {
-        // Update turrets and handle their AI
         for (Turret turret : gameEntities.getAllTurrets()) {
-            if (!turret.isActive()) {
-                continue;
-            }
-
-            // Turret AI: acquire targets and fire
-            turret.acquireTarget(gameEntities.getAllPlayers().stream().toList());
-            for (GameEntity turretShot : turret.tryFire()) {
-                if (turretShot instanceof FieldEffectBeam beam) {
-                    weaponSystem.handleBeamFire(beam);
-                } else {
-                    gameEntities.add(turretShot);
-                }
+            if (turret.isActive()) {
+                turret.acquireTarget(gameEntities.getAllPlayers().stream().toList());
+                weaponSystem.handleTurretFire(turret);
             }
         }
 
-        // Update oddball NPCs: AI decision + movement steering + firing
-        for (Oddball npc : gameEntities.getAllOddballNpcs()) {
-            if (!npc.isActive()) {
-                continue;
-            }
-            npc.tickAI(Collections.unmodifiableCollection(gameEntities.getAllPlayers()));
-            for (GameEntity npcShot : npc.tryFire()) {
-                if (npcShot instanceof FieldEffectBeam beam) {
-                    weaponSystem.handleBeamFire(beam);
-                } else {
-                    gameEntities.add(npcShot);
-                }
+        for (Oddball oddball : gameEntities.getAllOddballNpcs()) {
+            if (oddball.isActive()) {
+                oddball.tickAI(Collections.unmodifiableCollection(gameEntities.getAllPlayers()));
+                weaponSystem.handleOddballFire(oddball);
             }
         }
     }

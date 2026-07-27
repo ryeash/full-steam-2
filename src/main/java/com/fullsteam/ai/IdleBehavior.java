@@ -24,10 +24,10 @@ public class IdleBehavior implements AIBehavior {
         PlayerInput input = new PlayerInput();
 
         // Check for environmental hazards first - high priority
-        double areaDanger = HazardAvoidance.getAreaDangerRating(aiPlayer.getPosition(), 150.0, gameEntities);
+        double areaDanger = HazardAvoidance.getAreaDangerRating(aiPlayer, aiPlayer.getPosition(), 150.0, gameEntities);
         if (areaDanger > 0.5) {
             // Dangerous area - flee to safety
-            Vector2 safePos = HazardAvoidance.findNearestSafePosition(aiPlayer.getPosition(), 200.0, gameEntities);
+            Vector2 safePos = HazardAvoidance.findNearestSafePosition(aiPlayer, aiPlayer.getPosition(), 200.0, gameEntities);
             if (safePos != null) {
                 Vector2 fleeDirection = safePos.copy().subtract(aiPlayer.getPosition());
                 fleeDirection.normalize();
@@ -60,7 +60,7 @@ public class IdleBehavior implements AIBehavior {
         direction.normalize();
 
         // Apply hazard avoidance to movement
-        direction = HazardAvoidance.calculateSafeMovement(playerPos, direction, gameEntities, 100.0);
+        direction = HazardAvoidance.calculateSafeMovement(aiPlayer, playerPos, direction, gameEntities, 100.0);
 
         // Speed scales with distance, but never goes to zero
         double moveSpeed = Math.max(0.3, Math.min(0.8, distance / 100.0));
@@ -158,8 +158,8 @@ public class IdleBehavior implements AIBehavior {
             candidateTarget.x = Math.max(-halfW, Math.min(halfW, candidateTarget.x));
             candidateTarget.y = Math.max(-halfH, Math.min(halfH, candidateTarget.y));
 
-            if (HazardAvoidance.isPositionSafe(candidateTarget, 30.0, gameEntities) &&
-                    !HazardAvoidance.pathCrossesHazards(playerPos, candidateTarget, gameEntities)) {
+            if (HazardAvoidance.isPositionSafe(aiPlayer, candidateTarget, 30.0, gameEntities) &&
+                    !HazardAvoidance.pathCrossesHazards(aiPlayer, playerPos, candidateTarget, gameEntities)) {
                 wanderTarget = candidateTarget;
                 return;
             }

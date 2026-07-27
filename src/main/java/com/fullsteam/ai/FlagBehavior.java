@@ -162,7 +162,7 @@ public class FlagBehavior implements AIBehavior {
         direction.normalize();
 
         // Apply hazard avoidance
-        direction = HazardAvoidance.calculateSafeMovement(myPos, direction, gameEntities, 100.0);
+        direction = HazardAvoidance.calculateSafeMovement(aiPlayer, myPos, direction, gameEntities, 100.0);
 
         input.setMoveX(direction.x * moveIntensity);
         input.setMoveY(direction.y * moveIntensity);
@@ -362,7 +362,7 @@ public class FlagBehavior implements AIBehavior {
         }
 
         // Apply hazard avoidance (critical when carrying flag!)
-        direction = HazardAvoidance.calculateSafeMovement(myPos, direction, gameEntities, 120.0);
+        direction = HazardAvoidance.calculateSafeMovement(aiPlayer, myPos, direction, gameEntities, 120.0);
 
         input.setMoveX(direction.x);
         input.setMoveY(direction.y);

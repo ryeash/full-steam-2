@@ -40,8 +40,7 @@ class UtilitySystemTest extends BaseTestClass {
         gameEntities = new GameEntities(testConfig, world);
 
         // Create weapon system
-        weaponSystem = new WeaponSystem(gameEntities, world, (a, b) -> {
-        });
+        weaponSystem = new WeaponSystem(gameEntities, world);
 
         // Create broadcaster
         broadcaster = new TestBroadcaster();

@@ -109,7 +109,7 @@ public class VipBehavior implements AIBehavior {
             // Evade: move away from the closest threat
             Vector2 away = myPos.copy().subtract(enemyPos);
             away.normalize();
-            away = HazardAvoidance.calculateSafeMovement(myPos, away, gameEntities, 120.0);
+            away = HazardAvoidance.calculateSafeMovement(aiPlayer, myPos, away, gameEntities, 120.0);
             input.setMoveX(away.x);
             input.setMoveY(away.y);
 
@@ -155,7 +155,7 @@ public class VipBehavior implements AIBehavior {
             Vector2 toGuard = guardPos.copy().subtract(myPos);
             if (toGuard.getMagnitude() > 10) {
                 toGuard.normalize();
-                toGuard = HazardAvoidance.calculateSafeMovement(myPos, toGuard, gameEntities, 100.0);
+                toGuard = HazardAvoidance.calculateSafeMovement(aiPlayer, myPos, toGuard, gameEntities, 100.0);
                 input.setMoveX(toGuard.x);
                 input.setMoveY(toGuard.y);
             }
@@ -169,7 +169,7 @@ public class VipBehavior implements AIBehavior {
             // No threats — escort the VIP at a comfortable distance
             if (distToVip > 150) {
                 Vector2 toVip = vipPos.copy().subtract(myPos).getNormalized();
-                toVip = HazardAvoidance.calculateSafeMovement(myPos, toVip, gameEntities, 100.0);
+                toVip = HazardAvoidance.calculateSafeMovement(aiPlayer, myPos, toVip, gameEntities, 100.0);
                 input.setMoveX(toVip.x);
                 input.setMoveY(toVip.y);
             } else if (distToVip < 50) {
@@ -204,7 +204,7 @@ public class VipBehavior implements AIBehavior {
         // Move toward the enemy VIP
         Vector2 toTarget = targetPos.copy().subtract(myPos);
         toTarget.normalize();
-        toTarget = HazardAvoidance.calculateSafeMovement(myPos, toTarget, gameEntities, 100.0);
+        toTarget = HazardAvoidance.calculateSafeMovement(aiPlayer, myPos, toTarget, gameEntities, 100.0);
         input.setMoveX(toTarget.x);
         input.setMoveY(toTarget.y);
 
@@ -322,7 +322,7 @@ public class VipBehavior implements AIBehavior {
         double dist = toCenter.getMagnitude();
         if (dist > 50) {
             toCenter.normalize();
-            toCenter = HazardAvoidance.calculateSafeMovement(myPos, toCenter, gameEntities, 100.0);
+            toCenter = HazardAvoidance.calculateSafeMovement(aiPlayer, myPos, toCenter, gameEntities, 100.0);
             input.setMoveX(toCenter.x * 0.5);
             input.setMoveY(toCenter.y * 0.5);
         } else {

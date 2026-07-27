@@ -3,6 +3,7 @@ package com.fullsteam.ai;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.physics.GameEntities;
+import com.fullsteam.physics.Player;
 import org.dyn4j.geometry.Vector2;
 
 import java.util.ArrayList;
@@ -15,14 +16,16 @@ import java.util.List;
 public class HazardAvoidance {
 
     /**
-     * Find all dangerous field effects near a position.
+     * Find all dangerous field effects near a position for a specific player.
+     * Friendly field effects (created by the player or a teammate) are ignored.
      *
+     * @param player       The player evaluating hazards (can be null for generic check)
      * @param position     Center position to check from
      * @param checkRadius  How far to look for hazards
      * @param gameEntities Current game state
      * @return List of dangerous field effects within range
      */
-    public static List<FieldEffect> findNearbyHazards(Vector2 position, double checkRadius, GameEntities gameEntities) {
+    public static List<FieldEffect> findNearbyHazards(Player player, Vector2 position, double checkRadius, GameEntities gameEntities) {
         List<FieldEffect> hazards = new ArrayList<>();
 
         for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
@@ -30,8 +33,8 @@ public class HazardAvoidance {
                 continue;
             }
 
-            // Check if this is a dangerous effect type
-            if (!isDangerousEffect(effect.getType())) {
+            // Check if this effect is dangerous to this specific player
+            if (!isDangerousTo(player, effect)) {
                 continue;
             }
 
@@ -48,7 +51,14 @@ public class HazardAvoidance {
     }
 
     /**
-     * Check if a field effect type is dangerous and should be avoided.
+     * Overload for backward compatibility / generic checks.
+     */
+    public static List<FieldEffect> findNearbyHazards(Vector2 position, double checkRadius, GameEntities gameEntities) {
+        return findNearbyHazards(null, position, checkRadius, gameEntities);
+    }
+
+    /**
+     * Check if a field effect type is dangerous in general.
      */
     public static boolean isDangerousEffect(FieldEffectType type) {
         return switch (type) {
@@ -57,6 +67,38 @@ public class HazardAvoidance {
                  PROXIMITY_MINE, SMOKE, LASER, PLASMA -> true;
             case HEAL_ZONE, SPEED_BOOST, SHIELD_BARRIER, FRAGMENTATION -> false;
         };
+    }
+
+    /**
+     * Check if a field effect is dangerous to a specific player.
+     * Friendly field effects (created by the player or a teammate) do not deal damage
+     * to allies and should be ignored during hazard avoidance.
+     */
+    public static boolean isDangerousTo(Player player, FieldEffect effect) {
+        if (effect == null || !effect.isActive()) {
+            return false;
+        }
+
+        // Check if this is a dangerous effect type generally
+        if (!isDangerousEffect(effect.getType())) {
+            return false;
+        }
+
+        if (player == null) {
+            return true; // Without player context, assume dangerous
+        }
+
+        // Self-owned effects never harm the owner
+        if (effect.getOwnerId() == player.getId()) {
+            return false;
+        }
+
+        // In team mode, teammate-owned effects do not harm teammates
+        if (player.getTeam() > 0 && effect.getOwnerTeam() > 0 && player.getTeam() == effect.getOwnerTeam()) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -78,17 +120,18 @@ public class HazardAvoidance {
     }
 
     /**
-     * Calculate a safe movement direction that avoids nearby hazards.
+     * Calculate a safe movement direction that avoids nearby hazards for a specific player.
      *
+     * @param player           The player moving
      * @param currentPos       Current position
      * @param desiredDirection The direction the AI wants to move
      * @param gameEntities     Current game state
      * @param detectionRadius  How far to detect hazards
      * @return Modified movement direction that avoids hazards, or original if no hazards
      */
-    public static Vector2 calculateSafeMovement(Vector2 currentPos, Vector2 desiredDirection,
+    public static Vector2 calculateSafeMovement(Player player, Vector2 currentPos, Vector2 desiredDirection,
                                                 GameEntities gameEntities, double detectionRadius) {
-        List<FieldEffect> nearbyHazards = findNearbyHazards(currentPos, detectionRadius, gameEntities);
+        List<FieldEffect> nearbyHazards = findNearbyHazards(player, currentPos, detectionRadius, gameEntities);
 
         if (nearbyHazards.isEmpty()) {
             return desiredDirection.copy(); // No hazards, move as desired
@@ -152,17 +195,23 @@ public class HazardAvoidance {
         return finalDirection;
     }
 
+    public static Vector2 calculateSafeMovement(Vector2 currentPos, Vector2 desiredDirection,
+                                                GameEntities gameEntities, double detectionRadius) {
+        return calculateSafeMovement(null, currentPos, desiredDirection, gameEntities, detectionRadius);
+    }
+
     /**
-     * Check if a position is currently safe (no active hazards).
+     * Check if a position is currently safe for a specific player (no active hostile hazards).
      *
+     * @param player       The player checking safety
      * @param position     Position to check
      * @param safetyMargin Extra distance to consider (buffer zone)
      * @param gameEntities Current game state
      * @return true if position is safe, false if in or near hazards
      */
-    public static boolean isPositionSafe(Vector2 position, double safetyMargin, GameEntities gameEntities) {
+    public static boolean isPositionSafe(Player player, Vector2 position, double safetyMargin, GameEntities gameEntities) {
         for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
-            if (!effect.isActive() || !isDangerousEffect(effect.getType())) {
+            if (!isDangerousTo(player, effect)) {
                 continue;
             }
 
@@ -177,16 +226,21 @@ public class HazardAvoidance {
         return true; // No hazards nearby
     }
 
+    public static boolean isPositionSafe(Vector2 position, double safetyMargin, GameEntities gameEntities) {
+        return isPositionSafe(null, position, safetyMargin, gameEntities);
+    }
+
     /**
-     * Find the nearest safe position from a given location.
+     * Find the nearest safe position from a given location for a player.
      * Useful for finding where to flee when surrounded by hazards.
      *
+     * @param player       The player seeking safety
      * @param currentPos   Current position
      * @param searchRadius How far to search for safety
      * @param gameEntities Current game state
      * @return Nearest safe position, or null if none found
      */
-    public static Vector2 findNearestSafePosition(Vector2 currentPos, double searchRadius, GameEntities gameEntities) {
+    public static Vector2 findNearestSafePosition(Player player, Vector2 currentPos, double searchRadius, GameEntities gameEntities) {
         // Sample positions in a circle around current position
         int samples = 16; // Check 16 directions
         double bestDistance = Double.MAX_VALUE;
@@ -202,7 +256,7 @@ public class HazardAvoidance {
                         currentPos.y + Math.sin(angle) * dist
                 );
 
-                if (isPositionSafe(testPos, 20.0, gameEntities)) {
+                if (isPositionSafe(player, testPos, 20.0, gameEntities)) {
                     double distanceToSafety = currentPos.distance(testPos);
                     if (distanceToSafety < bestDistance) {
                         bestDistance = distanceToSafety;
@@ -215,15 +269,20 @@ public class HazardAvoidance {
         return bestPosition;
     }
 
+    public static Vector2 findNearestSafePosition(Vector2 currentPos, double searchRadius, GameEntities gameEntities) {
+        return findNearestSafePosition(null, currentPos, searchRadius, gameEntities);
+    }
+
     /**
      * Check if moving from one position to another would cross through hazards.
      *
+     * @param player       The player checking the path
      * @param from         Starting position
      * @param to           Destination position
      * @param gameEntities Current game state
      * @return true if path crosses hazards, false if clear
      */
-    public static boolean pathCrossesHazards(Vector2 from, Vector2 to, GameEntities gameEntities) {
+    public static boolean pathCrossesHazards(Player player, Vector2 from, Vector2 to, GameEntities gameEntities) {
         Vector2 direction = to.copy().subtract(from);
         double distance = direction.getMagnitude();
 
@@ -239,7 +298,7 @@ public class HazardAvoidance {
             double t = (double) i / checkPoints;
             Vector2 checkPos = from.copy().add(direction.copy().multiply(distance * t));
 
-            if (!isPositionSafe(checkPos, 10.0, gameEntities)) {
+            if (!isPositionSafe(player, checkPos, 10.0, gameEntities)) {
                 return true; // Path crosses hazard
             }
         }
@@ -247,12 +306,16 @@ public class HazardAvoidance {
         return false; // Path is clear
     }
 
+    public static boolean pathCrossesHazards(Vector2 from, Vector2 to, GameEntities gameEntities) {
+        return pathCrossesHazards(null, from, to, gameEntities);
+    }
+
     /**
      * Get a danger rating for the current area (0.0 = safe, 1.0 = extremely dangerous).
      * Useful for deciding whether to retreat or engage.
      */
-    public static double getAreaDangerRating(Vector2 position, double radius, GameEntities gameEntities) {
-        List<FieldEffect> nearbyHazards = findNearbyHazards(position, radius, gameEntities);
+    public static double getAreaDangerRating(Player player, Vector2 position, double radius, GameEntities gameEntities) {
+        List<FieldEffect> nearbyHazards = findNearbyHazards(player, position, radius, gameEntities);
 
         if (nearbyHazards.isEmpty()) {
             return 0.0;
@@ -281,6 +344,10 @@ public class HazardAvoidance {
 
         // Return combination of max threat and average threat
         return Math.min(1.0, (maxThreat * 0.7) + (totalThreat / nearbyHazards.size() * 0.3));
+    }
+
+    public static double getAreaDangerRating(Vector2 position, double radius, GameEntities gameEntities) {
+        return getAreaDangerRating(null, position, radius, gameEntities);
     }
 }
 

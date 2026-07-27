@@ -1,7 +1,6 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.Config;
-import com.fullsteam.games.WeaponSystem;
 import com.fullsteam.model.HasWeapon;
 import com.fullsteam.model.Weapon;
 import com.fullsteam.model.WeaponConfig;
@@ -30,6 +29,8 @@ import java.util.List;
 @Getter
 @Setter
 public class Turret extends OwnedGameEntity implements HasWeapon {
+    public static final double TURRET_FIRE_RATE_PENALTY = 2;
+
     private final Weapon weapon;
     private long lastShotTime = 0;
     private Player currentTarget;
@@ -97,34 +98,6 @@ public class Turret extends OwnedGameEntity implements HasWeapon {
         }
     }
 
-    /**
-     * Attempt to fire at the current target.
-     *
-     * <p>Fires {@code weapon.getBulletsPerShot()} projectiles or beams (depending
-     * on the weapon's ordinance) with independent accuracy spread per shot,
-     * mirroring how {@link Player#shoot()} and {@link Player#shootBeam()} handle
-     * multi-shot weapons.
-     *
-     * @return a list of the {@link Projectile}s or {@link com.fullsteam.model.FieldEffectBeam}s fired this tick,
-     * or an empty list if the turret cannot fire.
-     */
-    public List<GameEntity> tryFire() {
-        if (currentTarget == null || !canFire()) {
-            return List.of();
-        }
-        lastShotTime = System.currentTimeMillis();
-        Vector2 targetPos = currentTarget.getPosition();
-        Vector2 turretPos = getPosition();
-        Vector2 fireDirection = new Vector2(targetPos.x - turretPos.x, targetPos.y - turretPos.y);
-        if (fireDirection.getMagnitude() == 0) {
-            return List.of();
-        }
-        fireDirection.normalize();
-        double baseAngle = Math.atan2(fireDirection.y, fireDirection.x);
-        setRotation(baseAngle);
-        return WeaponSystem.fireWeapon(ownerId, ownerTeam, weapon, turretPos, fireDirection);
-    }
-
     private boolean isValidTarget(Player player) {
         double distance = getPosition().distance(player.getPosition());
         if (!player.isActive() || player.getHealth() <= 0 || distance > weapon.getRange()) {
@@ -144,7 +117,7 @@ public class Turret extends OwnedGameEntity implements HasWeapon {
             return false;
         }
         long now = System.currentTimeMillis();
-        double fireInterval = 1000.0 / weapon.getFireRate();
+        double fireInterval = 1000.0 / (weapon.getFireRate() / TURRET_FIRE_RATE_PENALTY);
         return (now - lastShotTime) >= fireInterval;
     }
 }

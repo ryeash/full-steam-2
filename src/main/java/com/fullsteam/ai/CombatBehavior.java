@@ -39,10 +39,10 @@ public class CombatBehavior implements AIBehavior {
         targetPursuitTime += deltaTime;
 
         // Check for environmental hazards - high priority
-        double areaDanger = HazardAvoidance.getAreaDangerRating(aiPlayer.getPosition(), 150.0, gameEntities);
+        double areaDanger = HazardAvoidance.getAreaDangerRating(aiPlayer, aiPlayer.getPosition(), 150.0, gameEntities);
         if (areaDanger > 0.7) {
             // Very dangerous area - flee to safety immediately
-            Vector2 safePos = HazardAvoidance.findNearestSafePosition(aiPlayer.getPosition(), 200.0, gameEntities);
+            Vector2 safePos = HazardAvoidance.findNearestSafePosition(aiPlayer, aiPlayer.getPosition(), 200.0, gameEntities);
             if (safePos != null) {
                 Vector2 fleeDirection = safePos.copy().subtract(aiPlayer.getPosition());
                 fleeDirection.normalize();
@@ -159,7 +159,7 @@ public class CombatBehavior implements AIBehavior {
         moveDirection.normalize();
 
         // Apply hazard avoidance to final movement direction
-        moveDirection = HazardAvoidance.calculateSafeMovement(playerPos, moveDirection, gameEntities, 100.0);
+        moveDirection = HazardAvoidance.calculateSafeMovement(aiPlayer, playerPos, moveDirection, gameEntities, 100.0);
 
         input.setMoveX(moveDirection.x * moveIntensity);
         input.setMoveY(moveDirection.y * moveIntensity);

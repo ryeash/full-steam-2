@@ -2,10 +2,7 @@ package com.fullsteam.physics;
 
 import com.fullsteam.Config;
 import com.fullsteam.model.AttributeModification;
-import com.fullsteam.model.FieldEffectBeam;
-import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.HasWeapon;
-import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.Scoring;
 import com.fullsteam.model.UtilityWeapon;
@@ -18,11 +15,8 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
-import java.util.LinkedList;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
 
 @Getter
 @Setter
@@ -214,105 +208,6 @@ public class Player extends OwnedGameEntity implements HasWeapon {
         lastUtilityUseTime = 0;
     }
 
-    public List<Projectile> shoot() {
-        Weapon weapon = this.getCurrentWeapon(); // Always use primary weapon
-        if (!canShoot()) {
-            if (!isReloading && weapon.getCurrentAmmo() <= 0) {
-                startReload();
-            }
-            return List.of();
-        }
-
-        lastShotTime = System.currentTimeMillis();
-
-        Vector2 pos = getPosition();
-        Vector2 baseDirection = aimDirection.copy();
-        double baseAngle = Math.atan2(baseDirection.y, baseDirection.x);
-
-        int bulletsPerShot = weapon.getBulletsPerShot();
-        int actualBulletsToFire = Math.min(bulletsPerShot, weapon.getCurrentAmmo());
-        weapon.setCurrentAmmo(weapon.getCurrentAmmo() - actualBulletsToFire);
-
-        // Calculate maximum accuracy-based spread for each bullet
-        double maxAccuracySpread = (1.0 - weapon.getAccuracy()) * 0.17; // Reduced from 0.2 for multi-shot
-
-        List<Projectile> toFire = new LinkedList<>();
-        // Store additional projectiles for GameManager to retrieve
-        double angle = baseAngle;
-        for (int i = 0; i < actualBulletsToFire; i++) {
-            // Apply random accuracy spread independently for each bullet
-            angle += (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * maxAccuracySpread;
-
-            Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
-            Vector2 velocity = direction.multiply(weapon.getProjectileSpeed());
-
-            Vector2 jitter = new Vector2((i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0,
-                    (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0);
-            pos.add(jitter);
-
-            toFire.add(new Projectile(
-                    id,
-                    pos,
-                    velocity,
-                    weapon.getDamagePerBullet(),
-                    weapon.getRange(),
-                    team,
-                    weapon.getLinearDamping(),
-                    weapon.getBulletEffects(),
-                    weapon.getOrdinance(),
-                    weapon.getCaliber(),
-                    weapon.getKnockbackPerBullet()
-            ));
-
-        }
-        return toFire;
-    }
-
-    /**
-     * Shoot beam weapon(s). Supports multiple beams per shot with accuracy spread,
-     * mirroring how shoot() handles multiple projectiles.
-     *
-     * @return List of FieldEffectBeam objects (empty if weapon cannot fire)
-     */
-    public List<FieldEffectBeam> shootBeam() {
-        Weapon weapon = this.getCurrentWeapon();
-        if (!canShoot() || !weapon.getOrdinance().isBeamType()) {
-            if (!isReloading && weapon.getCurrentAmmo() <= 0) {
-                startReload();
-            }
-            return List.of();
-        }
-
-        lastShotTime = System.currentTimeMillis();
-
-        int beamsToFire = Math.min(weapon.getBulletsPerShot(), weapon.getCurrentAmmo());
-        weapon.setCurrentAmmo(weapon.getCurrentAmmo() - beamsToFire);
-
-        Vector2 pos = getPosition();
-        Vector2 baseDirection = aimDirection.copy();
-        baseDirection.normalize();
-        double baseAngle = Math.atan2(baseDirection.y, baseDirection.x);
-
-        FieldEffectType beamType = weapon.getOrdinance() == Ordinance.PLASMA_BEAM
-                ? FieldEffectType.PLASMA
-                : FieldEffectType.LASER;
-        double range = weapon.getRange() * 0.6;
-        double damage = weapon.getDamagePerBullet();
-        double maxAccuracySpread = (1.0 - weapon.getAccuracy()) * 0.17;
-
-        List<FieldEffectBeam> beams = new LinkedList<>();
-        double angle = baseAngle;
-        double radius = getRadius();
-        for (int i = 0; i < beamsToFire; i++) {
-            angle += (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * maxAccuracySpread;
-            Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
-            Vector2 startPos = pos.copy().add(direction.copy().multiply(radius));
-            beams.add(new FieldEffectBeam(startPos, direction, range, damage,
-                    getId(), getTeam(), beamType, weapon.getBulletEffects(), weapon.getCaliber()));
-        }
-        return beams;
-    }
-
     /**
      * Use the utility weapon. Returns data needed to create the utility effect.
      *
@@ -335,7 +230,7 @@ public class Player extends OwnedGameEntity implements HasWeapon {
         );
     }
 
-    private void startReload() {
+    public void startReload() {
         Weapon weapon = this.getCurrentWeapon();
         if (weapon.needsReload()) {
             isReloading = true;
