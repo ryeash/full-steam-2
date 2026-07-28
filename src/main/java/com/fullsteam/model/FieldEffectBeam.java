@@ -2,6 +2,7 @@ package com.fullsteam.model;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.dyn4j.Epsilon;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.geometry.MassType;
@@ -98,60 +99,6 @@ public class FieldEffectBeam extends FieldEffect {
         return BASE_WIDTH * caliber;
     }
 
-    /**
-     * Alias for {@link #affectedEntities} so call sites that previously used
-     * {@code beam.getAffectedPlayers()} continue to work without change.
-     */
-    public Set<Integer> getAffectedPlayers() {
-        return affectedEntities;
-    }
-
-    /**
-     * Throttle for spawning a continuous beam's AOE field effects (fire, poison,
-     * smoke, …). Returns {@code true} — and arms the next window — at most once per
-     * {@link #AREA_EFFECT_INTERVAL_MS}.
-     */
-    public boolean tryEmitAreaEffect(long now) {
-        if (now - lastAreaEffectTime < AREA_EFFECT_INTERVAL_MS) {
-            return false;
-        }
-        lastAreaEffectTime = now;
-        return true;
-    }
-
-    // ── Targeting checks ──────────────────────────────────────────────────────
-
-    /**
-     * Whether this beam can affect a player — same owner/team rules as the former
-     * {@code Beam.canAffectPlayer}.
-     */
-    public boolean canAffectPlayer(com.fullsteam.physics.Player player) {
-        if (!player.isActive() || player.getHealth() <= 0) {
-            return false;
-        }
-        if (player.getId() == ownerId) {
-            return false;
-        }
-        return ownerTeam == 0 || player.getTeam() == 0 || ownerTeam != player.getTeam();
-    }
-
-    /**
-     * Whether this beam can affect a turret — same owner/team rules as the former
-     * {@code Beam.canAffectTurret}.
-     */
-    public boolean canAffectTurret(com.fullsteam.physics.Turret turret) {
-        if (!turret.isActive()) {
-            return false;
-        }
-        if (turret.getOwnerId() == ownerId) {
-            return false;
-        }
-        if (ownerTeam == 0 || turret.getOwnerTeam() == 0) {
-            return true;
-        }
-        return ownerTeam != turret.getOwnerTeam();
-    }
-
     @Override
     public void update(double deltaTime) {
         if (!active) {
@@ -173,23 +120,33 @@ public class FieldEffectBeam extends FieldEffect {
         Vector2 end = endPoint;
         double currentLength = start.distance(end);
         Vector2 dir = end.copy().subtract(start);
-        if (dir.getMagnitudeSquared() > 0.0001) {
+
+        if (dir.getMagnitudeSquared() > Epsilon.E) {
             dir.normalize();
             this.direction.set(dir);
         } else {
-            dir = this.direction.copy().getNormalized();
+            dir = this.direction.copy();
+            if (dir.getMagnitudeSquared() > Epsilon.E) {
+                dir.normalize();
+            } else {
+                dir = new Vector2(1, 0);
+            }
         }
-        Vector2 center = start.copy().add(dir.multiply(currentLength / 2.0));
+
+        Vector2 center = start.copy().add(dir.copy().multiply(currentLength / 2.0));
+        double angle = Math.atan2(dir.y, dir.x);
+
         Body body = getBody();
         body.getTransform().setTranslation(center.x, center.y);
-        body.getTransform().setRotation(Math.atan2(dir.y, dir.x));
+        body.getTransform().setRotation(angle);
 
+        double rectLength = Math.max(0.1, currentLength);
         if (body.getFixtureCount() > 0) {
             body.removeFixture(0);
-            Rectangle rect = new Rectangle(currentLength, BASE_WIDTH * caliber);
-            BodyFixture fixture = body.addFixture(rect);
-            fixture.setSensor(true);
         }
+        Rectangle rect = new Rectangle(rectLength, BASE_WIDTH * caliber);
+        BodyFixture fixture = body.addFixture(rect);
+        fixture.setSensor(true);
     }
 
     private static Body createBeamBody(Vector2 startPoint, Vector2 direction, double range, double caliber) {

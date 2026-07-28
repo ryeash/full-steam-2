@@ -1,7 +1,9 @@
 package com.fullsteam.games;
 
 import com.fullsteam.BaseTestClass;
+import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.UtilityWeapon;
+import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.UtilityActivation;
@@ -152,7 +154,32 @@ class UtilitySystemTest extends BaseTestClass {
 
         // Assert
         assertFalse(gameEntities.getFieldEffects().isEmpty(), "Proximity mine should be created");
-        assertEquals(1, gameEntities.getFieldEffects().size(), "Exactly one mine should be created");
+        assertEquals(2, gameEntities.getFieldEffects().size(), "Proximity mine creates warning zone + mine effect");
+    }
+
+    @Test
+    @DisplayName("Should create DefenseLaser entity and update rotating beams")
+    void testDefenseLaserCreationAndBeamUpdate() {
+        Player player = createTestPlayer(1, 1);
+        UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.DEFENSE_LASER);
+
+        utilitySystem.handleUtilityActivation(activation);
+
+        assertFalse(gameEntities.getAllDefenseLasers().isEmpty(), "DefenseLaser should be created");
+        assertEquals(1, gameEntities.getAllDefenseLasers().size(), "Exactly one DefenseLaser should be created");
+
+        DefenseLaser defenseLaser = gameEntities.getAllDefenseLasers().iterator().next();
+        assertEquals(3, defenseLaser.getBeams().size(), "DefenseLaser should have 3 arm beams");
+
+        // Update DefenseLaser and simulate endpoint update
+        defenseLaser.update(0.1);
+        for (FieldEffectBeam beam : defenseLaser.getBeams()) {
+            java.util.List<Vector2> path = weaponSystem.computeBeamPath(beam);
+            beam.setEndPoint(path.get(1));
+            beam.updateBodyTransform();
+            org.junit.jupiter.api.Assertions.assertTrue(beam.getStartPoint().distance(beam.getEndPoint()) > 10.0,
+                    "Beam should extend outwards from laser center");
+        }
     }
 
     /**

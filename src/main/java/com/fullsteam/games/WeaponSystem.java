@@ -7,8 +7,11 @@ import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.Weapon;
+import com.fullsteam.physics.DefenseLaser;
+import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.GameEntity;
+import com.fullsteam.physics.Headquarters;
 import com.fullsteam.physics.KothZone;
 import com.fullsteam.physics.NetProjectile;
 import com.fullsteam.physics.Obstacle;
@@ -278,7 +281,7 @@ public class WeaponSystem {
         return switch (entity) {
             case FieldEffect fieldEffect -> fieldEffect.getType() == FieldEffectType.SHIELD_BARRIER;
             case Obstacle _ -> true;
-            case Player _, Projectile _, NetProjectile _, Turret _, Oddball _, KothZone _ -> false;
+            case Player _, Projectile _, NetProjectile _, Turret _, Oddball _, KothZone _, DefenseLaser _, Headquarters _, Flag _ -> false;
             case null -> false;
             default -> true; // the world boundaries
         };

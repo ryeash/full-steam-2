@@ -2805,6 +2805,7 @@ class GameEngine {
         // Store effect data and add to containers
         effectContainer.effectData = effectData;
         effectContainer.effectGraphics = effectGraphics;
+        effectContainer._lastShapes = effectData.shapes;
         this.fieldEffects.set(effectData.id, effectContainer);
         this.gameContainer.addChild(effectContainer);
     }
@@ -2821,6 +2822,14 @@ class GameEngine {
         // Update position and rotation (in case effect moves or rotates)
         effectContainer.position.set(effectData.x, effectData.y);
         effectContainer.rotation = effectData.rotation || 0;
+
+        // If shapes data changed (e.g. beam length clipped by raycast or rotating), re-draw graphics
+        if (effectContainer._lastShapes !== effectData.shapes) {
+            effectContainer._lastShapes = effectData.shapes;
+            if (effectContainer.effectGraphics) {
+                this.drawEffectGraphics(effectContainer.effectGraphics, effectData);
+            }
+        }
         
         // Update visual based on effect progress/intensity
         this.updateEffectVisual(effectContainer, effectData);
@@ -3929,6 +3938,12 @@ class GameEngine {
      */
     createEffectGraphics(effectData) {
         const graphics = new PIXI.Graphics();
+        this.drawEffectGraphics(graphics, effectData);
+        return graphics;
+    }
+
+    drawEffectGraphics(graphics, effectData) {
+        graphics.clear();
         const style = this.getFieldEffectStyle(effectData.type);
         
         if (effectData.shapes && effectData.shapes.length > 0) {
@@ -3947,8 +3962,9 @@ class GameEngine {
         }
         
         graphics.fill({ color: style.color, alpha: style.alpha });
-        
-        return graphics;
+        if (effectData.type === 'LASER' || effectData.type === 'PLASMA') {
+            graphics.stroke({ width: 1, color: 0xffffff, alpha: 0.6 });
+        }
     }
 
     /**

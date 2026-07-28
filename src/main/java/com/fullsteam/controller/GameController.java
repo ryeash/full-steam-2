@@ -28,12 +28,14 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.validation.Valid;
 import org.apache.commons.lang3.StringUtils;
+import org.dyn4j.Epsilon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
 import java.net.URL;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
@@ -187,6 +189,7 @@ public class GameController {
         data.put("maxPoints", 100);
 
         data.put("utilityWeapons", Arrays.stream(UtilityWeapon.values())
+                .sorted(Comparator.comparing(String::valueOf))
                 .map(utility -> {
                     Map<String, Object> utilityData = new HashMap<>();
                     utilityData.put("name", utility.name());
@@ -196,8 +199,6 @@ public class GameController {
                     utilityData.put("cooldown", utility.getCooldown());
                     utilityData.put("range", utility.getRange());
                     utilityData.put("damage", utility.getDamage());
-                    utilityData.put("isFieldEffectBased", utility.isFieldEffectBased());
-                    utilityData.put("isEntityBased", utility.isEntityBased());
                     return utilityData;
                 })
                 .collect(Collectors.toList()));
@@ -249,7 +250,7 @@ public class GameController {
             attr.put("baseDisplay", formatStat(a, base, ordinance));
             // Coupled if the final value differs from the un-coupled base — works
             // uniformly for point-space and stat-space couplings.
-            attr.put("coupled", Math.abs(value - base) > 1e-6);
+            attr.put("coupled", Math.abs(value - base) > Epsilon.E);
             attributes.put(a.name(), attr);
         }
 

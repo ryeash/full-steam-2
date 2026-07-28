@@ -123,8 +123,6 @@ public class DefenseLaser extends OwnedGameEntity {
             Vector2 offset = direction.copy().multiply(beamLength);
             beam.getEndPoint().set(center);
             beam.getEndPoint().add(offset);
-            beam.updateBodyTransform();
-            // TODO: WRONG
         }
     }
 }
