@@ -8,7 +8,7 @@ class GameEngine {
         this.projectileInterpolators = new Map();
         this.obstacles = new Map();
         this.fieldEffects = new Map();
-        this.utilityEntities = new Map(); // For turrets, nets, mines, defense lasers, headquarters, power-ups
+        this.utilityEntities = new Map(); // For turrets, nets, defense lasers, headquarters, power-ups
         this.flags = new Map(); // CTF flags
         this.oddballNpcs = new Map(); // Oddball NPC entities
         this.kothZones = new Map(); // King of the Hill zones
@@ -1491,7 +1491,7 @@ class GameEngine {
             }
         }
         
-        // Handle utility entities (turrets, nets, mines, defense lasers, headquarters, power-ups)
+        // Handle utility entities (turrets, nets, defense lasers, headquarters, power-ups)
         this.handleUtilityEntities(data);
         
         this.updateUI(data);
@@ -1523,18 +1523,6 @@ class GameEngine {
                     this.updateUtilityEntity(netData);
                 } else {
                     this.createUtilityEntity(netData);
-                }
-            });
-        }
-        
-        // Handle mines
-        if (data.mines) {
-            data.mines.forEach(mineData => {
-                currentEntityIds.add(mineData.id);
-                if (this.utilityEntities.has(mineData.id)) {
-                    this.updateUtilityEntity(mineData);
-                } else {
-                    this.createUtilityEntity(mineData);
                 }
             });
         }
@@ -2806,10 +2794,11 @@ class GameEngine {
 
         // Utility zones get a distinctive centered symbol so they're instantly
         // recognizable instead of reading as just another tinted cloud.
-        const icon = this.createFieldEffectIcon(effectData.type, effectData.radius || 50);
+        const icon = this.createFieldEffectIcon(effectData.type, effectData.radius || 50, effectData);
         if (icon) {
             effectContainer.addChild(icon);
             effectContainer.iconOverlay = icon;
+            effectContainer.lastArmedState = effectData.isArmed || false;
         }
 
         // Electric fields get arcing lightning bolts redrawn on a throttle by
@@ -3275,8 +3264,6 @@ class GameEngine {
                 return this.createTurretGraphics(graphics, entityData);
             case 'NET':
                 return this.createNetGraphics(graphics, entityData);
-            case 'MINE':
-                return this.createMineGraphics(graphics, entityData);
             case 'DEFENSE_LASER':
                 return this.createDefenseLaserGraphics(graphics, entityData);
             case 'HEADQUARTERS':
@@ -3476,75 +3463,6 @@ class GameEngine {
             }
         }
         graphics.stroke({ width: 0.5, color: 0x654321, alpha: 0.3 });
-        
-        return graphics;
-    }
-    
-    /**
-     * Create proximity mine graphics
-     */
-    createMineGraphics(graphics, entityData) {
-        const isArmed = entityData.isArmed || false;
-        const ownerTeam = entityData.ownerTeam || 0;
-        
-        // Outer trigger zone - very subtle danger area
-        graphics.circle(0, 0, 18).fill({ color: 0xff4444, alpha: 0.06 });
-        
-        // Trigger zone outline - dashed circle (more subtle)
-        const dashCount = 16;
-        for (let i = 0; i < dashCount; i++) {
-            const startAngle = (i / dashCount) * Math.PI * 2;
-            const endAngle = ((i + 0.5) / dashCount) * Math.PI * 2;
-            graphics.arc(0, 0, 18, startAngle, endAngle);
-        }
-        graphics.stroke({ width: 1, color: 0xff6666, alpha: 0.25 });
-        
-        // Mine center body - darker, more blended
-        graphics.circle(0, 0, 8).fill({ color: 0x252f3a, alpha: 0.85 });
-
-        // Center body outline - much more subtle
-        graphics.circle(0, 0, 8).stroke({ width: 1, color: 0x1e2329, alpha: 0.7 });
- 
-        // Core highlight - metallic shine (more prominent without inner ring)
-        graphics.circle(-1, -1, 2).fill({ color: 0x3a4a5a, alpha: 0.4 });
-        
-        // Sensor spikes - 6 directional sensors (more subtle)
-        for (let i = 0; i < 6; i++) {
-            const angle = (i / 6) * Math.PI * 2;
-            const innerRadius = 6;
-            const outerRadius = 12;
-            const spikeWidth = 1.2;
-            
-            // Sensor spike body - darker and more transparent
-            graphics.moveTo(
-                Math.cos(angle) * innerRadius,
-                Math.sin(angle) * innerRadius
-            );
-            graphics.lineTo(
-                Math.cos(angle) * outerRadius,
-                Math.sin(angle) * outerRadius
-            );
-            graphics.stroke({ width: spikeWidth, color: 0x2a3441, alpha: 0.8 });
-            
-            // Sensor tip - small detection node (more subtle)
-            graphics.circle(
-                Math.cos(angle) * outerRadius,
-                Math.sin(angle) * outerRadius,
-                1.2
-            ).fill({ color: 0x3a4a5a, alpha: 0.7 });
-        }
-        
-        // Status indicator
-        if (isArmed) {
-            // Armed - team color pulsing ring around center
-            const pulse = 0.6 + 0.4 * Math.sin(Date.now() * 0.01);
-            const teamColor = this.getTeamColor(ownerTeam);
-            graphics.circle(0, 0, 10).stroke({ width: 2, color: teamColor, alpha: pulse });
-            
-            // Armed indicator - small pulsing center light
-            const centerPulse = 0.3 + 0.7 * Math.sin(Date.now() * 0.015);
-            graphics.circle(0, 0, 1.5).fill({ color: teamColor, alpha: centerPulse });
-        }
         
         return graphics;
     }
@@ -3755,8 +3673,6 @@ class GameEngine {
                 return 12; // Above players, same as turret
             case 'NET':
                 return 9;  // Same as projectiles
-            case 'MINE':
-                return 7;  // Above obstacles, below players
             case 'HEADQUARTERS':
                 return 5;  // Same as obstacles (HQ is a structure)
             default:
@@ -3773,6 +3689,7 @@ class GameEngine {
             // Ground/support effects - render beneath players
             case 'HEAL_ZONE':
             case 'SPEED_BOOST':
+            case 'PROXIMITY_MINE':
                 return 6;  // Above obstacles, below players
             // Crowd control effects - render above players
             case 'SLOW_FIELD':
@@ -3821,9 +3738,6 @@ class GameEngine {
         
         // Type-specific updates
         switch (entityData.type) {
-            case 'MINE':
-                this.updateMineVisual(container, entityData);
-                break;
             case 'TURRET':
                 this.updateTurretVisual(container, entityData);
                 break;
@@ -3836,22 +3750,6 @@ class GameEngine {
             case 'HEADQUARTERS':
                 this.updateHeadquartersVisual(container, entityData);
                 break;
-        }
-    }
-    
-    /**
-     * Update mine visual effects
-     */
-    updateMineVisual(container, entityData) {
-        // Recreate graphics if arming status changed
-        if (container.lastArmedState !== entityData.isArmed) {
-            container.removeChild(container.entityGraphics);
-            container.entityGraphics.destroy({ context: true });
-            
-            const newGraphics = this.createMineGraphics(new PIXI.Graphics(), entityData);
-            container.addChild(newGraphics);
-            container.entityGraphics = newGraphics;
-            container.lastArmedState = entityData.isArmed;
         }
     }
     
@@ -4106,6 +4004,7 @@ class GameEngine {
             case 'SMOKE':          return { color: 0x888888, alpha: 0.6 };
             case 'WARNING_ZONE':   return { color: 0xff4444, alpha: 0.5 };
             case 'EARTHQUAKE':     return { color: 0xaa7744, alpha: 0.6 };
+            case 'PROXIMITY_MINE': return { color: 0xff4444, alpha: 0.12 };
             case 'LASER':          return { color: 0xff3333, alpha: 0.8 };
             case 'PLASMA':         return { color: 0x33ffff, alpha: 0.8 };
             default:               return { color: 0xffffff, alpha: 0.6 };
@@ -4119,10 +4018,13 @@ class GameEngine {
      * Symbols are vertically symmetric so the Y-flipped gameContainer renders
      * them upright without extra handling.
      */
-    createFieldEffectIcon(type, radius) {
+    createFieldEffectIcon(type, radius, effectData) {
         const g = new PIXI.Graphics();
 
         switch (type) {
+            case 'PROXIMITY_MINE': {
+                return this.createMineOverlay(radius, effectData);
+            }
             case 'HEAL_ZONE': {
                 // Medical badge: white cross on a red rounded square.
                 const s = Math.min(radius * 1.1, 44); // badge edge length
@@ -4185,6 +4087,59 @@ class GameEngine {
             default:
                 return null;
         }
+    }
+
+    /**
+     * Create graphic overlay for proximity mines.
+     */
+    createMineOverlay(radius, effectData) {
+        const graphics = new PIXI.Graphics();
+        const isArmed = (effectData && effectData.isArmed) || false;
+        const ownerTeam = (effectData && effectData.ownerTeam) || 0;
+
+        // Mine center body - dark metallic disk
+        graphics.circle(0, 0, 8).fill({ color: 0x252f3a, alpha: 0.85 });
+        graphics.circle(0, 0, 8).stroke({ width: 1, color: 0x1e2329, alpha: 0.7 });
+
+        // Core highlight
+        graphics.circle(-1, -1, 2).fill({ color: 0x3a4a5a, alpha: 0.4 });
+
+        // Sensor spikes - 6 directional sensors
+        for (let i = 0; i < 6; i++) {
+            const angle = (i / 6) * Math.PI * 2;
+            const innerRadius = 6;
+            const outerRadius = 12;
+
+            graphics.moveTo(
+                Math.cos(angle) * innerRadius,
+                Math.sin(angle) * innerRadius
+            );
+            graphics.lineTo(
+                Math.cos(angle) * outerRadius,
+                Math.sin(angle) * outerRadius
+            );
+            graphics.stroke({ width: 1.2, color: 0x2a3441, alpha: 0.8 });
+
+            graphics.circle(
+                Math.cos(angle) * outerRadius,
+                Math.sin(angle) * outerRadius,
+                1.2
+            ).fill({ color: 0x3a4a5a, alpha: 0.7 });
+        }
+
+        // Status indicator
+        const teamColor = this.getTeamColor(ownerTeam);
+        if (isArmed) {
+            const pulse = 0.6 + 0.4 * Math.sin(Date.now() * 0.01);
+            graphics.circle(0, 0, 10).stroke({ width: 2, color: teamColor, alpha: pulse });
+            const centerPulse = 0.3 + 0.7 * Math.sin(Date.now() * 0.015);
+            graphics.circle(0, 0, 1.5).fill({ color: teamColor, alpha: centerPulse });
+        } else {
+            graphics.circle(0, 0, 10).stroke({ width: 1.5, color: 0xffaa00, alpha: 0.5 });
+            graphics.circle(0, 0, 1.5).fill({ color: 0xffaa00, alpha: 0.8 });
+        }
+
+        return graphics;
     }
 
 
@@ -4264,6 +4219,9 @@ class GameEngine {
                 break;
             case 'EARTHQUAKE':
                 this.animateEarthquake(container);
+                break;
+            case 'PROXIMITY_MINE':
+                this.animateMine(container);
                 break;
         }
     }
@@ -4544,6 +4502,33 @@ class GameEngine {
     }
     
     /**
+     * Animate proximity mine overlay
+     */
+    animateMine(container) {
+        if (!container.iconOverlay || !container.effectData) return;
+        const effectData = container.effectData;
+        const isArmed = (effectData && effectData.isArmed) || false;
+
+        // Recreate overlay if arming status changed
+        if (container.lastArmedState !== isArmed) {
+            container.lastArmedState = isArmed;
+            container.removeChild(container.iconOverlay);
+            container.iconOverlay.destroy({ context: true });
+            const newIcon = this.createMineOverlay(effectData.radius || 18, effectData);
+            container.addChild(newIcon);
+            container.iconOverlay = newIcon;
+        }
+
+        // Pulse scale/alpha for armed feedback
+        if (isArmed) {
+            const pulse = 0.85 + 0.15 * Math.sin(Date.now() * 0.008);
+            container.iconOverlay.alpha = pulse;
+        } else {
+            container.iconOverlay.alpha = 1.0;
+        }
+    }
+
+    /**
      * Update effect visual based on current state
      */
     updateEffectVisual(container, effectData) {
@@ -4552,7 +4537,7 @@ class GameEngine {
         
         // All effects now use server progress since server handles proper timing
         // The animation methods will override alpha as needed for visual polish
-        if (effectData.type === 'EXPLOSION' || effectData.type === 'FRAGMENTATION') {
+        if (effectData.type === 'EXPLOSION' || effectData.type === 'FRAGMENTATION' || effectData.type === 'PROXIMITY_MINE') {
             // Let animation handle these for visual polish, but server controls lifetime
         } else {
             // Duration effects use server progress

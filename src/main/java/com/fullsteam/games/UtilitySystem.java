@@ -2,7 +2,6 @@ package com.fullsteam.games;
 
 import com.fullsteam.Config;
 import com.fullsteam.model.BulletEffect;
-import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.FieldEffectCircle;
 import com.fullsteam.model.FieldEffectType;
@@ -30,6 +29,7 @@ import java.util.function.BiFunction;
  * This system handles utility activation, placement, and special utility behaviors.
  */
 public class UtilitySystem {
+    public static final long PROXIMITY_MINE_ARMING_TIME = 1;
     private static final Logger log = LoggerFactory.getLogger(UtilitySystem.class);
 
     private final GameEntities gameEntities;
@@ -158,18 +158,28 @@ public class UtilitySystem {
      * Create a proximity mine entity.
      */
     private void createProximityMine(UtilityActivation activation) {
-        FieldEffect mine = new FieldEffectCircle(
+        gameEntities.add(new FieldEffectCircle(
+                activation.playerId(),
+                FieldEffectType.WARNING_ZONE,
+                activation.position(),
+                45.0,
+                45.0,
+                0,
+                PROXIMITY_MINE_ARMING_TIME,
+                0,
+                activation.team()
+        ));
+        gameEntities.add(new FieldEffectCircle(
                 activation.playerId(),
                 FieldEffectType.PROXIMITY_MINE,
                 activation.position(),
                 45.0,
                 45.0,
-                1.0,
+                0,
                 15.0,
-                System.currentTimeMillis() + 1000,
+                System.currentTimeMillis() + PROXIMITY_MINE_ARMING_TIME * 1000,
                 activation.team()
-        );
-        gameEntities.add(mine);
+        ));
     }
 
     /**

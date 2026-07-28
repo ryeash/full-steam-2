@@ -2,7 +2,6 @@ package com.fullsteam.games;
 
 import com.fullsteam.model.AttributeModification;
 import com.fullsteam.model.FieldEffect;
-import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Rules;
 import com.fullsteam.model.Scoring;
@@ -84,7 +83,6 @@ public class GameStateSerializer {
         gameState.put("fieldEffects", createFieldEffectStates());
         gameState.put("turrets", createTurretStates());
         gameState.put("nets", createNetStates());
-        gameState.put("mines", createMineStates()); // TODO: these should merge into standard field effects
         gameState.put("defenseLasers", createDefenseLaserStates());
 
         // Add optional game mode states
@@ -201,8 +199,7 @@ public class GameStateSerializer {
             if (key.equals("players") || key.equals("projectiles")
                     || key.equals("fieldEffects") || key.equals("beams")
                     || key.equals("turrets") || key.equals("nets")
-                    || key.equals("mines") || key.equals("defenseLasers")
-                    || key.equals("powerUps")) {
+                    || key.equals("defenseLasers") || key.equals("powerUps")) {
                 continue;
             }
             state.put(key, entry.getValue());
@@ -215,7 +212,6 @@ public class GameStateSerializer {
         state.put("beams", List.of());
         state.put("turrets", List.of());
         state.put("nets", List.of());
-        state.put("mines", List.of());
         state.put("defenseLasers", List.of());
         state.put("powerUps", List.of());
 
@@ -398,24 +394,22 @@ public class GameStateSerializer {
     private List<Map<String, Object>> createFieldEffectStates() {
         List<Map<String, Object>> fieldEffectStates = new LinkedList<>();
         for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
-            // A delayed effect (e.g. a pending strike explosion) stays hidden until it
-            // arms/fires. Mines have their own serializer + arming visuals, so exempt them.
-            if (!effect.isArmed() && effect.getType() != FieldEffectType.PROXIMITY_MINE) {
-                continue;
+            if (effect.isArmed()) {
+                Vector2 pos = effect.getPosition();
+                Map<String, Object> effectState = new HashMap<>();
+                effectState.put("id", effect.getId());
+                effectState.put("type", effect.getType().name());
+                effectState.put("ownerTeam", effect.getOwnerTeam());
+                effectState.put("x", pos.x);
+                effectState.put("y", pos.y);
+                effectState.put("rotation", effect.getBody().getTransform().getRotation().toRadians());
+                effectState.put("radius", effect.getRadius());
+                effectState.put("progress", effect.getProgress());
+                effectState.put("active", effect.isActive());
+                effectState.put("isArmed", effect.isArmed());
+                effectState.put("shapes", verticesShorthand(effect.getBody()));
+                fieldEffectStates.add(effectState);
             }
-            Vector2 pos = effect.getPosition();
-            Map<String, Object> effectState = new HashMap<>();
-            effectState.put("id", effect.getId());
-            effectState.put("type", effect.getType().name());
-            effectState.put("ownerTeam", effect.getOwnerTeam());
-            effectState.put("x", pos.x);
-            effectState.put("y", pos.y);
-            effectState.put("rotation", effect.getBody().getTransform().getRotation().toRadians());
-            effectState.put("radius", effect.getRadius());
-            effectState.put("progress", effect.getProgress());
-            effectState.put("active", effect.isActive());
-            effectState.put("shapes", verticesShorthand(effect.getBody()));
-            fieldEffectStates.add(effectState);
         }
         return fieldEffectStates;
     }
@@ -452,27 +446,6 @@ public class GameStateSerializer {
             netStates.add(netState);
         }
         return netStates;
-    }
-
-    private List<Map<String, Object>> createMineStates() {
-        List<Map<String, Object>> mineStates = new ArrayList<>();
-        for (FieldEffect fieldEffect : gameEntities.getAllFieldEffects()) {
-            if (fieldEffect.getType() != FieldEffectType.PROXIMITY_MINE) {
-                continue;
-            }
-            Vector2 pos = fieldEffect.getPosition();
-            Map<String, Object> mineState = new HashMap<>();
-            mineState.put("id", fieldEffect.getId());
-            mineState.put("type", "MINE");
-            mineState.put("x", pos.x);
-            mineState.put("y", pos.y);
-            mineState.put("active", fieldEffect.isActive());
-            mineState.put("ownerTeam", fieldEffect.getOwnerTeam());
-            mineState.put("isArmed", fieldEffect.isArmed());
-            mineState.put("shapes", verticesShorthand(fieldEffect.getBody()));
-            mineStates.add(mineState);
-        }
-        return mineStates;
     }
 
     private List<Map<String, Object>> createDefenseLaserStates() {
@@ -513,7 +486,6 @@ public class GameStateSerializer {
                     && !key.equals("players") && !key.equals("projectiles")
                     && !key.equals("fieldEffects") && !key.equals("beams")
                     && !key.equals("turrets") && !key.equals("nets")
-                    && !key.equals("mines")
                     && !key.equals("defenseLasers") && !key.equals("powerUps")) {
                 state.put(key, entry.getValue());
             }
@@ -586,7 +558,9 @@ public class GameStateSerializer {
     private List<Map<String, Object>> createOddballNpcStates() {
         List<Map<String, Object>> states = new ArrayList<>();
         for (Oddball npc : gameEntities.getAllOddballNpcs()) {
-            if (!npc.isActive()) continue;
+            if (!npc.isActive()) {
+                continue;
+            }
             org.dyn4j.geometry.Vector2 pos = npc.getPosition();
             Map<String, Object> state = new HashMap<>();
             state.put("id", npc.getId());
@@ -614,4 +588,3 @@ public class GameStateSerializer {
         return flagStates;
     }
 }
-
