@@ -414,7 +414,6 @@ public class GameStateSerializer {
             effectState.put("radius", effect.getRadius());
             effectState.put("progress", effect.getProgress());
             effectState.put("active", effect.isActive());
-            // TODO: change frontend to render shapes
             effectState.put("shapes", verticesShorthand(effect.getBody()));
             fieldEffectStates.add(effectState);
         }
@@ -470,6 +469,7 @@ public class GameStateSerializer {
             mineState.put("active", fieldEffect.isActive());
             mineState.put("ownerTeam", fieldEffect.getOwnerTeam());
             mineState.put("isArmed", fieldEffect.isArmed());
+            mineState.put("shapes", verticesShorthand(fieldEffect.getBody()));
             mineStates.add(mineState);
         }
         return mineStates;

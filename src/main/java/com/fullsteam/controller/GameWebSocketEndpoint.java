@@ -21,6 +21,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.fullsteam.controller.PlayerConnectionService.SESSION_KEY;
 
@@ -45,8 +46,11 @@ public class GameWebSocketEndpoint {
         // An unset property binds the empty string as ["" ] (a one-element list),
         // not an empty list — strip blank entries so a blank config means
         // "no allowlist / allow any origin".
-        this.allowedOrigins = allowedOrigins == null ? List.of()
-                : allowedOrigins.stream().map(String::trim).filter(s -> !s.isEmpty()).toList();
+        this.allowedOrigins = Optional.ofNullable(allowedOrigins)
+                .orElse(List.of())
+                .stream().map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
     }
 
     @OnOpen
@@ -73,13 +77,11 @@ public class GameWebSocketEndpoint {
 
         ConnectResult result = connectionService.connectPlayer(session, gameId, asSpectator);
         if (result instanceof ConnectResult.Rejected(GameManager.JoinRejectReason reason)) {
-            log.warn("Failed to connect {} to game {} (reason: {}), closing session",
-                    asSpectator ? "spectator" : "player", gameId, reason);
+            log.warn("Failed to connect {} to game {} (reason: {}), closing session", asSpectator ? "spectator" : "player", gameId, reason);
             sendJoinRejected(session, reason.name());
             session.close();
         } else {
-            log.debug("{} successfully connected to game {}",
-                    asSpectator ? "Spectator" : "Player", gameId);
+            log.debug("{} successfully connected to game {}", asSpectator ? "Spectator" : "Player", gameId);
         }
     }
 
@@ -117,20 +119,16 @@ public class GameWebSocketEndpoint {
     @OnMessage(maxPayloadLength = 8192)
     public void onMessage(byte[] message, WebSocketSession session) {
         PlayerSession playerSession = session.get(SESSION_KEY, PlayerSession.class).orElse(null);
-
         if (playerSession == null) {
             return; // No player session found
         }
-
         GameManager game = playerSession.getGame();
         int playerId = playerSession.getPlayerId();
-
         if (game == null) {
             log.warn("Received message from session without game context. Closing.");
             session.close();
             return;
         }
-
         try {
             JsonNode rootNode = objectMapper.readTree(message);
             String type = rootNode.path("type").asString("playerInput");

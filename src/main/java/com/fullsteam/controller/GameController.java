@@ -16,6 +16,7 @@ import io.micronaut.context.annotation.Context;
 import io.micronaut.core.io.ResourceResolver;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
+import io.micronaut.http.HttpStatus;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.Body;
 import io.micronaut.http.annotation.Controller;
@@ -77,19 +78,15 @@ public class GameController {
     @Post("/api/games")
     public Map<String, String> createGame(@Valid @Body GameConfig gameConfig) {
         try {
-            GameManager game;
-            if (gameConfig != null) {
-                game = gameLobby.createGameWithConfig(gameConfig);
-            } else {
-                game = gameLobby.createGame();
-            }
+            GameManager game = gameConfig != null
+                    ? gameLobby.createGameWithConfig(gameConfig)
+                    : gameLobby.createGame();
             return Map.of(
                     "gameId", game.getGameId(),
                     "status", "created"
             );
         } catch (IllegalStateException e) {
-            throw new HttpStatusException(io.micronaut.http.HttpStatus.SERVICE_UNAVAILABLE,
-                    "Failed to create game: " + e.getMessage());
+            throw new HttpStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Failed to create game: " + e.getMessage());
         }
     }
 

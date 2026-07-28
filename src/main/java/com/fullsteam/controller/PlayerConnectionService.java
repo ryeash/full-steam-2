@@ -79,26 +79,22 @@ public class PlayerConnectionService {
     }
 
     public void disconnectPlayer(WebSocketSession session) {
-        PlayerSession playerSession = session.get(SESSION_KEY, PlayerSession.class).orElse(null);
-        if (playerSession != null) {
+        session.get(SESSION_KEY, PlayerSession.class).ifPresent(playerSession -> {
             GameManager game = playerSession.getGame();
             if (game != null) {
                 game.removePlayer(playerSession.getPlayerId());
-
                 // Remove empty games
                 if (game.getPlayerCount() == 0) {
                     gameLobby.removeGame(game.getGameId());
                 }
             }
-
             // Only decrement player count for actual players, not spectators
             if (!playerSession.isSpectator()) {
                 gameLobby.decrementPlayerCount();
             }
-
             log.debug("{} {} disconnected",
                     playerSession.isSpectator() ? "Spectator" : "Player",
                     playerSession.getPlayerId());
-        }
+        });
     }
 }
