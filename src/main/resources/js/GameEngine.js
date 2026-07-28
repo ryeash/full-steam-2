@@ -1923,10 +1923,6 @@ class GameEngine {
         // Create health bar above player
         const healthBarContainer = this.createPlayerHealthBar(playerData);
         sprite.healthBar = healthBarContainer;
-        
-        // Create reload indicator (initially hidden)
-        const reloadIndicator = this.createReloadIndicator(playerData);
-        sprite.reloadIndicator = reloadIndicator;
     
         // Create death marker (initially hidden)
         if (this.deathTexture) {
@@ -2002,12 +1998,8 @@ class GameEngine {
             sprite.healthBar.visible = playerData.active && playerData.health > 0;
         }
         
-        // Update reload indicator
-        if (sprite.reloadIndicator) {
-            this.updateReloadIndicator(sprite.reloadIndicator, playerData);
-        }
         if (sprite.healthBar) {
-            this.updateUtilityCooldownBar(sprite.healthBar, playerData);
+            this.updatePlayerSubBars(sprite.healthBar, playerData);
         }
 
         sprite.playerData = playerData;
@@ -2039,17 +2031,23 @@ class GameEngine {
             sprite.nameLabel = null;
         }
         
-        // Remove and destroy health bar
+        // Remove and destroy health bar and sub-bars
         if (sprite.healthBar) {
             if (sprite.healthBar.parent) {
                 sprite.healthBar.parent.removeChild(sprite.healthBar);
             }
-            // Clean up health bar components
+            // Clean up health bar and sub-bar components
             if (sprite.healthBar.healthBg) {
                 sprite.healthBar.healthBg.destroy({ context: true });
             }
             if (sprite.healthBar.healthFill) {
                 sprite.healthBar.healthFill.destroy({ context: true });
+            }
+            if (sprite.healthBar.reloadBg) {
+                sprite.healthBar.reloadBg.destroy({ context: true });
+            }
+            if (sprite.healthBar.reloadFill) {
+                sprite.healthBar.reloadFill.destroy({ context: true });
             }
             if (sprite.healthBar.cooldownBg) {
                 sprite.healthBar.cooldownBg.destroy({ context: true });
@@ -2059,22 +2057,6 @@ class GameEngine {
             }
             sprite.healthBar.destroy({ children: true, context: true });
             sprite.healthBar = null;
-        }
-        
-        // Remove and destroy reload indicator
-        if (sprite.reloadIndicator) {
-            if (sprite.reloadIndicator.parent) {
-                sprite.reloadIndicator.parent.removeChild(sprite.reloadIndicator);
-            }
-            // Clean up reload indicator components
-            if (sprite.reloadIndicator.background) {
-                sprite.reloadIndicator.background.destroy({ context: true });
-            }
-            if (sprite.reloadIndicator.reloadText) {
-                sprite.reloadIndicator.reloadText.destroy(); // free Text's GPU texture
-            }
-            sprite.reloadIndicator.destroy({ children: true, context: true });
-            sprite.reloadIndicator = null;
         }
         // Remove and destroy death marker
         if (sprite.deathMarker) {
@@ -2204,8 +2186,8 @@ class GameEngine {
             showWhenFull: true,
             dynamicColor: true
         });
-        // Stack the utility cooldown bar directly under the health bar.
-        this._addUtilityCooldownBar(container);
+        // Stack sub-bars (reload percentage bar & utility cooldown bar) directly under the health bar.
+        this._addPlayerSubBars(container);
         return container;
     }
     
@@ -2226,113 +2208,120 @@ class GameEngine {
     }
     
     /**
-     * Create reload indicator for a player.
-     */
-    /**
-     * Slim utility-cooldown bar stacked directly under the health bar (same width).
-     * Added to the health-bar container so it tracks position with it; only shown
-     * for the local player while the utility is recharging, filling left→right.
+     * Slim sub-bars (reloading percentage bar and utility cooldown bar) stacked
+     * directly under the health bar (same width).
+     * Added to the health-bar container so they track position with it.
      * nameContainer is Y-flipped, so "below" the health bar means negative local y.
      */
-    _addUtilityCooldownBar(healthBarContainer) {
+    _addPlayerSubBars(healthBarContainer) {
         const w = healthBarContainer.config.width;
         const r = healthBarContainer.config.cornerRadius;
-        const cdHeight = 3;
-        const gap = 2;
-        const topY = -(gap + cdHeight); // just below the health bar (flipped axis)
+        const barHeight = 3;
 
+        // Reload bar graphics
+        const reloadBg = new PIXI.Graphics();
+        const reloadFill = new PIXI.Graphics();
+        healthBarContainer.addChild(reloadBg);
+        healthBarContainer.addChild(reloadFill);
+
+        // Utility cooldown bar graphics
         const cooldownBg = new PIXI.Graphics();
-        cooldownBg.roundRect(-w / 2, topY, w, cdHeight, r).fill(0x333333);
-        healthBarContainer.addChild(cooldownBg);
-
         const cooldownFill = new PIXI.Graphics();
+        healthBarContainer.addChild(cooldownBg);
         healthBarContainer.addChild(cooldownFill);
 
+        healthBarContainer.subBarGeom = { w, barHeight, r };
+        healthBarContainer.reloadBg = reloadBg;
+        healthBarContainer.reloadFill = reloadFill;
         healthBarContainer.cooldownBg = cooldownBg;
         healthBarContainer.cooldownFill = cooldownFill;
-        healthBarContainer.cooldownGeom = { w, cdHeight, topY, r };
     }
 
-    /** Refresh the utility cooldown bar's fill/visibility from player state. */
-    updateUtilityCooldownBar(healthBarContainer, playerData) {
-        if (!healthBarContainer || !healthBarContainer.cooldownFill) return;
-
-        const pct = playerData.utilityCooldownPercent ?? 1;
-        // Local player only; hide when ready or inactive.
-        const show = playerData.id === this.myPlayerId && playerData.active && pct < 1;
-        healthBarContainer.cooldownBg.visible = show;
-        healthBarContainer.cooldownFill.visible = show;
-        if (!show) return;
-
-        const fill = healthBarContainer.cooldownFill;
-        if (fill._lastPct === pct) return; // skip redraw when unchanged
-        fill._lastPct = pct;
-        const g = healthBarContainer.cooldownGeom;
-        fill.clear();
-        fill.roundRect(-g.w / 2, g.topY, g.w * pct, g.cdHeight, g.r).fill(0xffcc33);
-    }
-
-    createReloadIndicator(playerData) {
-        const reloadContainer = new PIXI.Container();
-
-        // Create background circle for the "R"
-        const background = new PIXI.Graphics();
-        background.circle(0, 0, 12).fill({ color: 0x000000, alpha: 0.7 }); // Semi-transparent black background
-        background.circle(0, 0, 12).stroke({ width: 2, color: 0xff4444 }); // Red border
-        reloadContainer.addChild(background);
-        
-        // Create the "R" text
-        const reloadText = new PIXI.Text('R', {
-            fontSize: 14,
-            fill: 0xff4444, // Red color
-            fontWeight: 'bold',
-            fontFamily: 'Arial'
-        });
-        reloadText.anchor.set(0.5);
-        reloadText.scale.y = -1; // Flip Y-axis back so text is readable
-        reloadText.position.set(0, 0);
-        reloadContainer.addChild(reloadText);
-        
-        // Position above player (will be updated in updatePlayer)
-        reloadContainer.position.set(playerData.x, playerData.y - 50); // Above health bar
-        
-        // Initially hidden
-        reloadContainer.visible = false;
-        
-        // Store references for updates
-        reloadContainer.background = background;
-        reloadContainer.reloadText = reloadText;
-        
-        // Add to name container so it doesn't rotate with player
-        this.nameContainer.addChild(reloadContainer);
-        
-        return reloadContainer;
-    }
-    
     /**
-     * Update reload indicator appearance and position.
+     * Refresh the reload percentage bar and utility cooldown bar fills and visibility
+     * from player state, stacking them dynamically if both are active.
      */
-    updateReloadIndicator(reloadContainer, playerData) {
-        if (!reloadContainer) return;
-        
-        // Update position above player using current sprite position (may be interpolated)
-        const sprite = this.players.get(playerData.id);
-        if (sprite) {
-            reloadContainer.position.set(sprite.x, sprite.y - 50); // Above health bar
-        }
-        
-        // Show/hide based on reloading status and if player is active
+    updatePlayerSubBars(healthBarContainer, playerData) {
+        if (!healthBarContainer || !healthBarContainer.reloadFill) return;
+
+        const isLocalPlayer = playerData.id === this.myPlayerId;
+        const isActive = playerData.active && playerData.health > 0;
+
+        // Reload bar state (visible for any active player when reloading)
         const isReloading = playerData.reloading || false;
-        const isActive = playerData.active || false;
-        reloadContainer.visible = isActive && isReloading;
-        
-        // Optional: Add pulsing animation when reloading
-        if (isReloading && reloadContainer.reloadText) {
-            const time = Date.now() * 0.005; // Slow pulsing
-            const pulse = 0.8 + Math.sin(time) * 0.2; // Pulse between 0.6 and 1.0
-            reloadContainer.reloadText.alpha = pulse;
-        } else if (reloadContainer.reloadText) {
-            reloadContainer.reloadText.alpha = 1.0; // Full opacity when not reloading
+        const reloadPct = playerData.reloadPercent ?? (isReloading ? 0 : 1);
+        const showReload = isActive && isReloading && reloadPct < 1;
+
+        // Utility cooldown bar state (visible for local active player when utility is cooling down)
+        const utilityPct = playerData.utilityCooldownPercent ?? 1;
+        const showUtility = isLocalPlayer && isActive && utilityPct < 1;
+
+        // Determine stacking order:
+        // If both are active, Reload bar is Row 1 (topY = -5), Utility bar is Row 2 (topY = -10).
+        // If only one is active, it takes Row 1 (topY = -5).
+        let reloadRow = 0;
+        let utilityRow = 0;
+
+        if (showReload && showUtility) {
+            reloadRow = 1;
+            utilityRow = 2;
+        } else if (showReload) {
+            reloadRow = 1;
+        } else if (showUtility) {
+            utilityRow = 1;
+        }
+
+        const g = healthBarContainer.subBarGeom;
+        const gap = 2;
+
+        // --- Reload Bar ---
+        const reloadBg = healthBarContainer.reloadBg;
+        const reloadFill = healthBarContainer.reloadFill;
+        reloadBg.visible = showReload;
+        reloadFill.visible = showReload;
+
+        if (showReload) {
+            const topY = -(gap + g.barHeight) * reloadRow; // Row 1 = -5, Row 2 = -10
+            if (reloadBg._lastTopY !== topY) {
+                reloadBg._lastTopY = topY;
+                reloadBg.clear();
+                reloadBg.roundRect(-g.w / 2, topY, g.w, g.barHeight, g.r).fill(0x333333);
+            }
+            if (reloadFill._lastPct !== reloadPct || reloadFill._lastTopY !== topY) {
+                reloadFill._lastPct = reloadPct;
+                reloadFill._lastTopY = topY;
+                reloadFill.clear();
+                reloadFill.roundRect(-g.w / 2, topY, g.w * reloadPct, g.barHeight, g.r).fill(0xff4444);
+            }
+        } else {
+            reloadBg._lastTopY = null;
+            reloadFill._lastPct = null;
+            reloadFill._lastTopY = null;
+        }
+
+        // --- Utility Cooldown Bar ---
+        const cooldownBg = healthBarContainer.cooldownBg;
+        const cooldownFill = healthBarContainer.cooldownFill;
+        cooldownBg.visible = showUtility;
+        cooldownFill.visible = showUtility;
+
+        if (showUtility) {
+            const topY = -(gap + g.barHeight) * utilityRow; // Row 1 = -5, Row 2 = -10
+            if (cooldownBg._lastTopY !== topY) {
+                cooldownBg._lastTopY = topY;
+                cooldownBg.clear();
+                cooldownBg.roundRect(-g.w / 2, topY, g.w, g.barHeight, g.r).fill(0x333333);
+            }
+            if (cooldownFill._lastPct !== utilityPct || cooldownFill._lastTopY !== topY) {
+                cooldownFill._lastPct = utilityPct;
+                cooldownFill._lastTopY = topY;
+                cooldownFill.clear();
+                cooldownFill.roundRect(-g.w / 2, topY, g.w * utilityPct, g.barHeight, g.r).fill(0xffcc33);
+            }
+        } else {
+            cooldownBg._lastTopY = null;
+            cooldownFill._lastPct = null;
+            cooldownFill._lastTopY = null;
         }
     }
     

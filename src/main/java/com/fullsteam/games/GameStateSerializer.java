@@ -281,6 +281,7 @@ public class GameStateSerializer {
         s.put("ammo", player.getCurrentWeapon().getCurrentAmmo());
         s.put("maxAmmo", player.getCurrentWeapon().getMagazineSize());
         s.put("reloading", player.isReloading());
+        s.put("reloadPercent", player.getReloadPercent());
         s.put("utilityCooldownPercent", player.getUtilityCooldownProgress());
         s.put("weaponRange", player.getCurrentWeapon().getRange());
 

@@ -238,6 +238,22 @@ public class Player extends OwnedGameEntity implements HasWeapon {
         }
     }
 
+    /**
+     * Reload progress for player HUD / reload bar: 0.0 when reloading just started,
+     * ramping to 1.0 when reload is complete. Returns 1.0 when not reloading.
+     */
+    public double getReloadPercent() {
+        if (!isReloading || weapon == null) {
+            return 1.0;
+        }
+        double totalTime = weapon.getReloadTime();
+        if (totalTime <= 0) {
+            return 1.0;
+        }
+        double elapsed = totalTime - reloadTimeRemaining;
+        return Math.max(0.0, Math.min(1.0, elapsed / totalTime));
+    }
+
     public void die() {
         active = false;
         scoring.addDeath();
