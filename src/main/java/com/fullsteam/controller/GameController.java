@@ -74,7 +74,7 @@ public class GameController {
 
     @Get("/api/game-config/default")
     public GameConfig getDefaultGameConfig() {
-        return GameConfig.builder().build(); // Returns default values from @Builder.Default
+        return GameConfig.builder().build();
     }
 
     @Post("/api/games")
