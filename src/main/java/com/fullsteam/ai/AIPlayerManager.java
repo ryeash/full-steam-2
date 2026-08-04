@@ -1,12 +1,15 @@
 package com.fullsteam.ai;
 
+import com.fullsteam.Config;
 import com.fullsteam.RandomNames;
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.UtilityWeapon;
+import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
 import lombok.Getter;
+import org.dyn4j.geometry.Vector2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Supplier;
 
 /**
  * Central manager for all AI players in a game.
@@ -24,19 +28,23 @@ import java.util.concurrent.ThreadLocalRandom;
 public class AIPlayerManager {
     private static final Logger log = LoggerFactory.getLogger(AIPlayerManager.class);
 
+    // How far ahead of an obstacle's surface the AI starts steering around it.
+    private static final double OBSTACLE_LOOK_AHEAD = 70.0;
+
     private final Map<Integer, AIPlayer> aiPlayers = new HashMap<>();
     private final Map<Integer, List<AIBehavior>> availableBehaviors = new HashMap<>();
     private final Map<Integer, PlayerInput> generatedInputs = new HashMap<>();
 
-    // Available behavior types
-    private final List<AIBehavior> behaviorTemplates = List.of(
-            new IdleBehavior(),
-            new CombatBehavior(),
-            new FlagBehavior(),
-            new KothBehavior(),
-            new HeadquartersBehavior(),
-            new OddballBehavior(),
-            new PowerUpBehavior()
+    // Factories for the behaviors each AI can choose between. Each AI gets its own
+    // fresh instances so behavior state (targets, timers, etc.) is independent.
+    private static final List<Supplier<AIBehavior>> BEHAVIOR_FACTORIES = List.of(
+            IdleBehavior::new,
+            CombatBehavior::new,
+            FlagBehavior::new,
+            KothBehavior::new,
+            HeadquartersBehavior::new,
+            OddballBehavior::new,
+            VipBehavior::new
     );
 
     private final GameConfig gameConfig;
@@ -50,15 +58,12 @@ public class AIPlayerManager {
      */
     public void addAIPlayer(AIPlayer aiPlayer) {
         aiPlayers.put(aiPlayer.getId(), aiPlayer);
-
-        // Initialize available behaviors for this AI
         List<AIBehavior> behaviors = new ArrayList<>();
-        for (AIBehavior template : behaviorTemplates) {
-            behaviors.add(createBehaviorInstance(template));
+        for (Supplier<AIBehavior> factory : BEHAVIOR_FACTORIES) {
+            behaviors.add(factory.get());
         }
         availableBehaviors.put(aiPlayer.getId(), behaviors);
-
-        log.info("Added AI player {} ({}) with personality type: {}",
+        log.debug("Added AI player {} ({}) with personality type: {}",
                 aiPlayer.getId(), aiPlayer.getPlayerName(), aiPlayer.getPersonality().getPersonalityType());
     }
 
@@ -70,7 +75,7 @@ public class AIPlayerManager {
         availableBehaviors.remove(playerId);
         generatedInputs.remove(playerId);
 
-        log.info("Removed AI player {}", playerId);
+        log.debug("Removed AI player {}", playerId);
     }
 
     /**
@@ -80,6 +85,7 @@ public class AIPlayerManager {
         // Update all AI players
         for (AIPlayer aiPlayer : aiPlayers.values()) {
             if (!aiPlayer.isActive()) {
+                // Dead players are inactive - this is normal
                 continue;
             }
 
@@ -95,11 +101,64 @@ public class AIPlayerManager {
             // Generate input for this AI player
             PlayerInput input = generatePlayerInput(aiPlayer, gameEntities, deltaTime);
             if (input != null) {
+                // If stuck, override movement with an escape direction
+                if (aiPlayer.isStuck()) {
+                    applyUnstickMovement(aiPlayer, input, gameEntities);
+                }
+
+                // Steer around solid map obstacles. Applied here (after behavior and
+                // unstick logic) so every movement path benefits, then smoothed.
+                applyObstacleAvoidance(aiPlayer, input, gameEntities);
+
                 // Apply movement smoothing for continuous motion
                 aiPlayer.smoothMovement(input);
                 generatedInputs.put(aiPlayer.getId(), input);
             }
         }
+    }
+
+    /**
+     * Override movement input to escape when stuck against a wall or obstacle.
+     * Picks a direction roughly opposite to the current (failed) movement,
+     * with some randomization to avoid oscillating between two stuck states.
+     */
+    private void applyUnstickMovement(AIPlayer aiPlayer, PlayerInput input, GameEntities gameEntities) {
+        Vector2 stuckDirection = aiPlayer.getCurrentMovementDirection();
+
+        Vector2 escapeDirection;
+        if (stuckDirection.getMagnitude() > 0.05) {
+            // Move roughly opposite to the stuck direction with a random offset
+            // to avoid just hitting the same wall from a different angle
+            double stuckAngle = Math.atan2(stuckDirection.y, stuckDirection.x);
+            double offsetAngle = stuckAngle + Math.PI + (ThreadLocalRandom.current().nextDouble() - 0.5) * Math.PI * 0.8;
+            escapeDirection = new Vector2(Math.cos(offsetAngle), Math.sin(offsetAngle));
+        } else {
+            // No clear stuck direction, pick random
+            double angle = ThreadLocalRandom.current().nextDouble() * Math.PI * 2;
+            escapeDirection = new Vector2(Math.cos(angle), Math.sin(angle));
+        }
+
+        input.setMoveX(escapeDirection.x);
+        input.setMoveY(escapeDirection.y);
+    }
+
+    /**
+     * Steer the AI's movement around nearby physical obstacles while preserving the
+     * intended movement intensity (speed) that the behavior encoded in the vector length.
+     */
+    private void applyObstacleAvoidance(AIPlayer aiPlayer, PlayerInput input, GameEntities gameEntities) {
+        Vector2 desired = new Vector2(input.getMoveX(), input.getMoveY());
+        double intensity = desired.getMagnitude();
+        if (intensity < 0.01) {
+            return; // not trying to move, nothing to steer around
+        }
+
+        Vector2 steered = ObstacleAvoidance.steer(
+                aiPlayer.getPosition(), desired, gameEntities,
+                OBSTACLE_LOOK_AHEAD, Config.PLAYER_RADIUS);
+
+        input.setMoveX(steered.x * intensity);
+        input.setMoveY(steered.y * intensity);
     }
 
     /**
@@ -119,26 +178,24 @@ public class AIPlayerManager {
     /**
      * Create an AI player with a specific personality type, team, and personality-appropriate weapons.
      */
-    public static AIPlayer createAIPlayerWithPersonality(int id, double x, double y, String personalityType, int team, double maxHealth) {
-        AIPersonality personality = switch (personalityType.toLowerCase()) {
-            case "aggressive" -> AIPersonality.createAggressive();
-            case "defensive" -> AIPersonality.createDefensive();
-            case "sniper" -> AIPersonality.createSniper();
-            case "rusher" -> AIPersonality.createRusher();
+    public static AIPlayer createAIPlayerWithPersonality(int id, double x, double y, AIPersonality.Type personalityType, int team, double maxHealth) {
+        AIPersonality personality = switch (personalityType) {
+            case aggressive -> AIPersonality.createAggressive();
+            case defensive -> AIPersonality.createDefensive();
+            case sniper -> AIPersonality.createSniper();
+            case rusher -> AIPersonality.createRusher();
             default -> AIPersonality.createBalanced();
         };
 
         AIPlayer aiPlayer = new AIPlayer(id, RandomNames.randomName(), x, y, personality, team, maxHealth);
 
         // Assign weapons based on personality
-        com.fullsteam.model.WeaponConfig[] weapons = AIWeaponSelector.selectWeaponLoadoutForPersonality(personality);
+        WeaponConfig weapon = AIWeaponSelector.selectWeaponForPersonality(personality);
         UtilityWeapon utilityWeapon = AIWeaponSelector.selectUtilityWeaponForPersonality(personality);
-        aiPlayer.applyWeaponConfig(weapons[0], utilityWeapon);
-
-        log.info("Assigned weapons to AI player {} ({}): Primary={}, Utility={}",
+        aiPlayer.applyWeaponConfig(weapon, utilityWeapon);
+        log.debug("Assigned weapons to AI player {} ({}): Primary={}, Utility={}",
                 aiPlayer.getId(), aiPlayer.getPersonality().getPersonalityType(),
-                weapons[0].getType(), utilityWeapon.getDisplayName());
-
+                weapon.getType(), utilityWeapon.getDisplayName());
         return aiPlayer;
     }
 
@@ -251,26 +308,5 @@ public class AIPlayerManager {
 
         // Apply reaction speed delays (not implemented in this simple version)
         // Could add input delays based on reaction speed trait
-    }
-
-    private AIBehavior createBehaviorInstance(AIBehavior template) {
-        // Create new instances of behaviors for each AI
-        // This allows each AI to have independent behavior state
-        if (template instanceof IdleBehavior) {
-            return new IdleBehavior();
-        } else if (template instanceof CombatBehavior) {
-            return new CombatBehavior();
-        } else if (template instanceof FlagBehavior) {
-            return new FlagBehavior();
-        } else if (template instanceof KothBehavior) {
-            return new KothBehavior();
-        } else if (template instanceof HeadquartersBehavior) {
-            return new HeadquartersBehavior();
-        } else if (template instanceof OddballBehavior) {
-            return new OddballBehavior();
-        } else if (template instanceof PowerUpBehavior) {
-            return new PowerUpBehavior();
-        }
-        return new IdleBehavior(); // Fallback
     }
 }

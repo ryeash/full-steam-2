@@ -5,33 +5,33 @@ package com.fullsteam.model;
  */
 public enum RespawnMode {
     /**
-     * Respawn immediately after a delay (current default behavior).
-     * Most forgiving mode.
+     * Respawn after a fixed delay (see {@code respawnDelay}). The default,
+     * most-forgiving mode.
      */
-    INSTANT,
-    
+    DELAYED,
+
     /**
      * All dead players respawn together in waves at set intervals.
      * Encourages team coordination and grouped pushes.
      */
     WAVE,
-    
+
     /**
-     * No respawn until the current round ends.
-     * Die once = spectate until next round. Tactical, high-stakes gameplay.
-     */
-    NEXT_ROUND,
-    
-    /**
-     * No respawn at all - one life only.
-     * Last player/team standing wins. Battle royale style.
-     */
-    ELIMINATION,
-    
-    /**
-     * Limited number of lives per player.
+     * Similar to {@link #DELAYED} but limited number of lives per player.
      * Each death counts against your life pool. Once out of lives, eliminated.
+     * Set maxLives = 1 for one-life / battle-royale style play.
      */
-    LIMITED
+    LIMITED,
+
+    /**
+     * Event-driven "last one standing" respawn. Players have unlimited lives but
+     * do not respawn on a timer — the dead are held out until the arena collapses
+     * to a single survivor (FFA) or a single team with anyone still alive (team
+     * mode), at which point everyone respawns together for the next skirmish.
+     * Produces a rapid series of duels-to-the-death with no round timer or rest
+     * period — a quicker battle-royale feel. Pairs with SCORE_LIMIT or TIME_LIMIT
+     * (never ELIMINATION, which would end the game the instant the field collapses).
+     */
+    LAST_STANDING
 }
 

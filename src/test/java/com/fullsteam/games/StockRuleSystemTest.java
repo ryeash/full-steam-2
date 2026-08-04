@@ -1,7 +1,11 @@
 package com.fullsteam.games;
 
 import com.fullsteam.BaseTestClass;
-import com.fullsteam.model.*;
+import com.fullsteam.model.GameState;
+import com.fullsteam.model.RespawnMode;
+import com.fullsteam.model.Rules;
+import com.fullsteam.model.ScoreStyle;
+import com.fullsteam.model.VictoryCondition;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
 import org.dyn4j.dynamics.Body;
@@ -12,22 +16,22 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for the stock/default RuleSystem configuration.
  * Tests the default rules that are used when no custom configuration is provided.
  * <p>
  * Stock Rules (from Rules.java @Builder.Default):
- * - roundDuration = 120.0 (2 minutes)
- * - restDuration = 10.0 (10 seconds)
  * - flagsPerTeam = 0 (no flags)
  * - scoreStyle = ScoreStyle.TOTAL_KILLS
  * - victoryCondition = VictoryCondition.ENDLESS
  * - scoreLimit = 50
  * - timeLimit = 600.0 (10 minutes)
  * - suddenDeath = false
- * - respawnMode = RespawnMode.INSTANT
+ * - respawnMode = RespawnMode.DELAYED
  * - respawnDelay = 5.0
  * - maxLives = -1 (unlimited)
  * - waveRespawnInterval = 30.0
@@ -81,20 +85,6 @@ class StockRuleSystemTest extends BaseTestClass {
     // ============================================================================
 
     @Test
-    @DisplayName("Should use stock round duration (120 seconds)")
-    void testStockRoundDuration() {
-        assertEquals(120.0, stockRules.getRoundDuration(),
-                "Stock round duration should be 120 seconds");
-    }
-
-    @Test
-    @DisplayName("Should use stock rest duration (10 seconds)")
-    void testStockRestDuration() {
-        assertEquals(10.0, stockRules.getRestDuration(),
-                "Stock rest duration should be 10 seconds");
-    }
-
-    @Test
     @DisplayName("Should use stock victory condition (ENDLESS)")
     void testStockVictoryCondition() {
         assertEquals(VictoryCondition.ENDLESS, stockRules.getVictoryCondition(),
@@ -109,10 +99,10 @@ class StockRuleSystemTest extends BaseTestClass {
     }
 
     @Test
-    @DisplayName("Should use stock respawn mode (INSTANT)")
+    @DisplayName("Should use stock respawn mode (DELAYED)")
     void testStockRespawnMode() {
-        assertEquals(RespawnMode.INSTANT, stockRules.getRespawnMode(),
-                "Stock respawn mode should be INSTANT");
+        assertEquals(RespawnMode.DELAYED, stockRules.getRespawnMode(),
+                "Stock respawn mode should be DELAYED");
     }
 
     @Test
@@ -185,9 +175,8 @@ class StockRuleSystemTest extends BaseTestClass {
     // ============================================================================
 
     @Test
-    @DisplayName("Should start with round 1 and playing state using stock rules")
+    @DisplayName("Should start in playing state using stock rules")
     void testStockInitialState() {
-        assertEquals(1, ruleSystem.getCurrentRound(), "Should start with round 1");
         assertEquals(GameState.PLAYING, ruleSystem.getGameState(), "Should start in PLAYING state");
         assertFalse(ruleSystem.isGameOver(), "Game should not be over initially");
     }
@@ -197,15 +186,15 @@ class StockRuleSystemTest extends BaseTestClass {
     void testStockInstantRespawn() {
         // Add a player
         Player player = createTestPlayer(1, 1);
-        gameEntities.addPlayer(player);
+        gameEntities.add(player);
 
         // Kill the player
         player.die();
         assertFalse(player.isActive(), "Player should be dead");
-        
+
         // Set respawn time to 1 second
         player.setRespawnTime(1L);
-        
+
         // Advance time past the respawn time
         ruleSystem.update(2.0);
 
@@ -229,8 +218,8 @@ class StockRuleSystemTest extends BaseTestClass {
     void testStockAllowsRespawn() {
         assertTrue(stockRules.allowsRespawn(),
                 "Stock rules should allow respawn");
-        assertEquals(RespawnMode.INSTANT, stockRules.getRespawnMode(),
-                "Stock respawn mode should be INSTANT");
+        assertEquals(RespawnMode.DELAYED, stockRules.getRespawnMode(),
+                "Stock respawn mode should be DELAYED");
     }
 
     @Test
@@ -238,8 +227,8 @@ class StockRuleSystemTest extends BaseTestClass {
     void testStockNoWaveRespawn() {
         assertFalse(stockRules.usesWaveRespawn(),
                 "Stock rules should not use wave respawn");
-        assertEquals(RespawnMode.INSTANT, stockRules.getRespawnMode(),
-                "Stock respawn mode should be INSTANT, not WAVE");
+        assertEquals(RespawnMode.DELAYED, stockRules.getRespawnMode(),
+                "Stock respawn mode should be DELAYED, not WAVE");
     }
 
     @Test
@@ -269,10 +258,6 @@ class StockRuleSystemTest extends BaseTestClass {
         Rules rules3 = Rules.builder().build();
 
         // All should have identical stock values
-        assertEquals(rules1.getRoundDuration(), rules2.getRoundDuration());
-        assertEquals(rules2.getRoundDuration(), rules3.getRoundDuration());
-        assertEquals(120.0, rules1.getRoundDuration());
-
         assertEquals(rules1.getVictoryCondition(), rules2.getVictoryCondition());
         assertEquals(rules2.getVictoryCondition(), rules3.getVictoryCondition());
         assertEquals(VictoryCondition.ENDLESS, rules1.getVictoryCondition());
@@ -283,7 +268,7 @@ class StockRuleSystemTest extends BaseTestClass {
 
         assertEquals(rules1.getRespawnMode(), rules2.getRespawnMode());
         assertEquals(rules2.getRespawnMode(), rules3.getRespawnMode());
-        assertEquals(RespawnMode.INSTANT, rules1.getRespawnMode());
+        assertEquals(RespawnMode.DELAYED, rules1.getRespawnMode());
     }
 
     /**

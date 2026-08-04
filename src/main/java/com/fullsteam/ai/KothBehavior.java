@@ -55,9 +55,6 @@ public class KothBehavior implements AIBehavior {
      * Evaluate and select the best zone to target based on strategic value.
      */
     private void evaluateTargetZone(AIPlayer aiPlayer, GameEntities gameEntities) {
-        Vector2 myPos = aiPlayer.getPosition();
-        int myTeam = aiPlayer.getTeam();
-
         KothZone bestZone = null;
         double bestScore = -1;
 
@@ -193,7 +190,7 @@ public class KothBehavior implements AIBehavior {
         }
 
         // Apply hazard avoidance
-        direction = HazardAvoidance.calculateSafeMovement(myPos, direction, gameEntities, 100.0);
+        direction = HazardAvoidance.calculateSafeMovement(aiPlayer, myPos, direction, gameEntities, 100.0);
 
         double moveIntensity = 0.8 + (aiPlayer.getPersonality().getMobility() * 0.2);
         input.setMoveX(direction.x * moveIntensity);
@@ -233,10 +230,10 @@ public class KothBehavior implements AIBehavior {
             }
 
             double moveIntensity = 0.6 * aiPlayer.getPersonality().getMobility();
-            
+
             // Apply hazard avoidance
-            strafeDirection = HazardAvoidance.calculateSafeMovement(myPos, strafeDirection, gameEntities, 80.0);
-            
+            strafeDirection = HazardAvoidance.calculateSafeMovement(aiPlayer, myPos, strafeDirection, gameEntities, 80.0);
+
             input.setMoveX(strafeDirection.x * moveIntensity);
             input.setMoveY(strafeDirection.y * moveIntensity);
         }
@@ -249,20 +246,14 @@ public class KothBehavior implements AIBehavior {
         Vector2 myPos = aiPlayer.getPosition();
         Vector2 zonePos = zone.getPosition();
 
-        Player bestTarget = null;
+        AITargetWrapper bestTarget = null;
         double bestScore = -1;
 
-        for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() == aiPlayer.getId() || !player.isActive()) {
-                continue;
-            }
-
-            if (aiPlayer.isTeammate(player)) {
-                continue;
-            }
-
-            double distance = myPos.distance(player.getPosition());
-            double distanceToZone = player.getPosition().distance(zonePos);
+        // Consider enemy players AND enemy turrets, so the AI returns fire on a
+        // turret parked in its zone instead of tanking it while holding position.
+        for (AITargetWrapper target : collectEnemyTargets(aiPlayer, gameEntities)) {
+            double distance = myPos.distance(target.getPosition());
+            double distanceToZone = target.getPosition().distance(zonePos);
 
             // Prioritize enemies in or near zone
             double score = 0;
@@ -278,13 +269,12 @@ public class KothBehavior implements AIBehavior {
             // Closer enemies are easier to hit
             score += Math.max(0, (500 - distance) / 500) * 30;
 
-            // Prioritize low health enemies
-            double healthPercent = player.getHealth() / 100.0;
-            score += (1.0 - healthPercent) * 20;
+            // Prioritize low health enemies (ratio-based so it works at any max health)
+            score += (1.0 - target.healthPercent()) * 20;
 
             if (score > bestScore) {
                 bestScore = score;
-                bestTarget = player;
+                bestTarget = target;
             }
         }
 
@@ -317,20 +307,6 @@ public class KothBehavior implements AIBehavior {
             if (aiPlayer.canUseUtility() && countEnemiesInZone(aiPlayer, zone, gameEntities) >= 2) {
                 input.setAltFire(true);
             }
-        }
-    }
-
-    /**
-     * Smart reload - only reload when safe.
-     */
-    private void smartReload(AIPlayer aiPlayer, PlayerInput input, boolean isSafe) {
-        int currentAmmo = aiPlayer.getCurrentWeapon().getCurrentAmmo();
-        int magazineSize = aiPlayer.getCurrentWeapon().getMagazineSize();
-
-        if (currentAmmo == 0) {
-            input.setReload(true);
-        } else if (isSafe && currentAmmo < magazineSize * 0.3) {
-            input.setReload(true);
         }
     }
 

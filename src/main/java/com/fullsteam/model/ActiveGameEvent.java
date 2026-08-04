@@ -25,12 +25,12 @@ public class ActiveGameEvent {
         this.eventType = eventType;
         this.targetLocations = new ArrayList<>(targetLocations);
         this.warningZoneIds = new ArrayList<>();
-        
+
         long now = System.currentTimeMillis();
         this.warningStartTime = now;
         this.eventStartTime = (long) (now + (warningDuration * 1000));
         this.eventEndTime = (long) (eventStartTime + (eventType.getBaseDuration() * 1000));
-        
+
         this.warningPhase = true;
         this.active = false;
         this.completed = false;
@@ -38,16 +38,16 @@ public class ActiveGameEvent {
 
     public void update() {
         long now = System.currentTimeMillis();
-        
+
         if (completed) {
             return;
         }
-        
+
         if (warningPhase && now >= eventStartTime) {
             warningPhase = false;
             active = true;
         }
-        
+
         if (active && now >= eventEndTime) {
             active = false;
             completed = true;
@@ -60,10 +60,6 @@ public class ActiveGameEvent {
 
     public boolean isActive() {
         return active && !completed;
-    }
-
-    public boolean isCompleted() {
-        return completed;
     }
 
     public double getWarningTimeRemaining() {

@@ -49,10 +49,6 @@ public abstract class GameEntity {
         return body.getLinearVelocity().copy();
     }
 
-    public void setVelocity(double x, double y) {
-        body.setLinearVelocity(x, y);
-    }
-
     public void setVelocity(Vector2 velocity) {
         body.setLinearVelocity(velocity);
     }
@@ -65,23 +61,23 @@ public abstract class GameEntity {
         body.getTransform().setRotation(angle);
     }
 
+    public double getRadius() {
+        return body.getRotationDiscRadius();
+    }
+
     public boolean takeDamage(double damage) {
         boolean wasActive = active;
         health -= damage;
         if (health <= 0) {
             active = false;
         }
+        if (health > maxHealth) {
+            // prevent over-heal for negative damage
+            health = maxHealth;
+        }
         return wasActive && !active; // Return true if entity became inactive
     }
 
-    public void heal(double amount) {
-        health = Math.min(maxHealth, health + amount);
-    }
-
-
-    /**
-     * Check if the beam has expired
-     */
     public boolean isExpired() {
         if (!active) {
             return true;
@@ -110,7 +106,7 @@ public abstract class GameEntity {
             return false;
         }
         GameEntity that = (GameEntity) o;
-        return id == that.id;
+        return this.id == that.id;
     }
 
     @Override

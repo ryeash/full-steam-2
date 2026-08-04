@@ -1,5 +1,7 @@
 package com.fullsteam.model;
 
+import java.util.concurrent.ThreadLocalRandom;
+
 public enum EntityWorldDensity {
     /**
      * Fewer event instances, more breathing room.
@@ -39,7 +41,6 @@ public enum EntityWorldDensity {
      * @return A multiplier to apply to base event count
      */
     public double getMultiplier() {
-        double maxMult = max - min;
-        return min + (Math.random() * maxMult);
+        return ThreadLocalRandom.current().nextDouble(min, max);
     }
 }

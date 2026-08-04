@@ -1,5 +1,6 @@
 package com.fullsteam.ai;
 
+import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.physics.GameEntities;
@@ -38,10 +39,10 @@ public class CombatBehavior implements AIBehavior {
         targetPursuitTime += deltaTime;
 
         // Check for environmental hazards - high priority
-        double areaDanger = HazardAvoidance.getAreaDangerRating(aiPlayer.getPosition(), 150.0, gameEntities);
+        double areaDanger = HazardAvoidance.getAreaDangerRating(aiPlayer, aiPlayer.getPosition(), 150.0, gameEntities);
         if (areaDanger > 0.7) {
             // Very dangerous area - flee to safety immediately
-            Vector2 safePos = HazardAvoidance.findNearestSafePosition(aiPlayer.getPosition(), 200.0, gameEntities);
+            Vector2 safePos = HazardAvoidance.findNearestSafePosition(aiPlayer, aiPlayer.getPosition(), 200.0, gameEntities);
             if (safePos != null) {
                 Vector2 fleeDirection = safePos.copy().subtract(aiPlayer.getPosition());
                 fleeDirection.normalize();
@@ -94,7 +95,7 @@ public class CombatBehavior implements AIBehavior {
         double minRange = Math.min(weaponRange * 0.3, 80); // Don't get too close
 
         // Health-based tactics
-        double healthPercent = aiPlayer.getHealth() / 100.0;
+        double healthPercent = aiPlayer.healthPercent();
         boolean shouldRetreat = isRetreating || healthPercent < 0.3;
 
         if (shouldRetreat && !isRetreating) {
@@ -156,10 +157,10 @@ public class CombatBehavior implements AIBehavior {
         }
 
         moveDirection.normalize();
-        
+
         // Apply hazard avoidance to final movement direction
-        moveDirection = HazardAvoidance.calculateSafeMovement(playerPos, moveDirection, gameEntities, 100.0);
-        
+        moveDirection = HazardAvoidance.calculateSafeMovement(aiPlayer, playerPos, moveDirection, gameEntities, 100.0);
+
         input.setMoveX(moveDirection.x * moveIntensity);
         input.setMoveY(moveDirection.y * moveIntensity);
     }
@@ -174,12 +175,12 @@ public class CombatBehavior implements AIBehavior {
 
         // Check if using beam weapon (instant hit, no prediction needed)
         boolean isBeamWeapon = isBeamWeapon(aiPlayer);
-        
+
         Vector2 aimPos;
         if (isBeamWeapon) {
             // Beam weapons are instant hit - aim directly at target
             aimPos = targetPos.copy();
-            
+
             // Add slight inaccuracy based on personality
             double accuracy = aiPlayer.getPersonality().getAccuracy();
             double spread = (1.0 - accuracy) * 15;
@@ -241,7 +242,7 @@ public class CombatBehavior implements AIBehavior {
             // Don't shoot while reloading
             input.setLeft(false);
         }
-        
+
         // Utility weapon usage during combat
         evaluateUtilityWeaponUsage(aiPlayer, target, input, distance);
     }
@@ -360,7 +361,7 @@ public class CombatBehavior implements AIBehavior {
         // First, try to maintain current target if valid
         if (targetId != -1) {
             AITargetWrapper currentTarget = findTargetById(gameEntities, targetId, targetIsPlayer);
-            if (currentTarget != null && currentTarget.isActive() && !isTeammate(aiPlayer, currentTarget)) {
+            if (currentTarget != null && currentTarget.isActive() && !currentTarget.isTeammateOf(aiPlayer)) {
                 double distance = aiPlayer.getPosition().distance(currentTarget.getPosition());
                 if (distance <= 800) { // Increased persistence range
                     return currentTarget;
@@ -384,18 +385,24 @@ public class CombatBehavior implements AIBehavior {
 
         // Create list of all potential targets (players and turrets)
         List<AITargetWrapper> allTargets = new ArrayList<>();
-        
+
         // Add all enemy players
         for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() != aiPlayer.getId() && player.isActive() && !isTeammate(aiPlayer, AITargetWrapper.fromPlayer(player))) {
-                allTargets.add(AITargetWrapper.fromPlayer(player));
+            if (player.getId() != aiPlayer.getId() && player.isActive()) {
+                AITargetWrapper wrapper = AITargetWrapper.fromPlayer(player);
+                if (!wrapper.isTeammateOf(aiPlayer)) {
+                    allTargets.add(wrapper);
+                }
             }
         }
-        
+
         // Add all enemy turrets
         for (Turret turret : gameEntities.getAllTurrets()) {
-            if (turret.isActive() && !isTeammate(aiPlayer, AITargetWrapper.fromTurret(turret))) {
-                allTargets.add(AITargetWrapper.fromTurret(turret));
+            if (turret.isActive()) {
+                AITargetWrapper wrapper = AITargetWrapper.fromTurret(turret);
+                if (!wrapper.isTeammateOf(aiPlayer)) {
+                    allTargets.add(wrapper);
+                }
             }
         }
 
@@ -431,7 +438,7 @@ public class CombatBehavior implements AIBehavior {
             double weaponEffectiveness = calculateWeaponEffectiveness(aiPlayer, distance);
 
             double totalScore = (distanceScore * 0.3) + (healthScore * 0.15) + injuryBonus +
-                                continuityBonus + (typePriority * 0.2) + (weaponEffectiveness * 0.2);
+                    continuityBonus + (typePriority * 0.2) + (weaponEffectiveness * 0.2);
 
             if (totalScore > bestScore) {
                 bestScore = totalScore;
@@ -457,21 +464,6 @@ public class CombatBehavior implements AIBehavior {
             }
         }
         return null;
-    }
-    
-    private boolean isTeammate(AIPlayer aiPlayer, AITargetWrapper target) {
-        // In FFA mode (team 0), check if it's the AI's own turret
-        if (aiPlayer.getTeam() == 0) {
-            // Don't attack your own turrets in FFA
-            if (target.isTurret() && target.getOwnerId() == aiPlayer.getId()) {
-                return true;
-            }
-            // Everyone else is an enemy in FFA
-            return false;
-        }
-        
-        // In team mode, check if they're on the same team
-        return aiPlayer.getTeam() == target.getTeam();
     }
 
     private double calculateWeaponEffectiveness(AIPlayer aiPlayer, double distance) {
@@ -516,7 +508,7 @@ public class CombatBehavior implements AIBehavior {
 
         return Math.random() < shootChance;
     }
-    
+
     /**
      * Evaluate whether to use utility weapon during combat.
      */
@@ -525,18 +517,18 @@ public class CombatBehavior implements AIBehavior {
         if (!aiPlayer.canUseUtility()) {
             return;
         }
-        
+
         UtilityWeapon utility = aiPlayer.getUtilityWeapon();
         double utilityRange = utility.getRange();
-        
+
         // Check if target is within utility range
         if (distance > utilityRange) {
             return;
         }
-        
+
         boolean shouldUseUtility = false;
         double usageChance = 0.0;
-        
+
         switch (utility.getCategory()) {
             case CROWD_CONTROL:
                 // Use crowd control when enemy is close or when retreating
@@ -545,22 +537,22 @@ public class CombatBehavior implements AIBehavior {
                     if (isRetreating) usageChance += 0.3;
                 }
                 break;
-                
+
             case DEFENSIVE:
                 // Use defensive utilities when health is low or under pressure
-                if (aiPlayer.getHealth() < 60 || isRetreating) {
+                if (aiPlayer.healthPercent() < 0.6 || isRetreating) {
                     usageChance = 0.5;
-                    if (aiPlayer.getHealth() < 30) usageChance += 0.3;
+                    if (aiPlayer.healthPercent() < 0.3) usageChance += 0.3;
                 }
                 break;
-                
+
             case SUPPORT:
                 // Use support utilities when health is low or in good position
-                if (aiPlayer.getHealth() < 70 && distance > 200) {
+                if (aiPlayer.healthPercent() < 0.7 && distance > 200) {
                     usageChance = 0.3;
                 }
                 break;
-                
+
             case TACTICAL:
                 // Use tactical utilities for positioning advantages
                 if (distance > 100 && distance < 300) {
@@ -572,25 +564,25 @@ public class CombatBehavior implements AIBehavior {
                 }
                 break;
         }
-        
+
         // Personality modifiers
         double personalityMultiplier = 1.0;
-        
+
         // Aggressive personalities use utilities more often
         if (aiPlayer.getPersonality().getAggressiveness() > 0.7) {
             personalityMultiplier += 0.3;
         }
-        
+
         // Patient personalities are more strategic with utility usage
         if (aiPlayer.getPersonality().getPatience() > 0.6) {
             personalityMultiplier += 0.2;
         }
-        
+
         usageChance *= personalityMultiplier;
-        
+
         // Random factor to make behavior less predictable
         shouldUseUtility = Math.random() < usageChance;
-        
+
         if (shouldUseUtility) {
             input.setAltFire(true);
         }
@@ -600,9 +592,6 @@ public class CombatBehavior implements AIBehavior {
      * Check if the AI is using a beam weapon (instant hit).
      */
     private boolean isBeamWeapon(AIPlayer aiPlayer) {
-        String weaponType = aiPlayer.getCurrentWeapon().getName();
-        return weaponType.contains("Laser") || weaponType.contains("Plasma Beam") 
-               || weaponType.contains("Railgun") || weaponType.contains("Rail Cannon")
-               || weaponType.contains("Medic Beam");
+        return aiPlayer.getWeapon().getOrdinance() == Ordinance.LASER || aiPlayer.getWeapon().getOrdinance() == Ordinance.PLASMA_BEAM;
     }
 }

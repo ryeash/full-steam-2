@@ -4,378 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Full Steam - Battle Arena</title>
-    <meta name="description" content="Full Steam multiplayer battle arena featuring strategic locations and customizable weapons">
+    <meta name="description"
+          content="Full Steam multiplayer battle arena featuring strategic locations and customizable weapons">
     <meta name="keywords" content="multiplayer, battle arena, browser game, websockets, strategic combat">
     <meta property="og:title" content="Full Steam - Battle Arena">
     <meta property="og:description" content="Real-time multiplayer battle arena in your browser">
     <meta property="og:type" content="website">
     <meta name="game:category" content="Multiplayer Battle Arena">
     <link rel="stylesheet" type="text/css" href="unified.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            background: #1a1a1a;
-            font-family: 'Arial', sans-serif;
-        }
-        
-        #game-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-        }
-        
-        #loading-screen {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-        
-        .loading-content {
-            text-align: center;
-            color: white;
-        }
-        
-        .loading-bar {
-            width: 300px;
-            height: 20px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 10px;
-            overflow: hidden;
-            margin: 20px 0;
-        }
-        
-        .loading-progress {
-            height: 100%;
-            background: linear-gradient(90deg, #3498db, #2ecc71);
-            width: 0%;
-            transition: width 0.3s ease;
-        }
-        
-        #game-ui {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 100;
-        }
-        
-        /* Old HUD styles removed - now using PIXI-based consolidated HUD */
-        
-        /* Additional old HUD styles removed */
-        
-        #scoreboard {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.9);
-            border-radius: 10px;
-            padding: 20px;
-            min-width: 400px;
-            max-height: 80vh;
-            color: white;
-            pointer-events: all;
-            z-index: 9999; /* Ensure scoreboard is always on top */
-            display: flex;
-            flex-direction: column;
-        }
-        
-        #scoreboard-content {
-            overflow-y: auto;
-            max-height: calc(80vh - 100px);
-            padding-right: 10px;
-        }
-        
-        #scoreboard-content::-webkit-scrollbar {
-            width: 8px;
-        }
-        
-        #scoreboard-content::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 4px;
-        }
-        
-        #scoreboard-content::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.3);
-            border-radius: 4px;
-        }
-        
-        #scoreboard-content::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.5);
-        }
-        
-        .scoreboard-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        
-        #close-scoreboard {
-            background: #e74c3c;
-            border: none;
-            color: white;
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        
-        #capture-progress {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.8);
-            padding: 15px 30px;
-            border-radius: 10px;
-            color: white;
-            text-align: center;
-        }
-        
-        .capture-bar {
-            position: relative;
-            width: 300px;
-            height: 20px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 10px;
-            overflow: hidden;
-            margin-top: 10px;
-        }
-        
-        .capture-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #3498db, #2ecc71);
-            width: 0%;
-            transition: width 0.1s ease;
-        }
-        
-        .capture-text {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-weight: bold;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
-        }
-        
-        #death-screen {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            pointer-events: all;
-        }
-        
-        .death-content {
-            background: rgba(20,20,20,0.95);
-            padding: 40px;
-            border-radius: 15px;
-            text-align: center;
-            color: white;
-            border: 2px solid #e74c3c;
-        }
-        
-        #respawn-timer {
-            margin-top: 20px;
-            font-size: 18px;
-            color: #f39c12;
-        }
-        
-        #pixi-container {
-            width: 100%;
-            height: 100%;
-        }
-        
-        /* Spectator Mode Styles */
-        #spectator-hud {
-            display: none;
-            pointer-events: none;
-        }
-        
-        .spectator-banner {
-            position: fixed;
-            top: 80px;  /* Offset below the scoreboard/timer */
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.9);
-            border: 2px solid #00AAFF;
-            border-radius: 8px;
-            padding: 10px 20px;
-            display: flex;
-            gap: 15px;
-            align-items: center;
-            font-family: 'Arial', sans-serif;
-            z-index: 1000;
-            pointer-events: all;
-        }
-        
-        .spectator-icon {
-            font-size: 24px;
-        }
-        
-        .spectator-label {
-            font-size: 18px;
-            font-weight: bold;
-            color: #00AAFF;
-            text-shadow: 0 0 10px #00AAFF;
-        }
-        
-        .spectator-count {
-            font-size: 14px;
-            color: #888;
-        }
-        
-        .spectator-controls {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.9);
-            border: 2px solid #00AAFF;
-            border-radius: 8px;
-            padding: 15px;
-            display: flex;
-            gap: 20px;
-            z-index: 1000;
-            pointer-events: all;
-        }
-        
-        .camera-mode, .following-player {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            color: white;
-        }
-        
-        .spectator-controls button {
-            background: #00AAFF;
-            border: none;
-            color: white;
-            padding: 8px 15px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background 0.2s;
-        }
-        
-        .spectator-controls button:hover {
-            background: #0088CC;
-        }
-        
-        .spectator-player-list {
-            position: fixed;
-            right: 20px;
-            top: 80px;
-            width: 300px;
-            max-height: 60vh;
-            overflow-y: auto;
-            background: rgba(0, 0, 0, 0.9);
-            border: 2px solid #00AAFF;
-            border-radius: 8px;
-            padding: 10px;
-            z-index: 999;
-            pointer-events: all;
-        }
-        
-        .spectator-player-list h3 {
-            margin: 0 0 10px 0;
-            color: #00AAFF;
-            font-size: 16px;
-            text-align: center;
-        }
-        
-        .spectator-team {
-            margin-bottom: 15px;
-        }
-        
-        .spectator-team h4 {
-            margin: 5px 0;
-            color: #888;
-            font-size: 14px;
-            border-bottom: 1px solid #333;
-            padding-bottom: 5px;
-        }
-        
-        .spectator-player-item {
-            padding: 8px;
-            margin: 5px 0;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background 0.2s;
-            color: white;
-            font-size: 13px;
-        }
-        
-        .spectator-player-item:hover {
-            background: rgba(0, 170, 255, 0.2);
-        }
-        
-        .spectator-player-item.following {
-            background: rgba(0, 170, 255, 0.3);
-            border: 1px solid #00AAFF;
-        }
-        
-        .player-name {
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        
-        .player-health-bar {
-            height: 4px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 2px;
-            overflow: hidden;
-            margin: 5px 0;
-        }
-        
-        .health-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #e74c3c, #2ecc71);
-            transition: width 0.2s;
-        }
-        
-        .player-weapon {
-            font-size: 11px;
-            color: #888;
-        }
-        
-        .spectator-player-list::-webkit-scrollbar {
-            width: 6px;
-        }
-        
-        .spectator-player-list::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 3px;
-        }
-        
-        .spectator-player-list::-webkit-scrollbar-thumb {
-            background: rgba(0, 170, 255, 0.5);
-            border-radius: 3px;
-        }
-    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/8.13.2/pixi.min.js"></script>
+    <!-- All styles live in unified.css -->
     <script src="js/ProjectileInterpolator.js"></script>
     <script src="js/InputManager.js"></script>
+    <!-- Weapon Customization Modal -->
+    <script src="js/WeaponCustomizer.js"></script>
     <!-- Spectator Mode Modules -->
     <script src="js/spectator/SpectatorCamera.js"></script>
     <script src="js/spectator/SpectatorUI.js"></script>
@@ -395,7 +37,7 @@
         });
     </script>
 </head>
-<body>
+<body class="game-page">
 <div id="game-container">
     <div id="loading-screen">
         <div class="loading-content">
@@ -406,7 +48,7 @@
             <div id="loading-status">Initializing PixiJS...</div>
         </div>
     </div>
-    
+
     <!-- Game UI Overlay -->
     <div id="game-ui" style="display: none;">
         <div id="scoreboard" style="display: none;">
@@ -416,14 +58,14 @@
             </div>
             <div id="scoreboard-content"></div>
         </div>
-        
+
         <div id="capture-progress" style="display: none;">
             <div class="capture-bar">
                 <div class="capture-fill" id="capture-fill"></div>
                 <span class="capture-text" id="capture-text">Capturing...</span>
             </div>
         </div>
-        
+
         <div id="death-screen" style="display: none;">
             <div class="death-content">
                 <h2>You were eliminated!</h2>
@@ -431,7 +73,7 @@
                 <div id="respawn-timer">Respawning in <span id="respawn-countdown">5</span>s</div>
             </div>
         </div>
-        
+
         <!-- Spectator Mode UI -->
         <div id="spectator-hud">
             <div class="spectator-banner">
@@ -439,27 +81,52 @@
                 <span class="spectator-label">SPECTATOR MODE</span>
                 <span class="spectator-count" id="spectator-count">0 spectators</span>
             </div>
-            
+
             <div class="spectator-controls">
                 <div class="camera-mode">
                     <span>Camera: <strong id="camera-mode-label">Free</strong></span>
                     <button id="change-camera-btn">Change (C)</button>
                 </div>
-                
+
                 <div class="following-player" id="following-player" style="display: none;">
                     <span>Following: <strong id="followed-player-name">Player</strong></span>
                     <button id="cycle-player-btn">Next (E)</button>
                 </div>
             </div>
-            
+
             <div class="spectator-player-list" id="spectator-player-list">
                 <h3>Players</h3>
                 <!-- Populated dynamically by GameEngine.js -->
             </div>
         </div>
     </div>
-    
+
     <div id="pixi-container"></div>
+
+    <!-- Loadout customization modal -->
+    <div id="loadout-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Choose Your Loadout</h2>
+            </div>
+            <div id="loadout-banner" class="modal-banner"></div>
+            <div id="loadout-customizer-root">
+                <!-- WeaponCustomizer mounts here; name picker injected alongside point tracker --></div>
+            <div class="modal-footer">
+                <span id="lobby-countdown"></span>
+                <button id="ready-up" type="button" disabled>Ready</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Join-rejected overlay -->
+    <div id="join-rejected">
+        <div class="panel">
+            <h2 id="join-rejected-title">Unable to join</h2>
+            <p id="join-rejected-message"></p>
+            <button type="button" id="join-rejected-return">Return to Lobby</button>
+        </div>
+    </div>
 </div>
 </body>
 </html>

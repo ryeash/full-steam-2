@@ -12,7 +12,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Integration tests for Headquarters scoring system.
@@ -63,8 +67,8 @@ public class HeadquartersScoringTest extends BaseTestClass {
         // Create test players
         team1Player = new Player(1, "Team1Player", 0, 0, 1, 100.0);
         team2Player = new Player(2, "Team2Player", 100, 100, 2, 100.0);
-        gameEntities.addPlayer(team1Player);
-        gameEntities.addPlayer(team2Player);
+        gameEntities.add(team1Player);
+        gameEntities.add(team2Player);
 
         // Get headquarters
         team1HQ = gameEntities.getTeamHeadquarters(1);
@@ -87,7 +91,6 @@ public class HeadquartersScoringTest extends BaseTestClass {
         // Verify points were added (this is tracked internally in RuleSystem)
         // We can't directly check the bonus points, but we can verify the HQ took damage
         assertEquals(900.0, team1HQ.getHealth());
-        assertEquals(100.0, team1HQ.getTotalDamageTaken());
     }
 
     @Test
@@ -135,8 +138,8 @@ public class HeadquartersScoringTest extends BaseTestClass {
 
         Player p1 = new Player(1, "P1", 0, 0, 1, 100.0);
         Player p2 = new Player(2, "P2", 100, 100, 2, 100.0);
-        gmEnd.getGameEntities().addPlayer(p1);
-        gmEnd.getGameEntities().addPlayer(p2);
+        gmEnd.getGameEntities().add(p1);
+        gmEnd.getGameEntities().add(p2);
 
         Headquarters hq1 = gmEnd.getGameEntities().getTeamHeadquarters(1);
         assertNotNull(hq1);
@@ -187,7 +190,6 @@ public class HeadquartersScoringTest extends BaseTestClass {
         // Total damage: 450
         // Total points: 45 (at 0.1 per damage)
         assertEquals(550.0, team1HQ.getHealth());
-        assertEquals(450.0, team1HQ.getTotalDamageTaken());
     }
 
     @Test
@@ -204,8 +206,6 @@ public class HeadquartersScoringTest extends BaseTestClass {
         // Both HQs should have taken their respective damage
         assertEquals(800.0, team2HQ.getHealth());
         assertEquals(700.0, team1HQ.getHealth());
-        assertEquals(200.0, team2HQ.getTotalDamageTaken());
-        assertEquals(300.0, team1HQ.getTotalDamageTaken());
     }
 
     @Test
@@ -271,8 +271,8 @@ public class HeadquartersScoringTest extends BaseTestClass {
 
         Player p1 = new Player(1, "P1", 0, 0, 1, 100.0);
         Player p2 = new Player(2, "P2", 100, 100, 2, 100.0);
-        gmNoPoints.getGameEntities().addPlayer(p1);
-        gmNoPoints.getGameEntities().addPlayer(p2);
+        gmNoPoints.getGameEntities().add(p1);
+        gmNoPoints.getGameEntities().add(p2);
 
         Headquarters hq1 = gmNoPoints.getGameEntities().getTeamHeadquarters(1);
 
@@ -292,17 +292,22 @@ public class HeadquartersScoringTest extends BaseTestClass {
     }
 
     @Test
-    @DisplayName("RuleSystem addTeamPoints integration")
-    void testAddTeamPointsMethod() {
-        RuleSystem ruleSystem = gameManager.getRuleSystem();
+    @DisplayName("HQ damage and destruction credit the attacker's scoring")
+    void testHeadquartersScoringCreditsAttacker() {
+        // Team 2 damages Team 1's HQ
+        team1HQ.takeDamage(200.0);
+        gameManager.handleHeadquartersDamage(team1HQ, team2Player, 200.0, false);
 
-        // Directly add bonus points to team 2
-        ruleSystem.addTeamPoints(2, 50);
+        assertEquals(200.0, team2Player.getScoring().getHeadquarterDamage(), 0.001);
+        assertEquals(0, team2Player.getScoring().getHeadquartersDestroyed());
 
-        // Points should be reflected in team score calculations
-        // (We can't directly verify the internal map, but the method should not throw)
-        assertDoesNotThrow(() -> ruleSystem.addTeamPoints(1, 25));
-        assertDoesNotThrow(() -> ruleSystem.addTeamPoints(2, 75));
+        // Now destroy it
+        boolean destroyed = team1HQ.takeDamage(800.0);
+        assertTrue(destroyed);
+        gameManager.handleHeadquartersDamage(team1HQ, team2Player, 800.0, true);
+
+        assertEquals(1000.0, team2Player.getScoring().getHeadquarterDamage(), 0.001);
+        assertEquals(1, team2Player.getScoring().getHeadquartersDestroyed());
     }
 }
 

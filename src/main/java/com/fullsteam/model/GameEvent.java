@@ -3,6 +3,7 @@ package com.fullsteam.model;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.util.Set;
@@ -16,6 +17,8 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 public class GameEvent {
+
+    public static final long STANDARD_DISPLAY_TIME = 4000L;
 
     /**
      * The type of message for WebSocket routing
@@ -58,23 +61,20 @@ public class GameEvent {
     /**
      * Categories of game events for styling and organization
      */
+    @Getter
     public enum EventCategory {
-        KILL("#FF4444"),           // Red for kills/deaths
-        CAPTURE("#00FF88"),        // Green for objectives
-        SYSTEM("#FFAA00"),         // Orange for system messages
+        KILL("#E67E22"),           // Amber-orange for kills (avoids red/green pair)
+        CAPTURE("#2EC4B6"),        // Teal for objectives (colorblind-safe)
+        SYSTEM("#FFAA00"),         // Amber for system messages
         ACHIEVEMENT("#FFD700"),    // Gold for achievements
         WARNING("#FF8800"),        // Orange for warnings
-        INFO("#00AAFF"),          // Blue for information
+        INFO("#56B4E9"),          // Sky blue for information
         CHAT("#FFFFFF");          // White for chat messages
 
         private final String defaultColor;
 
         EventCategory(String defaultColor) {
             this.defaultColor = defaultColor;
-        }
-
-        public String getDefaultColor() {
-            return defaultColor;
         }
     }
 
@@ -149,7 +149,7 @@ public class GameEvent {
                 .category(EventCategory.KILL)
                 .color(EventCategory.KILL.getDefaultColor())
                 .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
-                .displayDuration(3000L)
+                .displayDuration(STANDARD_DISPLAY_TIME)
                 .build();
     }
 
@@ -158,10 +158,10 @@ public class GameEvent {
      */
     private static String getTeamColorHex(int teamNumber) {
         return switch (teamNumber) {
-            case 1 -> "#4CAF50";  // Green (Team 1)
-            case 2 -> "#F44336";  // Red (Team 2)
-            case 3 -> "#2196F3";  // Blue (Team 3)
-            case 4 -> "#FF9800";  // Orange (Team 4)
+            case 1 -> "#0072B2";  // Cobalt blue (Team 1)
+            case 2 -> "#E69F00";  // Amber (Team 2)
+            case 3 -> "#009E73";  // Teal (Team 3)
+            case 4 -> "#CC79A7";  // Mauve (Team 4)
             default -> "#FFFFFF"; // White (FFA/Unknown)
         };
     }
@@ -187,36 +187,7 @@ public class GameEvent {
                 .category(EventCategory.SYSTEM)
                 .color(EventCategory.SYSTEM.getDefaultColor())
                 .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
-                .displayDuration(3000L)
-                .build();
-    }
-
-    /**
-     * Create a capture event
-     */
-    public static GameEvent createCaptureEvent(String playerName, String locationName) {
-        return GameEvent.builder()
-                .message(String.format("%s captured %s", playerName, locationName))
-                .category(EventCategory.CAPTURE)
-                .color(EventCategory.CAPTURE.getDefaultColor())
-                .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
-                .displayDuration(3000L)
-                .build();
-    }
-
-    /**
-     * Create a team-specific event
-     */
-    public static GameEvent createTeamEvent(String message, int teamId, EventCategory category) {
-        return GameEvent.builder()
-                .message(message)
-                .category(category)
-                .color(category.getDefaultColor())
-                .target(EventTarget.builder()
-                        .type(EventTarget.TargetType.TEAM)
-                        .teamIds(Set.of(teamId))
-                        .build())
-                .displayDuration(3000L)
+                .displayDuration(STANDARD_DISPLAY_TIME)
                 .build();
     }
 
@@ -229,7 +200,7 @@ public class GameEvent {
                 .category(EventCategory.SYSTEM)
                 .color(EventCategory.SYSTEM.getDefaultColor())
                 .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
-                .displayDuration(3000L)
+                .displayDuration(STANDARD_DISPLAY_TIME)
                 .build();
     }
 
@@ -245,20 +216,7 @@ public class GameEvent {
                         .type(EventTarget.TargetType.SPECIFIC)
                         .playerIds(Set.of(playerId))
                         .build())
-                .displayDuration(3000L)
-                .build();
-    }
-
-    /**
-     * Create an achievement event
-     */
-    public static GameEvent createAchievementEvent(String playerName, String achievement) {
-        return GameEvent.builder()
-                .message(String.format("%s earned: %s", playerName, achievement))
-                .category(EventCategory.ACHIEVEMENT)
-                .color(EventCategory.ACHIEVEMENT.getDefaultColor())
-                .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
-                .displayDuration(3000L)
+                .displayDuration(STANDARD_DISPLAY_TIME)
                 .build();
     }
 
@@ -275,7 +233,7 @@ public class GameEvent {
                 .category(EventCategory.CAPTURE)
                 .color(teamColor)
                 .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
-                .displayDuration(5000L) // Longer display for major event
+                .displayDuration(STANDARD_DISPLAY_TIME + 1000L) // Longer display for major event
                 .build();
     }
 
@@ -285,7 +243,7 @@ public class GameEvent {
     public static GameEvent createEliminationEvent(String playerName, int teamNumber, int livesRemaining) {
         StringBuilder messageBuilder = new StringBuilder();
         messageBuilder.append("💀 ");
-        
+
         // Add player name with team color
         if (teamNumber > 0) {
             String teamColor = getTeamColorHex(teamNumber);
@@ -293,12 +251,12 @@ public class GameEvent {
         } else {
             messageBuilder.append(playerName);
         }
-        
+
         messageBuilder.append(" has been eliminated!");
-        
+
         // Add lives remaining if not completely out
         if (livesRemaining > 0) {
-            messageBuilder.append(String.format(" (%d %s remaining)", 
+            messageBuilder.append(String.format(" (%d %s remaining)",
                     livesRemaining, livesRemaining == 1 ? "life" : "lives"));
         }
 
@@ -307,20 +265,7 @@ public class GameEvent {
                 .category(EventCategory.WARNING)
                 .color(EventCategory.WARNING.getDefaultColor())
                 .target(EventTarget.builder().type(EventTarget.TargetType.ALL).build())
-                .displayDuration(4000L) // Longer display for elimination
-                .build();
-    }
-
-    /**
-     * Create a custom event with full control
-     */
-    public static GameEvent createCustomEvent(String message, String color, EventTarget target) {
-        return GameEvent.builder()
-                .message(message)
-                .color(color)
-                .category(EventCategory.INFO)
-                .target(target)
-                .displayDuration(3000L)
+                .displayDuration(STANDARD_DISPLAY_TIME)
                 .build();
     }
 }

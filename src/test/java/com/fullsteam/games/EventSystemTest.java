@@ -6,6 +6,7 @@ import com.fullsteam.model.EnvironmentalEvent;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Rules;
 import com.fullsteam.physics.GameEntities;
+import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.world.World;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +28,10 @@ class EventSystemTest extends BaseTestClass {
     @BeforeEach
     protected void baseSetUp() {
         world = new World<>();
+        // TerrainGenerator reads world.getBounds() in its constructor; the tests
+        // build 2000x2000 worlds, so set matching bounds (production does this in
+        // GameManager). Without it, getBounds() is null → NPE.
+        world.setBounds(new AxisAlignedBounds(2000, 2000));
     }
 
     @Test
@@ -46,7 +51,7 @@ class EventSystemTest extends BaseTestClass {
         GameEntities gameEntities = new GameEntities(config, world);
         GameEventManager eventManager = new GameEventManager(gameEntities, (session, msg) -> {
         });
-        TerrainGenerator terrainGenerator = new TerrainGenerator(2000, 2000);
+        TerrainGenerator terrainGenerator = new TerrainGenerator(world, config);
 
         EventSystem eventSystem = new EventSystem(
                 "test-game",
@@ -129,8 +134,7 @@ class EventSystemTest extends BaseTestClass {
     @Test
     void testEnabledEventsFilter() {
         List<EnvironmentalEvent> enabledEvents = List.of(
-                EnvironmentalEvent.METEOR_SHOWER,
-                EnvironmentalEvent.SUPPLY_DROP
+                EnvironmentalEvent.METEOR_SHOWER
         );
 
         Rules rules = Rules.builder()
@@ -140,7 +144,6 @@ class EventSystemTest extends BaseTestClass {
 
         assertEquals(2, rules.getEnabledEvents().size());
         assertTrue(rules.getEnabledEvents().contains(EnvironmentalEvent.METEOR_SHOWER));
-        assertTrue(rules.getEnabledEvents().contains(EnvironmentalEvent.SUPPLY_DROP));
         assertFalse(rules.getEnabledEvents().contains(EnvironmentalEvent.VOLCANIC_ERUPTION));
     }
 
@@ -190,7 +193,7 @@ class EventSystemTest extends BaseTestClass {
     void testAllEventTypesCount() {
         // Ensure we have all expected event types
         EnvironmentalEvent[] events = EnvironmentalEvent.values();
-        assertEquals(7, events.length, "Should have 7 environmental event types");
+        assertEquals(6, events.length, "Should have 6 environmental event types");
     }
 
     @Test
@@ -209,7 +212,7 @@ class EventSystemTest extends BaseTestClass {
         GameEntities gameEntities = new GameEntities(config, world);
         GameEventManager eventManager = new GameEventManager(gameEntities, (session, msg) -> {
         });
-        TerrainGenerator terrainGenerator = new TerrainGenerator(2000, 2000);
+        TerrainGenerator terrainGenerator = new TerrainGenerator(world, config);
 
         EventSystem eventSystem = new EventSystem(
                 "test-game",
@@ -225,42 +228,42 @@ class EventSystemTest extends BaseTestClass {
         assertNotNull(eventData);
         assertEquals(0, eventData.size(), "Should be empty when no events active");
     }
-    
+
     @Test
     void testEventDensityMultipliers() {
         // Test SPARSE density range
         for (int i = 0; i < 10; i++) {
             double multiplier = EntityWorldDensity.SPARSE.getMultiplier();
-            assertTrue(multiplier >= 0.6 && multiplier <= 0.9, 
+            assertTrue(multiplier >= 0.6 && multiplier <= 0.9,
                     "SPARSE multiplier should be between 0.6 and 0.9, got: " + multiplier);
         }
-        
+
         // Test DENSE density range
         for (int i = 0; i < 10; i++) {
             double multiplier = EntityWorldDensity.DENSE.getMultiplier();
-            assertTrue(multiplier >= 1.2 && multiplier <= 1.8, 
+            assertTrue(multiplier >= 1.2 && multiplier <= 1.8,
                     "DENSE multiplier should be between 1.2 and 1.8, got: " + multiplier);
         }
-        
+
         // Test CHOKED density range
         for (int i = 0; i < 10; i++) {
             double multiplier = EntityWorldDensity.CHOKED.getMultiplier();
-            assertTrue(multiplier >= 2.0 && multiplier <= 3.0, 
+            assertTrue(multiplier >= 2.0 && multiplier <= 3.0,
                     "CHOKED multiplier should be between 2.0 and 3.0, got: " + multiplier);
         }
-        
+
         // Test RANDOM density (should return values from any of the above ranges)
         for (int i = 0; i < 10; i++) {
             double multiplier = EntityWorldDensity.RANDOM.getMultiplier();
-            assertTrue(multiplier >= 0.6 && multiplier <= 3.0, 
+            assertTrue(multiplier >= 0.6 && multiplier <= 3.0,
                     "RANDOM multiplier should be between 0.6 and 3.0, got: " + multiplier);
         }
     }
-    
+
     @Test
     void testEventDensityDefaultValues() {
         Rules rules = Rules.builder().build();
-        
+
         // Check default density values
         assertEquals(EntityWorldDensity.DENSE, rules.getMeteorShowerDensity());
         assertEquals(EntityWorldDensity.SPARSE, rules.getSupplyDropDensity());

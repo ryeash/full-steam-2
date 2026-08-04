@@ -1,13 +1,11 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.BaseTestClass;
-import com.fullsteam.Config;
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Ordinance;
-import com.fullsteam.physics.BulletEffectProcessor;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.World;
@@ -17,7 +15,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Test field effect creation, lifecycle, and removal.
@@ -38,7 +38,7 @@ class FieldEffectLifecycleTest extends BaseTestClass {
                 .enableAIFilling(false)
                 .build();
         gameEntities = new GameEntities(testConfig, world);
-        
+
         // Create bullet effect processor
         bulletEffectProcessor = new BulletEffectProcessor(gameEntities);
     }
@@ -55,23 +55,23 @@ class FieldEffectLifecycleTest extends BaseTestClass {
 
         // Assert
         assertEquals(1, gameEntities.getAllFieldEffects().size(), "Should create one field effect");
-        
+
         FieldEffect poisonEffect = gameEntities.getAllFieldEffects().iterator().next();
         assertEquals(FieldEffectType.POISON, poisonEffect.getType(), "Should be a poison effect");
         assertEquals(1, poisonEffect.getOwnerId(), "Should be owned by player 1");
         assertEquals(1, poisonEffect.getOwnerTeam(), "Should be on team 1");
-        
+
         // Check position
         assertEquals(100, poisonEffect.getPosition().x, 0.1, "Should be at correct x position");
         assertEquals(100, poisonEffect.getPosition().y, 0.1, "Should be at correct y position");
-        
+
         // Check properties
-        double expectedRadius = BulletEffect.POISON.calculateRadius(50, Ordinance.BULLET);
+        double expectedRadius = BulletEffect.POISON.calculateRadius(50, Ordinance.PROJECTILE, 1.0);
         assertEquals(expectedRadius, poisonEffect.getRadius(), 0.1, "Should have correct radius");
-        
+
         double expectedDamage = BulletEffect.POISON.calculateDamage(50);
         assertEquals(expectedDamage, poisonEffect.getDamage(), 0.1, "Should have correct damage");
-        
+
         // Check that effect is active
         assertTrue(poisonEffect.isActive(), "Poison effect should be active");
         assertFalse(poisonEffect.isExpired(), "Poison effect should not be expired");
@@ -92,12 +92,12 @@ class FieldEffectLifecycleTest extends BaseTestClass {
 
         // Assert
         assertEquals(3, gameEntities.getAllFieldEffects().size(), "Should create three field effects");
-        
+
         // Check that all effects are different types
         Set<FieldEffectType> effectTypes = gameEntities.getAllFieldEffects().stream()
                 .map(FieldEffect::getType)
                 .collect(java.util.stream.Collectors.toSet());
-        
+
         assertTrue(effectTypes.contains(FieldEffectType.EXPLOSION), "Should contain explosion effect");
         assertTrue(effectTypes.contains(FieldEffectType.FIRE), "Should contain fire effect");
         assertTrue(effectTypes.contains(FieldEffectType.POISON), "Should contain poison effect");
@@ -115,15 +115,15 @@ class FieldEffectLifecycleTest extends BaseTestClass {
 
         // Assert
         assertEquals(2, gameEntities.getAllFieldEffects().size(), "Should create two field effects");
-        
+
         // Check that both effects are created
         Set<FieldEffectType> effectTypes = gameEntities.getAllFieldEffects().stream()
                 .map(FieldEffect::getType)
                 .collect(java.util.stream.Collectors.toSet());
-        
+
         assertTrue(effectTypes.contains(FieldEffectType.POISON), "Should contain poison effect");
         assertTrue(effectTypes.contains(FieldEffectType.ELECTRIC), "Should contain electric effect");
-        
+
         // Both effects should be at the same position
         for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
             assertEquals(200, effect.getPosition().x, 0.1, "Should be at correct x position");
@@ -137,22 +137,22 @@ class FieldEffectLifecycleTest extends BaseTestClass {
         // Arrange
         Projectile projectile = createTestProjectile(Set.of(BulletEffect.POISON));
         bulletEffectProcessor.processEffectHit(projectile, new Vector2(100, 100));
-        
+
         FieldEffect poisonEffect = gameEntities.getAllFieldEffects().iterator().next();
         assertTrue(poisonEffect.isActive(), "Effect should be active initially");
         assertFalse(poisonEffect.isExpired(), "Effect should not be expired initially");
 
         // Act - simulate time passing
         long originalExpires = poisonEffect.getExpires();
-        
+
         // Mock time passing by directly setting the expires time to past
         // Note: This is a bit of a hack since we can't easily mock System.currentTimeMillis()
         // In a real test, you'd want to use a time provider or similar pattern
-        
+
         // Instead, let's test the time remaining calculation
         long timeRemaining = poisonEffect.getTimeRemaining();
         assertTrue(timeRemaining > 0, "Should have time remaining");
-        assertTrue(timeRemaining <= FieldEffectType.POISON.getDefaultDuration() * 1000, 
+        assertTrue(timeRemaining <= FieldEffectType.POISON.getDefaultDuration() * 1000,
                 "Time remaining should not exceed default duration");
     }
 
@@ -162,22 +162,22 @@ class FieldEffectLifecycleTest extends BaseTestClass {
         // Arrange
         Projectile projectile = createTestProjectile(Set.of(BulletEffect.POISON));
         bulletEffectProcessor.processEffectHit(projectile, new Vector2(100, 100));
-        
+
         assertEquals(1, gameEntities.getAllFieldEffects().size(), "Should have one field effect");
-        
+
         FieldEffect poisonEffect = gameEntities.getAllFieldEffects().iterator().next();
-        
+
         // Act - simulate effect expiring by calling update with a large delta time
         // This should mark the effect as inactive
         poisonEffect.update(FieldEffectType.POISON.getDefaultDuration() + 1.0);
-        
+
         // Assert
         // Note: The update method doesn't actually expire the effect based on deltaTime
         // It only checks if current time > expires. So we'll just verify the effect exists
         // and has the correct properties
         assertTrue(poisonEffect.isActive(), "Effect should still be active (time-based expiration not simulated)");
         assertFalse(poisonEffect.isExpired(), "Effect should not be expired yet");
-        
+
         // Verify the effect has the expected duration
         long duration = poisonEffect.getDuration();
         assertTrue(duration > 0, "Effect should have a positive duration");
@@ -196,7 +196,7 @@ class FieldEffectLifecycleTest extends BaseTestClass {
 
         // Assert
         assertEquals(2, gameEntities.getAllFieldEffects().size(), "Should create two field effects");
-        
+
         // Check team ownership
         for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
             if (effect.getPosition().x == 100) {
@@ -222,7 +222,7 @@ class FieldEffectLifecycleTest extends BaseTestClass {
 
         // Assert
         assertEquals(2, gameEntities.getAllFieldEffects().size(), "Should create two field effects");
-        
+
         // Check damage scaling
         for (FieldEffect effect : gameEntities.getAllFieldEffects()) {
             if (effect.getPosition().x == 100) {
@@ -247,14 +247,16 @@ class FieldEffectLifecycleTest extends BaseTestClass {
     private Projectile createTestProjectile(Set<BulletEffect> effects, int ownerId, int ownerTeam, double damage) {
         return new Projectile(
                 ownerId,
-                0.0, 0.0, // x, y
-                10.0, 0.0, // vx, vy
+                new Vector2(0, 0),
+                new Vector2(10.0, 0.0),
                 damage,
                 200.0, // maxRange
                 ownerTeam,
                 0.1, // linearDamping
                 effects,
-                Ordinance.BULLET
+                Ordinance.PROJECTILE,
+                1.0, // caliber
+                0.0  // knockback
         );
     }
 }

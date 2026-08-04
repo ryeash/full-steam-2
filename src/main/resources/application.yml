@@ -8,6 +8,8 @@ micronaut:
       worker:
         threads: 8
       max-header-size: 8192
+      websocket:
+        compression: true
   executors:
     scheduled:
       type: scheduled
@@ -24,3 +26,20 @@ micronaut:
         ws:
           compression:
             enabled: true
+# Management endpoints: expose ONLY /health (for load-balancer / uptime probes),
+# with no detail breakdown so it doesn't leak host internals. All other
+# management endpoints (env, beans, loggers, refresh, …) stay disabled.
+endpoints:
+  all:
+    enabled: false
+    sensitive: false
+  health:
+    enabled: true
+    sensitive: false
+    details-visible: NEVER
+# Application-specific settings.
+app:
+  # Comma-separated allowlist of permitted WebSocket Origins
+  # (e.g. https://game.example.com). Empty = allow any origin, which is fine for
+  # local dev; set APP_ALLOWED_ORIGINS in production to block cross-site sockets.
+  allowed-origins: ${APP_ALLOWED_ORIGINS:}

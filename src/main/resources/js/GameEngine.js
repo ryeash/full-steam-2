@@ -8,11 +8,10 @@ class GameEngine {
         this.projectileInterpolators = new Map();
         this.obstacles = new Map();
         this.fieldEffects = new Map();
-        this.beams = new Map();
-        this.utilityEntities = new Map(); // For turrets, barriers, nets, mines, teleport pads
+        this.utilityEntities = new Map(); // For turrets, nets, defense lasers, headquarters, power-ups
         this.flags = new Map(); // CTF flags
+        this.oddballNpcs = new Map(); // Oddball NPC entities
         this.kothZones = new Map(); // King of the Hill zones
-        this.teleportConnections = new Map(); // Track teleport pad connections
         this.myPlayerId = null;
         this.gameState = null;
         this.websocket = null;
@@ -41,7 +40,8 @@ class GameEngine {
             closeScoreboard: null
         };
         this.pendingTimeouts = [];
-        this.tickerCallbacks = [];
+        this.tickerCallbacks = new Set();
+        this.memoryCleanupInterval = null;
         
         this.init();
     }
@@ -60,7 +60,7 @@ class GameEngine {
             this.updateLoadingProgress(40, "Setting up UI...");
             this.setupUI();
             this.createConsolidatedHUD();
-            this.createRoundTimer();
+            this.createGameTimer();
             
             this.updateLoadingProgress(60, "Loading assets...");
             await this.loadAssets();
@@ -71,6 +71,11 @@ class GameEngine {
             this.updateLoadingProgress(100, "Ready!");
             this.hideLoadingScreen();
             
+            // Set up periodic memory cleanup (every 60 seconds)
+            this.memoryCleanupInterval = setInterval(() => {
+                this.performMemoryCleanup();
+            }, 60000);
+            
         } catch (error) {
             console.error('Game initialization failed:', error);
             this.updateLoadingProgress(0, `Error: ${error.message}`);
@@ -78,7 +83,9 @@ class GameEngine {
     }
     
     async initPixiApp() {
-        this.app = new PIXI.Application({
+        this.app = new PIXI.Application();
+        
+        await this.app.init({
             width: window.innerWidth,
             height: window.innerHeight,
             backgroundColor: 0x1a1a1a, // Dark grey for better ordinance visibility
@@ -87,7 +94,7 @@ class GameEngine {
             autoDensity: true
         });
 
-        document.getElementById('pixi-container').appendChild(this.app.view);
+        document.getElementById('pixi-container').appendChild(this.app.canvas);
 
         // Handle WebGL context loss - store handlers for cleanup
         this.eventHandlers.webglContextLost = (event) => {
@@ -95,16 +102,18 @@ class GameEngine {
             event.preventDefault();
             this.handleWebGLContextLost();
         };
-        this.app.renderer.gl.canvas.addEventListener('webglcontextlost', this.eventHandlers.webglContextLost);
+        // Access canvas directly - v8 compatible with both WebGL and WebGPU
+        this.app.canvas.addEventListener('webglcontextlost', this.eventHandlers.webglContextLost);
 
         this.eventHandlers.webglContextRestored = () => {
             console.log('WebGL context restored');
             this.handleWebGLContextRestored();
         };
-        this.app.renderer.gl.canvas.addEventListener('webglcontextrestored', this.eventHandlers.webglContextRestored);
+        this.app.canvas.addEventListener('webglcontextrestored', this.eventHandlers.webglContextRestored);
 
         // Set up interpolation ticker for smooth movement - store reference for cleanup
-        const interpolationCallback = (deltaTime) => {
+        const interpolationCallback = (ticker) => {
+            const deltaTime = ticker.deltaTime;
             const dt = deltaTime / 60.0; // Convert to seconds
             
             // Update all projectile interpolators every frame
@@ -112,24 +121,23 @@ class GameEngine {
                 interpolator.update(deltaTime);
             });
             
-            // Animate plasma effects
+            // Animate plasma effects and extend projectile trails. Both ride the
+            // interpolated container position, so they must run per render frame
+            // (after the interpolators above have moved the containers).
             this.projectiles.forEach(projectileContainer => {
                 if (projectileContainer.isPlasma) {
                     this.animatePlasmaEffects(projectileContainer, deltaTime);
                 }
-            });
-            
-            // Smoothly update workshop progress bars
-            this.utilityEntities.forEach((container, entityId) => {
-                if (container.progressBars) {
-                    container.progressBars.forEach((progressBar) => {
-                        this.updateProgressBarAnimation(progressBar, deltaTime);
-                    });
+                if (projectileContainer.isStrikeBeacon) {
+                    this.animateStrikeBeacon(projectileContainer, deltaTime);
+                }
+                if (projectileContainer.trail) {
+                    this.updateProjectileTrail(projectileContainer);
                 }
             });
+            
         };
-        this.tickerCallbacks.push(interpolationCallback);
-        this.app.ticker.add(interpolationCallback);
+        this.addTickerCallback(interpolationCallback);
 
         // Create main containers
         this.backgroundContainer = new PIXI.Container();
@@ -145,6 +153,7 @@ class GameEngine {
         // Set up proper z-ordering
         this.backgroundContainer.zIndex = 0;
         this.gameContainer.zIndex = 1;
+        this.gameContainer.sortableChildren = true
         this.nameContainer.zIndex = 50; // Above game objects but below UI
         this.uiContainer.zIndex = 100;
 
@@ -156,12 +165,35 @@ class GameEngine {
         // Enable sorting for proper z-index handling
         this.app.stage.sortableChildren = true;
 
+        // All input is handled via DOM listeners (keyboard/gamepad/HTML buttons);
+        // nothing uses Pixi pointer events. Disabling the event system stops the
+        // renderer from walking the whole scene graph for hit-testing on every
+        // pointer move. (PixiJS perf guide: "Event Handling".)
+        this.app.stage.eventMode = 'none';
+        this.app.stage.interactiveChildren = false;
+
         // Handle window resize - store handler for cleanup
         this.eventHandlers.resize = () => {
             this.handleResize();
-            this.updateRoundTimerPosition();
+            this.updateGameTimerPosition();
         };
         window.addEventListener('resize', this.eventHandlers.resize);
+    }
+    
+    /**
+     * Add a ticker callback with proper tracking for cleanup
+     */
+    addTickerCallback(callback) {
+        this.tickerCallbacks.add(callback);
+        this.app.ticker.add(callback);
+    }
+    
+    /**
+     * Remove a ticker callback and stop tracking it
+     */
+    removeTickerCallback(callback) {
+        this.tickerCallbacks.delete(callback);
+        this.app.ticker.remove(callback);
     }
     
     /**
@@ -174,11 +206,8 @@ class GameEngine {
         
         // HUD background (smaller without health section)
         const hudBg = new PIXI.Graphics();
-        hudBg.beginFill(0x000000, 0.7);
-        hudBg.drawRoundedRect(10, 10, 280, 170, 8);
-        hudBg.endFill();
-        hudBg.lineStyle(2, 0x444444, 0.8);
-        hudBg.drawRoundedRect(10, 10, 280, 170, 8);
+        hudBg.roundRect(10, 10, 280, 170, 8).fill({ color: 0x000000, alpha: 0.7 });
+        hudBg.roundRect(10, 10, 280, 170, 8).stroke({ width: 2, color: 0x444444, alpha: 0.8 });
         this.hudContainer.addChild(hudBg);
         
         // Player info (bottom portion) - minimap will be created after world bounds are received
@@ -190,126 +219,95 @@ class GameEngine {
     /**
      * Create round timer display in top center of screen.
      */
-    createRoundTimer() {
-        this.roundTimerContainer = new PIXI.Container();
-        this.roundTimerContainer.zIndex = 200;
-        this.roundTimerContainer.visible = false; // Hidden by default, shown when rounds are enabled or team mode is active
-        
+    createGameTimer() {
+        this.gameTimerContainer = new PIXI.Container();
+        this.gameTimerContainer.zIndex = 200;
+        this.gameTimerContainer.visible = false; // Hidden by default; shown for timed games or when team scores exist
+
         // Wider background to accommodate team scores
         const bg = new PIXI.Graphics();
-        bg.beginFill(0x000000, 0.8);
-        bg.drawRoundedRect(0, 0, 400, 60, 8);
-        bg.endFill();
-        bg.lineStyle(2, 0xffaa00, 0.9);
-        bg.drawRoundedRect(0, 0, 400, 60, 8);
-        this.roundTimerContainer.addChild(bg);
-        this.roundTimerBackground = bg;
-        
-        // Round number text (center)
-        this.roundNumberText = new PIXI.Text('ROUND 1', {
-            fontSize: 14,
-            fill: 0xffaa00,
-            fontWeight: 'bold',
-            align: 'center'
-        });
-        this.roundNumberText.anchor.set(0.5, 0);
-        this.roundNumberText.position.set(200, 8);
-        this.roundTimerContainer.addChild(this.roundNumberText);
-        
+        bg.roundRect(0, 0, 400, 60, 8).fill({ color: 0x000000, alpha: 0.8 });
+        bg.roundRect(0, 0, 400, 60, 8).stroke({ width: 2, color: 0xffaa00, alpha: 0.9 });
+        this.gameTimerContainer.addChild(bg);
+        this.gameTimerBackground = bg;
+
         // Timer text (MM:SS) (center)
-        this.roundTimerText = new PIXI.Text('05:00', {
-            fontSize: 24,
+        this.gameTimerText = new PIXI.Text('10:00', {
+            fontSize: 26,
             fill: 0xffffff,
             fontWeight: 'bold',
             align: 'center'
         });
-        this.roundTimerText.anchor.set(0.5, 0);
-        this.roundTimerText.position.set(200, 28);
-        this.roundTimerContainer.addChild(this.roundTimerText);
-        
+        this.gameTimerText.anchor.set(0.5, 0.5);
+        this.gameTimerText.position.set(200, 30);
+        this.gameTimerContainer.addChild(this.gameTimerText);
+
         // Create team score containers (will be populated dynamically)
         this.teamScoreContainers = new Map();
-        
-        this.uiContainer.addChild(this.roundTimerContainer);
-        
+
+        this.uiContainer.addChild(this.gameTimerContainer);
+
         // Position at top center of screen
-        this.updateRoundTimerPosition();
+        this.updateGameTimerPosition();
     }
-    
+
     /**
-     * Update round timer position based on screen size.
+     * Update game timer position based on screen size.
      */
-    updateRoundTimerPosition() {
-        if (!this.roundTimerContainer) return;
-        this.roundTimerContainer.position.set(
+    updateGameTimerPosition() {
+        if (!this.gameTimerContainer) return;
+        this.gameTimerContainer.position.set(
             (this.app.screen.width / 2) - 200, // Center horizontally (wider now)
             10 // Top of screen with padding
         );
     }
-    
+
     /**
-     * Update round timer display with current round state and team scores.
+     * Update the game timer display with the remaining game time and team scores.
+     * Games run continuously to a single deadline (or forever); there are no rounds.
      */
-    updateRoundTimer(roundData) {
-        if (!this.roundTimerContainer) return;
-        
+    updateGameTimer(data) {
+        if (!this.gameTimerContainer) return;
+
         const hasTeams = this.teamCount > 0;
-        const hasTeamScores = roundData.teamScores && Object.keys(roundData.teamScores).length > 0;
-        
-        // Show if rounds are enabled OR if we have team scores to display
-        const shouldShow = roundData.roundEnabled || (hasTeams && hasTeamScores);
-        
+        const hasTeamScores = data.teamScores && Object.keys(data.teamScores).length > 0;
+
+        // Show if the game is timed OR if we have team scores to display
+        const shouldShow = data.gameTimed || (hasTeams && hasTeamScores);
+
         if (!shouldShow) {
-            this.roundTimerContainer.visible = false;
+            this.gameTimerContainer.visible = false;
             return;
         }
-        
-        this.roundTimerContainer.visible = true;
-        
-        // Update round number and timer (if rounds are enabled)
-        if (roundData.roundEnabled) {
-            this.roundNumberText.visible = true;
-            this.roundTimerText.visible = true;
-            
-            // Update round number
-            this.roundNumberText.text = `ROUND ${roundData.currentRound}`;
-            
-            // Update timer based on game state
-            let timeRemaining;
-            let timerColor;
-            
-            if (roundData.gameState === 'PLAYING') {
-                timeRemaining = roundData.roundTimeRemaining;
-                timerColor = timeRemaining <= 30 ? 0xff4444 : 0xffffff; // Red when under 30 seconds
-            } else if (roundData.gameState === 'REST_PERIOD') {
-                timeRemaining = roundData.restTimeRemaining;
-                timerColor = 0xffaa00; // Orange during rest
-                this.roundNumberText.text = 'REST PERIOD';
-            } else {
-                timeRemaining = 0;
-                timerColor = 0xffffff;
-            }
-            
+
+        this.gameTimerContainer.visible = true;
+
+        // Update the countdown (only present for timed games)
+        if (data.gameTimed) {
+            this.gameTimerText.visible = true;
+
+            const timeRemaining = data.gameTimeRemaining;
+            const timerColor = timeRemaining <= 30 ? 0xff4444 : 0xffffff; // Red when under 30 seconds
+
             // Format as MM:SS
             const minutes = Math.floor(Math.max(0, timeRemaining) / 60);
             const seconds = Math.floor(Math.max(0, timeRemaining) % 60);
-            this.roundTimerText.text = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            this.roundTimerText.style.fill = timerColor;
+            this.gameTimerText.text = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            this.setTextFill(this.gameTimerText, timerColor);
         } else {
-            // Hide round/timer info if rounds are disabled
-            this.roundNumberText.visible = false;
-            this.roundTimerText.visible = false;
+            // No countdown for endless / score / elimination games
+            this.gameTimerText.visible = false;
         }
-        
+
         // Update team scores
-        this.updateTeamScores(roundData);
+        this.updateTeamScores(data);
     }
     
     /**
      * Update team score displays in the round timer container.
      */
     updateTeamScores(roundData) {
-        if (!this.roundTimerContainer || !roundData.teamScores) return;
+        if (!this.gameTimerContainer || !roundData.teamScores) return;
         
         const teamScores = roundData.teamScores;
         const teams = Object.keys(teamScores).map(t => parseInt(t)).sort((a, b) => a - b);
@@ -318,15 +316,14 @@ class GameEngine {
         for (let [teamId, container] of this.teamScoreContainers) {
             if (!teams.includes(teamId)) {
                 // Properly destroy the container and its children to prevent memory leak
-                if (container.colorBar) {
+                // Note: colorBar and scoreText are children of container, so they will be
+                // destroyed automatically with { children: true }. No need to destroy them separately.
+                if (container.colorBar && container.colorBar.clear) {
                     container.colorBar.clear();
-                    container.colorBar.destroy();
                 }
-                if (container.scoreText) {
-                    container.scoreText.destroy();
-                }
-                this.roundTimerContainer.removeChild(container);
-                container.destroy({ children: true, texture: false, baseTexture: false });
+                this.gameTimerContainer.removeChild(container);
+                // children:true + default texture frees the scoreText Text's texture.
+                container.destroy({ children: true, context: true });
                 this.teamScoreContainers.delete(teamId);
             }
         }
@@ -353,9 +350,7 @@ class GameEngine {
                 
                 // Team color indicator
                 const colorBar = new PIXI.Graphics();
-                colorBar.beginFill(this.getTeamColor(teamId));
-                colorBar.drawRoundedRect(0, 0, 6, 48, 3);
-                colorBar.endFill();
+                colorBar.roundRect(0, 0, 6, 48, 3).fill(this.getTeamColor(teamId));
                 colorBar.position.set(0, 2);
                 container.addChild(colorBar);
                 container.colorBar = colorBar;
@@ -383,7 +378,7 @@ class GameEngine {
                 container.addChild(scoreText);
                 container.scoreText = scoreText;
                 
-                this.roundTimerContainer.addChild(container);
+                this.gameTimerContainer.addChild(container);
                 this.teamScoreContainers.set(teamId, container);
             }
             
@@ -440,11 +435,8 @@ class GameEngine {
         
         // Minimap background
         const minimapBg = new PIXI.Graphics();
-        minimapBg.beginFill(0x1a3d1f, 0.8);
-        minimapBg.drawRoundedRect(0, 0, minimapWidth, minimapHeight, 4);
-        minimapBg.endFill();
-        minimapBg.lineStyle(1, 0x2ecc71, 0.6);
-        minimapBg.drawRoundedRect(0, 0, minimapWidth, minimapHeight, 4);
+        minimapBg.roundRect(0, 0, minimapWidth, minimapHeight, 4).fill({ color: 0x0f2040, alpha: 0.8 });
+        minimapBg.roundRect(0, 0, minimapWidth, minimapHeight, 4).stroke({ width: 1, color: 0x5FC4B8, alpha: 0.6 });
         minimapContainer.addChild(minimapBg);
         
         // Minimap title
@@ -478,11 +470,8 @@ class GameEngine {
             const totalHeight = this.minimapHeight + 90; // Minimap + title + player info section
             
             hudBg.clear();
-            hudBg.beginFill(0x000000, 0.7);
-            hudBg.drawRoundedRect(10, 10, totalWidth, totalHeight, 8);
-            hudBg.endFill();
-            hudBg.lineStyle(2, 0x444444, 0.8);
-            hudBg.drawRoundedRect(10, 10, totalWidth, totalHeight, 8);
+            hudBg.roundRect(10, 10, totalWidth, totalHeight, 8).fill({ color: 0x000000, alpha: 0.7 });
+            hudBg.roundRect(10, 10, totalWidth, totalHeight, 8).stroke({ width: 2, color: 0x444444, alpha: 0.8 });
         }
         
         // Adjust player info position to be below the minimap
@@ -622,10 +611,10 @@ class GameEngine {
     getTeamColor(teamNumber) {
         switch (teamNumber) {
             case 0: return 0x808080; // Gray for FFA/no team
-            case 1: return 0x4CAF50; // Green
-            case 2: return 0xF44336; // Red
-            case 3: return 0x2196F3; // Blue
-            case 4: return 0xFF9800; // Orange
+            case 1: return 0x0072B2; // Cobalt blue
+            case 2: return 0xE69F00; // Amber
+            case 3: return 0x009E73; // Teal
+            case 4: return 0xCC79A7; // Mauve
             default: return 0x808080; // Default gray
         }
     }
@@ -714,8 +703,7 @@ class GameEngine {
         
         // Start game loop - store reference for cleanup
         const gameLoopCallback = () => this.gameLoop();
-        this.tickerCallbacks.push(gameLoopCallback);
-        this.app.ticker.add(gameLoopCallback);
+        this.addTickerCallback(gameLoopCallback);
     }
     
     setupInput() {
@@ -769,85 +757,99 @@ class GameEngine {
         // Create clean 2D top-down assets
         
         // Player sprite - clean circular design
-        // Use a container to ensure the texture is centered on the circle, not the overall bounds
-        const playerContainer = new PIXI.Container();
-        
         const playerGraphics = new PIXI.Graphics();
-        playerGraphics.beginFill(0x8c8c8c);
-        playerGraphics.drawCircle(0, 0, 20);
-        playerGraphics.endFill();
+        playerGraphics.circle(0, 0, 20).fill(0x8c8c8c);
         
         // Direction indicator (weapon/facing)
-        playerGraphics.beginFill(0xffffff);
-        playerGraphics.drawPolygon([15, 0, 25, -5, 25, 5]);
-        playerGraphics.endFill();
+        playerGraphics.poly([15, 0, 25, -5, 25, 5]).fill(0xffffff);
         
-        playerContainer.addChild(playerGraphics);
-        
-        // Generate texture with explicit bounds centered on the circle (not the triangle)
-        // This ensures rotation happens around the circle's center
-        const bounds = new PIXI.Rectangle(-25, -25, 50, 50);
-        this.playerTexture = this.app.renderer.generateTexture(playerContainer, {
-            region: bounds,
-            resolution: 1
-        });
-        playerContainer.destroy({ children: true }); // Clean up after generating texture
+        // Generate texture - PIXI will auto-calculate bounds
+        // The texture will include the full visual (circle + triangle)
+        this.playerTexture = this.app.renderer.generateTexture(playerGraphics);
+        playerGraphics.destroy({ context: true }); // Clean up after generating texture
         
         // Projectile - simple bullet
         const projectileGraphics = new PIXI.Graphics();
-        projectileGraphics.beginFill(0xf39c12);
-        projectileGraphics.drawCircle(0, 0, 3);
-        projectileGraphics.endFill();
+        projectileGraphics.circle(0, 0, 3).fill(0xf39c12);
         this.projectileTexture = this.app.renderer.generateTexture(projectileGraphics);
-        projectileGraphics.destroy(); // Clean up graphics after generating texture
+        projectileGraphics.destroy({ context: true }); // Clean up graphics after generating texture
 
-        // Obstacle - boulder
-        const boulderGraphics = new PIXI.Graphics();
-        boulderGraphics.beginFill(0x808080);
-        boulderGraphics.drawCircle(0, 0, 20);
-        boulderGraphics.endFill();
-        this.boulderTexture = this.app.renderer.generateTexture(boulderGraphics);
-        boulderGraphics.destroy(); // Clean up graphics after generating texture
+        // Shared soft-glow circle. This is the single reusable base texture for
+        // ALL field effects, power-up auras, and particle-style visuals. Instead
+        // of rebuilding per-instance Graphics geometry every frame, we render a
+        // tinted/scaled Sprite of this texture, which lets PIXI batch them into a
+        // handful of draw calls with zero per-frame geometry churn.
+        this.glowTextureRadius = 64;
+        const glowGraphics = new PIXI.Graphics();
+        const glowSteps = 2;
+        for (let i = glowSteps; i >= 1; i--) {
+            const r = this.glowTextureRadius * (i / glowSteps);
+            const a = Math.pow(1 - (i - 1) / glowSteps, 2) * 0.18;
+            glowGraphics.circle(0, 0, r).fill({ color: 0xffffff, alpha: a });
+        }
+        glowGraphics.circle(0, 0, this.glowTextureRadius * 0.35).fill({ color: 0xffffff, alpha: 0.85 });
+        this.glowTexture = this.app.renderer.generateTexture(glowGraphics);
+        glowGraphics.destroy({ context: true });
+
+        // Field-effect disc. Unlike the glow texture (small bright core + wide
+        // faint halo), this fills its full extent: dense toward the centre,
+        // fading only at the very rim. Field effects scale this so the rim lands
+        // exactly on the gameplay radius — the render never exceeds the physics
+        // radius, keeping the visual boundary honest for players.
+        this.fieldTextureRadius = 64;
+        const fieldGraphics = new PIXI.Graphics();
+        const fieldSteps = 16;
+        for (let i = fieldSteps; i >= 1; i--) {
+            const r = this.fieldTextureRadius * (i / fieldSteps);
+            // Painter's stacking concentrates opacity toward the centre; soften
+            // only the outermost ring so the disc reads as filled with a soft edge.
+            const rimFade = i >= fieldSteps ? 0.4 : 1.0;
+            fieldGraphics.circle(0, 0, r).fill({ color: 0xffffff, alpha: 0.11 * rimFade });
+        }
+        this.fieldTexture = this.app.renderer.generateTexture(fieldGraphics);
+        fieldGraphics.destroy({ context: true });
         
         // Death marker - tombstone/X
         const deathGraphics = new PIXI.Graphics();
+        // Add a circle background first
+        deathGraphics.circle(0, 0, 18).fill({ color: 0x000000, alpha: 0.3 });
+        deathGraphics.circle(0, 0, 18).stroke({ width: 2, color: 0x444444, alpha: 0.8 });
         // Draw a red X
-        deathGraphics.lineStyle(4, 0xff4444, 1);
         deathGraphics.moveTo(-15, -15);
         deathGraphics.lineTo(15, 15);
         deathGraphics.moveTo(15, -15);
         deathGraphics.lineTo(-15, 15);
-        // Add a circle background
-        deathGraphics.lineStyle(2, 0x444444, 0.8);
-        deathGraphics.beginFill(0x000000, 0.3);
-        deathGraphics.drawCircle(0, 0, 18);
-        deathGraphics.endFill();
+        deathGraphics.stroke({ width: 4, color: 0xff4444 });
         this.deathTexture = this.app.renderer.generateTexture(deathGraphics);
-        deathGraphics.destroy(); // Clean up graphics after generating texture
+        deathGraphics.destroy({ context: true }); // Clean up graphics after generating texture
     }
     
     async connectToServer() {
         const params = new URLSearchParams(window.location.search);
         const gameId = params.get('gameId') || 'default';
         const spectate = params.get('spectate') === 'true';
-        
-        // Set spectator flag
+
+        // Set spectator flag (preserved for SpectatorMode)
         this.isSpectator = spectate;
-        
+        // Indicates the player has not yet spawned. Becomes false on initialState.
+        this.isAwaitingSpawn = !spectate;
+        // Was set when the server told us our lobby slot was freed (timeout).
+        // After this, "Ready" actually retries as SPECTATOR->PLAYING.
+        this.wasLobbyDowngraded = false;
+        // Suppresses the generic connection-lost overlay when the server is
+        // closing the socket on a typed joinRejected.
+        this.expectingSocketClose = false;
+
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/game/${gameId}?spectate=${spectate}`;
-        
+
         return new Promise((resolve, reject) => {
             this.websocket = new WebSocket(wsUrl);
-            
+
             this.websocket.onopen = () => {
-                // Spectators don't need to send configuration
-                if (!this.isSpectator) {
-                    this.sendPlayerConfiguration();
-                }
                 resolve();
             };
-            
+
             this.websocket.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
@@ -856,15 +858,17 @@ class GameEngine {
                     console.error('Error parsing server message:', error);
                 }
             };
-            
+
             this.websocket.onclose = () => {
-                this.showConnectionError();
+                if (!this.expectingSocketClose) {
+                    this.showConnectionError();
+                }
             };
-            
+
             this.websocket.onerror = (error) => {
                 reject(error);
             };
-            
+
             this.safeSetTimeout(() => {
                 if (this.websocket.readyState !== WebSocket.OPEN) {
                     reject(new Error('Connection timeout'));
@@ -874,8 +878,6 @@ class GameEngine {
     }
     
     gameLoop() {
-        this.gameLoopCounter = (this.gameLoopCounter || 0) + 1;
-        
         const deltaTime = this.app.ticker.deltaMS / 1000;
         
         // Update spectator mode if active (spectator handles its own camera)
@@ -960,6 +962,11 @@ class GameEngine {
         this.backgroundContainer.scale.set(this.zoomLevel, -this.zoomLevel); // Also Y-flip background
         this.backgroundContainer.pivot.x = this.camera.x;
         this.backgroundContainer.pivot.y = this.camera.y;
+
+        // Keep smoke overlay centered on the camera in world coordinates
+        if (this.smokeOverlay && this.camera) {
+            this.smokeOverlay.position.set(this.camera.x, this.camera.y);
+        }
     }
     
     // Coordinate conversion functions removed - no longer needed!
@@ -987,13 +994,22 @@ class GameEngine {
             this.handleSpectatorInit(data);
             return;
         }
-        
+
         // Delegate to spectator mode if active
         if (this.spectatorMode) {
             this.spectatorMode.handleServerMessage(data);
         }
-        
+
         switch (data.type) {
+            case 'lobbyInit':
+                this.handleLobbyInit(data);
+                break;
+            case 'lobbyTimeout':
+                this.handleLobbyTimeout(data);
+                break;
+            case 'joinRejected':
+                this.handleJoinRejected(data);
+                break;
             case 'initialState':
                 this.handleInitialState(data);
                 break;
@@ -1003,14 +1019,11 @@ class GameEngine {
             case 'playerKilled':
                 this.handlePlayerKilled(data);
                 break;
+            case 'eliminated':
+                this.handleEliminated(data);
+                break;
             case 'gameEvent':
                 this.handleGameEvent(data);
-                break;
-            case 'roundEnd':
-                this.handleRoundEnd(data);
-                break;
-            case 'roundStart':
-                this.handleRoundStart(data);
                 break;
             case 'gameOver':
                 this.showGameOverScreen(data);
@@ -1018,84 +1031,324 @@ class GameEngine {
         }
     }
     
+    /**
+     * The server eliminated us in a last-man-standing game and is switching us to
+     * spectator. The spectatorInit message that follows builds the free-look view;
+     * here we tear down the player-facing UI and stop sending input. The isSpectator
+     * flag + spectatorMode (created by spectatorInit) make sendPlayerInput a no-op.
+     */
+    handleEliminated(data) {
+        this.isSpectator = true;
+        this.hideDeathScreen();
+        this.displayGameEvent({
+            message: '💀 You were eliminated — now spectating',
+            category: 'INFO',
+            color: '#ff6666',
+            displayDuration: 5000
+        });
+    }
+
     handleSpectatorInit(data) {
-        // Set world bounds (server sends worldWidth/worldHeight directly)
-        this.worldBounds.width = data.worldWidth || 2000;
-        this.worldBounds.height = data.worldHeight || 2000;
-        
-        // Store team information (for rendering)
-        this.teamMode = data.teamMode || false;
-        this.teamCount = data.teamCount || 0;
-        
-        // Store terrain information
-        this.terrainData = data.terrain || null;
-        
-        // Create background and grid (same as normal players)
-        if (this.terrainData) {
-            this.createProceduralTerrain();
+        // Use the shared world setup so a LOBBY -> SPECTATOR downgrade doesn't
+        // duplicate obstacles/terrain/grid that we already drew during lobbyInit.
+        // Skip the minimap because the spectator HUD has a full-map overlay.
+        this.setupWorldFromInitData(data, /* includeMinimap */ false);
+
+        // If the user joined directly as a spectator (URL flag), close the
+        // loadout modal. After a lobby-timeout downgrade, keep it open so the
+        // user can still pick a loadout and click Ready to claim a free slot.
+        if (!this.wasLobbyDowngraded) {
+            this.hideLoadoutModal();
         }
-        
-        if (this.teamMode && data.teamAreas) {
-            this.teamAreas = data.teamAreas;
-            this.createTeamSpawnAreas();
+
+        // Create the spectator mode instance if one isn't already running.
+        if (!this.spectatorMode && typeof SpectatorMode !== 'undefined') {
+            this.spectatorMode = new SpectatorMode(this);
+            this.spectatorMode.init(data);
         }
-        
-        this.createCrosshatchGrid();
-        
-        // Don't create minimap for spectators (they have full view)
-        // Spectators don't need player HUD either
-        
-        // Create spectator mode instance
-        this.spectatorMode = new SpectatorMode(this);
-        this.spectatorMode.init(data);
-        
+
         // Show game UI
-        document.getElementById('game-ui').style.display = 'block';
+        const gameUi = document.getElementById('game-ui');
+        if (gameUi) gameUi.style.display = 'block';
     }
     
     handleInitialState(data) {
         this.myPlayerId = data.playerId;
-        this.worldBounds.width = data.worldWidth || 2000;
-        this.worldBounds.height = data.worldHeight || 2000;
-        
-        // Store team information
-        this.teamMode = data.teamMode || false;
-        this.teamCount = data.teamCount || 0;
-        this.teamAreas = data.teamAreas || null;
-        
-        // Store terrain information
-        this.terrainData = data.terrain || null;
+        // World may already be set up from a prior lobbyInit; setup is idempotent.
+        this.setupWorldFromInitData(data);
 
-        if (data.obstacles) {
-            data.obstacles.forEach(obstacle => {
-                this.createObstacle(obstacle);
+        this.isAwaitingSpawn = false;
+        this.hideLoadoutModal();
+    }
+
+    /**
+     * Idempotently configure world bounds, terrain, obstacles, grid, team
+     * areas, and (optionally) the minimap from an initial-state-style
+     * payload. Shared between {@code handleInitialState},
+     * {@code handleLobbyInit}, and {@code handleSpectatorInit}.
+     *
+     * @param data           initial-state payload from the server.
+     * @param includeMinimap when false (spectators), the minimap is skipped
+     *                       since the spectator HUD has its own full-map view.
+     */
+    setupWorldFromInitData(data, includeMinimap = true) {
+        if (!this._worldSetupDone) {
+            this.worldBounds.width = data.worldWidth || 2000;
+            this.worldBounds.height = data.worldHeight || 2000;
+            this.teamMode = data.teamMode || false;
+            this.teamCount = data.teamCount || 0;
+            this.teamAreas = data.teamAreas || null;
+
+            if (data.obstacles) {
+                data.obstacles.forEach(obstacle => this.createObstacle(obstacle));
+            }
+            if (this.teamMode && this.teamAreas) {
+                this.createTeamSpawnAreas();
+            }
+            this.createCrosshatchGrid();
+            if (includeMinimap) {
+                this.createHUDMinimap();
+                this.updateHUDLayout();
+            }
+
+            this._worldSetupDone = true;
+        }
+    }
+
+    handleLobbyInit(data) {
+        this.setupWorldFromInitData(data);
+        // Show the loading screen briefly during initial layout so the canvas
+        // doesn't pop up under the modal; the modal itself takes over right after.
+        this.showLoadoutModal(data);
+    }
+
+    handleLobbyTimeout(data) {
+        // Server has soft-downgraded us to spectator. The modal stays visible
+        // so the user can still pick a loadout and click Ready when a slot opens.
+        this.wasLobbyDowngraded = true;
+        this.isAwaitingSpawn = false; // We're effectively a spectator now.
+        this.showLoadoutBanner(
+            'Your slot was freed for being idle. Press Ready when you want to '
+            + 'try to spawn into an available slot.'
+        );
+        const countdownEl = document.getElementById('lobby-countdown');
+        if (countdownEl) countdownEl.textContent = '';
+        if (this._lobbyCountdownInterval) {
+            clearInterval(this._lobbyCountdownInterval);
+            this._lobbyCountdownInterval = null;
+        }
+    }
+
+    handleJoinRejected(data) {
+        // Server explicitly rejected our spawn/join. Show a friendly overlay
+        // and stop the generic disconnect screen from masking the reason.
+        this.expectingSocketClose = true;
+        this.hideLoadoutModal();
+
+        const reason = data && data.reason ? data.reason : 'UNKNOWN';
+        const messages = {
+            GAME_FULL: 'This game is full. Try a different game or wait for a slot to open.',
+            GAME_LOCKED: 'This game has locked late joiners out and cannot accept new players.',
+            GAME_ENDED: 'This game has already finished.',
+            GAME_NOT_FOUND: "That game doesn't exist anymore. It may have ended."
+        };
+        const titleEl = document.getElementById('join-rejected-title');
+        const msgEl = document.getElementById('join-rejected-message');
+        const returnBtn = document.getElementById('join-rejected-return');
+        const overlay = document.getElementById('join-rejected');
+        if (titleEl) {
+            titleEl.textContent = reason === 'GAME_NOT_FOUND' ? 'Game not found' : 'Unable to join';
+        }
+        if (msgEl) {
+            msgEl.textContent = messages[reason] || `Reason: ${reason}`;
+        }
+        if (returnBtn && !returnBtn._handlerBound) {
+            returnBtn._handlerBound = true;
+            returnBtn.addEventListener('click', () => {
+                window.location.href = '/lobby.html';
             });
         }
-        
-        // Create procedural terrain background
-        if (this.terrainData) {
-            this.createProceduralTerrain();
+        if (overlay) overlay.classList.add('visible');
+    }
+
+    showLoadoutModal(data) {
+        const modal = document.getElementById('loadout-modal');
+        if (!modal) {
+            console.warn('Loadout modal markup missing from page');
+            return;
         }
-        
-        // Draw team spawn areas if in team mode
-        if (this.teamMode && this.teamAreas) {
-            this.createTeamSpawnAreas();
+
+        const root = document.getElementById('loadout-customizer-root');
+        const readyBtn = document.getElementById('ready-up');
+
+        if (!this.weaponCustomizer && root && typeof WeaponCustomizer !== 'undefined') {
+            this.weaponCustomizer = new WeaponCustomizer(root, {
+                onValidityChange: (isValid) => {
+                    if (readyBtn) readyBtn.disabled = !isValid;
+                }
+            });
+            this.weaponCustomizer.init();
         }
-        
-        // Create crosshatch grid background with correct world dimensions
-        this.createCrosshatchGrid();
-        
-        // Create minimap with correct aspect ratio
-        this.createHUDMinimap();
-        this.updateHUDLayout();
+
+        if (readyBtn && !readyBtn._handlerBound) {
+            readyBtn._handlerBound = true;
+            readyBtn.addEventListener('click', () => this.submitReadyToSpawn());
+        }
+
+        // Populate the name dropdown with the curated list; pre-select the
+        // server-assigned random name so the player can just hit Ready.
+        this.populateNamePicker(data && data.assignedName);
+
+        // Show the modal and hide the loading screen behind it
+        modal.classList.add('visible');
+        const loading = document.getElementById('loading-screen');
+        if (loading) loading.style.display = 'none';
+        const gameUi = document.getElementById('game-ui');
+        if (gameUi) gameUi.style.display = 'block';
+
+        // Kick off the lobby countdown if the server told us a timeout
+        const timeoutMs = data && typeof data.lobbyTimeoutMs === 'number' ? data.lobbyTimeoutMs : null;
+        if (timeoutMs) this.startLobbyCountdown(timeoutMs);
+    }
+
+    /**
+     * Fetch the curated name list from /api/names, populate #name-select, and
+     * pre-select the server-assigned name. Attaches the randomise button handler.
+     * Safe to call multiple times — skips re-population when the list is already loaded.
+     */
+    async populateNamePicker(assignedName) {
+        const select = document.getElementById('name-select');
+        const randomBtn = document.getElementById('name-randomize');
+        if (!select) return;
+
+        // Only fetch once; on subsequent calls just update the selection.
+        if (!this._namePicker_loaded) {
+            try {
+                const resp = await fetch('/api/names');
+                const names = await resp.json();
+                select.innerHTML = '';
+                names.forEach(name => {
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = name;
+                    select.appendChild(opt);
+                });
+                this._namePicker_loaded = true;
+                this._namePicker_names = names;
+            } catch (err) {
+                console.error('Failed to load name list', err);
+                select.innerHTML = '<option value="">Could not load names</option>';
+                return;
+            }
+        }
+
+        // Priority: previously saved name → server-assigned random name → first in list.
+        const saved = localStorage.getItem('fullsteam_playerName');
+        if (saved && this._namePicker_names && this._namePicker_names.includes(saved)) {
+            select.value = saved;
+        } else if (assignedName) {
+            select.value = assignedName;
+        }
+
+        // Persist any manual selection immediately so it survives page reloads.
+        if (!select._changeHandlerBound) {
+            select._changeHandlerBound = true;
+            select.addEventListener('change', () => {
+                if (select.value) localStorage.setItem('fullsteam_playerName', select.value);
+            });
+        }
+
+        // Randomise button — picks a new entry from the already-loaded list.
+        if (randomBtn && !randomBtn._handlerBound) {
+            randomBtn._handlerBound = true;
+            randomBtn.addEventListener('click', () => {
+                const names = this._namePicker_names;
+                if (!names || !names.length) return;
+                select.value = names[Math.floor(Math.random() * names.length)];
+                if (select.value) localStorage.setItem('fullsteam_playerName', select.value);
+            });
+        }
+    }
+
+    hideLoadoutModal() {
+        const modal = document.getElementById('loadout-modal');
+        if (modal) modal.classList.remove('visible');
+        if (this._lobbyCountdownInterval) {
+            clearInterval(this._lobbyCountdownInterval);
+            this._lobbyCountdownInterval = null;
+        }
+        const countdownEl = document.getElementById('lobby-countdown');
+        if (countdownEl) countdownEl.textContent = '';
+    }
+
+    showLoadoutBanner(message) {
+        const banner = document.getElementById('loadout-banner');
+        if (banner) {
+            banner.textContent = message;
+            banner.classList.add('visible');
+        }
+    }
+
+    startLobbyCountdown(timeoutMs) {
+        const deadline = Date.now() + timeoutMs;
+        const el = document.getElementById('lobby-countdown');
+        if (this._lobbyCountdownInterval) {
+            clearInterval(this._lobbyCountdownInterval);
+        }
+        const tick = () => {
+            const remaining = Math.max(0, deadline - Date.now());
+            if (el) {
+                const seconds = Math.ceil(remaining / 1000);
+                el.textContent = remaining > 0
+                    ? `Slot held for ${seconds}s while customizing`
+                    : '';
+            }
+            if (remaining <= 0 && this._lobbyCountdownInterval) {
+                clearInterval(this._lobbyCountdownInterval);
+                this._lobbyCountdownInterval = null;
+            }
+        };
+        tick();
+        this._lobbyCountdownInterval = setInterval(tick, 1000);
+    }
+
+    submitReadyToSpawn() {
+        if (!this.weaponCustomizer || !this.websocket
+            || this.websocket.readyState !== WebSocket.OPEN) {
+            return;
+        }
+        const config = this.weaponCustomizer.getPlayerConfig();
+        const nameSelect = document.getElementById('name-select');
+        const message = {
+            type: 'readyToSpawn',
+            weaponConfig: config.weaponConfig,
+            utilityWeapon: config.utilityWeapon,
+            playerName: nameSelect ? nameSelect.value : undefined
+        };
+        this.websocket.send(JSON.stringify(message));
+
+        // Visually indicate the action is in flight; server will reply with
+        // `initialState` (success) or `joinRejected` (failure).
+        const readyBtn = document.getElementById('ready-up');
+        if (readyBtn) {
+            readyBtn.disabled = true;
+            readyBtn.textContent = 'Spawning...';
+            // Restore label if server takes too long (defensive only)
+            this.safeSetTimeout(() => {
+                if (readyBtn && readyBtn.textContent === 'Spawning...') {
+                    readyBtn.textContent = 'Ready';
+                    readyBtn.disabled = !(this.weaponCustomizer && this.weaponCustomizer.isValid());
+                }
+            }, 5000);
+        }
     }
     
     handleGameState(data) {
         this.gameState = data;
         
-        // Update round timer if rounds are enabled
-        if (data.roundEnabled !== undefined) {
-            this.updateRoundTimer(data);
+        // Update the game timer (countdown for timed games, plus team scores)
+        if (data.gameState !== undefined) {
+            this.updateGameTimer(data);
         }
         
         if (data.players) {
@@ -1120,26 +1373,31 @@ class GameEngine {
             this.updateScoreboard(data.players);
         }
         
-        if (data.projectiles) {
+        // Projectiles: cleanup runs unconditionally so an absent field (server
+        // omits the key when the list is empty) clears any stale sprites.
+        {
             const currentProjectileIds = new Set();
-            
-            data.projectiles.forEach(projectileData => {
-                currentProjectileIds.add(projectileData.id);
-                
-                if (this.projectiles.has(projectileData.id)) {
-                    this.updateProjectile(projectileData);
-                } else {
-                    this.createProjectile(projectileData);
-                }
-            });
-            
-            for (let [projectileId, projectile] of this.projectiles) {
+            if (data.projectiles) {
+                data.projectiles.forEach(projectileData => {
+                    currentProjectileIds.add(projectileData.id);
+                    if (this.projectiles.has(projectileData.id)) {
+                        this.updateProjectile(projectileData);
+                    } else {
+                        this.createProjectile(projectileData);
+                    }
+                });
+            }
+            for (let [projectileId] of this.projectiles) {
                 if (!currentProjectileIds.has(projectileId)) {
                     this.removeProjectile(projectileId);
                 }
             }
         }
 
+        // Obstacles are static — delivered once in the init payload and never
+        // re-sent in recurring gameState messages.  We still handle the field
+        // if it appears (e.g. future reconnect flows) but never rely on its
+        // absence to remove obstacles that were set up during initialisation.
         if (data.obstacles) {
             const currentObstacleIds = new Set();
             data.obstacles.forEach(obstacleData => {
@@ -1149,62 +1407,34 @@ class GameEngine {
                 } else {
                     this.createObstacle(obstacleData);
                 }
-                
-                // Create health bar for player barriers if it doesn't exist
-                if (obstacleData.type === 'PLAYER_BARRIER' && obstacleData.ownerId > 0) {
-                    this.obstacleHealthBars = this.obstacleHealthBars || new Map();
-                    if (!this.obstacleHealthBars.has(obstacleData.id)) {
-                        const healthBarContainer = this.createObstacleHealthBar(obstacleData);
-                        this.obstacleHealthBars.set(obstacleData.id, healthBarContainer);
-                    }
-                }
             });
-
-            for (let [obstacleId, obstacle] of this.obstacles) {
+            for (let [obstacleId] of this.obstacles) {
                 if (!currentObstacleIds.has(obstacleId)) {
                     this.removeObstacle(obstacleId);
                 }
             }
         }
-        
-        // Handle field effects
-        if (data.fieldEffects) {
-            const currentFieldEffectIds = new Set();
-            data.fieldEffects.forEach(effectData => {
-                currentFieldEffectIds.add(effectData.id);
-                if (this.fieldEffects.has(effectData.id)) {
-                    this.updateFieldEffect(effectData);
-                } else {
-                    this.createFieldEffect(effectData);
-                }
-            });
 
-            for (let [effectId, effect] of this.fieldEffects) {
+        // Field effects: same absent-means-empty pattern as projectiles
+        {
+            const currentFieldEffectIds = new Set();
+            if (data.fieldEffects) {
+                data.fieldEffects.forEach(effectData => {
+                    currentFieldEffectIds.add(effectData.id);
+                    if (this.fieldEffects.has(effectData.id)) {
+                        this.updateFieldEffect(effectData);
+                    } else {
+                        this.createFieldEffect(effectData);
+                    }
+                });
+            }
+            for (let [effectId] of this.fieldEffects) {
                 if (!currentFieldEffectIds.has(effectId)) {
                     this.removeFieldEffect(effectId);
                 }
             }
         }
-        
-        // Handle beams
-        if (data.beams) {
-            const currentBeamIds = new Set();
-            data.beams.forEach(beamData => {
-                currentBeamIds.add(beamData.id);
-                if (this.beams.has(beamData.id)) {
-                    this.updateBeam(beamData);
-                } else {
-                    this.createBeam(beamData);
-                }
-            });
 
-            for (let [beamId, beam] of this.beams) {
-                if (!currentBeamIds.has(beamId)) {
-                    this.removeBeam(beamId);
-                }
-            }
-        }
-        
         // Handle flags (CTF mode)
         if (data.flags) {
             const currentFlagIds = new Set();
@@ -1224,6 +1454,24 @@ class GameEngine {
             }
         }
         
+        // Handle Oddball NPCs
+        if (data.oddballNpcs) {
+            const currentNpcIds = new Set();
+            data.oddballNpcs.forEach(npcData => {
+                currentNpcIds.add(npcData.id);
+                if (this.oddballNpcs.has(npcData.id)) {
+                    this.updateOddballNpc(npcData);
+                } else {
+                    this.createOddballNpc(npcData);
+                }
+            });
+            for (let [npcId] of this.oddballNpcs) {
+                if (!currentNpcIds.has(npcId)) {
+                    this.removeOddballNpc(npcId);
+                }
+            }
+        }
+
         // Handle KOTH zones
         if (data.kothZones) {
             const currentZoneIds = new Set();
@@ -1243,7 +1491,7 @@ class GameEngine {
             }
         }
         
-        // Handle utility entities (turrets, barriers, nets, mines, teleport pads)
+        // Handle utility entities (turrets, nets, defense lasers, headquarters, power-ups)
         this.handleUtilityEntities(data);
         
         this.updateUI(data);
@@ -1279,30 +1527,6 @@ class GameEngine {
             });
         }
         
-        // Handle mines
-        if (data.mines) {
-            data.mines.forEach(mineData => {
-                currentEntityIds.add(mineData.id);
-                if (this.utilityEntities.has(mineData.id)) {
-                    this.updateUtilityEntity(mineData);
-                } else {
-                    this.createUtilityEntity(mineData);
-                }
-            });
-        }
-        
-        // Handle teleport pads
-        if (data.teleportPads) {
-            data.teleportPads.forEach(padData => {
-                currentEntityIds.add(padData.id);
-                if (this.utilityEntities.has(padData.id)) {
-                    this.updateUtilityEntity(padData);
-                } else {
-                    this.createUtilityEntity(padData);
-                }
-            });
-        }
-        
         // Handle defense lasers
         if (data.defenseLasers) {
             data.defenseLasers.forEach(laserData => {
@@ -1311,30 +1535,6 @@ class GameEngine {
                     this.updateUtilityEntity(laserData);
                 } else {
                     this.createUtilityEntity(laserData);
-                }
-            });
-        }
-        
-        // Handle workshops
-        if (data.workshops) {
-            data.workshops.forEach(workshopData => {
-                currentEntityIds.add(workshopData.id);
-                if (this.utilityEntities.has(workshopData.id)) {
-                    this.updateUtilityEntity(workshopData);
-                } else {
-                    this.createUtilityEntity(workshopData);
-                }
-            });
-        }
-        
-        // Handle power-ups
-        if (data.powerUps) {
-            data.powerUps.forEach(powerUpData => {
-                currentEntityIds.add(powerUpData.id);
-                if (this.utilityEntities.has(powerUpData.id)) {
-                    this.updateUtilityEntity(powerUpData);
-                } else {
-                    this.createUtilityEntity(powerUpData);
                 }
             });
         }
@@ -1357,8 +1557,42 @@ class GameEngine {
                 this.removeUtilityEntity(entityId);
             }
         }
+
+        // Handle vision-obscured overlay
+        this.updateVisionObscuredOverlay(data.visionObscured === true);
     }
     
+    /**
+     * Show or hide a full-screen smoke overlay when the player's vision is obscured.
+     */
+    updateVisionObscuredOverlay(isObscured) {
+        if (isObscured && !this.smokeOverlay) {
+            this.smokeOverlay = new PIXI.Graphics();
+            const overlaySize = 10000;
+            this.smokeOverlay.rect(
+                -overlaySize / 2,
+                -overlaySize / 2,
+                overlaySize,
+                overlaySize
+            ).fill({ color: 0x888888, alpha: 0.75 });
+            this.smokeOverlay.zIndex = 45; // Above game objects, below HUD
+            this.gameContainer.addChild(this.smokeOverlay);
+            if (this.camera) {
+                this.smokeOverlay.position.set(this.camera.x, this.camera.y);
+            }
+        } else if (isObscured && this.smokeOverlay) {
+            // Keep it visible and follow camera position
+            this.smokeOverlay.visible = true;
+            if (this.camera) {
+                this.smokeOverlay.position.set(this.camera.x, this.camera.y);
+            }
+        } else if (!isObscured && this.smokeOverlay) {
+            this.gameContainer.removeChild(this.smokeOverlay);
+            this.smokeOverlay.destroy({ children: true, context: true });
+            this.smokeOverlay = null;
+        }
+    }
+
     /**
      * Create a utility entity
      */
@@ -1385,14 +1619,6 @@ class GameEngine {
         entityContainer.entityGraphics = entityGraphics;
         this.utilityEntities.set(entityData.id, entityContainer);
         this.gameContainer.addChild(entityContainer);
-        
-        // Handle teleport pad connections
-        if (entityData.type === 'TELEPORT_PAD') {
-            this.updateTeleportPadConnections(entityData);
-        }
-        
-        // Enable sorting
-        this.gameContainer.sortableChildren = true;
     }
     
     /**
@@ -1432,57 +1658,45 @@ class GameEngine {
     handleGameEvent(data) {
         this.displayGameEvent(data);
     }
-    
+
     displayGameEvent(event) {
-        // Create the event display container if it doesn't exist
         if (!this.eventContainer) {
             this.createEventDisplay();
         }
-        
-        // Create the event element
+
         const eventElement = document.createElement('div');
         eventElement.className = 'game-event';
-        eventElement.style.color = event.color || '#FFFFFF';
-        
-        // Parse and render colored text
-        // Format: <color:#RRGGBB>Text</color>
+
+        // Overall colour hint (may be overridden by colored-text spans inside)
+        if (event.color) eventElement.style.color = event.color;
+
+        if (event.category) {
+            eventElement.classList.add('event-' + event.category.toLowerCase());
+        }
+
         const coloredMessage = this.parseColoredMessage(event.message);
         if (coloredMessage) {
             eventElement.innerHTML = coloredMessage;
         } else {
             eventElement.textContent = event.message;
         }
-        
-        // Add category-specific styling
-        if (event.category) {
-            eventElement.classList.add('event-' + event.category.toLowerCase());
-        }
-        
-        // Add to container (prepend so newest events appear at top)
+
         this.eventContainer.prepend(eventElement);
-        
-        // Animate in from the right
-        eventElement.style.opacity = '0';
-        eventElement.style.transform = 'translateX(20px)';
-        requestAnimationFrame(() => {
-            eventElement.style.transition = 'all 0.3s ease-out';
-            eventElement.style.opacity = '1';
-            eventElement.style.transform = 'translateX(0)';
-        });
-        
-        // Auto-remove after display duration (or default 3 seconds)
+
+        // Auto-remove after display duration
         const displayDuration = event.displayDuration || 3000;
-        this.safeSetTimeout(() => {
-            this.removeGameEvent(eventElement);
-        }, displayDuration);
-        
-        // Limit the number of visible events
-        const maxEvents = 6;
-        const events = this.eventContainer.children;
-        if (events.length > maxEvents) {
-            for (let i = maxEvents; i < events.length; i++) {
-                this.removeGameEvent(events[i]);
-            }
+        this.safeSetTimeout(() => this.removeGameEvent(eventElement), displayDuration);
+
+        // Cap visible events. Evict overflow SYNCHRONOUSLY: removeGameEvent() only
+        // schedules an animated removal 300ms later, so using it here would never
+        // change children.length and this while-loop would spin forever (tab
+        // freeze) — which is exactly what high event-rate modes (CTF/oddball)
+        // triggered. The break guard ensures we can never loop without progress.
+        const MAX_EVENTS = 10;
+        while (this.eventContainer.children.length > MAX_EVENTS) {
+            const oldest = this.eventContainer.lastElementChild;
+            if (!oldest) break;
+            this.eventContainer.removeChild(oldest);
         }
     }
     
@@ -1511,577 +1725,110 @@ class GameEngine {
     }
     
     createEventDisplay() {
-        // Create the event container
+        // All layout and styling lives in unified.css (#game-events, .game-event, etc.)
         this.eventContainer = document.createElement('div');
         this.eventContainer.id = 'game-events';
-        this.eventContainer.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 380px;
-            max-width: 35vw;
-            z-index: 1000;
-            pointer-events: none;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-        `;
-        
         document.body.appendChild(this.eventContainer);
-        
-        // Add CSS styles for events
-        const style = document.createElement('style');
-        style.textContent = `
-            .game-event {
-                background: rgba(0, 0, 0, 0.85);
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 4px;
-                padding: 6px 10px;
-                margin-bottom: 4px;
-                font-weight: 500;
-                text-align: left;
-                font-size: 12px;
-                line-height: 1.3;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-                backdrop-filter: blur(3px);
-                -webkit-backdrop-filter: blur(3px);
-                max-width: 100%;
-                word-wrap: break-word;
-            }
-            
-            .game-event.event-kill {
-                border-left: 3px solid #FF4444;
-                border-color: rgba(255, 68, 68, 0.6);
-            }
-            
-            .game-event.event-capture {
-                border-left: 3px solid #00FF88;
-                border-color: rgba(0, 255, 136, 0.6);
-            }
-            
-            .game-event.event-system {
-                border-left: 3px solid #FFAA00;
-                border-color: rgba(255, 170, 0, 0.6);
-            }
-            
-            .game-event.event-achievement {
-                border-left: 3px solid #FFD700;
-                border-color: rgba(255, 215, 0, 0.6);
-                background: linear-gradient(135deg, rgba(255, 215, 0, 0.05), rgba(0, 0, 0, 0.85));
-            }
-            
-            .game-event.event-warning {
-                border-left: 3px solid #FF8800;
-                border-color: rgba(255, 136, 0, 0.6);
-            }
-            
-            .game-event.event-info {
-                border-left: 3px solid #00AAFF;
-                border-color: rgba(0, 170, 255, 0.6);
-            }
-        `;
-        document.head.appendChild(style);
     }
     
     removeGameEvent(eventElement) {
-        if (eventElement && eventElement.parentNode) {
-            eventElement.style.transition = 'all 0.3s ease-in';
-            eventElement.style.opacity = '0';
-            eventElement.style.transform = 'translateX(30px) scale(0.95)';
-            this.safeSetTimeout(() => {
-                if (eventElement.parentNode) {
-                    eventElement.parentNode.removeChild(eventElement);
-                }
-            }, 300);
-        }
-    }
-    
-    /**
-     * Handle round end event - display scores
-     */
-    handleRoundEnd(data) {
-        this.showRoundEndScreen(data);
-    }
-    
-    /**
-     * Handle round start event - clear round end screen
-     */
-    handleRoundStart(data) {
-        this.hideRoundEndScreen();
-    }
-    
-    /**
-     * Show round end screen with scores
-     */
-    showRoundEndScreen(data) {
-        // Create or get round end overlay
-        let overlay = document.getElementById('round-end-overlay');
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.id = 'round-end-overlay';
-            overlay.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0, 0, 0, 0.85);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 10000;
-                backdrop-filter: blur(8px);
-                -webkit-backdrop-filter: blur(8px);
-            `;
-            document.body.appendChild(overlay);
-        }
-        
-        // Create content container
-        const content = document.createElement('div');
-        content.style.cssText = `
-            background: linear-gradient(135deg, rgba(20, 20, 30, 0.95), rgba(40, 40, 60, 0.95));
-            border: 2px solid rgba(255, 170, 0, 0.6);
-            border-radius: 12px;
-            padding: 40px;
-            max-width: 800px;
-            width: 90%;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-        `;
-        
-        // Title
-        const title = document.createElement('h1');
-        title.textContent = `ROUND ${data.round} COMPLETE`;
-        title.style.cssText = `
-            color: #ffaa00;
-            text-align: center;
-            margin: 0 0 30px 0;
-            font-size: 36px;
-            text-shadow: 0 2px 10px rgba(255, 170, 0, 0.5);
-        `;
-        content.appendChild(title);
-        
-        // Scores
-        if (data.scores && data.scores.length > 0) {
-            const scoresContainer = document.createElement('div');
-            scoresContainer.style.cssText = `
-                background: rgba(0, 0, 0, 0.3);
-                border-radius: 8px;
-                padding: 20px;
-                margin-bottom: 20px;
-            `;
-            
-            // Group by team if team mode
-            const hasTeams = data.scores.some(score => score.team > 0);
-            
-            if (hasTeams) {
-                // Team-based display
-                const teams = {};
-                const teamTotals = {};
-                
-                // Group players by team and calculate team totals
-                data.scores.forEach(score => {
-                    const teamNum = score.team || 0;
-                    if (!teams[teamNum]) {
-                        teams[teamNum] = [];
-                        teamTotals[teamNum] = { kills: 0, deaths: 0, captures: 0, bonusPoints: 0 };
-                    }
-                    teams[teamNum].push(score);
-                    teamTotals[teamNum].kills += score.kills || 0;
-                    teamTotals[teamNum].deaths += score.deaths || 0;
-                    teamTotals[teamNum].captures += score.captures || 0;
-                    teamTotals[teamNum].bonusPoints += score.bonusPoints || 0;
-                });
-                
-                // Sort teams by total kills (descending) - winning team first
-                const sortedTeams = Object.entries(teams).sort((a, b) => {
-                    const teamA = parseInt(a[0]);
-                    const teamB = parseInt(b[0]);
-                    // No team (0) always goes last
-                    if (teamA === 0) return 1;
-                    if (teamB === 0) return -1;
-                    return teamTotals[teamB].kills - teamTotals[teamA].kills;
-                });
-                
-                sortedTeams.forEach(([teamNum, players]) => {
-                    const teamNumInt = parseInt(teamNum);
-                    const totals = teamTotals[teamNum];
-                    
-                    // Team header with totals
-                    const teamHeader = document.createElement('div');
-                    teamHeader.style.cssText = `
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        margin: 15px 0 10px 0;
-                        padding: 10px 15px;
-                        background: rgba(255, 255, 255, 0.05);
-                        border-radius: 6px;
-                        border-left: 4px solid ${this.getTeamColorCSS(teamNumInt)};
-                    `;
-                    
-                    const teamName = document.createElement('h3');
-                    teamName.textContent = teamNum == 0 ? 'No Team' : `Team ${teamNum}`;
-                    teamName.style.cssText = `
-                        color: ${this.getTeamColorCSS(teamNumInt)};
-                        margin: 0;
-                        font-size: 22px;
-                        font-weight: bold;
-                    `;
-                    
-                    const teamStats = document.createElement('div');
-                    teamStats.style.cssText = `
-                        display: flex;
-                        gap: 20px;
-                        color: #cccccc;
-                        font-size: 16px;
-                        font-weight: bold;
-                    `;
-                    
-                    const teamKills = document.createElement('span');
-                    teamKills.style.color = '#4ade80';
-                    teamKills.textContent = `${totals.kills} K`;
-                    
-                    const teamDeaths = document.createElement('span');
-                    teamDeaths.style.color = '#f87171';
-                    teamDeaths.textContent = `${totals.deaths} D`;
-                    
-                    const teamKD = document.createElement('span');
-                    teamKD.style.color = '#fbbf24';
-                    teamKD.textContent = `${(totals.kills / Math.max(1, totals.deaths)).toFixed(2)} K/D`;
-                    
-                    teamStats.appendChild(teamKills);
-                    teamStats.appendChild(teamDeaths);
-                    
-                    if (totals.captures > 0) {
-                        const teamCaptures = document.createElement('span');
-                        teamCaptures.style.color = '#FFD700';
-                        teamCaptures.textContent = `${totals.captures} 🚩`;
-                        teamStats.appendChild(teamCaptures);
-                    }
-                    
-                    teamStats.appendChild(teamKD);
-                    
-                    teamHeader.appendChild(teamName);
-                    teamHeader.appendChild(teamStats);
-                    scoresContainer.appendChild(teamHeader);
-                    
-                    // Sort players within team by kills (descending)
-                    const sortedPlayers = [...players].sort((a, b) => (b.kills || 0) - (a.kills || 0));
-                    
-                    sortedPlayers.forEach(score => {
-                        scoresContainer.appendChild(this.createScoreRow(score));
-                    });
-                });
-            } else {
-                // FFA display - sort by kills with winner first
-                const sortedScores = [...data.scores].sort((a, b) => (b.kills || 0) - (a.kills || 0));
-                
-                sortedScores.forEach((score, index) => {
-                    scoresContainer.appendChild(this.createScoreRow(score, index + 1));
-                });
-            }
-            
-            content.appendChild(scoresContainer);
-        }
-        
-        // Next round info
-        const nextRoundText = document.createElement('p');
-        nextRoundText.textContent = `Next round starts in ${Math.ceil(data.restDuration)} seconds...`;
-        nextRoundText.style.cssText = `
-            color: #ffaa00;
-            text-align: center;
-            font-size: 18px;
-            margin: 20px 0 0 0;
-            animation: pulse 2s ease-in-out infinite;
-        `;
-        content.appendChild(nextRoundText);
-        
-        // Add pulse animation
-        if (!document.getElementById('round-end-styles')) {
-            const style = document.createElement('style');
-            style.id = 'round-end-styles';
-            style.textContent = `
-                @keyframes pulse {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0.6; }
-                }
-            `;
-            document.head.appendChild(style);
-        }
-        
-        overlay.innerHTML = '';
-        overlay.appendChild(content);
-        overlay.style.display = 'flex';
-    }
-    
-    /**
-     * Create a score row for a player
-     */
-    createScoreRow(score, rank = null) {
-        const isLocalPlayer = score.playerId === this.myPlayerId;
-        
-        const row = document.createElement('div');
-        row.style.cssText = `
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 15px;
-            margin: 5px 0;
-            background: ${isLocalPlayer ? 'rgba(255, 215, 0, 0.2)' : 'rgba(255, 255, 255, 0.05)'};
-            border-radius: 6px;
-            border-left: 3px solid ${this.getTeamColorCSS(score.team)};
-            ${isLocalPlayer ? 'box-shadow: 0 0 15px rgba(255, 215, 0, 0.4); border: 2px solid rgba(255, 215, 0, 0.6);' : ''}
-        `;
-        
-        const nameSection = document.createElement('div');
-        nameSection.style.cssText = `
-            flex: 1;
-            color: ${isLocalPlayer ? '#FFD700' : '#ffffff'};
-            font-size: 16px;
-            font-weight: bold;
-        `;
-        nameSection.textContent = (rank ? `#${rank} ` : '') + score.playerName;
-        
-        const stats = document.createElement('div');
-        stats.style.cssText = `
-            display: flex;
-            gap: 20px;
-            color: #cccccc;
-            font-size: 14px;
-        `;
-        
-        const kills = document.createElement('span');
-        kills.style.color = '#4ade80';
-        kills.textContent = `${score.kills || 0} K`;
-        
-        const deaths = document.createElement('span');
-        deaths.style.color = '#f87171';
-        deaths.textContent = `${score.deaths || 0} D`;
-        
-        // Add captures if player has any
-        if (score.captures && score.captures > 0) {
-            const captures = document.createElement('span');
-            captures.style.color = '#FFD700';
-            captures.textContent = `${score.captures || 0} 🚩`;
-            stats.appendChild(captures);
-        }
-        
-        const kd = document.createElement('span');
-        kd.style.color = '#fbbf24';
-        kd.textContent = `${((score.kills || 0) / Math.max(1, (score.deaths || 0))).toFixed(2)} K/D`;
-        
-        stats.appendChild(kills);
-        stats.appendChild(deaths);
-        stats.appendChild(kd);
-        
-        row.appendChild(nameSection);
-        row.appendChild(stats);
-        
-        return row;
-    }
-    
-    /**
-     * Hide round end screen
-     */
-    hideRoundEndScreen() {
-        const overlay = document.getElementById('round-end-overlay');
-        if (overlay) {
-            overlay.style.display = 'none';
-        }
+        if (!eventElement?.parentNode) return;
+        // CSS animation (.removing keyframe) plays the exit; remove from DOM after it finishes
+        eventElement.classList.add('removing');
+        this.safeSetTimeout(() => eventElement.parentNode?.removeChild(eventElement), 300);
     }
     
     /**
      * Show game over screen with final results
      */
     showGameOverScreen(data) {
-        // Create or get game over overlay
         let overlay = document.getElementById('game-over-overlay');
         if (!overlay) {
             overlay = document.createElement('div');
             overlay.id = 'game-over-overlay';
-            overlay.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0, 0, 0, 0.9);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 20000;
-                backdrop-filter: blur(10px);
-                -webkit-backdrop-filter: blur(10px);
-            `;
             document.body.appendChild(overlay);
         }
-        
-        // Create content container
+
         const content = document.createElement('div');
-        content.style.cssText = `
-            background: linear-gradient(135deg, rgba(30, 30, 40, 0.98), rgba(50, 50, 70, 0.98));
-            border: 3px solid #FFD700;
-            border-radius: 15px;
-            padding: 50px;
-            max-width: 900px;
-            width: 90%;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(255, 215, 0, 0.3);
-            text-align: center;
-        `;
-        
-        // Victory title
+        content.className = 'game-over-content';
+
         const title = document.createElement('h1');
+        title.className = 'game-over-title';
         title.textContent = '🏆 GAME OVER';
-        title.style.cssText = `
-            color: #FFD700;
-            font-size: 48px;
-            margin: 0 0 20px 0;
-            text-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
-            animation: pulse 2s ease-in-out infinite;
-        `;
         content.appendChild(title);
-        
-        // Victory message
+
         const message = document.createElement('p');
-        message.textContent = data.message || 'The battle has ended!';
-        message.style.cssText = `
-            color: #ffffff;
-            font-size: 24px;
-            margin: 20px 0 40px 0;
-            font-weight: bold;
-        `;
+        message.className = 'game-over-message';
+        message.textContent = data.victoryMessage || data.message || 'The battle has ended!';
         content.appendChild(message);
-        
-        // Victory condition info
+
         const vcInfo = document.createElement('p');
-        const vcName = this.getVictoryConditionName(data.victoryCondition);
-        vcInfo.textContent = `Victory Condition: ${vcName}`;
-        vcInfo.style.cssText = `
-            color: #aaa;
-            font-size: 16px;
-            margin: 0 0 30px 0;
-        `;
+        vcInfo.className = 'game-over-vc-info';
+        vcInfo.textContent = `Victory Condition: ${this.getVictoryConditionName(data.victoryCondition)}`;
         content.appendChild(vcInfo);
-        
-        // Final scores
-        if (data.finalScores && data.finalScores.length > 0) {
+
+        if (data.finalScores?.length > 0) {
             const scoresTitle = document.createElement('h2');
+            scoresTitle.className = 'final-scores-title';
             scoresTitle.textContent = 'Final Scores';
-            scoresTitle.style.cssText = `
-                color: #FFD700;
-                font-size: 28px;
-                margin: 30px 0 20px 0;
-            `;
             content.appendChild(scoresTitle);
-            
+
             const scoresContainer = document.createElement('div');
-            scoresContainer.style.cssText = `
-                background: rgba(0, 0, 0, 0.4);
-                border-radius: 10px;
-                padding: 20px;
-                margin: 20px 0;
-            `;
-            
-            // Sort scores - in ELIMINATION mode, use placement; otherwise use score
+            scoresContainer.className = 'final-scores-container';
+
             const isEliminationMode = data.victoryCondition === 'ELIMINATION';
+            const columns = this.activeScoreColumns(data.finalScores, data.scoringConfig);
             const sortedScores = [...data.finalScores].sort((a, b) => {
                 if (isEliminationMode && a.placement && b.placement) {
-                    // Sort by placement (lower is better: 1st < 2nd < 3rd)
-                    if (a.placement !== b.placement) {
-                        return a.placement - b.placement;
-                    }
-                    // If placement is same, sort by kills
-                    if (b.kills !== a.kills) {
-                        return b.kills - a.kills;
-                    }
-                    // If kills are same, sort by elimination time (later is better)
+                    if (a.placement !== b.placement) return a.placement - b.placement;
+                    if (b.kills !== a.kills) return b.kills - a.kills;
                     return b.eliminationTime - a.eliminationTime;
                 }
-                // Default: sort by score
-                return b.score - a.score;
+                return this.playerScoreTotal(b) - this.playerScoreTotal(a);
             });
-            
+
             sortedScores.forEach((score, index) => {
-                const scoreRow = this.createFinalScoreRow(score, index + 1, data, isEliminationMode);
-                scoresContainer.appendChild(scoreRow);
+                scoresContainer.appendChild(this.createFinalScoreRow(score, index + 1, data, isEliminationMode, columns));
             });
-            
+
             content.appendChild(scoresContainer);
         }
-        
-        // Return to lobby button
+
         const lobbyButton = document.createElement('button');
+        lobbyButton.className = 'lobby-button';
         lobbyButton.textContent = '← Return to Lobby';
-        lobbyButton.style.cssText = `
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            padding: 15px 40px;
-            font-size: 18px;
-            border-radius: 8px;
-            cursor: pointer;
-            margin-top: 30px;
-            transition: transform 0.2s, box-shadow 0.2s;
-        `;
-        lobbyButton.onmouseover = () => {
-            lobbyButton.style.transform = 'scale(1.05)';
-            lobbyButton.style.boxShadow = '0 5px 20px rgba(102, 126, 234, 0.4)';
-        };
-        lobbyButton.onmouseout = () => {
-            lobbyButton.style.transform = 'scale(1)';
-            lobbyButton.style.boxShadow = 'none';
-        };
-        lobbyButton.onclick = () => {
-            window.location.href = '/lobby.html';
-        };
+        lobbyButton.onclick = () => { window.location.href = '/lobby.html'; };
         content.appendChild(lobbyButton);
-        
+
         overlay.innerHTML = '';
         overlay.appendChild(content);
-        overlay.style.display = 'flex';
+        overlay.classList.add('visible');
     }
     
     /**
      * Create a score row for the game over screen
      */
-    createFinalScoreRow(score, rank, gameOverData, isEliminationMode = false) {
+    createFinalScoreRow(score, rank, gameOverData, isEliminationMode = false, columns = []) {
         const isLocalPlayer = score.playerId === this.myPlayerId;
-        
-        const row = document.createElement('div');
-        row.style.cssText = `
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 20px;
-            margin: 8px 0;
-            background: ${isLocalPlayer ? 'rgba(255, 215, 0, 0.25)' : (rank === 1 ? 'rgba(255, 215, 0, 0.15)' : 'rgba(255, 255, 255, 0.05)')};
-            border-radius: 8px;
-            border-left: 4px solid ${this.getRankColor(rank)};
-            ${isLocalPlayer ? 'box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); border: 2px solid rgba(255, 215, 0, 0.7);' : ''}
-        `;
-        
-        // Rank and name
-        const nameSection = document.createElement('div');
-        nameSection.style.cssText = `
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            flex: 1;
-        `;
-        
-        const rankBadge = document.createElement('span');
-        // In elimination mode, use actual placement if available
         const displayRank = isEliminationMode && score.placement ? score.placement : rank;
+
+        const row = document.createElement('div');
+        const classes = ['final-score-row'];
+        if (isLocalPlayer) classes.push('local-player');
+        else if (rank === 1) classes.push('rank-1');
+        row.className = classes.join(' ');
+        row.style.borderLeftColor = this.getRankColor(displayRank);
+
+        const nameSection = document.createElement('div');
+        nameSection.className = 'final-score-name-section';
+
+        const rankBadge = document.createElement('span');
+        rankBadge.className = 'rank-badge';
         rankBadge.textContent = this.getRankBadge(displayRank);
-        rankBadge.style.cssText = `
-            font-size: 24px;
-            min-width: 40px;
-        `;
         nameSection.appendChild(rankBadge);
-        
+
         const nameText = document.createElement('span');
+        nameText.className = 'final-score-name';
         if (score.team !== undefined) {
             nameText.textContent = `Team ${score.team}`;
             nameText.style.color = this.getTeamColorCSS(score.team);
@@ -2089,59 +1836,34 @@ class GameEngine {
             nameText.textContent = score.playerName || `Player ${score.playerId}`;
             nameText.style.color = isLocalPlayer ? '#FFD700' : '#ffffff';
         }
-        nameText.style.cssText += `
-            font-size: 20px;
-            font-weight: bold;
-        `;
         nameSection.appendChild(nameText);
-        
         row.appendChild(nameSection);
-        
-        // Stats
+
         const stats = document.createElement('div');
-        stats.style.cssText = `
-            display: flex;
-            gap: 25px;
-            color: #cccccc;
-            font-size: 16px;
-        `;
-        
-        // In elimination mode, show placement more prominently
+        stats.className = 'final-score-stats';
+
         if (isEliminationMode && score.placement) {
             const placementSpan = document.createElement('span');
-            placementSpan.style.color = displayRank <= 3 ? '#FFD700' : '#cccccc';
-            placementSpan.style.fontWeight = 'bold';
-            placementSpan.style.fontSize = '18px';
+            placementSpan.className = displayRank <= 3 ? 'stat-placement' : '';
             placementSpan.textContent = `#${score.placement}`;
             stats.appendChild(placementSpan);
         } else {
             const scoreSpan = document.createElement('span');
-            scoreSpan.style.color = '#FFD700';
-            scoreSpan.style.fontWeight = 'bold';
-            scoreSpan.style.fontSize = '20px';
-            scoreSpan.textContent = `${score.score} pts`;
+            scoreSpan.className = 'stat-score';
+            scoreSpan.textContent = `${this.playerScoreTotal(score)} pts`;
             stats.appendChild(scoreSpan);
         }
-        
-        const killsSpan = document.createElement('span');
-        killsSpan.style.color = '#4ade80';
-        killsSpan.textContent = `${score.kills} K`;
-        stats.appendChild(killsSpan);
-        
+
+        // One span per contributing score component (driven by scoringConfig),
+        // then deaths as informational stat.
+        this.appendScoreStats(stats, score, columns);
+
         const deathsSpan = document.createElement('span');
-        deathsSpan.style.color = '#f87171';
-        deathsSpan.textContent = `${score.deaths} D`;
+        deathsSpan.className = 'stat-deaths';
+        deathsSpan.textContent = `${(this.getBreakdown(score).deaths ?? score.deaths) || 0} D`;
         stats.appendChild(deathsSpan);
-        
-        if (score.captures > 0) {
-            const capturesSpan = document.createElement('span');
-            capturesSpan.style.color = '#FFD700';
-            capturesSpan.textContent = `${score.captures} 🚩`;
-            stats.appendChild(capturesSpan);
-        }
-        
+
         row.appendChild(stats);
-        
         return row;
     }
     
@@ -2152,7 +1874,6 @@ class GameEngine {
         const names = {
             'SCORE_LIMIT': 'Score Limit',
             'TIME_LIMIT': 'Time Limit',
-            'OBJECTIVE': 'Objective',
             'ELIMINATION': 'Elimination',
             'ENDLESS': 'Endless'
         };
@@ -2182,7 +1903,10 @@ class GameEngine {
     createPlayer(playerData) {
         
         const sprite = new PIXI.Sprite(this.playerTexture);
-        sprite.anchor.set(0.5);
+        // The texture bounds are from (-20, -20) to (25, 20) - width 45, height 40
+        // Circle center is at (0, 0) which is (20, 20) in texture pixel coordinates
+        // Set anchor to rotate around the circle center, not the texture center
+        sprite.anchor.set(20/45, 0.5); // x: 20/45 ≈ 0.444, y: 0.5
         
         sprite.position.set(playerData.x, playerData.y);
         sprite.rotation = playerData.rotation || 0;
@@ -2199,10 +1923,6 @@ class GameEngine {
         // Create health bar above player
         const healthBarContainer = this.createPlayerHealthBar(playerData);
         sprite.healthBar = healthBarContainer;
-        
-        // Create reload indicator (initially hidden)
-        const reloadIndicator = this.createReloadIndicator(playerData);
-        sprite.reloadIndicator = reloadIndicator;
     
         // Create death marker (initially hidden)
         if (this.deathTexture) {
@@ -2242,9 +1962,6 @@ class GameEngine {
         sprite.playerData = playerData;
         this.players.set(playerData.id, sprite);
         this.gameContainer.addChild(sprite);
-        
-        // Enable sorting for this container
-        this.gameContainer.sortableChildren = true;
     }
     
     updatePlayer(playerData) {
@@ -2263,7 +1980,6 @@ class GameEngine {
         if (sprite.deathMarker) {
             sprite.deathMarker.visible = isDead;
             if (isDead) {
-                // Position death marker at death location
                 sprite.deathMarker.position.set(sprite.x, sprite.y);
             }
         }
@@ -2282,13 +1998,9 @@ class GameEngine {
             sprite.healthBar.visible = playerData.active && playerData.health > 0;
         }
         
-        // Update reload indicator
-        if (sprite.reloadIndicator) {
-            this.updateReloadIndicator(sprite.reloadIndicator, playerData);
+        if (sprite.healthBar) {
+            this.updatePlayerSubBars(sprite.healthBar, playerData);
         }
-        
-        // Update power-up visual indicators
-        this.updatePowerUpIndicators(sprite, playerData);
 
         sprite.playerData = playerData;
     }
@@ -2314,65 +2026,52 @@ class GameEngine {
             if (sprite.nameLabel.parent) {
                 sprite.nameLabel.parent.removeChild(sprite.nameLabel);
             }
+            // Text owns an auto-generated GPU texture; let destroy() free it.
             sprite.nameLabel.destroy();
             sprite.nameLabel = null;
         }
         
-        // Remove and destroy health bar
+        // Remove and destroy health bar and sub-bars
         if (sprite.healthBar) {
             if (sprite.healthBar.parent) {
                 sprite.healthBar.parent.removeChild(sprite.healthBar);
             }
-            // Clean up health bar components
+            // Clean up health bar and sub-bar components
             if (sprite.healthBar.healthBg) {
-                sprite.healthBar.healthBg.destroy();
+                sprite.healthBar.healthBg.destroy({ context: true });
             }
             if (sprite.healthBar.healthFill) {
-                sprite.healthBar.healthFill.destroy();
+                sprite.healthBar.healthFill.destroy({ context: true });
             }
-            sprite.healthBar.destroy({ children: true });
+            if (sprite.healthBar.reloadBg) {
+                sprite.healthBar.reloadBg.destroy({ context: true });
+            }
+            if (sprite.healthBar.reloadFill) {
+                sprite.healthBar.reloadFill.destroy({ context: true });
+            }
+            if (sprite.healthBar.cooldownBg) {
+                sprite.healthBar.cooldownBg.destroy({ context: true });
+            }
+            if (sprite.healthBar.cooldownFill) {
+                sprite.healthBar.cooldownFill.destroy({ context: true });
+            }
+            sprite.healthBar.destroy({ children: true, context: true });
             sprite.healthBar = null;
         }
-        
-        // Remove and destroy reload indicator
-        if (sprite.reloadIndicator) {
-            if (sprite.reloadIndicator.parent) {
-                sprite.reloadIndicator.parent.removeChild(sprite.reloadIndicator);
-            }
-            // Clean up reload indicator components
-            if (sprite.reloadIndicator.background) {
-                sprite.reloadIndicator.background.destroy();
-            }
-            if (sprite.reloadIndicator.reloadText) {
-                sprite.reloadIndicator.reloadText.destroy();
-            }
-            sprite.reloadIndicator.destroy({ children: true });
-            sprite.reloadIndicator = null;
-        }
-        
         // Remove and destroy death marker
         if (sprite.deathMarker) {
             if (sprite.deathMarker.parent) {
                 sprite.deathMarker.parent.removeChild(sprite.deathMarker);
             }
-            sprite.deathMarker.destroy();
+            sprite.deathMarker.destroy({ context: true });
             sprite.deathMarker = null;
-        }
-        
-        // Remove and destroy power-up container
-        if (sprite.powerUpContainer) {
-            if (sprite.powerUpContainer.parent) {
-                sprite.powerUpContainer.parent.removeChild(sprite.powerUpContainer);
-            }
-            sprite.powerUpContainer.destroy({ children: true });
-            sprite.powerUpContainer = null;
         }
         
         // Clear player data reference
         sprite.playerData = null;
         
-        // Destroy the main sprite
-        sprite.destroy();
+        // Destroy the main sprite (texture is shared, so keep it; free child geometry)
+        sprite.destroy({ children: true, texture: false, context: true });
     }
     
     /**
@@ -2396,16 +2095,12 @@ class GameEngine {
         
         // Health bar background
         const healthBg = new PIXI.Graphics();
-        healthBg.beginFill(config.bgColor);
-        healthBg.drawRoundedRect(-config.width/2, 0, config.width, config.height, config.cornerRadius);
-        healthBg.endFill();
+        healthBg.roundRect(-config.width/2, 0, config.width, config.height, config.cornerRadius).fill(config.bgColor);
         healthBarContainer.addChild(healthBg);
         
         // Health bar fill
         const healthFill = new PIXI.Graphics();
-        healthFill.beginFill(config.fillColor);
-        healthFill.drawRoundedRect(-config.width/2, 0, config.width, config.height, config.cornerRadius);
-        healthFill.endFill();
+        healthFill.roundRect(-config.width/2, 0, config.width, config.height, config.cornerRadius).fill(config.fillColor);
         healthBarContainer.addChild(healthFill);
         
         // Store references for updates
@@ -2445,59 +2140,55 @@ class GameEngine {
         const isDamaged = healthPercent < 1.0;
         healthBarContainer.visible = entityData.active && (config.showWhenFull || isDamaged);
         
-        if (!healthBarContainer.visible) return;
-        
-        // Update health bar fill
-        healthBarContainer.healthFill.clear();
+        if (!healthBarContainer.visible) {
+            return;
+        }
         
         // Color based on health level (for players)
         let healthColor = config.fillColor;
         if (config.dynamicColor && healthPercent < 0.3) {
-            healthColor = 0xe74c3c; // Red
+            healthColor = 0xFF6B35; // Deep orange (critical)
         } else if (config.dynamicColor && healthPercent < 0.6) {
-            healthColor = 0xf39c12; // Orange
+            healthColor = 0xFFC300; // Amber-yellow (mid health)
         }
-        
-        healthBarContainer.healthFill.beginFill(healthColor);
-        healthBarContainer.healthFill.drawRoundedRect(
+
+        // Only rebuild the fill geometry when it actually changes. Rebuilding a
+        // Graphics every frame (clear + redraw) for every entity is the PixiJS
+        // anti-pattern that churns GPU geometry; health rarely changes, so this
+        // skips the vast majority of redraws.
+        const fill = healthBarContainer.healthFill;
+        if (fill._lastHealthPercent === healthPercent && fill._lastHealthColor === healthColor) {
+            return;
+        }
+        fill._lastHealthPercent = healthPercent;
+        fill._lastHealthColor = healthColor;
+
+        fill.clear();
+        fill.roundRect(
             -config.width/2, 0, 
             config.width * healthPercent, 
             config.height, 
             config.cornerRadius
-        );
-        healthBarContainer.healthFill.endFill();
+        ).fill(healthColor);
     }
     
     /**
      * Create health bar for a player
      */
     createPlayerHealthBar(playerData) {
-        return this.createHealthBar(playerData, {
+        const container = this.createHealthBar(playerData, {
             width: 50,
             height: 6,
             yOffset: 35,
             bgColor: 0x333333,
-            fillColor: 0x2ecc71,
+            fillColor: 0x00B4D8,
             cornerRadius: 2,
             showWhenFull: true,
             dynamicColor: true
         });
-    }
-    
-    /**
-     * Create health bar for an obstacle
-     */
-    createObstacleHealthBar(obstacleData) {
-        return this.createHealthBar(obstacleData, {
-            width: 30,
-            height: 4,
-            yOffset: 25,
-            bgColor: 0x222222,
-            fillColor: 0x4a90e2,
-            cornerRadius: 1,
-            showWhenFull: false,
-            dynamicColor: false
-        });
+        // Stack sub-bars (reload percentage bar & utility cooldown bar) directly under the health bar.
+        this._addPlayerSubBars(container);
+        return container;
     }
     
     /**
@@ -2517,480 +2208,121 @@ class GameEngine {
     }
     
     /**
-     * Create reload indicator for a player.
+     * Slim sub-bars (reloading percentage bar and utility cooldown bar) stacked
+     * directly under the health bar (same width).
+     * Added to the health-bar container so they track position with it.
+     * nameContainer is Y-flipped, so "below" the health bar means negative local y.
      */
-    createReloadIndicator(playerData) {
-        const reloadContainer = new PIXI.Container();
-        
-        // Create background circle for the "R"
-        const background = new PIXI.Graphics();
-        background.beginFill(0x000000, 0.7); // Semi-transparent black background
-        background.drawCircle(0, 0, 12); // 12 pixel radius
-        background.endFill();
-        background.lineStyle(2, 0xff4444, 1.0); // Red border
-        background.drawCircle(0, 0, 12);
-        reloadContainer.addChild(background);
-        
-        // Create the "R" text
-        const reloadText = new PIXI.Text('R', {
-            fontSize: 14,
-            fill: 0xff4444, // Red color
-            fontWeight: 'bold',
-            fontFamily: 'Arial'
-        });
-        reloadText.anchor.set(0.5);
-        reloadText.scale.y = -1; // Flip Y-axis back so text is readable
-        reloadText.position.set(0, 0);
-        reloadContainer.addChild(reloadText);
-        
-        // Position above player (will be updated in updatePlayer)
-        reloadContainer.position.set(playerData.x, playerData.y - 50); // Above health bar
-        
-        // Initially hidden
-        reloadContainer.visible = false;
-        
-        // Store references for updates
-        reloadContainer.background = background;
-        reloadContainer.reloadText = reloadText;
-        
-        // Add to name container so it doesn't rotate with player
-        this.nameContainer.addChild(reloadContainer);
-        
-        return reloadContainer;
+    _addPlayerSubBars(healthBarContainer) {
+        const w = healthBarContainer.config.width;
+        const r = healthBarContainer.config.cornerRadius;
+        const barHeight = 3;
+
+        // Reload bar graphics
+        const reloadBg = new PIXI.Graphics();
+        const reloadFill = new PIXI.Graphics();
+        healthBarContainer.addChild(reloadBg);
+        healthBarContainer.addChild(reloadFill);
+
+        // Utility cooldown bar graphics
+        const cooldownBg = new PIXI.Graphics();
+        const cooldownFill = new PIXI.Graphics();
+        healthBarContainer.addChild(cooldownBg);
+        healthBarContainer.addChild(cooldownFill);
+
+        healthBarContainer.subBarGeom = { w, barHeight, r };
+        healthBarContainer.reloadBg = reloadBg;
+        healthBarContainer.reloadFill = reloadFill;
+        healthBarContainer.cooldownBg = cooldownBg;
+        healthBarContainer.cooldownFill = cooldownFill;
     }
-    
+
     /**
-     * Update reload indicator appearance and position.
+     * Refresh the reload percentage bar and utility cooldown bar fills and visibility
+     * from player state, stacking them dynamically if both are active.
      */
-    updateReloadIndicator(reloadContainer, playerData) {
-        if (!reloadContainer) return;
-        
-        // Update position above player using current sprite position (may be interpolated)
-        const sprite = this.players.get(playerData.id);
-        if (sprite) {
-            reloadContainer.position.set(sprite.x, sprite.y - 50); // Above health bar
-        }
-        
-        // Show/hide based on reloading status and if player is active
+    updatePlayerSubBars(healthBarContainer, playerData) {
+        if (!healthBarContainer || !healthBarContainer.reloadFill) return;
+
+        const isLocalPlayer = playerData.id === this.myPlayerId;
+        const isActive = playerData.active && playerData.health > 0;
+
+        // Reload bar state (visible for any active player when reloading)
         const isReloading = playerData.reloading || false;
-        const isActive = playerData.active || false;
-        reloadContainer.visible = isActive && isReloading;
-        
-        // Optional: Add pulsing animation when reloading
-        if (isReloading && reloadContainer.reloadText) {
-            const time = Date.now() * 0.005; // Slow pulsing
-            const pulse = 0.8 + Math.sin(time) * 0.2; // Pulse between 0.6 and 1.0
-            reloadContainer.reloadText.alpha = pulse;
-        } else if (reloadContainer.reloadText) {
-            reloadContainer.reloadText.alpha = 1.0; // Full opacity when not reloading
+        const reloadPct = playerData.reloadPercent ?? (isReloading ? 0 : 1);
+        const showReload = isActive && isReloading && reloadPct < 1;
+
+        // Utility cooldown bar state (visible for local active player when utility is cooling down)
+        const utilityPct = playerData.utilityCooldownPercent ?? 1;
+        const showUtility = isLocalPlayer && isActive && utilityPct < 1;
+
+        // Determine stacking order:
+        // If both are active, Reload bar is Row 1 (topY = -5), Utility bar is Row 2 (topY = -10).
+        // If only one is active, it takes Row 1 (topY = -5).
+        let reloadRow = 0;
+        let utilityRow = 0;
+
+        if (showReload && showUtility) {
+            reloadRow = 1;
+            utilityRow = 2;
+        } else if (showReload) {
+            reloadRow = 1;
+        } else if (showUtility) {
+            utilityRow = 1;
         }
-    }
-    
-    /**
-     * Update power-up visual indicators around player.
-     */
-    updatePowerUpIndicators(sprite, playerData) {
-        const activePowerUps = playerData.activePowerUps || [];
-        
-        // Create power-up container if it doesn't exist
-        if (!sprite.powerUpContainer) {
-            sprite.powerUpContainer = new PIXI.Container();
-            this.gameContainer.addChild(sprite.powerUpContainer);
-        }
-        
-        // Update position to match player
-        sprite.powerUpContainer.position.set(sprite.x, sprite.y);
-        sprite.powerUpContainer.visible = playerData.active;
-        
-        // Parse active power-ups and create/update visuals
-        if (activePowerUps.length > 0) {
-            this.updatePowerUpVisuals(sprite.powerUpContainer, activePowerUps, sprite);
+
+        const g = healthBarContainer.subBarGeom;
+        const gap = 2;
+
+        // --- Reload Bar ---
+        const reloadBg = healthBarContainer.reloadBg;
+        const reloadFill = healthBarContainer.reloadFill;
+        reloadBg.visible = showReload;
+        reloadFill.visible = showReload;
+
+        if (showReload) {
+            const topY = -(gap + g.barHeight) * reloadRow; // Row 1 = -5, Row 2 = -10
+            if (reloadBg._lastTopY !== topY) {
+                reloadBg._lastTopY = topY;
+                reloadBg.clear();
+                reloadBg.roundRect(-g.w / 2, topY, g.w, g.barHeight, g.r).fill(0x333333);
+            }
+            if (reloadFill._lastPct !== reloadPct || reloadFill._lastTopY !== topY) {
+                reloadFill._lastPct = reloadPct;
+                reloadFill._lastTopY = topY;
+                reloadFill.clear();
+                reloadFill.roundRect(-g.w / 2, topY, g.w * reloadPct, g.barHeight, g.r).fill(0xff4444);
+            }
         } else {
-            // Clear all power-up effects if no active power-ups - properly destroy to prevent memory leak
-            const childrenToDestroy = [...sprite.powerUpContainer.children];
-            childrenToDestroy.forEach(child => {
-                if (child.clear && typeof child.clear === 'function') {
-                    child.clear();
-                }
-                child.destroy({ children: true, texture: false, baseTexture: false });
-            });
-            sprite.powerUpContainer.removeChildren();
+            reloadBg._lastTopY = null;
+            reloadFill._lastPct = null;
+            reloadFill._lastTopY = null;
         }
-    }
-    
-    /**
-     * Create/update power-up visual effects based on render hints.
-     * 
-     * RenderHint Format: "effect_name:#COLOR:animation_type:show_icon:Display Name:params"
-     * 
-     * Animation Types:
-     * - pulse/sparkle: Pulsing ring with rotating particles
-     *   Params: {particles, radius, particleDistance, particleSize}
-     * - shield: Polygonal shield pattern
-     *   Params: {sides, size}
-     * - slow: Dripping effect for debuffs
-     *   Params: {drops, radius, dropSize, dripAmount}
-     * - cloud: Billowing cloud effect (poison)
-     *   Params: {radius, puffs, wisps}
-     * - flame: Flickering fire particles (burning)
-     *   Params: {count, radius, height}
-     * - star: Orbiting stars (special status)
-     *   Params: {count, radius, size}
-     * - crown: VIP crown with sparkles
-     * 
-     * Examples:
-     * "poison:#8BC34A:cloud:true:Poison"
-     * "fire:#FF4500:flame:true:Burning:{\"count\":12,\"radius\":22,\"height\":10}"
-     */
-    updatePowerUpVisuals(container, activePowerUps, sprite) {
-        // Parse render hints: "effect_name:#COLOR:animation_type:show_icon:Display Name:params"
-        // params is optional JSON object for animation customization
-        const effects = activePowerUps.map(hint => {
-            const parts = hint.split(':');
-            
-            // Try to parse optional params (6th field onwards, rejoined in case of colons in JSON)
-            let params = {};
-            if (parts.length > 5) {
-                try {
-                    const paramsString = parts.slice(5).join(':');
-                    params = JSON.parse(paramsString);
-                } catch (e) {
-                    // If JSON parsing fails, treat as legacy format without params
-                    console.warn('Failed to parse renderHint params:', e);
-                }
+
+        // --- Utility Cooldown Bar ---
+        const cooldownBg = healthBarContainer.cooldownBg;
+        const cooldownFill = healthBarContainer.cooldownFill;
+        cooldownBg.visible = showUtility;
+        cooldownFill.visible = showUtility;
+
+        if (showUtility) {
+            const topY = -(gap + g.barHeight) * utilityRow; // Row 1 = -5, Row 2 = -10
+            if (cooldownBg._lastTopY !== topY) {
+                cooldownBg._lastTopY = topY;
+                cooldownBg.clear();
+                cooldownBg.roundRect(-g.w / 2, topY, g.w, g.barHeight, g.r).fill(0x333333);
             }
-            
-            return {
-                name: parts[0] || 'unknown',
-                color: parseInt(parts[1]?.replace('#', '') || 'FFFFFF', 16),
-                animation: parts[2] || 'pulse',
-                showIcon: parts[3] === 'true',
-                displayName: parts[4] || '',
-                params: params
-            };
-        });
-        
-        // Clear existing visuals - properly destroy to prevent memory leak
-        const childrenToDestroy = [...container.children];
-        childrenToDestroy.forEach(child => {
-            if (child.clear && typeof child.clear === 'function') {
-                child.clear();
+            if (cooldownFill._lastPct !== utilityPct || cooldownFill._lastTopY !== topY) {
+                cooldownFill._lastPct = utilityPct;
+                cooldownFill._lastTopY = topY;
+                cooldownFill.clear();
+                cooldownFill.roundRect(-g.w / 2, topY, g.w * utilityPct, g.barHeight, g.r).fill(0xffcc33);
             }
-            child.destroy({ children: true, texture: false, baseTexture: false });
-        });
-        container.removeChildren();
-        
-        // Create visual effect for each active power-up
-        effects.forEach((effect, index) => {
-            // Create aura/glow around player
-            const aura = new PIXI.Graphics();
-            
-            // Draw aura based on effect type
-            if (effect.animation === 'sparkle' || effect.animation === 'pulse') {
-                // Pulsing glow ring with rotating particles
-                const time = Date.now() * 0.003;
-                const params = effect.params || {};
-                const baseRadius = params.radius || 20;
-                const particleCount = params.particles || 8;
-                const particleDistance = params.particleDistance || 25;
-                const particleSize = params.particleSize || 2;
-                
-                const pulseSize = baseRadius + Math.sin(time + index) * 5;
-                
-                aura.lineStyle(3, effect.color, 0.6);
-                aura.drawCircle(0, 0, pulseSize);
-                
-                // Add inner particles/sparkles
-                for (let i = 0; i < particleCount; i++) {
-                    const angle = (i / particleCount) * Math.PI * 2 + time;
-                    const x = Math.cos(angle) * particleDistance;
-                    const y = Math.sin(angle) * particleDistance;
-                    
-                    aura.beginFill(effect.color, 0.8);
-                    aura.drawCircle(x, y, particleSize);
-                    aura.endFill();
-                }
-            } else if (effect.animation === 'shield') {
-                // Hexagonal shield pattern
-                const time = Date.now() * 0.002;
-                const params = effect.params || {};
-                const baseSize = params.size || 22;
-                const sides = params.sides || 6;
-                
-                const size = baseSize + Math.sin(time) * 2;
-                
-                aura.lineStyle(2, effect.color, 0.7);
-                for (let i = 0; i < sides; i++) {
-                    const angle = (i / sides) * Math.PI * 2;
-                    const x = Math.cos(angle) * size;
-                    const y = Math.sin(angle) * size;
-                    if (i === 0) {
-                        aura.moveTo(x, y);
-                    } else {
-                        aura.lineTo(x, y);
-                    }
-                }
-                aura.closePath();
-            } else if (effect.animation === 'slow') {
-                // Slow debuff - dripping effect
-                const time = Date.now() * 0.002;
-                const params = effect.params || {};
-                const dropCount = params.drops || 6;
-                const radius = params.radius || 18;
-                const dropSize = params.dropSize || 3;
-                const dripAmount = params.dripAmount || 3;
-                
-                aura.beginFill(effect.color, 0.5);
-                for (let i = 0; i < dropCount; i++) {
-                    const angle = (i / dropCount) * Math.PI * 2 + time;
-                    const x = Math.cos(angle) * radius;
-                    const y = Math.sin(angle) * radius + Math.sin(time * 2 + i) * dripAmount;
-                    aura.drawCircle(x, y, dropSize);
-                }
-                aura.endFill();
-            } else if (effect.animation === 'cloud') {
-                // Cloud effect - for poison (green pallor cloud)
-                const time = Date.now() * 0.001;
-                const params = effect.params || {};
-                const baseRadius = params.radius || 22;
-                const puffCount = params.puffs || 6;
-                const wispCount = params.wisps || 8;
-                
-                // Create multiple overlapping cloud puffs for organic shape
-                for (let i = 0; i < puffCount; i++) {
-                    const angle = (i / puffCount) * Math.PI * 2 + time * 0.5;
-                    const puffDistance = baseRadius * 0.6;
-                    const x = Math.cos(angle) * puffDistance;
-                    const y = Math.sin(angle) * puffDistance;
-                    const puffSize = baseRadius * (0.5 + Math.sin(time * 2 + i) * 0.1);
-                    
-                    aura.beginFill(effect.color, 0.25 + Math.sin(time * 3 + i) * 0.1);
-                    aura.drawCircle(x, y, puffSize);
-                    aura.endFill();
-                }
-                
-                // Central cloud mass
-                const centralSize = baseRadius * (0.7 + Math.sin(time * 1.5) * 0.1);
-                aura.beginFill(effect.color, 0.3);
-                aura.drawCircle(0, 0, centralSize);
-                aura.endFill();
-                
-                // Add smaller wispy details
-                for (let i = 0; i < wispCount; i++) {
-                    const angle = (i / wispCount) * Math.PI * 2 + time * 1.5;
-                    const distance = baseRadius * 0.8;
-                    const x = Math.cos(angle) * distance;
-                    const y = Math.sin(angle) * distance;
-                    const wispSize = 3 + Math.sin(time * 4 + i) * 1;
-                    
-                    aura.beginFill(effect.color, 0.35 + Math.sin(time * 5 + i) * 0.15);
-                    aura.drawCircle(x, y, wispSize);
-                    aura.endFill();
-                }
-            } else if (effect.animation === 'flame') {
-                // Flame effect - for burning (flickering fire particles)
-                const time = Date.now() * 0.004;
-                const params = effect.params || {};
-                const particleCount = params.count || 10;
-                const baseRadius = params.radius || 20;
-                const flameHeight = params.height || 8;
-                
-                // Create flickering flame particles
-                for (let i = 0; i < particleCount; i++) {
-                    const angle = (i / particleCount) * Math.PI * 2 + time * 2;
-                    const distance = baseRadius + Math.sin(time * 3 + i) * 5;
-                    const x = Math.cos(angle) * distance;
-                    const y = Math.sin(angle) * distance - Math.abs(Math.sin(time * 4 + i)) * flameHeight;
-                    const size = 2 + Math.sin(time * 5 + i) * 1.5;
-                    const alpha = 0.4 + Math.sin(time * 6 + i) * 0.3;
-                    
-                    aura.beginFill(effect.color, alpha);
-                    aura.drawCircle(x, y, size);
-                    aura.endFill();
-                }
-                
-                // Add inner glow
-                const glowSize = baseRadius * (0.6 + Math.sin(time * 3) * 0.15);
-                aura.beginFill(effect.color, 0.2);
-                aura.drawCircle(0, 0, glowSize);
-                aura.endFill();
-                
-                // Add bright center
-                aura.beginFill(effect.color, 0.5 + Math.sin(time * 4) * 0.2);
-                aura.drawCircle(0, 0, baseRadius * 0.3);
-                aura.endFill();
-            } else if (effect.animation === 'star') {
-                // Star effect - orbiting stars for special status (ball carrier)
-                const time = Date.now() * 0.003;
-                const params = effect.params || {};
-                const starCount = params.count || 8;
-                const orbitRadius = params.radius || 30;
-                const starSize = params.size || 3;
-                
-                // Outer pulsing ring
-                const pulseSize = 25 + Math.sin(time) * 3;
-                aura.lineStyle(2, effect.color, 0.6);
-                aura.drawCircle(0, 0, pulseSize);
-                
-                // Orbiting stars
-                for (let i = 0; i < starCount; i++) {
-                    const angle = (i / starCount) * Math.PI * 2 + time * 2;
-                    const cx = Math.cos(angle) * orbitRadius;
-                    const cy = Math.sin(angle) * orbitRadius;
-                    
-                    // Draw a 5-point star
-                    aura.beginFill(effect.color, 0.9);
-                    const starPoints = 5;
-                    const outerR = starSize;
-                    const innerR = starSize * 0.4;
-                    for (let j = 0; j < starPoints * 2; j++) {
-                        const starAngle = (j / (starPoints * 2)) * Math.PI * 2 - Math.PI / 2;
-                        const radius = j % 2 === 0 ? outerR : innerR;
-                        const sx = cx + Math.cos(starAngle) * radius;
-                        const sy = cy + Math.sin(starAngle) * radius;
-                        if (j === 0) {
-                            aura.moveTo(sx, sy);
-                        } else {
-                            aura.lineTo(sx, sy);
-                        }
-                    }
-                    aura.closePath();
-                    aura.endFill();
-                }
-                
-                // Central star
-                aura.beginFill(effect.color, 0.8);
-                const centerStarPoints = 5;
-                const centerOuterR = 8;
-                const centerInnerR = 3;
-                for (let j = 0; j < centerStarPoints * 2; j++) {
-                    const starAngle = (j / (centerStarPoints * 2)) * Math.PI * 2 - Math.PI / 2 + time;
-                    const radius = j % 2 === 0 ? centerOuterR : centerInnerR;
-                    const sx = Math.cos(starAngle) * radius;
-                    const sy = Math.sin(starAngle) * radius;
-                    if (j === 0) {
-                        aura.moveTo(sx, sy);
-                    } else {
-                        aura.lineTo(sx, sy);
-                    }
-                }
-                aura.closePath();
-                aura.endFill();
-            } else if (effect.animation === 'crown') {
-                // VIP crown - special prominent indicator
-                const time = Date.now() * 0.003;
-                const pulseSize = 25 + Math.sin(time) * 3;
-                
-                // Outer golden ring
-                aura.lineStyle(3, effect.color, 0.8);
-                aura.drawCircle(0, 0, pulseSize);
-                
-                // Inner star pattern
-                aura.lineStyle(2, effect.color, 0.9);
-                for (let i = 0; i < 5; i++) {
-                    const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
-                    const outerRadius = 30;
-                    const innerRadius = 15;
-                    
-                    const x1 = Math.cos(angle) * outerRadius;
-                    const y1 = Math.sin(angle) * outerRadius;
-                    const x2 = Math.cos(angle + Math.PI / 5) * innerRadius;
-                    const y2 = Math.sin(angle + Math.PI / 5) * innerRadius;
-                    
-                    if (i === 0) {
-                        aura.moveTo(x1, y1);
-                    } else {
-                        aura.lineTo(x1, y1);
-                    }
-                    aura.lineTo(x2, y2);
-                }
-                aura.closePath();
-                
-                // Rotating sparkles (small stars)
-                for (let i = 0; i < 8; i++) {
-                    const angle = (i / 8) * Math.PI * 2 + time * 2;
-                    const distance = 35;
-                    const cx = Math.cos(angle) * distance;
-                    const cy = Math.sin(angle) * distance;
-                    
-                    // Draw a small star manually
-                    aura.beginFill(effect.color, 0.9);
-                    const starPoints = 4;
-                    const outerR = 3;
-                    const innerR = 1.5;
-                    for (let j = 0; j < starPoints * 2; j++) {
-                        const starAngle = (j / (starPoints * 2)) * Math.PI * 2 - Math.PI / 2;
-                        const radius = j % 2 === 0 ? outerR : innerR;
-                        const sx = cx + Math.cos(starAngle) * radius;
-                        const sy = cy + Math.sin(starAngle) * radius;
-                        if (j === 0) {
-                            aura.moveTo(sx, sy);
-                        } else {
-                            aura.lineTo(sx, sy);
-                        }
-                    }
-                    aura.closePath();
-                    aura.endFill();
-                }
-            } else {
-                // Fallback for unknown animation types - simple pulsing circle
-                const time = Date.now() * 0.003;
-                const pulseSize = 20 + Math.sin(time) * 4;
-                
-                aura.lineStyle(2, effect.color, 0.6);
-                aura.drawCircle(0, 0, pulseSize);
-                
-                aura.beginFill(effect.color, 0.3);
-                aura.drawCircle(0, 0, pulseSize * 0.7);
-                aura.endFill();
-            }
-            
-            // Store animation type for update loop
-            aura.animationType = effect.animation;
-            aura.effectColor = effect.color;
-            aura.effectIndex = index;
-            
-            container.addChild(aura);
-            
-            // Add icon badge if requested (for player's own view)
-            if (effect.showIcon && sprite.playerData.id === this.myPlayerId) {
-                const badge = this.createPowerUpBadge(effect, index);
-                container.addChild(badge);
-            }
-        });
-    }
-    
-    /**
-     * Create a small badge/icon for power-up status (shown only for local player).
-     */
-    createPowerUpBadge(effect, index) {
-        const badge = new PIXI.Container();
-        
-        // Position badges in a row above player
-        const offsetX = (index - 0.5) * 30;
-        badge.position.set(offsetX, -45);
-        
-        // Background circle
-        const bg = new PIXI.Graphics();
-        bg.beginFill(0x000000, 0.7);
-        bg.drawCircle(0, 0, 10);
-        bg.endFill();
-        bg.lineStyle(2, effect.color, 1.0);
-        bg.drawCircle(0, 0, 10);
-        badge.addChild(bg);
-        
-        // Icon letter (first letter of effect name)
-        const letter = effect.displayName.charAt(0) || '?';
-        const text = new PIXI.Text(letter, {
-            fontSize: 12,
-            fill: effect.color,
-            fontWeight: 'bold'
-        });
-        text.anchor.set(0.5);
-        text.scale.y = -1; // Flip Y-axis back so text is readable
-        badge.addChild(text);
-        
-        return badge;
+        } else {
+            cooldownBg._lastTopY = null;
+            cooldownFill._lastPct = null;
+            cooldownFill._lastTopY = null;
+        }
     }
     
     createProjectile(projectileData) {
@@ -3008,27 +2340,40 @@ class GameEngine {
         
         // Customize projectile appearance based on ordinance type
         this.customizeProjectileAppearance(sprite, projectileData);
-        
+
+        // Strike Beacon: deliberately obvious — a bright red, blinking projectile in
+        // flight (the blink is driven per-frame by animateStrikeBeacon). Identified by
+        // its utility-only STRIKE bullet effect.
+        if ((projectileData.bulletEffects || []).includes('STRIKE')) {
+            sprite.tint = 0xff3333;
+            projectileContainer.isStrikeBeacon = true;
+            projectileContainer.beaconTime = 0;
+        }
+
+        // Scale the sprite by the weapon's caliber so the render matches the
+        // server-side hitbox (1.0 = baseline). Multiply to preserve the Y-flip.
+        const caliber = projectileData.caliber || 1;
+        sprite.scale.x *= caliber;
+        sprite.scale.y *= caliber;
+
         // Add sprite to container
         projectileContainer.addChild(sprite);
         
-        // Add special effects for plasma projectiles
-        const ordinance = projectileData.ordinance || 'BULLET';
-        if (ordinance === 'PLASMA') {
+        // Energy glow for electrically-charged rounds (the old per-PLASMA glow is
+        // now derived from gameplay: ELECTRIC rounds shimmer).
+        const effects = projectileData.bulletEffects || [];
+        if (effects.includes('ELECTRIC')) {
             this.createPlasmaEffects(projectileContainer, sprite);
         }
-        
-        // Check if this projectile should have a trail
-        const shouldHaveTrail = this.shouldProjectileHaveTrail(ordinance);
-        
-        if (shouldHaveTrail) {
-            // Create trail graphics
-            const trail = this.createProjectileTrail(ordinance);
+
+        // Trails are now derived from caliber/speed/effects, not the ordinance name.
+        if (this.shouldProjectileHaveTrail(projectileData)) {
+            const trail = this.createProjectileTrail(projectileData);
             trail.zIndex = -1; // Behind the main projectile
             projectileContainer.addChildAt(trail, 0); // Add at index 0 to be behind sprite
             projectileContainer.trail = trail;
             projectileContainer.trailPoints = []; // Store recent positions for trail
-            projectileContainer.maxTrailLength = this.getTrailLength(ordinance);
+            projectileContainer.maxTrailLength = this.getTrailLength(projectileData);
         }
         
         // Set projectile z-index below players but above obstacles
@@ -3049,232 +2394,134 @@ class GameEngine {
     }
     
     /**
-     * Check if projectile should have a trail based on ordinance type
+     * Whether a projectile leaves a trail — derived from gameplay rather than the
+     * ordinance name: big-caliber rounds (exhaust/smoke) or very fast rounds (tracer).
      */
-    shouldProjectileHaveTrail(ordinance) {
-        // Based on Ordinance.java hasTrail() property
-        switch (ordinance) {
-            case 'ROCKET':
-            case 'GRENADE':
-                return true;
-            default:
-                return false;
-        }
+    shouldProjectileHaveTrail(projectileData) {
+        const caliber = projectileData.caliber || 1;
+        const speed = Math.hypot(projectileData.vx || 0, projectileData.vy || 0);
+        return caliber >= 1.3 || speed >= 800;
     }
-    
+
     /**
-     * Create trail graphics for projectiles
+     * Trail style derived from caliber (width) and the dominant bullet effect
+     * (color), instead of the ordinance type.
      */
-    createProjectileTrail(ordinance) {
+    createProjectileTrail(projectileData) {
         const trail = new PIXI.Graphics();
-        
-        switch (ordinance) {
-            case 'ROCKET':
-                // Rocket exhaust trail - bright orange/yellow with flames
-                trail.trailColor = 0xff6600; // Orange
-                trail.trailSecondaryColor = 0xffaa00; // Yellow
-                trail.trailWidth = 8;
-                trail.trailAlpha = 0.8;
-                break;
-            case 'GRENADE':
-                // Grenade trail - dark smoke
-                trail.trailColor = 0x666666; // Dark gray
-                trail.trailSecondaryColor = 0x999999; // Light gray
-                trail.trailWidth = 6;
-                trail.trailAlpha = 0.6;
-                break;
-            default:
-                trail.trailColor = 0xffffff;
-                trail.trailSecondaryColor = 0xcccccc;
-                trail.trailWidth = 4;
-                trail.trailAlpha = 0.5;
-                break;
-        }
-        
+        const caliber = projectileData.caliber || 1;
+        const effects = projectileData.bulletEffects || [];
+
+        let color = 0xff8800, secondary = 0xffcc44; // default warm exhaust
+        if (effects.includes('SMOKE'))         { color = 0x666666; secondary = 0x999999; }
+        else if (effects.includes('FREEZING')) { color = 0x88ccff; secondary = 0xcceeff; }
+        else if (effects.includes('POISON'))   { color = 0x88cc44; secondary = 0xaaff66; }
+        else if (effects.includes('ELECTRIC')) { color = 0x66ccff; secondary = 0xaaddff; }
+        else if (effects.includes('INCENDIARY') || effects.includes('EXPLOSIVE')) { color = 0xff6600; secondary = 0xffaa00; }
+
+        trail.trailColor = color;
+        trail.trailSecondaryColor = secondary;
+        trail.trailWidth = 3 * caliber + 2; // ~5 at baseline, ~8 at ×2
+        trail.trailAlpha = 0.7;
         return trail;
     }
-    
-    /**
-     * Get trail length based on ordinance type
-     */
-    getTrailLength(ordinance) {
-        switch (ordinance) {
-            case 'ROCKET':
-                return 15; // Long rocket exhaust
-            case 'GRENADE':
-                return 10; // Medium smoke trail
-            default:
-                return 8;
-        }
+
+    /** Trail length (sample count) derived from caliber — bigger rounds trail longer. */
+    getTrailLength(projectileData) {
+        const caliber = projectileData.caliber || 1;
+        return Math.round(8 + (caliber - 1) * 7); // ~8 baseline, ~15 at ×2
     }
     
     /**
      * Create plasma effects for super-heated buzzing/glowing appearance
      */
     createPlasmaEffects(projectileContainer, sprite) {
-        // Create multiple layers for plasma effect
-        
-        // Outer electric field
-        const outerGlow = new PIXI.Graphics();
-        outerGlow.beginFill(0x4444ff, 0.3);
-        outerGlow.drawCircle(0, 0, 8);
-        outerGlow.endFill();
-        outerGlow.zIndex = -2;
-        projectileContainer.addChild(outerGlow);
-        
-        // Middle energy field with pulsing
-        const middleGlow = new PIXI.Graphics();
-        middleGlow.beginFill(0x6666ff, 0.5);
-        middleGlow.drawCircle(0, 0, 5);
-        middleGlow.endFill();
-        middleGlow.zIndex = -1;
-        projectileContainer.addChild(middleGlow);
-        
-        // Inner core glow
-        const innerGlow = new PIXI.Graphics();
-        innerGlow.beginFill(0xaaaaff, 0.7);
-        innerGlow.drawCircle(0, 0, 3);
-        innerGlow.endFill();
-        innerGlow.zIndex = 0;
-        projectileContainer.addChild(innerGlow);
-        
-        // Electric arcs around the plasma
-        const electricArcs = new PIXI.Graphics();
-        electricArcs.zIndex = 1;
-        projectileContainer.addChild(electricArcs);
-        
-        // Store references for animation
-        projectileContainer.plasmaEffects = {
-            outerGlow: outerGlow,
-            middleGlow: middleGlow,
-            innerGlow: innerGlow,
-            electricArcs: electricArcs,
-            animationTime: 0,
-            arcUpdateTimer: 0
-        };
-        
-        // Mark for plasma animation
+        // Single reusable glow sprite instead of 3 layered Graphics + per-frame
+        // electric-arc geometry rebuilds. Pulsed via transform only.
+        const glow = new PIXI.Sprite(this.glowTexture);
+        glow.anchor.set(0.5);
+        glow.tint = 0x6688ff;
+        glow._baseScale = 14 / (this.glowTextureRadius || 64);
+        glow.scale.set(glow._baseScale);
+        glow.zIndex = -1;
+        projectileContainer.addChildAt(glow, 0);
+
+        projectileContainer.plasmaGlow = glow;
+        projectileContainer.plasmaTime = 0;
         projectileContainer.isPlasma = true;
     }
     
     /**
-     * Animate plasma effects for buzzing/glowing appearance
+     * Animate plasma glow (transform-only pulse, no geometry).
      */
     animatePlasmaEffects(projectileContainer, deltaTime) {
-        if (!projectileContainer.plasmaEffects) return;
-        
-        const effects = projectileContainer.plasmaEffects;
-        effects.animationTime += deltaTime * 0.05; // Slow down animation speed
-        effects.arcUpdateTimer += deltaTime;
-        
-        const time = effects.animationTime;
-        
-        // Pulsing glow effects
-        const pulseOuter = 0.8 + Math.sin(time * 8) * 0.3; // Fast pulse
-        const pulseMiddle = 0.9 + Math.sin(time * 12) * 0.2; // Faster pulse
-        const pulseInner = 0.95 + Math.sin(time * 15) * 0.1; // Very fast pulse
-        
-        effects.outerGlow.alpha = pulseOuter * 0.3;
-        effects.middleGlow.alpha = pulseMiddle * 0.5;
-        effects.innerGlow.alpha = pulseInner * 0.7;
-        
-        // Scale pulsing for energy field effect
-        const scaleOuter = 1.0 + Math.sin(time * 6) * 0.2;
-        const scaleMiddle = 1.0 + Math.sin(time * 10) * 0.15;
-        const scaleInner = 1.0 + Math.sin(time * 14) * 0.1;
-        
-        effects.outerGlow.scale.set(scaleOuter);
-        effects.middleGlow.scale.set(scaleMiddle);
-        effects.innerGlow.scale.set(scaleInner);
-        
-        // Update electric arcs every few frames for buzzing effect
-        if (effects.arcUpdateTimer > 0.1) { // Update every 100ms for buzzing
-            this.updatePlasmaArcs(effects.electricArcs);
-            effects.arcUpdateTimer = 0;
-        }
-        
-        // Slight rotation for dynamic feel
-        effects.outerGlow.rotation = time * 2;
-        effects.middleGlow.rotation = -time * 3;
-        effects.innerGlow.rotation = time * 4;
-    }
-    
-    /**
-     * Update electric arcs around plasma for buzzing effect
-     */
-    updatePlasmaArcs(electricArcs) {
-        electricArcs.clear();
-        electricArcs.lineStyle(1, 0xaaaaff, 0.8);
-        
-        // Draw 3-5 random electric arcs
-        const numArcs = 3 + Math.floor(Math.random() * 3);
-        
-        for (let i = 0; i < numArcs; i++) {
-            const startAngle = Math.random() * Math.PI * 2;
-            const arcLength = Math.PI * 0.3 + Math.random() * Math.PI * 0.4; // 54-126 degrees
-            const radius = 6 + Math.random() * 4; // 6-10 pixel radius
-            
-            // Create zigzag electric arc
-            const steps = 5 + Math.floor(Math.random() * 3); // 5-7 steps
-            let currentAngle = startAngle;
-            const angleStep = arcLength / steps;
-            
-            let lastX = Math.cos(currentAngle) * radius;
-            let lastY = Math.sin(currentAngle) * radius;
-            
-            for (let j = 1; j <= steps; j++) {
-                currentAngle += angleStep;
-                
-                // Add random jitter for electric effect
-                const jitterRadius = radius + (Math.random() - 0.5) * 3;
-                const jitterAngle = currentAngle + (Math.random() - 0.5) * 0.3;
-                
-                const x = Math.cos(jitterAngle) * jitterRadius;
-                const y = Math.sin(jitterAngle) * jitterRadius;
-                
-                electricArcs.moveTo(lastX, lastY);
-                electricArcs.lineTo(x, y);
-                
-                lastX = x;
-                lastY = y;
-            }
-        }
+        const glow = projectileContainer.plasmaGlow;
+        if (!glow) return;
+
+        projectileContainer.plasmaTime += deltaTime * 0.05;
+        const t = projectileContainer.plasmaTime;
+
+        const pulse = 1.0 + Math.sin(t * 10) * 0.25;
+        glow.scale.set(glow._baseScale * pulse);
+        glow.alpha = 0.55 + Math.sin(t * 8) * 0.2;
     }
     
     /**
      * Update projectile trail graphics
      */
+    /** Blink a Strike Beacon projectile so it's unmistakable in flight (~5 Hz). */
+    animateStrikeBeacon(projectileContainer, deltaTime) {
+        projectileContainer.beaconTime = (projectileContainer.beaconTime || 0) + deltaTime;
+        const blink = (Math.sin(projectileContainer.beaconTime * 0.5) + 1) / 2; // 0..1
+        if (projectileContainer.sprite) {
+            projectileContainer.sprite.alpha = 0.3 + 0.7 * blink;
+        }
+    }
+
     updateProjectileTrail(projectileContainer) {
-        if (!projectileContainer.trail || !projectileContainer.trailPoints) return;
-        
         const trail = projectileContainer.trail;
         const points = projectileContainer.trailPoints;
-        
-        // Clear previous trail
+        if (!trail || !points) {
+            return;
+        }
+
+        // Record the projectile's current world position (its container lives in
+        // gameContainer space, driven by the interpolator). We keep a short
+        // rolling history and drop the oldest sample once we exceed the cap.
+        const cx = projectileContainer.position.x;
+        const cy = projectileContainer.position.y;
+        points.push({ x: cx, y: cy });
+        const maxLen = projectileContainer.maxTrailLength || 8;
+        if (points.length > maxLen) {
+            points.splice(0, points.length - maxLen);
+        }
+
         trail.clear();
-        
         if (points.length < 2) return;
-        
-        // Draw trail as a series of connected lines with decreasing width and alpha
+
+        // The trail Graphics is a CHILD of the moving container, so draw each
+        // recorded world point relative to the container's current position —
+        // that anchors the trail in world space behind the projectile. Taper
+        // width + alpha from oldest (thin/faint) to newest (full) so it fades
+        // out into the distance.
+        // Large-caliber rounds get a bright inner core near the head (exhaust look).
+        const bigBore = (projectileContainer.projectileData?.caliber || 1) >= 1.7;
         for (let i = 1; i < points.length; i++) {
-            const progress = i / points.length; // 0 = oldest, 1 = newest
-            const prevPoint = points[i - 1];
-            const currentPoint = points[i];
-            
-            // Calculate trail properties based on progress
-            const width = trail.trailWidth * (0.2 + 0.8 * progress); // Wider at front
-            const alpha = trail.trailAlpha * progress; // More opaque at front
-            
-            // Use gradient effect by drawing multiple lines
-            trail.lineStyle(width, trail.trailColor, alpha);
-            trail.moveTo(prevPoint.x, prevPoint.y);
-            trail.lineTo(currentPoint.x, currentPoint.y);
-            
-            // Add inner bright core for rocket trails
-            if (projectileContainer.projectileData.ordinance === 'ROCKET' && progress > 0.7) {
-                trail.lineStyle(width * 0.4, trail.trailSecondaryColor, alpha * 0.8);
-                trail.moveTo(prevPoint.x, prevPoint.y);
-                trail.lineTo(currentPoint.x, currentPoint.y);
+            const progress = i / (points.length - 1); // 0 = oldest segment, 1 = newest
+            const ax = points[i - 1].x - cx, ay = points[i - 1].y - cy;
+            const bx = points[i].x - cx, by = points[i].y - cy;
+            const width = trail.trailWidth * (0.2 + 0.8 * progress);
+            const alpha = trail.trailAlpha * progress;
+
+            trail.moveTo(ax, ay);
+            trail.lineTo(bx, by);
+            trail.stroke({ width, color: trail.trailColor, alpha });
+
+            // Bright inner core near the head of a large round's exhaust.
+            if (bigBore && progress > 0.7) {
+                trail.moveTo(ax, ay);
+                trail.lineTo(bx, by);
+                trail.stroke({ width: width * 0.4, color: trail.trailSecondaryColor, alpha: alpha * 0.8 });
             }
         }
     }
@@ -3283,50 +2530,19 @@ class GameEngine {
      * Customize projectile appearance based on ordinance type and effects
      */
     customizeProjectileAppearance(sprite, projectileData) {
-        const ordinance = projectileData.ordinance || 'BULLET';
         const effects = projectileData.bulletEffects || [];
-        
-        // Set size based on ordinance
-        switch (ordinance) {
-            case 'ROCKET':
-                sprite.scale.set(2.0);
-                sprite.tint = 0xff4444; // Red for rockets
-                break;
-            case 'GRENADE':
-                sprite.scale.set(1.5);
-                sprite.tint = 0x44aa44; // Green for grenades
-                break;
-            case 'PLASMA':
-                sprite.scale.set(1.2);
-                sprite.tint = 0x8888ff; // Bright blue-white for plasma core
-                sprite.alpha = 0.9; // Slightly transparent for energy effect
-                break;
-            case 'LASER':
-                sprite.scale.set(0.8);
-                sprite.tint = 0xff44ff; // Magenta for laser
-                break;
-            case 'DART':
-                sprite.scale.set(0.5);
-                sprite.tint = 0xffaa44; // Orange for darts
-                break;
-            case 'FLAMETHROWER':
-                sprite.scale.set(1.8);
-                sprite.tint = 0xff8844; // Fire orange
-                break;
-            case 'BULLET':
-            default:
-                sprite.scale.set(1.0);
-                sprite.tint = 0xf39c12; // Default bullet color
-                break;
-        }
-        
+
+        // Base appearance. Size is driven by CALIBER (applied as a scale multiplier
+        // by the caller), and color is modulated by bullet effects below — there's
+        // no longer a per-ordinance sub-type to switch on.
+        sprite.scale.set(1.0);
+        sprite.tint = 0xf39c12; // Default projectile color
+
         // Add visual effects for special bullet effects
         if (effects.includes('HOMING')) {
             // Add a subtle glow for homing projectiles
             const glow = new PIXI.Graphics();
-            glow.beginFill(0xffffff, 0.3);
-            glow.drawCircle(0, 0, 8);
-            glow.endFill();
+            glow.circle(0, 0, 8).fill({ color: 0xffffff, alpha: 0.3 });
             sprite.addChild(glow);
         }
         
@@ -3395,42 +2611,13 @@ class GameEngine {
      * Thoroughly clean up a projectile container to prevent memory leaks
      */
     cleanupProjectileContainer(projectileContainer) {
-        // Clean up plasma effects if they exist
-        if (projectileContainer.plasmaEffects) {
-            const effects = projectileContainer.plasmaEffects;
-            
-            // Remove and destroy all plasma effect children
-            if (effects.outerGlow) {
-                if (effects.outerGlow.parent) {
-                    effects.outerGlow.parent.removeChild(effects.outerGlow);
-                }
-                if (effects.outerGlow.clear) effects.outerGlow.clear();
-                effects.outerGlow.destroy();
+        // Clean up plasma glow sprite if it exists (shared texture preserved)
+        if (projectileContainer.plasmaGlow) {
+            if (projectileContainer.plasmaGlow.parent) {
+                projectileContainer.plasmaGlow.parent.removeChild(projectileContainer.plasmaGlow);
             }
-            if (effects.middleGlow) {
-                if (effects.middleGlow.parent) {
-                    effects.middleGlow.parent.removeChild(effects.middleGlow);
-                }
-                if (effects.middleGlow.clear) effects.middleGlow.clear();
-                effects.middleGlow.destroy();
-            }
-            if (effects.innerGlow) {
-                if (effects.innerGlow.parent) {
-                    effects.innerGlow.parent.removeChild(effects.innerGlow);
-                }
-                if (effects.innerGlow.clear) effects.innerGlow.clear();
-                effects.innerGlow.destroy();
-            }
-            if (effects.electricArcs) {
-                if (effects.electricArcs.parent) {
-                    effects.electricArcs.parent.removeChild(effects.electricArcs);
-                }
-                if (effects.electricArcs.clear) effects.electricArcs.clear();
-                effects.electricArcs.destroy();
-            }
-            
-            // Clear references
-            projectileContainer.plasmaEffects = null;
+            projectileContainer.plasmaGlow.destroy({ texture: false, baseTexture: false });
+            projectileContainer.plasmaGlow = null;
         }
         
         // Clean up trail if it exists
@@ -3438,11 +2625,7 @@ class GameEngine {
             if (projectileContainer.trail.parent) {
                 projectileContainer.trail.parent.removeChild(projectileContainer.trail);
             }
-            // Clear graphics content before destroying
-            if (projectileContainer.trail.clear) {
-                projectileContainer.trail.clear();
-            }
-            projectileContainer.trail.destroy();
+            projectileContainer.trail.destroy({ context: true });
             projectileContainer.trail = null;
         }
         
@@ -3465,10 +2648,11 @@ class GameEngine {
         // Clear all references
         projectileContainer.projectileData = null;
         projectileContainer.isPlasma = null;
+        projectileContainer.isStrikeBeacon = null;
         projectileContainer.maxTrailLength = null;
         
         // Destroy the container itself (children already manually destroyed above)
-        projectileContainer.destroy({ children: true, texture: false, baseTexture: false });
+        projectileContainer.destroy({ children: true, texture: false, baseTexture: false, context: true });
     }
 
     createObstacle(obstacleData) {
@@ -3478,132 +2662,73 @@ class GameEngine {
         graphics.zIndex = 5;
         this.obstacles.set(obstacleData.id, graphics);
         this.gameContainer.addChild(graphics);
-        
-        // Create health bar for player-created obstacles (barriers)
-        if (obstacleData.type === 'PLAYER_BARRIER' && obstacleData.ownerId > 0) {
-            const healthBarContainer = this.createObstacleHealthBar(obstacleData);
-            this.obstacleHealthBars = this.obstacleHealthBars || new Map();
-            this.obstacleHealthBars.set(obstacleData.id, healthBarContainer);
-        }
     }
 
     /**
-     * Create graphics for an obstacle based on its shape data.
+     * Parse the compact shapes shorthand string produced by the server into an
+     * array of drawable fixture descriptors.
+     *
+     * Format:  "fixture1;fixture2;..."
+     *   Polygon fixture:  "(x1,y1)/(x2,y2)/..."
+     *   Circle fixture:   "(cx,cy,r)"   (distinguished by having 3 comma-separated numbers)
+     *
+     * Returns an array of objects:
+     *   { type: 'circle',  cx, cy, r }
+     *   { type: 'polygon', points: [[x,y], ...] }
+     */
+    parseObstacleShapes(shapesStr) {
+        if (!shapesStr) return [];
+        return shapesStr.split(';').filter(s => s.length > 0).map(fixtureStr => {
+            const parts = fixtureStr.split('/').map(v => {
+                return v.replace(/[()]/g, '').split(',').map(Number);
+            });
+            if (parts[0].length === 3) {
+                const [cx, cy, r] = parts[0];
+                return { type: 'circle', cx, cy, r };
+            }
+            return { type: 'polygon', points: parts };
+        });
+    }
+
+    /**
+     * Create graphics for an obstacle using the compact shapes shorthand.
+     * Handles circles, convex polygons, and multi-fixture compound shapes
+     * (e.g. L-walls, cross-barriers) — all drawn from the same data.
      */
     createObstacleGraphics(obstacleData) {
         const graphics = new PIXI.Graphics();
-        const shapeCategory = obstacleData.shapeCategory || 'CIRCULAR';
         const obstacleType = obstacleData.type || 'BOULDER';
-        
-        // Get color based on obstacle type
         const color = this.getObstacleColor(obstacleType);
         const outlineColor = this.darkenColor(color);
-        
-        graphics.beginFill(color, 0.8);
-        graphics.lineStyle(2, outlineColor, 1);
-        
-        switch (shapeCategory) {
-            case 'CIRCULAR':
-                this.drawCircularObstacle(graphics, obstacleData);
-                break;
-            case 'RECTANGULAR':
-                this.drawRectangularObstacle(graphics, obstacleData);
-                break;
-            case 'TRIANGULAR':
-                this.drawTriangularObstacle(graphics, obstacleData);
-                break;
-            case 'POLYGONAL':
-                this.drawPolygonalObstacle(graphics, obstacleData);
-                break;
-            case 'COMPOUND':
-                this.drawCompoundObstacle(graphics, obstacleData);
-                break;
-            default:
-                // Fallback to circle
-                graphics.drawCircle(0, 0, obstacleData.boundingRadius || 20);
-                break;
+        const shapes = this.parseObstacleShapes(obstacleData.shapes);
+        for (const shape of shapes) {
+            if (shape.type === 'circle') {
+                graphics.circle(shape.cx, shape.cy, shape.r);
+            } else {
+                graphics.poly(shape.points.flatMap(([x, y]) => [x, y]));
+            }
         }
-        
-        graphics.endFill();
+        graphics.fill({ color, alpha: 0.8 });
+        graphics.stroke({ width: 2, color: outlineColor });
         return graphics;
     }
-    
+
     /**
      * Get color for obstacle based on type.
      */
     getObstacleColor(obstacleType) {
         switch (obstacleType) {
-            case 'BOULDER': return 0x808080; // Gray
-            case 'HOUSE': return 0x8B4513; // Brown
-            case 'WALL_SEGMENT': return 0x696969; // Dark gray
-            case 'TRIANGLE_ROCK': return 0x708090; // Slate gray
-            case 'POLYGON_DEBRIS': return 0x654321; // Dark brown
-            case 'HEXAGON_CRYSTAL': return 0x4169E1; // Royal blue
-            case 'DIAMOND_STONE': return 0x9370DB; // Medium purple
-            case 'L_SHAPED_WALL': return 0x2F4F4F; // Dark slate gray
-            case 'CROSS_BARRIER': return 0x8B7D6B; // Light gray
-            case 'PLAYER_BARRIER': return 0x8B4513; // Light gray
-            default: return 0x808080; // Default gray
+            case 'BOULDER': return 0x808080;
+            case 'HOUSE': return 0x8B4513;
+            case 'WALL_SEGMENT': return 0x696969;
+            case 'TRIANGLE_ROCK': return 0x708090;
+            case 'POLYGON_DEBRIS': return 0x654321;
+            case 'HEXAGON_CRYSTAL': return 0x4169E1;
+            case 'DIAMOND_STONE': return 0x9370DB;
+            case 'L_SHAPED_WALL': return 0x2F4F4F;
+            case 'CROSS_BARRIER': return 0x8B7D6B;
+            default: return 0x808080;
         }
-    }
-    
-    drawCircularObstacle(graphics, obstacleData) {
-        const radius = obstacleData.radius || obstacleData.boundingRadius || 20;
-        graphics.drawCircle(0, 0, radius);
-    }
-    
-    drawRectangularObstacle(graphics, obstacleData) {
-        const width = obstacleData.width || obstacleData.boundingRadius * 1.5 || 30;
-        const height = obstacleData.height || obstacleData.boundingRadius * 1.2 || 25;
-        graphics.drawRect(-width/2, -height/2, width, height);
-    }
-    
-    drawTriangularObstacle(graphics, obstacleData) {
-        if (obstacleData.vertices && obstacleData.vertices.length >= 3) {
-            this.drawPolygonFromVertices(graphics, obstacleData.vertices);
-        } else {
-            // Fallback equilateral triangle
-            const size = obstacleData.boundingRadius || 25;
-            graphics.drawPolygon([
-                0, -size * 0.577,          // Top (inverted Y)
-                -size * 0.5, size * 0.289, // Bottom left (inverted Y)
-                size * 0.5, size * 0.289   // Bottom right (inverted Y)
-            ]);
-        }
-    }
-    
-    drawPolygonalObstacle(graphics, obstacleData) {
-        if (obstacleData.vertices && obstacleData.vertices.length >= 3) {
-            this.drawPolygonFromVertices(graphics, obstacleData.vertices);
-        } else {
-            // Fallback to hexagon
-            const radius = obstacleData.boundingRadius || 25;
-            const sides = 6;
-            const points = [];
-            for (let i = 0; i < sides; i++) {
-                const angle = (2 * Math.PI * i) / sides;
-                points.push(Math.cos(angle) * radius);
-                points.push(-Math.sin(angle) * radius);  // Invert Y for PIXI coordinate system
-            }
-            graphics.drawPolygon(points);
-        }
-    }
-    
-    drawCompoundObstacle(graphics, obstacleData) {
-        // For now, draw as rectangle - compound shapes would need special handling
-        this.drawRectangularObstacle(graphics, obstacleData);
-    }
-    
-    drawPolygonFromVertices(graphics, vertices) {
-        if (vertices.length < 3) return;
-        
-        const points = [];
-        vertices.forEach(vertex => {
-            // No coordinate conversion needed - gameContainer Y-axis is flipped to match physics
-            points.push(vertex.x);
-            points.push(vertex.y);
-        });
-        graphics.drawPolygon(points);
     }
 
     updateObstacle(obstacleData) {
@@ -3611,12 +2736,6 @@ class GameEngine {
         if (!graphics) return;
         graphics.position.set(obstacleData.x, obstacleData.y);
         graphics.rotation = obstacleData.rotation || 0;
-        
-        // Update health bar if it exists
-        if (this.obstacleHealthBars && this.obstacleHealthBars.has(obstacleData.id)) {
-            const healthBar = this.obstacleHealthBars.get(obstacleData.id);
-            this.updateHealthBar(healthBar, obstacleData, graphics, healthBar.config);
-        }
     }
 
     removeObstacle(obstacleId) {
@@ -3633,73 +2752,17 @@ class GameEngine {
             
             // Clear references
             sprite.obstacleData = null;
-            sprite.destroy();
-        }
-        
-        // Remove health bar if it exists
-        if (this.obstacleHealthBars && this.obstacleHealthBars.has(obstacleId)) {
-            const healthBar = this.obstacleHealthBars.get(obstacleId);
-            if (healthBar.parent) {
-                healthBar.parent.removeChild(healthBar);
-            }
-            healthBar.destroy();
-            this.obstacleHealthBars.delete(obstacleId);
+            sprite.destroy({ children: true, context: true });
         }
     }
     
-    /**
-     * Create health bar for player-created obstacles (barriers).
-     * Uses a smaller, more subtle design to distinguish from player health bars.
-     */
-    createObstacleHealthBar(obstacleData) {
-        const healthBarContainer = new PIXI.Container();
-        
-        // Smaller health bar background (half the size of player health bars)
-        const healthBg = new PIXI.Graphics();
-        healthBg.beginFill(0x222222, 0.8); // Darker, more subtle background
-        healthBg.drawRoundedRect(-15, 0, 30, 4, 1); // Smaller dimensions
-        healthBg.endFill();
-        healthBarContainer.addChild(healthBg);
-        
-        // Health bar fill
-        const healthFill = new PIXI.Graphics();
-        healthFill.beginFill(0x4a90e2); // Blue color to distinguish from player health
-        healthFill.drawRoundedRect(-15, 0, 30, 4, 1);
-        healthFill.endFill();
-        healthBarContainer.addChild(healthFill);
-        
-        // Store references for updates
-        healthBarContainer.healthBg = healthBg;
-        healthBarContainer.healthFill = healthFill;
-        healthBarContainer.config = {
-            width: 30,
-            height: 4,
-            yOffset: 25,
-            bgColor: 0x222222,
-            fillColor: 0x4a90e2,
-            cornerRadius: 1,
-            showWhenFull: false,
-            dynamicColor: false
-        };
-        
-        // Position above obstacle (will be updated in updateObstacleHealthBar)
-        healthBarContainer.position.set(obstacleData.x, obstacleData.y - 25); // Closer to obstacle than player health bars
-        
-        // Add to name container so it doesn't rotate with obstacle
-        this.nameContainer.addChild(healthBarContainer);
-        
-        return healthBarContainer;
-    }
-    
-    /**
-     * Update obstacle health bar appearance and position.
-     */
     /**
      * Create a field effect (explosion, fire, electric, etc.)
      */
     createFieldEffect(effectData) {
         const effectContainer = new PIXI.Container();
         effectContainer.position.set(effectData.x, effectData.y);
+        effectContainer.rotation = effectData.rotation || 0;
         
         // Set z-index based on effect type
         // Ground effects (heal zones, speed boosts) should render beneath players
@@ -3709,18 +2772,42 @@ class GameEngine {
         // Create the main effect visual based on type
         const effectGraphics = this.createEffectGraphics(effectData);
         effectContainer.addChild(effectGraphics);
-        
+
+        // Shield barriers get a solid shell ring on top of the fill so they read
+        // as a hard barrier rather than just another tinted field (e.g. ice).
+        if (effectData.type === 'SHIELD_BARRIER') {
+            const ring = this.createShieldBarrierRing(effectData.radius || 50);
+            effectContainer.addChild(ring);
+            effectContainer.barrierRing = ring;
+        }
+
+        // Utility zones get a distinctive centered symbol so they're instantly
+        // recognizable instead of reading as just another tinted cloud.
+        const icon = this.createFieldEffectIcon(effectData.type, effectData.radius || 50, effectData);
+        if (icon) {
+            effectContainer.addChild(icon);
+            effectContainer.iconOverlay = icon;
+            effectContainer.lastArmedState = effectData.isArmed || false;
+        }
+
+        // Electric fields get arcing lightning bolts redrawn on a throttle by
+        // animateElectric() — a dedicated Graphics child so the flicker doesn't
+        // touch the shared fill sprite.
+        if (effectData.type === 'ELECTRIC') {
+            const lightning = new PIXI.Graphics();
+            effectContainer.addChild(lightning);
+            effectContainer.lightning = lightning;
+        }
+
         // Add animated elements for certain effects
         this.addEffectAnimation(effectContainer, effectData);
         
         // Store effect data and add to containers
         effectContainer.effectData = effectData;
         effectContainer.effectGraphics = effectGraphics;
+        effectContainer._lastShapes = effectData.shapes;
         this.fieldEffects.set(effectData.id, effectContainer);
         this.gameContainer.addChild(effectContainer);
-        
-        // Enable sorting for proper z-index handling
-        this.gameContainer.sortableChildren = true;
     }
     
     /**
@@ -3728,25 +2815,19 @@ class GameEngine {
      */
     updateFieldEffect(effectData) {
         const effectContainer = this.fieldEffects.get(effectData.id);
-        if (!effectContainer) return;
-        
-        // Update position (in case effect moves)
-        effectContainer.position.set(effectData.x, effectData.y);
-        
-        // Handle growing effects (like ERUPTION)
-        if (!effectContainer.initialRadius) {
-            effectContainer.initialRadius = effectData.radius;
-            effectContainer.currentRadius = effectData.radius;
+        if (!effectContainer) {
+            return;
         }
-        
-        // Smoothly scale to match server radius for growing effects
-        if (effectData.type === 'FIRE' && effectData.radius !== effectContainer.currentRadius) {
-            effectContainer.currentRadius = effectData.radius;
-            const scaleFactor = effectData.radius / effectContainer.initialRadius;
-            
-            // Apply base scale to the graphics (animation will pulse on top of this)
+
+        // Update position and rotation (in case effect moves or rotates)
+        effectContainer.position.set(effectData.x, effectData.y);
+        effectContainer.rotation = effectData.rotation || 0;
+
+        // If shapes data changed (e.g. beam length clipped by raycast or rotating), re-draw graphics
+        if (effectContainer._lastShapes !== effectData.shapes) {
+            effectContainer._lastShapes = effectData.shapes;
             if (effectContainer.effectGraphics) {
-                effectContainer.effectGraphics.scale.set(scaleFactor);
+                this.drawEffectGraphics(effectContainer.effectGraphics, effectData);
             }
         }
         
@@ -3755,363 +2836,183 @@ class GameEngine {
         
         effectContainer.effectData = effectData;
     }
-    
+
     /**
      * Remove a field effect
      */
     removeFieldEffect(effectId) {
         const effectContainer = this.fieldEffects.get(effectId);
         if (effectContainer) {
+            this.fieldEffects.delete(effectId);
+
+            // Guard against tearing down the same container twice.
+            if (effectContainer._removing) {
+                return;
+            }
+            effectContainer._removing = true;
+
             // Clean up animation ticker first
             if (effectContainer.animationFunction) {
-                this.app.ticker.remove(effectContainer.animationFunction);
+                this.removeTickerCallback(effectContainer.animationFunction);
                 effectContainer.animationFunction = null;
             }
             
-            // Add fade-out animation before removal
+            // Add fade-out animation before final teardown (frees GPU geometry).
             this.fadeOutEffect(effectContainer, () => {
-                // Final cleanup
                 this.cleanupFieldEffectContainer(effectContainer);
-                this.gameContainer.removeChild(effectContainer);
-                this.fieldEffects.delete(effectId);
+                if (effectContainer.parent) {
+                    effectContainer.parent.removeChild(effectContainer);
+                }
             });
         }
     }
     
-    /**
-     * Create a beam weapon effect
-     */
-    createBeam(beamData) {
-        const beamContainer = new PIXI.Container();
-        
-        beamContainer.position.set(beamData.startX, beamData.startY);
-        
-        // Calculate beam length and angle
-        const dx = beamData.endX - beamData.startX;
-        const dy = beamData.endY - beamData.startY;
-        const length = Math.sqrt(dx * dx + dy * dy);
-        const angle = Math.atan2(dy, dx);
-        
-        // Create the main beam graphics based on type
-        const beamGraphics = this.createBeamGraphics(beamData, length);
-        beamGraphics.rotation = angle;
-        beamContainer.addChild(beamGraphics);
-        
-        // Add beam effects based on damage type
-        if (beamData.damageType === 'DAMAGE_OVER_TIME') {
-            this.addBeamEffects(beamContainer, beamData, length, angle);
-        }
-        
-        // Set z-index above projectiles but below players
-        beamContainer.zIndex = 9;
-        
-        // Store beam data and add to containers
-        beamContainer.beamData = beamData;
-        beamContainer.beamGraphics = beamGraphics;
-        beamContainer.beamLength = length;
-        beamContainer.beamAngle = angle;
-        this.beams.set(beamData.id, beamContainer);
-        this.gameContainer.addChild(beamContainer);
-        
-        // Enable sorting for proper z-index handling
-        this.gameContainer.sortableChildren = true;
-    }
-    
-    /**
-     * Update a beam weapon effect
-     */
-    updateBeam(beamData) {
-        const beamContainer = this.beams.get(beamData.id);
-        if (!beamContainer) return;
-        
-        // Update position and angle
-        beamContainer.position.set(beamData.startX, beamData.startY);
-        
-        // Recalculate beam properties
-        const dx = beamData.endX - beamData.startX;
-        const dy = beamData.endY - beamData.startY;
-        const length = Math.sqrt(dx * dx + dy * dy);
-        const angle = Math.atan2(dy, dx);
-        
-        // Update beam graphics if length or angle changed significantly
-        if (Math.abs(length - beamContainer.beamLength) > 5 ||
-            Math.abs(angle - beamContainer.beamAngle) > 0.1) {
-            
-            // Remove old graphics
-            if (beamContainer.beamGraphics) {
-                beamContainer.removeChild(beamContainer.beamGraphics);
-                beamContainer.beamGraphics.destroy();
-            }
-            
-            // Create new graphics with updated dimensions
-            const beamGraphics = this.createBeamGraphics(beamData, length);
-            beamGraphics.rotation = angle;
-            beamContainer.addChild(beamGraphics);
-            
-            beamContainer.beamGraphics = beamGraphics;
-            beamContainer.beamLength = length;
-            beamContainer.beamAngle = angle;
-        }
-        
-        // Update beam intensity based on duration
-        const intensity = beamData.durationPercent || 1.0;
-        beamContainer.alpha = Math.max(0.3, intensity);
-        
-        beamContainer.beamData = beamData;
-    }
-    
-    /**
-     * Remove a beam weapon effect
-     */
-    removeBeam(beamId) {
-        const beamContainer = this.beams.get(beamId);
-        if (beamContainer) {
-            this.cleanupBeamContainer(beamContainer);
-            this.gameContainer.removeChild(beamContainer);
-            this.beams.delete(beamId);
-        }
-    }
-    
     // ===== Flag Management (CTF Mode) =====
-    
-    /**
-     * Create a flag for capture-the-flag mode or oddball
-     */
+
     createFlag(flagData) {
         const flagContainer = new PIXI.Container();
-        
         flagContainer.position.set(flagData.x, flagData.y);
-        
-        // Check if this is an oddball (ownerTeam === 0)
-        const isOddball = flagData.ownerTeam === 0 || flagData.isOddball;
-        
-        if (isOddball) {
-            // Create ODDBALL - basketball style
-            this.createOddballGraphics(flagContainer, flagData);
-        } else {
-            // Create regular CTF flag
-            this.createCTFFlagGraphics(flagContainer, flagData);
-        }
-        
-        // Set z-index (above players for visibility when carried)
+        this.createCTFFlagGraphics(flagContainer, flagData);
         flagContainer.zIndex = 11;
-        
-        // Store flag data
         flagContainer.flagData = flagData;
-        flagContainer.isOddball = isOddball;
         this.flags.set(flagData.id, flagContainer);
         this.gameContainer.addChild(flagContainer);
-        
-        // Enable sorting for proper z-index handling
-        this.gameContainer.sortableChildren = true;
     }
     
-    /**
-     * Create oddball graphics (yellow ball with star design)
-     */
-    createOddballGraphics(flagContainer, flagData) {
-        // Create yellow sphere
-        const ball = new PIXI.Graphics();
-        
-        // Draw main yellow ball
-        const ballColor = 0xFFFF00; // Bright yellow
-        ball.beginFill(ballColor);
-        ball.drawCircle(0, 0, 20);
-        ball.endFill();
-        
-        // Add darker yellow/gold outline
-        ball.lineStyle(2, 0xFFAA00, 1);
-        ball.drawCircle(0, 0, 20);
-        
-        // Draw star pattern in the center
-        ball.lineStyle(0); // No outline for star
-        ball.beginFill(0xFFFFFF, 0.9); // White star
-        
-        // Draw a 5-pointed star
-        const starPoints = 5;
-        const outerRadius = 12;
-        const innerRadius = 5;
-        
-        for (let i = 0; i < starPoints * 2; i++) {
-            const radius = i % 2 === 0 ? outerRadius : innerRadius;
-            const angle = (i * Math.PI) / starPoints - Math.PI / 2;
-            const x = Math.cos(angle) * radius;
-            const y = Math.sin(angle) * radius;
-            
-            if (i === 0) {
-                ball.moveTo(x, y);
-            } else {
-                ball.lineTo(x, y);
-            }
-        }
-        ball.closePath();
-        ball.endFill();
-        
-        // Add star outline
-        ball.lineStyle(1.5, 0xFFAA00, 1);
-        for (let i = 0; i < starPoints * 2; i++) {
-            const radius = i % 2 === 0 ? outerRadius : innerRadius;
-            const angle = (i * Math.PI) / starPoints - Math.PI / 2;
-            const x = Math.cos(angle) * radius;
-            const y = Math.sin(angle) * radius;
-            
-            if (i === 0) {
-                ball.moveTo(x, y);
-            } else {
-                ball.lineTo(x, y);
-            }
-        }
-        ball.closePath();
-        
-        flagContainer.addChild(ball);
-        flagContainer.ballSprite = ball;
-        
-        // Add golden glow for oddball
-        const glow = new PIXI.Graphics();
-        glow.beginFill(0xFFFF00, 0.4); // Yellow glow
-        glow.drawCircle(0, 0, 30);
-        glow.endFill();
-        flagContainer.addChildAt(glow, 0); // Behind ball
-        flagContainer.glow = glow;
-        
-        // Add "ODDBALL" label
-        const label = new PIXI.Text('⭐ ODDBALL', {
-            fontSize: 10,
-            fill: 0xFFFFFF,
-            fontWeight: 'bold',
-            stroke: 0x000000,
-            strokeThickness: 3
-        });
-        label.anchor.set(0.5);
-        label.scale.y = -1; // Flip Y-axis back
-        label.position.set(0, 35);
-        flagContainer.addChild(label);
-        flagContainer.label = label;
-        
-        // Animate glow pulsing
-        flagContainer.glowPhase = 0;
-    }
-    
-    /**
-     * Create CTF flag graphics (traditional flag)
-     */
     createCTFFlagGraphics(flagContainer, flagData) {
         // Create flag pole (extends upward from base)
         const pole = new PIXI.Graphics();
-        pole.beginFill(0xEEEEEE); // Very bright silver/chrome
-        pole.lineStyle(1, 0xFFFFFF, 0.8); // White outline for extra visibility
-        pole.drawRect(-2, 0, 4, 30);
-        pole.endFill();
+        pole.rect(-2, 0, 4, 30).fill(0xEEEEEE); // Very bright silver/chrome
+        pole.rect(-2, 0, 4, 30).stroke({ width: 1, color: 0xFFFFFF, alpha: 0.8 }); // White outline for extra visibility
         flagContainer.addChild(pole);
         
         // Create flag sprite (triangle) - flag at top of pole
         const flag = new PIXI.Graphics();
         const teamColor = this.getTeamColor(flagData.ownerTeam);
-        flag.beginFill(teamColor);
         flag.moveTo(0, 30);
         flag.lineTo(20, 20);
         flag.lineTo(0, 10);
         flag.lineTo(0, 30);
-        flag.endFill();
+        flag.fill(teamColor);
         
         // Add black outline
-        flag.lineStyle(1, 0x000000, 1);
         flag.moveTo(0, 30);
         flag.lineTo(20, 20);
         flag.lineTo(0, 10);
+        flag.closePath();
+        flag.stroke({ width: 1, color: 0x000000 });
         
         flagContainer.addChild(flag);
         flagContainer.flagSprite = flag;
-        
-        // Add glow effect for visibility
-        const glow = new PIXI.Graphics();
-        glow.beginFill(teamColor, 0.3);
-        glow.drawCircle(0, 15, 25);
-        glow.endFill();
-        flagContainer.addChildAt(glow, 0); // Behind everything else
-        flagContainer.glow = glow;
-        
-        // Animate glow
-        flagContainer.glowPhase = 0;
     }
     
-    /**
-     * Update a flag's position and state
-     */
+    // ===== Oddball NPC Management =====
+
+    createOddballNpc(npcData) {
+        const container = new PIXI.Container();
+        container.position.set(npcData.x, npcData.y);
+        container.zIndex = 12;
+
+        const isRampage = npcData.personality === 'RAMPAGE';
+        const radius = npcData.radius;
+
+        const ball = new PIXI.Graphics();
+
+        if (isRampage) {
+            // Rampage: large dark-orange body with spiky ring — menacing
+            ball.circle(0, 0, radius).fill({ color: 0xCC4400, alpha: 0.95 });
+            ball.circle(0, 0, radius).stroke({ width: 3, color: 0xFF6600 });
+            // Spike ring
+            const spikes = 8;
+            for (let i = 0; i < spikes; i++) {
+                const angle = (i / spikes) * Math.PI * 2;
+                const inner = radius + 2;
+                const outer = radius + 10;
+                const ix = Math.cos(angle) * inner;
+                const iy = Math.sin(angle) * inner;
+                const ox = Math.cos(angle) * outer;
+                const oy = Math.sin(angle) * outer;
+                ball.moveTo(ix, iy).lineTo(ox, oy);
+                ball.stroke({ width: 2.5, color: 0xFF4400 });
+            }
+            // Eye — single menacing eye
+            ball.circle(0, -4, 5).fill(0xFFCC00);
+            ball.circle(0, -4, 5).stroke({ width: 1, color: 0xFF8800 });
+            ball.circle(0, -4, 2).fill(0x000000);
+        } else {
+            // Seeker: small fast-looking cyan circle with trailing arcs — quick, harassing
+            ball.circle(0, 0, radius).fill({ color: 0x005577, alpha: 0.92 });
+            ball.circle(0, 0, radius).stroke({ width: 2, color: 0x00CCFF });
+            // Arc accents suggesting motion
+            for (let i = 0; i < 3; i++) {
+                const startAngle = (i / 3) * Math.PI * 2;
+                const arcLen = Math.PI * 0.4;
+                ball.arc(0, 0, radius + 4, startAngle, startAngle + arcLen);
+                ball.stroke({ width: 1.5, color: 0x00BBEE, alpha: 0.7 });
+            }
+            // Small bright core
+            ball.circle(0, 0, radius * 0.35).fill(0x00FFFF);
+        }
+
+        container.addChild(ball);
+        container.ball = ball;
+        container.npcData = npcData;
+
+        this.oddballNpcs.set(npcData.id, container);
+        this.gameContainer.addChild(container);
+    }
+
+    updateOddballNpc(npcData) {
+        const container = this.oddballNpcs.get(npcData.id);
+        if (!container) return;
+        container.position.set(npcData.x, npcData.y);
+        container.npcData = npcData;
+    }
+
+    removeOddballNpc(npcId) {
+        const container = this.oddballNpcs.get(npcId);
+        if (container) {
+            this.gameContainer.removeChild(container);
+            container.destroy({ children: true });
+            this.oddballNpcs.delete(npcId);
+        }
+    }
+
     updateFlag(flagData) {
         const flagContainer = this.flags.get(flagData.id);
-        if (!flagContainer) return;
-        
+        if (!flagContainer) {
+            return;
+        }
+
         // Update position (important for carried flags)
         flagContainer.position.set(flagData.x, flagData.y);
-        
+
         // Update visual state based on flag state
         const state = flagData.state;
-        const isOddball = flagContainer.isOddball;
-        
+
         if (state === 'CARRIED') {
-            // Flag/ball is being carried - make it bob and pulse
             flagContainer.alpha = 0.9;
             flagContainer.scale.set(0.8);
-            
-            // Extra spin animation for oddball
-            if (isOddball && flagContainer.ballSprite) {
-                flagContainer.ballSprite.rotation += 0.05;
-            }
         } else if (state === 'DROPPED') {
-            // Flag/ball is dropped - pulse slowly
             flagContainer.alpha = 0.8 + Math.sin(Date.now() / 500) * 0.2;
             flagContainer.scale.set(1.0);
-            
-            // Bounce animation for oddball
-            if (isOddball && flagContainer.ballSprite) {
-                const bounce = Math.abs(Math.sin(Date.now() / 300)) * 5;
-                flagContainer.ballSprite.position.y = -bounce;
-            }
         } else {
             // Flag/ball is at home - full opacity
             flagContainer.alpha = 1.0;
             flagContainer.scale.set(1.0);
-            
-            // Gentle float for oddball at home
-            if (isOddball && flagContainer.ballSprite) {
-                const float = Math.sin(Date.now() / 800) * 3;
-                flagContainer.ballSprite.position.y = float;
-            }
         }
-        
-        // Animate glow
-        flagContainer.glowPhase += 0.05;
-        if (flagContainer.glow) {
-            if (isOddball) {
-                // Oddball has more intense golden glow pulse
-                flagContainer.glow.alpha = 0.3 + Math.sin(flagContainer.glowPhase) * 0.2;
-            } else {
-                // CTF flag has subtle glow
-                flagContainer.glow.alpha = 0.2 + Math.sin(flagContainer.glowPhase) * 0.1;
-            }
-        }
-        
         flagContainer.flagData = flagData;
     }
     
-    /**
-     * Remove a flag
-     */
     removeFlag(flagId) {
         const flagContainer = this.flags.get(flagId);
         if (flagContainer) {
-            flagContainer.destroy({ children: true });
+            flagContainer.destroy({ children: true, context: true });
             this.gameContainer.removeChild(flagContainer);
             this.flags.delete(flagId);
         }
     }
     
-    // ===== KOTH Zone Management =====
-    
-    /**
-     * Create a KOTH zone
-     */
     createKothZone(zoneData) {
         const zoneContainer = new PIXI.Container();
         
@@ -4121,7 +3022,18 @@ class GameEngine {
         const baseCircle = new PIXI.Graphics();
         zoneContainer.baseCircle = baseCircle;
         zoneContainer.addChild(baseCircle);
-        
+
+        // Caution-tape stripes shown only while the zone is CONTESTED. Drawn as
+        // diagonal bands clipped to the zone circle by cautionMask.
+        const cautionStripes = new PIXI.Graphics();
+        cautionStripes.visible = false;
+        zoneContainer.cautionStripes = cautionStripes;
+        zoneContainer.addChild(cautionStripes);
+        const cautionMask = new PIXI.Graphics();
+        zoneContainer.cautionMask = cautionMask;
+        zoneContainer.addChild(cautionMask);
+        cautionStripes.mask = cautionMask;
+
         // Create capture progress ring
         const progressRing = new PIXI.Graphics();
         zoneContainer.progressRing = progressRing;
@@ -4203,34 +3115,41 @@ class GameEngine {
         // Get colors based on state
         const colors = this.getKothZoneColors(zoneData);
         const radius = zoneData.radius || 80;
-        
-        // Redraw base circle
-        const baseCircle = zoneContainer.baseCircle;
-        baseCircle.clear();
-        baseCircle.lineStyle(3, colors.border, 1);
-        baseCircle.beginFill(colors.fill, 0.2);
-        baseCircle.drawCircle(0, 0, radius);
-        baseCircle.endFill();
-        
-        // Draw capture progress ring (no longer needed - removed capture time)
-        const progressRing = zoneContainer.progressRing;
-        progressRing.clear();
-        // No progress ring since zones are controlled immediately
-        
-        // Draw inner glow
-        const glow = zoneContainer.glow;
-        glow.clear();
-        glow.beginFill(colors.glow, 0.3);
-        glow.drawCircle(0, 0, radius * 0.7);
-        glow.endFill();
-        
-        // Update zone number color
-        zoneContainer.zoneText.style.fill = colors.text;
-        
-        // Update status text
-        const statusText = zoneContainer.statusText;
-        statusText.text = this.getKothZoneStatusText(zoneData);
-        statusText.style.fill = colors.statusText;
+
+        // Only rebuild the circle/glow geometry when the visual state actually
+        // changes (state, controlling team, or radius). Redrawing every tick is
+        // the GPU-geometry-churn anti-pattern; zone state changes rarely.
+        const renderKey = `${zoneData.state}|${zoneData.controllingTeam}|${radius}`;
+        if (zoneContainer._renderKey !== renderKey) {
+            zoneContainer._renderKey = renderKey;
+
+            const baseCircle = zoneContainer.baseCircle;
+            baseCircle.clear();
+            baseCircle.circle(0, 0, radius).fill({ color: colors.fill, alpha: 0.2 });
+            baseCircle.circle(0, 0, radius).stroke({ width: 3, color: colors.border });
+
+            const glow = zoneContainer.glow;
+            glow.clear();
+            glow.circle(0, 0, radius * 0.7).fill({ color: colors.glow, alpha: 0.3 });
+
+            // Caution-tape striping while contested (clipped to the zone circle).
+            const stripes = zoneContainer.cautionStripes;
+            if (zoneData.state === 'CONTESTED') {
+                this._drawCautionStripes(stripes, radius);
+                zoneContainer.cautionMask.clear();
+                zoneContainer.cautionMask.circle(0, 0, radius).fill({ color: 0xffffff });
+                stripes.visible = true;
+            } else {
+                stripes.clear();
+                stripes.visible = false;
+            }
+
+            zoneContainer.zoneText.style.fill = colors.text;
+
+            const statusText = zoneContainer.statusText;
+            statusText.text = this.getKothZoneStatusText(zoneData);
+            statusText.style.fill = colors.statusText;
+        }
         
         // Update player count
         const playerCountText = zoneContainer.playerCountText;
@@ -4245,6 +3164,27 @@ class GameEngine {
     /**
      * Get colors for KOTH zone based on state
      */
+    /**
+     * Draw diagonal "caution tape" bands across the zone's bounding box. The
+     * caller masks this to the zone circle. Yellow bands over the zone's gray base
+     * fill read as a hazard/contested stripe pattern (no red — that clashes with
+     * the red team color).
+     */
+    _drawCautionStripes(g, radius) {
+        g.clear();
+        const stripeW = 16;          // band thickness
+        const step = stripeW * 2;    // band + equal gap
+        // 45° bands: each is the strip between the lines x - y = c and = c + stripeW.
+        for (let c = -2 * radius; c < 2 * radius; c += step) {
+            g.moveTo(c - radius, -radius);
+            g.lineTo(c + stripeW - radius, -radius);
+            g.lineTo(c + stripeW + radius, radius);
+            g.lineTo(c + radius, radius);
+            g.closePath();
+        }
+        g.fill({ color: 0xFFD21A, alpha: 0.55 });
+    }
+
     getKothZoneColors(zoneData) {
         switch (zoneData.state) {
             case 'CONTROLLED':
@@ -4259,13 +3199,15 @@ class GameEngine {
                 };
             
             case 'CONTESTED':
+                // Caution-tape look: yellow on a gray base (red was confused with
+                // the red team). The diagonal stripes are drawn separately.
                 return {
-                    fill: 0xFF4444,
-                    border: 0xFF4444,
-                    progress: 0xFF4444,
-                    glow: 0xFF4444,
+                    fill: 0x555555,
+                    border: 0xFFD21A,
+                    progress: 0xFFD21A,
+                    glow: 0x666666,
                     text: 0xFFFFFF,
-                    statusText: 0xFF4444
+                    statusText: 0xFFD21A
                 };
             
             case 'NEUTRAL':
@@ -4302,217 +3244,28 @@ class GameEngine {
     removeKothZone(zoneId) {
         const zoneContainer = this.kothZones.get(zoneId);
         if (zoneContainer) {
-            zoneContainer.destroy({ children: true });
+            zoneContainer.destroy({ children: true, context: true });
             this.gameContainer.removeChild(zoneContainer);
             this.kothZones.delete(zoneId);
         }
     }
     
-    /**
-     * Create beam graphics based on beam type and properties
-     */
-    createBeamGraphics(beamData, length) {
-        const graphics = new PIXI.Graphics();
-        
-        // Determine beam type from damage properties
-        let beamType = 'LASER'; // default
-        if (beamData.isHealingBeam) {
-            beamType = 'HEAL_BEAM';
-        } else if (beamData.damageType === 'DAMAGE_OVER_TIME') {
-            beamType = 'PLASMA_BEAM';
-        } else if (beamData.canPierceObstacles) {
-            beamType = 'RAILGUN';
-        } else if (beamData.canPiercePlayers) {
-            beamType = 'LASER';
-        }
-        
-        switch (beamType) {
-            case 'LASER':
-                return this.createLaserGraphics(graphics, length, beamData);
-            case 'PLASMA_BEAM':
-                return this.createPlasmaBeamGraphics(graphics, length, beamData);
-            case 'HEAL_BEAM':
-                return this.createHealBeamGraphics(graphics, length, beamData);
-            case 'RAILGUN':
-                return this.createRailgunGraphics(graphics, length, beamData);
-            default:
-                return this.createGenericBeamGraphics(graphics, length, beamData);
-        }
-    }
-    
-    /**
-     * Create laser beam graphics
-     */
-    createLaserGraphics(graphics, length, beamData) {
-        // Main laser beam - bright magenta/red
-        graphics.lineStyle(4, 0xff44ff, 0.9);
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        
-        // Inner core - white hot
-        graphics.lineStyle(2, 0xffffff, 1.0);
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        
-        // Outer glow effect
-        graphics.lineStyle(8, 0xff44ff, 0.3);
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        
-        return graphics;
-    }
-    
-    /**
-     * Create plasma beam graphics
-     */
-    createPlasmaBeamGraphics(graphics, length, beamData) {
-        // Main plasma beam - electric blue
-        graphics.lineStyle(6, 0x4488ff, 0.8);
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        
-        // Plasma core - bright white
-        graphics.lineStyle(3, 0xaaffff, 1.0);
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        
-        // Crackling energy effect
-        graphics.lineStyle(10, 0x4488ff, 0.2);
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        
-        // Add plasma instability (random segments)
-        for (let i = 0; i < length; i += 20) {
-            const segmentEnd = Math.min(i + 15 + Math.random() * 10, length);
-            const offset = (Math.random() - 0.5) * 4;
-            
-            graphics.lineStyle(2, 0x88aaff, 0.6);
-            graphics.moveTo(i, 0);
-            graphics.lineTo(segmentEnd, offset);
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create heal beam graphics
-     */
-    createHealBeamGraphics(graphics, length, beamData) {
-        // Main healing beam - soft green
-        graphics.lineStyle(5, 0x2ecc71, 0.7);
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        
-        // Healing core - bright green
-        graphics.lineStyle(2, 0x58d68d, 1.0);
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        
-        // Healing aura
-        graphics.lineStyle(12, 0x2ecc71, 0.2);
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        
-        // Add healing particles along the beam
-        for (let i = 10; i < length; i += 15) {
-            const offset = (Math.random() - 0.5) * 6;
-            graphics.beginFill(0x58d68d, 0.8);
-            graphics.drawCircle(i, offset, 1.5);
-            graphics.endFill();
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create railgun beam graphics
-     */
-    createRailgunGraphics(graphics, length, beamData) {
-        // Main railgun beam - bright white/blue
-        graphics.lineStyle(3, 0xaaffff, 1.0);
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        
-        // Railgun core - pure white
-        graphics.lineStyle(1, 0xffffff, 1.0);
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        
-        // Electromagnetic field
-        graphics.lineStyle(8, 0x88ccff, 0.4);
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        
-        // Add electromagnetic distortion lines
-        for (let i = 0; i < length; i += 25) {
-            const distortionLength = 8 + Math.random() * 6;
-            graphics.lineStyle(1, 0xaaffff, 0.5);
-            graphics.moveTo(i, -distortionLength/2);
-            graphics.lineTo(i, distortionLength/2);
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create generic beam graphics
-     */
-    createGenericBeamGraphics(graphics, length, beamData) {
-        // Generic beam - white
-        graphics.lineStyle(3, 0xffffff, 0.8);
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        
-        // Core
-        graphics.lineStyle(1, 0xffffff, 1.0);
-        graphics.moveTo(0, 0);
-        graphics.lineTo(length, 0);
-        
-        return graphics;
-    }
-    
-    /**
-     * Add special effects to beams (for DOT types)
-     */
-    addBeamEffects(beamContainer, beamData, length, angle) {
-        // Add pulsing or crackling effects for continuous beams
-        if (beamData.damageType === 'DAMAGE_OVER_TIME') {
-            // Add continuous energy effect
-            const energyEffect = new PIXI.Graphics();
-            energyEffect.lineStyle(8, 0x4488ff, 0.1);
-            energyEffect.moveTo(0, 0);
-            energyEffect.lineTo(length, 0);
-            energyEffect.rotation = angle;
-            beamContainer.addChild(energyEffect);
-            
-            // Store for animation
-            beamContainer.energyEffect = energyEffect;
-        }
-    }
+    // ===== Utility Entity Management =====
     
     /**
      * Create graphics for utility entities based on type
      */
     createUtilityEntityGraphics(entityData) {
         const graphics = new PIXI.Graphics();
-        
         switch (entityData.type) {
             case 'TURRET':
                 return this.createTurretGraphics(graphics, entityData);
             case 'NET':
                 return this.createNetGraphics(graphics, entityData);
-            case 'MINE':
-                return this.createMineGraphics(graphics, entityData);
-            case 'TELEPORT_PAD':
-                return this.createTeleportPadGraphics(graphics, entityData);
             case 'DEFENSE_LASER':
                 return this.createDefenseLaserGraphics(graphics, entityData);
-            case 'WORKSHOP':
-                return this.createWorkshopGraphics(graphics, entityData);
             case 'HEADQUARTERS':
                 return this.createHeadquartersGraphics(graphics, entityData);
-            case 'POWERUP':
-                return this.createPowerUpGraphics(graphics, entityData);
             default:
                 return this.createGenericUtilityGraphics(graphics, entityData);
         }
@@ -4523,35 +3276,27 @@ class GameEngine {
      */
     createTurretGraphics(graphics, entityData) {
         // Turret base - dark gray circle
-        graphics.beginFill(0x444444, 0.9);
-        graphics.drawCircle(0, 0, 18);
-        graphics.endFill();
+        graphics.circle(0, 0, 18).fill({ color: 0x444444, alpha: 0.9 });
         
         // Turret base outline
-        graphics.lineStyle(2, 0x666666, 1.0);
-        graphics.drawCircle(0, 0, 18);
+        graphics.circle(0, 0, 18).stroke({ width: 2, color: 0x666666 });
         
         // Turret barrel - pointing in direction
-        graphics.lineStyle(4, 0x333333, 1.0);
         graphics.moveTo(0, 0);
         graphics.lineTo(25, 0); // Barrel length
+        graphics.stroke({ width: 4, color: 0x333333 });
         
         // Turret barrel tip
-        graphics.beginFill(0x222222, 1.0);
-        graphics.drawCircle(25, 0, 3);
-        graphics.endFill();
+        graphics.circle(25, 0, 3).fill(0x222222);
         
         // Team color indicator
         const teamColor = this.getTeamColor(entityData.ownerTeam || 0);
-        graphics.beginFill(teamColor, 0.8);
-        graphics.drawCircle(0, 0, 8);
-        graphics.endFill();
+        graphics.circle(0, 0, 8).fill({ color: teamColor, alpha: 0.8 });
         
         // Health indicator (if available)
         if (entityData.health !== undefined) {
             const healthPercent = Math.max(0, entityData.health / 100);
-            graphics.lineStyle(2, 0x2ecc71, healthPercent);
-            graphics.drawCircle(0, 0, 20);
+            graphics.circle(0, 0, 20).stroke({ width: 2, color: 0x2ecc71, alpha: healthPercent });
         }
         
         return graphics;
@@ -4581,11 +3326,9 @@ class GameEngine {
         const meshSize = 3; // Size of each mesh cell
         
         // Draw the main net frame (rectangle outline)
-        graphics.lineStyle(2, 0x8B4513, 0.9); // Brown rope color
-        graphics.drawRect(-netWidth/2, -netHeight/2, netWidth, netHeight);
+        graphics.rect(-netWidth/2, -netHeight/2, netWidth, netHeight).stroke({ width: 2, color: 0x8B4513, alpha: 0.9 }); // Brown rope color
         
         // Draw horizontal mesh lines
-        graphics.lineStyle(1, 0x654321, 0.8); // Slightly darker brown
         const horizontalLines = Math.floor(netHeight / meshSize);
         for (let i = 1; i < horizontalLines; i++) {
             const y = -netHeight/2 + (i * meshSize);
@@ -4600,6 +3343,7 @@ class GameEngine {
             graphics.moveTo(x, -netHeight/2);
             graphics.lineTo(x, netHeight/2);
         }
+        graphics.stroke({ width: 1, color: 0x654321, alpha: 0.8 }); // Slightly darker brown
         
         // Add corner weights for realistic net behavior
         const cornerRadius = 3;
@@ -4612,19 +3356,14 @@ class GameEngine {
         
         corners.forEach(corner => {
             // Corner weight
-            graphics.beginFill(0x4A4A4A, 0.9); // Dark gray metal
-            graphics.lineStyle(1, 0x2A2A2A, 1.0); // Darker outline
-            graphics.drawCircle(corner.x, corner.y, cornerRadius);
-            graphics.endFill();
+            graphics.circle(corner.x, corner.y, cornerRadius).fill({ color: 0x4A4A4A, alpha: 0.9 }); // Dark gray metal
+            graphics.circle(corner.x, corner.y, cornerRadius).stroke({ width: 1, color: 0x2A2A2A }); // Darker outline
             
             // Add metallic shine
-            graphics.beginFill(0x6A6A6A, 0.6);
-            graphics.drawCircle(corner.x - 1, corner.y - 1, cornerRadius * 0.4);
-            graphics.endFill();
+            graphics.circle(corner.x - 1, corner.y - 1, cornerRadius * 0.4).fill({ color: 0x6A6A6A, alpha: 0.6 });
         });
         
         // Add subtle net texture with small cross-hatches
-        graphics.lineStyle(0.5, 0x654321, 0.4);
         for (let x = -netWidth/2 + meshSize/2; x < netWidth/2; x += meshSize) {
             for (let y = -netHeight/2 + meshSize/2; y < netHeight/2; y += meshSize) {
                 // Small cross pattern in each mesh cell
@@ -4634,6 +3373,7 @@ class GameEngine {
                 graphics.lineTo(x - 0.5, y + 0.5);
             }
         }
+        graphics.stroke({ width: 0.5, color: 0x654321, alpha: 0.4 });
         
         return graphics;
     }
@@ -4655,15 +3395,14 @@ class GameEngine {
         }
         
         // Draw pentagon outline
-        graphics.lineStyle(2, 0x8B4513, 0.9); // Brown rope color
         graphics.moveTo(vertices[0].x, vertices[0].y);
         for (let i = 1; i < vertices.length; i++) {
             graphics.lineTo(vertices[i].x, vertices[i].y);
         }
         graphics.lineTo(vertices[0].x, vertices[0].y); // Close the pentagon
+        graphics.stroke({ width: 2, color: 0x8B4513, alpha: 0.9 }); // Brown rope color
         
         // Draw mesh lines from center to each vertex
-        graphics.lineStyle(1, 0x654321, 0.8); // Slightly darker brown
         vertices.forEach(vertex => {
             graphics.moveTo(0, 0); // Center
             graphics.lineTo(vertex.x, vertex.y);
@@ -4689,24 +3428,20 @@ class GameEngine {
             }
             graphics.lineTo(levelVertices[0].x, levelVertices[0].y);
         }
+        graphics.stroke({ width: 1, color: 0x654321, alpha: 0.8 }); // Slightly darker brown
         
         // Add corner weights at each vertex
         const cornerRadius = 2.5;
         vertices.forEach(vertex => {
             // Corner weight
-            graphics.beginFill(0x4A4A4A, 0.9); // Dark gray metal
-            graphics.lineStyle(1, 0x2A2A2A, 1.0); // Darker outline
-            graphics.drawCircle(vertex.x, vertex.y, cornerRadius);
-            graphics.endFill();
+            graphics.circle(vertex.x, vertex.y, cornerRadius).fill({ color: 0x4A4A4A, alpha: 0.9 }); // Dark gray metal
+            graphics.circle(vertex.x, vertex.y, cornerRadius).stroke({ width: 1, color: 0x2A2A2A }); // Darker outline
             
             // Add metallic shine
-            graphics.beginFill(0x6A6A6A, 0.6);
-            graphics.drawCircle(vertex.x - 0.8, vertex.y - 0.8, cornerRadius * 0.4);
-            graphics.endFill();
+            graphics.circle(vertex.x - 0.8, vertex.y - 0.8, cornerRadius * 0.4).fill({ color: 0x6A6A6A, alpha: 0.6 });
         });
         
         // Add subtle net texture with small cross-hatches in mesh cells
-        graphics.lineStyle(0.5, 0x654321, 0.3);
         for (let level = 1; level < meshLevels; level++) {
             const levelRadius = (level * radius) / meshLevels;
             const nextLevelRadius = ((level + 1) * radius) / meshLevels;
@@ -4725,161 +3460,7 @@ class GameEngine {
                 graphics.lineTo(centerX - 0.5, centerY + 0.5);
             }
         }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create proximity mine graphics
-     */
-    createMineGraphics(graphics, entityData) {
-        const isArmed = entityData.isArmed || false;
-        const ownerTeam = entityData.ownerTeam || 0;
-        
-        // Outer trigger zone - very subtle danger area
-        graphics.beginFill(0xff4444, 0.06);
-        graphics.drawCircle(0, 0, 18);
-        graphics.endFill();
-        
-        // Trigger zone outline - dashed circle (more subtle)
-        graphics.lineStyle(1, 0xff6666, 0.25);
-        const dashCount = 16;
-        for (let i = 0; i < dashCount; i++) {
-            const startAngle = (i / dashCount) * Math.PI * 2;
-            const endAngle = ((i + 0.5) / dashCount) * Math.PI * 2;
-            graphics.arc(0, 0, 18, startAngle, endAngle);
-        }
-        
-        // Mine center body - darker, more blended
-        graphics.beginFill(0x252f3a, 0.85);
-        graphics.drawCircle(0, 0, 8);
-        graphics.endFill();
-
-        // Center body outline - much more subtle
-        graphics.lineStyle(1, 0x1e2329, 0.7);
-        graphics.drawCircle(0, 0, 8);
- 
-        // Core highlight - metallic shine (more prominent without inner ring)
-        graphics.beginFill(0x3a4a5a, 0.4);
-        graphics.drawCircle(-1, -1, 2);
-        graphics.endFill();
-        
-        // Sensor spikes - 6 directional sensors (more subtle)
-        for (let i = 0; i < 6; i++) {
-            const angle = (i / 6) * Math.PI * 2;
-            const innerRadius = 6;
-            const outerRadius = 12;
-            const spikeWidth = 1.2;
-            
-            // Sensor spike body - darker and more transparent
-            graphics.lineStyle(spikeWidth, 0x2a3441, 0.8);
-            graphics.moveTo(
-                Math.cos(angle) * innerRadius,
-                Math.sin(angle) * innerRadius
-            );
-            graphics.lineTo(
-                Math.cos(angle) * outerRadius,
-                Math.sin(angle) * outerRadius
-            );
-            
-            // Sensor tip - small detection node (more subtle)
-            graphics.beginFill(0x3a4a5a, 0.7);
-            graphics.drawCircle(
-                Math.cos(angle) * outerRadius,
-                Math.sin(angle) * outerRadius,
-                1.2
-            );
-            graphics.endFill();
-        }
-        
-        // Status indicator
-        if (isArmed) {
-            // Armed - team color pulsing ring around center
-            const pulse = 0.6 + 0.4 * Math.sin(Date.now() * 0.01);
-            const teamColor = this.getTeamColor(ownerTeam);
-            graphics.lineStyle(2, teamColor, pulse);
-            graphics.drawCircle(0, 0, 10);
-            
-            // Armed indicator - small pulsing center light
-            const centerPulse = 0.3 + 0.7 * Math.sin(Date.now() * 0.015);
-            graphics.beginFill(teamColor, centerPulse);
-            graphics.drawCircle(0, 0, 1.5);
-            graphics.endFill();
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create teleport pad graphics
-     */
-    createTeleportPadGraphics(graphics, entityData) {
-        const isLinked = entityData.isLinked || false;
-        const isCharging = entityData.isCharging || false;
-        const chargingProgress = entityData.chargingProgress || 0;
-        const pulseValue = entityData.pulseValue || 0.5;
-        
-        // Teleport pad base - large circle
-        const baseColor = isLinked ? 0x9b59b6 : 0x6c5ce7; // Purple when linked, blue when not
-        graphics.beginFill(baseColor, 0.3);
-        graphics.drawCircle(0, 0, 20);
-        graphics.endFill();
-        
-        // Outer ring
-        graphics.lineStyle(3, baseColor, 0.8);
-        graphics.drawCircle(0, 0, 20);
-        
-        // Inner energy core
-        const coreAlpha = isCharging ? chargingProgress : 1.0;
-        graphics.beginFill(0xffffff, coreAlpha * 0.6);
-        graphics.drawCircle(0, 0, 8);
-        graphics.endFill();
-        
-        // Pulsing energy rings
-        if (!isCharging || chargingProgress > 0.5) {
-            const pulseAlpha = pulseValue * 0.5;
-            graphics.lineStyle(2, 0xffffff, pulseAlpha);
-            graphics.drawCircle(0, 0, 12);
-            graphics.drawCircle(0, 0, 16);
-        }
-        
-        // Charging progress indicator
-        if (isCharging) {
-            graphics.lineStyle(4, 0xf39c12, 0.8);
-            graphics.arc(0, 0, 24, 0, Math.PI * 2 * chargingProgress);
-        }
-        
-        // Link indicator
-        if (isLinked) {
-            // Draw connection symbols - more prominent
-            for (let i = 0; i < 4; i++) {
-                const angle = (i / 4) * Math.PI * 2;
-                const x = Math.cos(angle) * 16;
-                const y = Math.sin(angle) * 16;
-                
-                // Outer glow effect
-                graphics.beginFill(0x9b59b6, 0.3);
-                graphics.drawCircle(x, y, 6);
-                graphics.endFill();
-                
-                // Arrow pointing outward
-                graphics.beginFill(0x9b59b6, 0.9);
-                graphics.drawPolygon([
-                    x - 2, y - 2,
-                    x + 2, y - 2,
-                    x + 4, y,
-                    x + 2, y + 2,
-                    x - 2, y + 2,
-                    x - 4, y
-                ]);
-                graphics.endFill();
-            }
-            
-            // Add pulsing connection ring
-            const connectionRingAlpha = pulseValue * 0.6;
-            graphics.lineStyle(2, 0x9b59b6, connectionRingAlpha);
-            graphics.drawCircle(0, 0, 25);
-        }
+        graphics.stroke({ width: 0.5, color: 0x654321, alpha: 0.3 });
         
         return graphics;
     }
@@ -4888,213 +3469,105 @@ class GameEngine {
      * Create defense laser graphics
      */
     createDefenseLaserGraphics(graphics, entityData) {
-        // Base structure - blue-gray circle
-        graphics.beginFill(0x4444AA, 0.9);
-        graphics.drawCircle(0, 0, 15);
-        graphics.endFill();
-        
-        // Central core - brighter blue
-        graphics.beginFill(0x6666CC, 0.8);
-        graphics.drawCircle(0, 0, 8);
-        graphics.endFill();
-        
-        // Rotating indicator - shows current beam direction
-        graphics.beginFill(0x8888FF, 0.9);
-        graphics.drawRect(-2, -12, 4, 6);
-        graphics.endFill();
-        
-        // Outer ring to show it's active
-        graphics.lineStyle(2, 0xAAAAFF, 0.8);
-        graphics.drawCircle(0, 0, 18);
-        
+        const teamColor = this.getTeamColor(entityData.ownerTeam || 0);
+
+        // Base structure - team-colored circle
+        graphics.circle(0, 0, 15).fill({ color: teamColor, alpha: 0.7 });
+
+        // Central core - solid team color
+        graphics.circle(0, 0, 8).fill({ color: teamColor, alpha: 0.95 });
+
+        // Rotating indicator - white for contrast so direction is readable on any team color
+        graphics.rect(-2, -12, 4, 6).fill({ color: 0xFFFFFF, alpha: 0.9 });
+
+        // Outer ring - team color
+        graphics.circle(0, 0, 18).stroke({ width: 2, color: teamColor, alpha: 0.8 });
+
         return graphics;
-    }
-    
-    /**
-     * Create workshop graphics
-     */
-    createWorkshopGraphics(graphics, entityData) {
-        if (entityData.type !== 'WORKSHOP') {
-            return;
-        }
-        
-        // Use the same approach as rectangular obstacles
-        const width = entityData.width;
-        const height = entityData.height;
-        
-        const halfWidth = width / 2;
-        const halfHeight = height / 2;
-        
-        // Workshop base - industrial gray rectangle
-        graphics.beginFill(0x555555, 0.9);
-        graphics.drawRect(-halfWidth, -halfHeight, width, height);
-        graphics.endFill();
-        
-        // Workshop outline
-        graphics.lineStyle(3, 0x777777, 1.0);
-        graphics.drawRect(-halfWidth, -halfHeight, width, height);
-        
-        // Crafting radius indicator (subtle)
-        graphics.lineStyle(1, 0x888888, 0.3);
-        graphics.drawCircle(0, 0, entityData.craftRadius || 80);
-        
-        // Workshop center - gear-like design
-        graphics.lineStyle(2, 0x999999, 1.0);
-        graphics.moveTo(-8, -8);
-        graphics.lineTo(8, 8);
-        graphics.moveTo(8, -8);
-        graphics.lineTo(-8, 8);
-        graphics.drawCircle(0, 0, 6);
-        
-        // Add some workshop details to make it look more industrial
-        graphics.lineStyle(1, 0x666666, 0.8);
-        // Horizontal lines for workshop floor (scaled to actual dimensions)
-        const floorY1 = -halfHeight * 0.3;
-        const floorY2 = halfHeight * 0.3;
-        graphics.moveTo(-halfWidth * 0.8, floorY1);
-        graphics.lineTo(halfWidth * 0.8, floorY1);
-        graphics.moveTo(-halfWidth * 0.8, floorY2);
-        graphics.lineTo(halfWidth * 0.8, floorY2);
-        // Vertical lines for workshop walls (scaled to actual dimensions)
-        const wallX1 = -halfWidth * 0.6;
-        const wallX2 = halfWidth * 0.6;
-        graphics.moveTo(wallX1, -halfHeight * 0.8);
-        graphics.lineTo(wallX1, halfHeight * 0.8);
-        graphics.moveTo(wallX2, -halfHeight * 0.8);
-        graphics.lineTo(wallX2, halfHeight * 0.8);
-        
-        // Add crafting progress indicators for active players
-        if (entityData.craftingProgress) {
-            const progressEntries = Object.entries(entityData.craftingProgress);
-            progressEntries.forEach(([playerId, progress], index) => {
-                if (progress > 0) {
-                    const angle = (index / progressEntries.length) * Math.PI * 2;
-                    const radius = Math.max(halfWidth, halfHeight) + 20; // Position further outside the workshop
-                    const x = Math.cos(angle) * radius;
-                    const y = Math.sin(angle) * radius;
-                    
-                    // Progress indicator dot (larger and more visible)
-                    graphics.beginFill(0x00AAFF, 1.0);
-                    graphics.drawCircle(x, y, 8);
-                    graphics.endFill();
-                    
-                    // Progress ring (outer) - thicker and more visible
-                    graphics.lineStyle(4, 0x00AAFF, progress);
-                    graphics.drawCircle(x, y, 12);
-                    
-                    // Inner progress circle
-                    graphics.lineStyle(2, 0xFFFFFF, 0.8);
-                    graphics.drawCircle(x, y, 6);
-                    
-                    // Progress percentage indicator (pulsing dot)
-                    const pulseSize = 4 + (progress * 4);
-                    graphics.beginFill(0xFFFFFF, 0.9);
-                    graphics.drawCircle(x, y, pulseSize);
-                    graphics.endFill();
-                }
-            });
-        }
-        
-        // Add workshop activity indicator (pulsing center when active)
-        if (entityData.activeCrafters > 0) {
-            // Pulsing center circle to show workshop is active
-            graphics.lineStyle(3, 0x00FF00, 1.0); // Green for active - thicker and brighter
-            graphics.drawCircle(0, 0, 10);
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Update workshop visual to show crafting progress changes
-     */
-    updateWorkshopVisual(container, entityData) {
-        // Clear and redraw with updated progress
-        const graphics = container.getChildAt(0);
-        if (graphics) {
-            graphics.clear();
-            this.createWorkshopGraphics(graphics, entityData);
-        }
     }
     
     /**
      * Create headquarters graphics
      */
     createHeadquartersGraphics(graphics, entityData) {
-        const width = entityData.width || 80;
-        const height = entityData.height || 60;
-        const halfWidth = width / 2;
-        const halfHeight = height / 2;
+        // Derive dimensions from the compact shapes string; fall back to
+        // sensible defaults so the renderer never breaks on missing data.
+        const shapes = this.parseObstacleShapes(entityData.shapes);
+
+        // The physics body is composed of wall polygon(s) plus one circle fixture
+        // per corner turret. Honor that data directly rather than synthesizing
+        // decorations at guessed positions.
+        const wallShapes = shapes.filter(s => s.type === 'polygon');
+        const turretShapes = shapes.filter(s => s.type === 'circle');
+
+        // The wall bounding box drives the HQ proportions (outline, command
+        // center, health bar). Turret circles extend beyond it.
+        let halfWidth = 40;
+        let halfHeight = 30;
+        const wallPoints = wallShapes.flatMap(s => s.points);
+        if (wallPoints.length > 0) {
+            const xs = wallPoints.map(([x]) => x);
+            const ys = wallPoints.map(([, y]) => y);
+            halfWidth  = (Math.max(...xs) - Math.min(...xs)) / 2;
+            halfHeight = (Math.max(...ys) - Math.min(...ys)) / 2;
+        }
+        const width  = halfWidth  * 2;
+        const height = halfHeight * 2;
         const team = entityData.team || 0;
-        
+
         // Get team color
         const teamColor = this.getTeamColor(team);
-        
+        const darkerTeamColor = this.darkenColor(teamColor);
+
         // Health is already sent as a percentage (0.0 - 1.0) from backend
         const healthPct = entityData.health || 1.0;
-        
-        // HQ base - large fortified rectangle with team color
-        const baseAlpha = 0.9;
-        graphics.beginFill(teamColor, baseAlpha);
-        graphics.drawRect(-halfWidth, -halfHeight, width, height);
-        graphics.endFill();
-        
-        // Damage overlay (darker as health decreases)
-        if (healthPct < 1.0) {
-            const damageAlpha = (1.0 - healthPct) * 0.6;
-            graphics.beginFill(0x000000, damageAlpha);
-            graphics.drawRect(-halfWidth, -halfHeight, width, height);
-            graphics.endFill();
-        }
-        
-        // HQ fortified outline (thicker than normal obstacles)
-        graphics.lineStyle(4, 0xFFFFFF, 0.9);
-        graphics.drawRect(-halfWidth, -halfHeight, width, height);
-        
-        // Castle turrets at each corner
-        const turretRadius = 12;
-        const turretPositions = [
-            { x: -halfWidth, y: -halfHeight },  // Top-left
-            { x: halfWidth, y: -halfHeight },   // Top-right
-            { x: halfWidth, y: halfHeight },    // Bottom-right
-            { x: -halfWidth, y: halfHeight }    // Bottom-left
-        ];
-        
-        turretPositions.forEach(pos => {
-            // Turret base (darker shade of team color)
-            const darkerTeamColor = this.darkenColor(teamColor);
-            graphics.beginFill(darkerTeamColor, 0.95);
-            graphics.drawCircle(pos.x, pos.y, turretRadius);
-            graphics.endFill();
-            
-            // Damage overlay on turrets
-            if (healthPct < 1.0) {
-                const damageAlpha = (1.0 - healthPct) * 0.6;
-                graphics.beginFill(0x000000, damageAlpha);
-                graphics.drawCircle(pos.x, pos.y, turretRadius);
-                graphics.endFill();
+        const damageAlpha = healthPct < 1.0 ? (1.0 - healthPct) * 0.6 : 0;
+
+        // Re-issue the wall path(s) so they can be filled, damage-overlaid, and stroked.
+        const traceWalls = () => {
+            if (wallShapes.length > 0) {
+                for (const wall of wallShapes) {
+                    graphics.poly(wall.points.flatMap(([x, y]) => [x, y]));
+                }
+            } else {
+                graphics.rect(-halfWidth, -halfHeight, width, height);
             }
-            
+        };
+
+        // Walls: team-colored fill, damage overlay, fortified white outline.
+        traceWalls();
+        graphics.fill({ color: teamColor, alpha: 0.9 });
+        if (damageAlpha > 0) {
+            traceWalls();
+            graphics.fill({ color: 0x000000, alpha: damageAlpha });
+        }
+        traceWalls();
+        graphics.stroke({ width: 4, color: 0xFFFFFF, alpha: 0.9 });
+
+        const turrets = turretShapes.map(c => ({ x: c.cx, y: c.cy, r: c.r }))
+        turrets.forEach(turret => {
+            // Turret base (darker shade of team color)
+            graphics.circle(turret.x, turret.y, turret.r).fill({ color: darkerTeamColor, alpha: 0.95 });
+
+            // Damage overlay on turrets
+            if (damageAlpha > 0) {
+                graphics.circle(turret.x, turret.y, turret.r).fill({ color: 0x000000, alpha: damageAlpha });
+            }
+
             // Turret outline
-            graphics.lineStyle(3, 0xFFFFFF, 0.95);
-            graphics.drawCircle(pos.x, pos.y, turretRadius);
-            
+            graphics.circle(turret.x, turret.y, turret.r).stroke({ width: 3, color: 0xFFFFFF, alpha: 0.95 });
+
             // Inner turret detail (smaller circle)
-            graphics.lineStyle(2, 0xFFFFFF, 0.7);
-            graphics.drawCircle(pos.x, pos.y, turretRadius * 0.6);
-            
+            graphics.circle(turret.x, turret.y, turret.r * 0.6).stroke({ width: 2, color: 0xFFFFFF, alpha: 0.7 });
+
             // Turret top accent
-            graphics.beginFill(0xFFFFFF, 0.4);
-            graphics.drawCircle(pos.x, pos.y, turretRadius * 0.3);
-            graphics.endFill();
+            graphics.circle(turret.x, turret.y, turret.r * 0.3).fill({ color: 0xFFFFFF, alpha: 0.4 });
         });
-        
+
         // Central command center design
         const centerSize = Math.min(halfWidth, halfHeight) * 0.5;
-        graphics.lineStyle(2, 0xFFFFFF, 0.8);
-        graphics.beginFill(teamColor, 0.5);
-        graphics.drawCircle(0, 0, centerSize);
-        graphics.endFill();
+        graphics.circle(0, 0, centerSize).fill({ color: teamColor, alpha: 0.5 });
+        graphics.circle(0, 0, centerSize).stroke({ width: 2, color: 0xFFFFFF, alpha: 0.8 });
         
         // Team indicator - large team number in center
         const teamText = new PIXI.Text(`HQ\n${team}`, {
@@ -5115,10 +3588,8 @@ class GameEngine {
         const barY = -halfHeight - 15;
         
         // Health bar background
-        graphics.lineStyle(2, 0x000000, 0.8);
-        graphics.beginFill(0x333333, 0.8);
-        graphics.drawRect(-barWidth/2, barY, barWidth, barHeight);
-        graphics.endFill();
+        graphics.rect(-barWidth/2, barY, barWidth, barHeight).fill({ color: 0x333333, alpha: 0.8 });
+        graphics.rect(-barWidth/2, barY, barWidth, barHeight).stroke({ width: 2, color: 0x000000, alpha: 0.8 });
         
         // Health bar fill (color changes based on health)
         let healthBarColor = 0x00FF00; // Green
@@ -5128,9 +3599,7 @@ class GameEngine {
             healthBarColor = 0xFFAA00; // Orange
         }
         
-        graphics.beginFill(healthBarColor, 0.9);
-        graphics.drawRect(-barWidth/2, barY, barWidth * healthPct, barHeight);
-        graphics.endFill();
+        graphics.rect(-barWidth/2, barY, barWidth * healthPct, barHeight).fill({ color: healthBarColor, alpha: 0.9 });
         
         // Health text (show as percentage)
         const healthPercentage = (healthPct * 100).toFixed(0);
@@ -5149,8 +3618,7 @@ class GameEngine {
         // Warning pulse effect when heavily damaged
         if (healthPct < 0.3) {
             const pulse = Math.sin(Date.now() * 0.005) * 0.5 + 0.5;
-            graphics.lineStyle(3, 0xFF0000, pulse);
-            graphics.drawRect(-halfWidth - 5, -halfHeight - 5, width + 10, height + 10);
+            graphics.rect(-halfWidth - 5, -halfHeight - 5, width + 10, height + 10).stroke({ width: 3, color: 0xFF0000, alpha: pulse });
         }
         
         return graphics;
@@ -5160,88 +3628,34 @@ class GameEngine {
      * Update headquarters visual to show health changes
      */
     updateHeadquartersVisual(container, entityData) {
-        // Clear and redraw with updated health
         const graphics = container.getChildAt(0);
-        if (graphics) {
-            graphics.clear();
-            // Remove and destroy old text children to prevent memory leak
-            while (graphics.children.length > 0) {
-                const child = graphics.children[0];
-                graphics.removeChild(child);
-                child.destroy({ children: true, texture: false, baseTexture: false });
-            }
-            this.createHeadquartersGraphics(graphics, entityData);
+        if (!graphics) return;
+
+        // Only rebuild when health or team changes. The HQ is otherwise static,
+        // and a rebuild allocates two PIXI.Text objects (each owns a GPU texture),
+        // so redrawing every tick churned both geometry and textures.
+        const renderKey = `${entityData.health}|${entityData.team}`;
+        if (container._hqRenderKey === renderKey) return;
+        container._hqRenderKey = renderKey;
+
+        graphics.clear();
+        // Fully destroy old children. Text owns an auto-generated GPU texture, so
+        // we must let destroy() free it — passing texture:false here leaks it.
+        while (graphics.children.length > 0) {
+            const child = graphics.children[0];
+            graphics.removeChild(child);
+            child.destroy({ children: true });
         }
-    }
-    
-    /**
-     * Create power-up graphics
-     */
-    createPowerUpGraphics(graphics, entityData) {
-        const powerUpType = entityData.powerUpType || entityData.type || 'SPEED_BOOST';
-        
-        // Power-up base - larger circle for better visibility
-        graphics.beginFill(0xFFFFFF, 0.9);
-        graphics.drawCircle(0, 0, 14);
-        graphics.endFill();
-        
-        // Power-up outline (thicker for better visibility)
-        graphics.lineStyle(3, 0xCCCCCC, 1.0);
-        graphics.drawCircle(0, 0, 14);
-        
-        // Type-specific visual indicators (larger inner circle)
-        switch (powerUpType) {
-            case 'SPEED_BOOST':
-                graphics.beginFill(0x00FFFF, 0.8);
-                graphics.drawCircle(0, 0, 9);
-                graphics.endFill();
-                break;
-            case 'HEALTH_REGENERATION':
-                graphics.beginFill(0x00FF00, 0.8);
-                graphics.drawCircle(0, 0, 9);
-                graphics.endFill();
-                break;
-            case 'DAMAGE_BOOST':
-                graphics.beginFill(0xFF0000, 0.8);
-                graphics.drawCircle(0, 0, 9);
-                graphics.endFill();
-                break;
-            case 'DAMAGE_RESISTANCE':
-                graphics.beginFill(0xFFD700, 0.8);
-                graphics.drawCircle(0, 0, 9);
-                graphics.endFill();
-                break;
-            case 'BERSERKER_MODE':
-                graphics.beginFill(0xFF4500, 0.8);
-                graphics.drawCircle(0, 0, 9);
-                graphics.endFill();
-                break;
-            case 'SLOW_EFFECT':
-                graphics.beginFill(0x0066CC, 0.8);
-                graphics.drawCircle(0, 0, 9);
-                graphics.endFill();
-                break;
-        }
-        
-        // Add larger sparkle effect for better visibility
-        graphics.beginFill(0xFFFFFF, 0.7);
-        graphics.drawCircle(-5, -5, 3);
-        graphics.drawCircle(5, 5, 3);
-        graphics.endFill();
-        
-        return graphics;
+        this.createHeadquartersGraphics(graphics, entityData);
     }
     
     /**
      * Create generic utility graphics
      */
     createGenericUtilityGraphics(graphics, entityData) {
-        graphics.beginFill(0x888888, 0.7);
-        graphics.drawCircle(0, 0, 15);
-        graphics.endFill();
+        graphics.circle(0, 0, 15).fill({ color: 0x888888, alpha: 0.7 });
         
-        graphics.lineStyle(2, 0xcccccc, 1.0);
-        graphics.drawCircle(0, 0, 15);
+        graphics.circle(0, 0, 15).stroke({ width: 2, color: 0xcccccc });
         
         return graphics;
     }
@@ -5255,20 +3669,10 @@ class GameEngine {
                 return 12; // Above players
             case 'DEFENSE_LASER':
                 return 12; // Above players, same as turret
-            case 'BARRIER':
-                return 6;  // Above obstacles, below players
             case 'NET':
                 return 9;  // Same as projectiles
-            case 'MINE':
-                return 7;  // Above obstacles, below players
-            case 'TELEPORT_PAD':
-                return 5;  // Below most things
-            case 'WORKSHOP':
-                return 6;  // Above obstacles, below players
             case 'HEADQUARTERS':
                 return 5;  // Same as obstacles (HQ is a structure)
-            case 'POWERUP':
-                return 10; // Above players, below projectiles
             default:
                 return 8;
         }
@@ -5283,8 +3687,13 @@ class GameEngine {
             // Ground/support effects - render beneath players
             case 'HEAL_ZONE':
             case 'SPEED_BOOST':
+            case 'PROXIMITY_MINE':
                 return 6;  // Above obstacles, below players
-            
+            // Crowd control effects - render above players
+            case 'SLOW_FIELD':
+            case 'GRAVITY_WELL':
+                return 20; // Above players
+
             // Dangerous/active effects - render above players for visibility
             case 'EXPLOSION':
             case 'FRAGMENTATION':
@@ -5294,20 +3703,19 @@ class GameEngine {
             case 'POISON':
             case 'ERUPTION':
                 return 20; // Above players
-            
-            // Crowd control effects - render above players
-            case 'SLOW_FIELD':
-            case 'GRAVITY_WELL':
-                return 20; // Above players
-            
+
+
             // Defensive effects - render above players
             case 'SHIELD_BARRIER':
                 return 15; // Above players but below dangerous effects
             
+            // Smoke - render above players for visibility
+            case 'SMOKE':
+                return 25; // Above everything for visual coverage
+
             // Environmental effects
             case 'WARNING_ZONE':
             case 'EARTHQUAKE':
-            case 'VISION_REVEAL':
                 return 20; // Above players
             
             default:
@@ -5328,12 +3736,6 @@ class GameEngine {
         
         // Type-specific updates
         switch (entityData.type) {
-            case 'MINE':
-                this.updateMineVisual(container, entityData);
-                break;
-            case 'TELEPORT_PAD':
-                this.updateTeleportPadVisual(container, entityData);
-                break;
             case 'TURRET':
                 this.updateTurretVisual(container, entityData);
                 break;
@@ -5343,214 +3745,10 @@ class GameEngine {
             case 'DEFENSE_LASER':
                 this.updateDefenseLaserVisual(container, entityData);
                 break;
-            case 'WORKSHOP':
-                this.updateWorkshopVisual(container, entityData);
-                break;
             case 'HEADQUARTERS':
                 this.updateHeadquartersVisual(container, entityData);
                 break;
         }
-    }
-    
-    /**
-     * Update mine visual effects
-     */
-    updateMineVisual(container, entityData) {
-        // Recreate graphics if arming status changed
-        if (container.lastArmedState !== entityData.isArmed) {
-            container.removeChild(container.entityGraphics);
-            container.entityGraphics.destroy();
-            
-            const newGraphics = this.createMineGraphics(new PIXI.Graphics(), entityData);
-            container.addChild(newGraphics);
-            container.entityGraphics = newGraphics;
-            container.lastArmedState = entityData.isArmed;
-        }
-    }
-    
-    /**
-     * Update teleport pad visual effects
-     */
-    updateTeleportPadVisual(container, entityData) {
-        // Only recreate graphics if state changed (cooldown, active, etc)
-        // This prevents memory leak from recreating graphics every frame
-        const stateKey = `${entityData.active}_${entityData.cooldownRemaining || 0}`;
-        if (container.lastStateKey === stateKey) {
-            return; // No change, skip recreation
-        }
-        
-        // Recreate graphics for dynamic effects
-        if (container.entityGraphics) {
-            container.removeChild(container.entityGraphics);
-            container.entityGraphics.destroy({ children: true, texture: false, baseTexture: false });
-        }
-        
-        const newGraphics = this.createTeleportPadGraphics(new PIXI.Graphics(), entityData);
-        container.addChild(newGraphics);
-        container.entityGraphics = newGraphics;
-        container.lastStateKey = stateKey;
-        
-        // Update connection lines if this pad is linked
-        this.updateTeleportPadConnections(entityData);
-    }
-    
-    /**
-     * Update teleport pad connection lines
-     */
-    updateTeleportPadConnections(entityData) {
-        const padId = entityData.id;
-        const linkedPadId = entityData.linkedPadId;
-        
-        // Remove existing connection for this pad
-        if (this.teleportConnections.has(padId)) {
-            const connection = this.teleportConnections.get(padId);
-            if (connection.animationFunction) {
-                this.app.ticker.remove(connection.animationFunction);
-                connection.animationFunction = null;
-            }
-            if (connection.parent) {
-                connection.parent.removeChild(connection);
-            }
-            connection.destroy();
-            this.teleportConnections.delete(padId);
-        }
-        
-        // Remove any connections pointing TO this pad from other pads
-        // This handles the case where another pad was linked to this one but is now being re-linked
-        for (let [otherPadId, connection] of this.teleportConnections) {
-            if (connection.linkedPadId === padId) {
-                if (connection.animationFunction) {
-                    this.app.ticker.remove(connection.animationFunction);
-                    connection.animationFunction = null;
-                }
-                if (connection.parent) {
-                    connection.parent.removeChild(connection);
-                }
-                connection.destroy();
-                this.teleportConnections.delete(otherPadId);
-            }
-        }
-        
-        // Create new connection if this pad is linked
-        if (linkedPadId && this.utilityEntities.has(linkedPadId)) {
-            const linkedPad = this.utilityEntities.get(linkedPadId);
-            if (linkedPad && linkedPad.entityData && linkedPad.entityData.type === 'TELEPORT_PAD') {
-                this.createTeleportConnection(padId, linkedPadId, entityData, linkedPad.entityData);
-            }
-        }
-    }
-    
-    /**
-     * Create a visual connection line between two teleport pads
-     */
-    createTeleportConnection(padId1, padId2, padData1, padData2) {
-        const connectionGraphics = new PIXI.Graphics();
-        
-        const pos1 = { x: padData1.x, y: padData1.y };
-        const pos2 = { x: padData2.x, y: padData2.y };
-        
-        // Create animated connection line
-        this.drawAnimatedConnectionLine(connectionGraphics, pos1, pos2);
-        
-        // Add to game container (behind other entities)
-        connectionGraphics.zIndex = 1;
-        this.gameContainer.addChild(connectionGraphics);
-        
-        // Store metadata about the connection for cleanup
-        connectionGraphics.linkedPadId = padId2;
-        
-        // Store connection for cleanup
-        this.teleportConnections.set(padId1, connectionGraphics);
-        
-        // Add animation ticker for the connection line
-        const animateConnection = () => {
-            if (!connectionGraphics.parent) {
-                // Connection was removed - cleanup ticker
-                if (connectionGraphics.animationFunction) {
-                    this.app.ticker.remove(connectionGraphics.animationFunction);
-                    connectionGraphics.animationFunction = null;
-                }
-                return;
-            }
-            
-            connectionGraphics.clear();
-            this.drawAnimatedConnectionLine(connectionGraphics, pos1, pos2);
-        };
-        
-        connectionGraphics.animationFunction = animateConnection;
-        this.app.ticker.add(animateConnection);
-    }
-    
-    /**
-     * Draw an animated connection line between two points
-     */
-    drawAnimatedConnectionLine(graphics, pos1, pos2) {
-        const time = performance.now() * 0.003; // Slow animation
-        const distance = Math.sqrt((pos2.x - pos1.x) ** 2 + (pos2.y - pos1.y) ** 2);
-        
-        // Create flowing energy effect along the line
-        const segments = Math.max(8, Math.floor(distance / 20));
-        const segmentLength = distance / segments;
-        
-        // Calculate direction vector
-        const dx = (pos2.x - pos1.x) / distance;
-        const dy = (pos2.y - pos1.y) / distance;
-        
-        // Draw animated segments
-        for (let i = 0; i < segments; i++) {
-            const progress = i / segments;
-            const segmentStart = progress * distance;
-            const segmentEnd = (progress + 1 / segments) * distance;
-            
-            // Animate the segment opacity
-            const waveOffset = (time + progress * 3) % (Math.PI * 2);
-            const alpha = 0.3 + 0.4 * Math.sin(waveOffset);
-            
-            // Calculate segment positions
-            const startX = pos1.x + dx * segmentStart;
-            const startY = pos1.y + dy * segmentStart;
-            const endX = pos1.x + dx * segmentEnd;
-            const endY = pos1.y + dy * segmentEnd;
-            
-            // Draw segment with gradient effect
-            graphics.lineStyle(3, 0x9b59b6, alpha);
-            graphics.moveTo(startX, startY);
-            graphics.lineTo(endX, endY);
-            
-            // Add energy particles along the line
-            if (i % 2 === 0) {
-                const particleProgress = (progress + 0.5 / segments) % 1;
-                const particleX = pos1.x + dx * particleProgress * distance;
-                const particleY = pos1.y + dy * particleProgress * distance;
-                
-                graphics.beginFill(0xffffff, alpha * 0.8);
-                graphics.drawCircle(particleX, particleY, 2);
-                graphics.endFill();
-            }
-        }
-        
-        // Add connection indicators at both ends
-        graphics.beginFill(0x9b59b6, 0.6);
-        graphics.drawCircle(pos1.x, pos1.y, 3);
-        graphics.drawCircle(pos2.x, pos2.y, 3);
-        graphics.endFill();
-        
-        // Add directional arrows
-        const midX = (pos1.x + pos2.x) / 2;
-        const midY = (pos1.y + pos2.y) / 2;
-        
-        // Arrow pointing from pad1 to pad2
-        const arrowSize = 4;
-        const perpX = -dy * arrowSize;
-        const perpY = dx * arrowSize;
-        
-        graphics.beginFill(0x9b59b6, 0.8);
-        graphics.drawPolygon([
-            midX + dx * arrowSize, midY + dy * arrowSize,
-            midX - dx * arrowSize + perpX, midY - dy * arrowSize + perpY,
-            midX - dx * arrowSize - perpX, midY - dy * arrowSize - perpY
-        ]);
-        graphics.endFill();
     }
     
     /**
@@ -5580,96 +3778,6 @@ class GameEngine {
         const time = Date.now() * 0.003; // Slow pulse
         const pulseValue = 0.8 + 0.2 * Math.sin(time);
         container.alpha = pulseValue;
-    }
-    
-    /**
-     * Update workshop visual with crafting progress
-     */
-    updateWorkshopVisual(container, entityData) {
-        // Always update the progress data for smooth interpolation
-        container.craftingProgress = entityData.craftingProgress || {};
-        container.activeCrafters = entityData.activeCrafters || 0;
-        
-        // Create progress bars if they don't exist
-        if (!container.progressBars) {
-            container.progressBars = new Map();
-        }
-        
-        // Get current crafters
-        const currentCrafters = new Set(Object.keys(container.craftingProgress));
-        const existingCrafters = new Set(container.progressBars.keys());
-        
-        // Remove progress bars for players who stopped crafting
-        for (const playerId of existingCrafters) {
-            if (!currentCrafters.has(playerId)) {
-                const progressBar = container.progressBars.get(playerId);
-                if (progressBar && progressBar.parent) {
-                    container.removeChild(progressBar);
-                    progressBar.destroy();
-                }
-                container.progressBars.delete(playerId);
-            }
-        }
-        
-        // Create or update progress bars for active crafters
-        let barIndex = 0;
-        for (const [playerId, progress] of Object.entries(container.craftingProgress)) {
-            if (progress > 0) {
-                let progressBar = container.progressBars.get(playerId);
-                
-                if (!progressBar) {
-                    // Create new progress bar
-                    progressBar = this.createWorkshopProgressBar();
-                    container.addChild(progressBar);
-                    container.progressBars.set(playerId, progressBar);
-                }
-                
-                // Position progress bar above workshop
-                const yOffset = -40 - (barIndex * 12); // Stack multiple bars
-                progressBar.position.set(0, yOffset);
-                
-                // Update progress bar fill (smooth interpolation happens in animation)
-                progressBar.targetProgress = progress;
-                
-                barIndex++;
-            }
-        }
-    }
-    
-    /**
-     * Create a simple horizontal progress bar for workshop crafting
-     */
-    createWorkshopProgressBar() {
-        const barContainer = new PIXI.Container();
-        
-        // Progress bar dimensions
-        const barWidth = 60;
-        const barHeight = 8;
-        
-        // Background (dark gray)
-        const background = new PIXI.Graphics();
-        background.beginFill(0x222222, 0.8);
-        background.drawRoundedRect(-barWidth/2, 0, barWidth, barHeight, 3);
-        background.endFill();
-        
-        // Border
-        background.lineStyle(1, 0x444444, 0.8);
-        background.drawRoundedRect(-barWidth/2, 0, barWidth, barHeight, 3);
-        barContainer.addChild(background);
-        
-        // Progress fill (starts empty)
-        const progressFill = new PIXI.Graphics();
-        barContainer.addChild(progressFill);
-        
-        // Store references and state
-        barContainer.background = background;
-        barContainer.progressFill = progressFill;
-        barContainer.barWidth = barWidth;
-        barContainer.barHeight = barHeight;
-        barContainer.currentProgress = 0;
-        barContainer.targetProgress = 0;
-        
-        return barContainer;
     }
     
     /**
@@ -5706,14 +3814,10 @@ class GameEngine {
                 }
                 
                 // Draw the fill
-                fill.beginFill(fillColor, 0.9);
-                fill.drawRoundedRect(-progressBar.barWidth/2 + 2, 2, fillWidth, progressBar.barHeight - 4, 2);
-                fill.endFill();
+                fill.roundRect(-progressBar.barWidth/2 + 2, 2, fillWidth, progressBar.barHeight - 4, 2).fill({ color: fillColor, alpha: 0.9 });
                 
                 // Add a subtle shine effect
-                fill.beginFill(0xffffff, 0.3);
-                fill.drawRoundedRect(-progressBar.barWidth/2 + 2, 2, fillWidth, 2, 2);
-                fill.endFill();
+                fill.roundRect(-progressBar.barWidth/2 + 2, 2, fillWidth, 2, 2).fill({ color: 0xffffff, alpha: 0.3 });
             }
         }
     }
@@ -5726,16 +3830,12 @@ class GameEngine {
         
         // Health bar background
         const healthBg = new PIXI.Graphics();
-        healthBg.beginFill(0x333333);
-        healthBg.drawRoundedRect(-20, 0, 40, 5, 2);
-        healthBg.endFill();
+        healthBg.roundRect(-20, 0, 40, 5, 2).fill(0x333333);
         healthBarContainer.addChild(healthBg);
         
         // Health bar fill
         const healthFill = new PIXI.Graphics();
-        healthFill.beginFill(0x2ecc71);
-        healthFill.drawRoundedRect(-20, 0, 40, 5, 2);
-        healthFill.endFill();
+        healthFill.roundRect(-20, 0, 40, 5, 2).fill(0x2ecc71);
         healthBarContainer.addChild(healthFill);
         
         // Store references for updates
@@ -5765,48 +3865,15 @@ class GameEngine {
      * Clean up utility entity container
      */
     cleanupUtilityEntityContainer(container) {
-        // Clean up teleport pad connections if this is a teleport pad
-        if (container.entityData && container.entityData.type === 'TELEPORT_PAD') {
-            const padId = container.entityData.id;
-            
-            // Remove connection from this pad
-            if (this.teleportConnections.has(padId)) {
-                const connection = this.teleportConnections.get(padId);
-                if (connection.animationFunction) {
-                    this.app.ticker.remove(connection.animationFunction);
-                }
-                if (connection.parent) {
-                    connection.parent.removeChild(connection);
-                }
-                connection.destroy();
-                this.teleportConnections.delete(padId);
-            }
-            
-            // Remove any connections TO this pad
-            for (let [otherPadId, connection] of this.teleportConnections) {
-                if (connection.linkedPadId === padId) {
-                    if (connection.animationFunction) {
-                        this.app.ticker.remove(connection.animationFunction);
-                    }
-                    if (connection.parent) {
-                        connection.parent.removeChild(connection);
-                    }
-                    connection.destroy();
-                    this.teleportConnections.delete(otherPadId);
-                }
-            }
-        }
-        
         // Clean up graphics
         if (container.entityGraphics) {
-            container.entityGraphics.clear();
-            container.entityGraphics.destroy();
+            container.entityGraphics.destroy({ context: true });
             container.entityGraphics = null;
         }
         
         // Clean up health bar
         if (container.healthBar) {
-            container.healthBar.destroy();
+            container.healthBar.destroy({ children: true, context: true });
         }
         
         // Clear references
@@ -5814,34 +3881,7 @@ class GameEngine {
         container.lastArmedState = null;
         
         // Destroy container
-        container.destroy({ children: true, texture: false, baseTexture: false });
-    }
-    
-    /**
-     * Clean up beam container to prevent memory leaks
-     */
-    cleanupBeamContainer(beamContainer) {
-        // Clean up beam graphics
-        if (beamContainer.beamGraphics) {
-            beamContainer.beamGraphics.clear();
-            beamContainer.beamGraphics.destroy();
-            beamContainer.beamGraphics = null;
-        }
-        
-        // Clean up energy effects
-        if (beamContainer.energyEffect) {
-            beamContainer.energyEffect.clear();
-            beamContainer.energyEffect.destroy();
-            beamContainer.energyEffect = null;
-        }
-        
-        // Clear all references
-        beamContainer.beamData = null;
-        beamContainer.beamLength = null;
-        beamContainer.beamAngle = null;
-        
-        // Destroy the container
-        beamContainer.destroy({ children: true, texture: false, baseTexture: false });
+        container.destroy({ children: true, texture: false, baseTexture: false, context: true });
     }
     
     /**
@@ -5850,36 +3890,32 @@ class GameEngine {
     cleanupFieldEffectContainer(effectContainer) {
         // Remove animation ticker first (if not already removed)
         if (effectContainer.animationFunction) {
-            this.app.ticker.remove(effectContainer.animationFunction);
+            this.removeTickerCallback(effectContainer.animationFunction);
             effectContainer.animationFunction = null;
         }
         
         // Remove fade-out ticker if it exists
         if (effectContainer.fadeOutFunction) {
-            this.app.ticker.remove(effectContainer.fadeOutFunction);
+            this.removeTickerCallback(effectContainer.fadeOutFunction);
             effectContainer.fadeOutFunction = null;
         }
         
         // Clean up graphics objects explicitly
         if (effectContainer.effectGraphics) {
-            effectContainer.effectGraphics.clear();
             if (effectContainer.effectGraphics.parent) {
                 effectContainer.effectGraphics.parent.removeChild(effectContainer.effectGraphics);
             }
-            effectContainer.effectGraphics.destroy();
+            effectContainer.effectGraphics.destroy({ context: true });
             effectContainer.effectGraphics = null;
         }
         
         // Clean up all child graphics objects
         const childrenToDestroy = [...effectContainer.children];
         childrenToDestroy.forEach(child => {
-            if (child.clear && typeof child.clear === 'function') {
-                child.clear(); // Clear graphics content
-            }
             if (child.parent) {
                 child.parent.removeChild(child);
             }
-            child.destroy();
+            child.destroy({ children: true, context: true });
         });
         
         // Clear all custom properties
@@ -5889,9 +3925,12 @@ class GameEngine {
         effectContainer.originalScale = null;
         effectContainer.originalX = null;
         effectContainer.originalY = null;
+        effectContainer.barrierRing = null; // destroyed via the child loop above
+        effectContainer.iconOverlay = null; // destroyed via the child loop above
+        effectContainer.lightning = null;   // destroyed via the child loop above
         
         // Destroy the container itself
-        effectContainer.destroy({ children: true, texture: false, baseTexture: false });
+        effectContainer.destroy({ children: true, texture: false, baseTexture: false, context: true });
     }
     
     /**
@@ -5899,715 +3938,216 @@ class GameEngine {
      */
     createEffectGraphics(effectData) {
         const graphics = new PIXI.Graphics();
-        const radius = effectData.radius || 50;
-        
-        switch (effectData.type) {
-            case 'EXPLOSION':
-                return this.createExplosionGraphics(graphics, radius, effectData);
-            case 'FIRE':
-                return this.createFireGraphics(graphics, radius, effectData);
-            case 'ELECTRIC':
-                return this.createElectricGraphics(graphics, radius, effectData);
-            case 'FREEZE':
-                return this.createFreezeGraphics(graphics, radius, effectData);
-            case 'FRAGMENTATION':
-                return this.createFragmentationGraphics(graphics, radius, effectData);
-            case 'POISON':
-                return this.createPoisonGraphics(graphics, radius, effectData);
-            // Utility effect types
-            case 'HEAL_ZONE':
-                return this.createHealZoneGraphics(graphics, radius, effectData);
-            case 'SLOW_FIELD':
-                return this.createSlowFieldGraphics(graphics, radius, effectData);
-            case 'SHIELD_BARRIER':
-                return this.createShieldBarrierGraphics(graphics, radius, effectData);
-            case 'GRAVITY_WELL':
-                return this.createGravityWellGraphics(graphics, radius, effectData);
-            case 'VISION_REVEAL':
-                return this.createVisionRevealGraphics(graphics, radius, effectData);
-            case 'SPEED_BOOST':
-                return this.createSpeedBoostGraphics(graphics, radius, effectData);
-            // Environmental event effects
-            case 'WARNING_ZONE':
-                return this.createWarningZoneGraphics(graphics, radius, effectData);
-            case 'EARTHQUAKE':
-                return this.createEarthquakeGraphics(graphics, radius, effectData);
-            default:
-                return this.createGenericEffectGraphics(graphics, radius, effectData);
-        }
-    }
-    
-    /**
-     * Create explosion effect graphics
-     */
-    createExplosionGraphics(graphics, radius, effectData) {
-        // Outer blast ring
-        graphics.beginFill(0xff4444, 0.6);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
-        
-        // Inner core
-        graphics.beginFill(0xffaa44, 0.8);
-        graphics.drawCircle(0, 0, radius * 0.6);
-        graphics.endFill();
-        
-        // Bright center
-        graphics.beginFill(0xffffff, 0.9);
-        graphics.drawCircle(0, 0, radius * 0.3);
-        graphics.endFill();
-        
+        this.drawEffectGraphics(graphics, effectData);
         return graphics;
     }
-    
-    /**
-     * Create fire effect graphics
-     */
-    createFireGraphics(graphics, radius, effectData) {
-        // Base fire area
-        graphics.beginFill(0xff4444, 0.4);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
+
+    drawEffectGraphics(graphics, effectData) {
+        graphics.clear();
+        const style = this.getFieldEffectStyle(effectData.type);
         
-        // Inner flames
-        graphics.beginFill(0xff8844, 0.6);
-        graphics.drawCircle(0, 0, radius * 0.7);
-        graphics.endFill();
-        
-        // Hot center
-        graphics.beginFill(0xffaa44, 0.8);
-        graphics.drawCircle(0, 0, radius * 0.4);
-        graphics.endFill();
-        
-        // Add flame particles
-        for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2;
-            const distance = radius * (0.6 + Math.random() * 0.4);
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const size = 3 + Math.random() * 5;
-            
-            graphics.beginFill(0xff6644, 0.7);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create electric effect graphics
-     */
-    createElectricGraphics(graphics, radius, effectData) {
-        // Electric field base
-        graphics.beginFill(0x4444ff, 0.3);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
-        
-        // Electric arcs
-        graphics.lineStyle(2, 0x88aaff, 0.8);
-        
-        for (let i = 0; i < 6; i++) {
-            const startAngle = (i / 6) * Math.PI * 2;
-            const endAngle = startAngle + (Math.random() - 0.5) * Math.PI;
-            
-            const startX = Math.cos(startAngle) * radius * 0.2;
-            const startY = Math.sin(startAngle) * radius * 0.2;
-            const endX = Math.cos(endAngle) * radius * 0.9;
-            const endY = Math.sin(endAngle) * radius * 0.9;
-            
-            // Draw zigzag lightning
-            graphics.moveTo(startX, startY);
-            
-            const steps = 5;
-            for (let j = 1; j <= steps; j++) {
-                const t = j / steps;
-                const x = startX + (endX - startX) * t + (Math.random() - 0.5) * 10;
-                const y = startY + (endY - startY) * t + (Math.random() - 0.5) * 10;
-                graphics.lineTo(x, y);
+        if (effectData.shapes && effectData.shapes.length > 0) {
+            const shapes = this.parseObstacleShapes(effectData.shapes);
+            for (const shape of shapes) {
+                if (shape.type === 'circle') {
+                    graphics.circle(shape.cx, shape.cy, shape.r);
+                } else {
+                    graphics.poly(shape.points.flatMap(([x, y]) => [x, y]));
+                }
             }
+        } else {
+            // Fallback
+            const radius = effectData.radius || 50;
+            graphics.circle(0, 0, radius);
         }
         
-        // Bright electric center
-        graphics.beginFill(0xaaffff, 0.9);
-        graphics.drawCircle(0, 0, radius * 0.2);
-        graphics.endFill();
-        
-        return graphics;
+        graphics.fill({ color: style.color, alpha: style.alpha });
+        if (effectData.type === 'LASER' || effectData.type === 'PLASMA') {
+            graphics.stroke({ width: 1, color: 0xffffff, alpha: 0.6 });
+        }
     }
-    
+
     /**
-     * Create freeze effect graphics
+     * Build the hard "shell" ring that distinguishes a shield barrier from a
+     * plain tinted field. Strokes are inset by half their width so the outer
+     * edge lands exactly on the physics radius — never beyond it. Stays in the
+     * blue energy-shield palette.
      */
-    createFreezeGraphics(graphics, radius, effectData) {
-        // Freeze field base
-        graphics.beginFill(0x88ccff, 0.4);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
-        
-        // Ice crystals
-        graphics.lineStyle(2, 0xaaffff, 0.8);
-        
-        for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2;
-            const length = radius * (0.6 + Math.random() * 0.3);
-            
-            // Main crystal line
-            graphics.moveTo(0, 0);
-            graphics.lineTo(Math.cos(angle) * length, Math.sin(angle) * length);
-            
-            // Crystal branches
-            const branchLength = length * 0.3;
-            const branchX = Math.cos(angle) * length * 0.7;
-            const branchY = Math.sin(angle) * length * 0.7;
-            
-            graphics.moveTo(branchX, branchY);
-            graphics.lineTo(
-                branchX + Math.cos(angle + Math.PI/4) * branchLength,
-                branchY + Math.sin(angle + Math.PI/4) * branchLength
-            );
-            
-            graphics.moveTo(branchX, branchY);
-            graphics.lineTo(
-                branchX + Math.cos(angle - Math.PI/4) * branchLength,
-                branchY + Math.sin(angle - Math.PI/4) * branchLength
-            );
-        }
-        
-        // Reset line style before drawing filled center
-        graphics.lineStyle(0);
-        
-        // Frozen center
-        graphics.beginFill(0xffffff, 0.7);
-        graphics.drawCircle(0, 0, radius * 0.2);
-        graphics.endFill();
-        
-        return graphics;
+    createShieldBarrierRing(radius) {
+        const ring = new PIXI.Graphics();
+
+        // Solid outer shell — the dominant "this is a barrier" cue.
+        const shellWidth = Math.max(3, radius * 0.06);
+        ring.circle(0, 0, radius - shellWidth / 2)
+            .stroke({ width: shellWidth, color: 0x33aaff, alpha: 0.95 });
+
+        // Bright inner highlight ring for a layered, glassy shell look.
+        const highlightWidth = Math.max(1.5, radius * 0.025);
+        ring.circle(0, 0, radius - shellWidth - highlightWidth)
+            .stroke({ width: highlightWidth, color: 0xcceeff, alpha: 0.75 });
+
+        return ring;
     }
-    
+
     /**
-     * Create fragmentation effect graphics
+     * Tint + base opacity for each field effect type. Color is the only
+     * per-type differentiator now that all effects share one glow sprite.
      */
-    createFragmentationGraphics(graphics, radius, effectData) {
-        // Fragmentation burst
-        graphics.beginFill(0xffaa44, 0.5);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
-        
-        // Fragment trails
-        graphics.lineStyle(2, 0xff8844, 0.7);
-        
-        for (let i = 0; i < 12; i++) {
-            const angle = (i / 12) * Math.PI * 2 + Math.random() * 0.2;
-            const length = radius * (0.8 + Math.random() * 0.4);
-            
-            graphics.moveTo(0, 0);
-            graphics.lineTo(Math.cos(angle) * length, Math.sin(angle) * length);
-            
-            // Fragment at end of trail
-            graphics.beginFill(0xffcc44, 0.8);
-            graphics.drawCircle(Math.cos(angle) * length, Math.sin(angle) * length, 2);
-            graphics.endFill();
+    getFieldEffectStyle(type) {
+        switch (type) {
+            case 'EXPLOSION':      return { color: 0xff501f, alpha: 0.9 };
+            case 'FIRE':           return { color: 0xff5522, alpha: 0.7 };
+            case 'ELECTRIC':       return { color: 0x88aaff, alpha: 0.85 };
+            case 'FREEZE':         return { color: 0x88ccff, alpha: 0.7 };
+            case 'FRAGMENTATION':  return { color: 0xffcc66, alpha: 0.9 };
+            case 'POISON':         return { color: 0x88cc44, alpha: 0.6 };
+            case 'HEAL_ZONE':      return { color: 0x888888, alpha: 0.8 };
+            case 'SLOW_FIELD':     return { color: 0xe2ca76, alpha: 0.75 };
+            case 'SHIELD_BARRIER': return { color: 0x66ccff, alpha: 0.6 };
+            case 'GRAVITY_WELL':   return { color: 0x9966ff, alpha: 0.7 };
+            case 'SPEED_BOOST':    return { color: 0xffee66, alpha: 0.6 };
+            case 'SMOKE':          return { color: 0x888888, alpha: 0.6 };
+            case 'WARNING_ZONE':   return { color: 0xff4444, alpha: 0.5 };
+            case 'EARTHQUAKE':     return { color: 0xaa7744, alpha: 0.6 };
+            case 'PROXIMITY_MINE': return { color: 0xff4444, alpha: 0.12 };
+            case 'LASER':          return { color: 0xff3333, alpha: 0.8 };
+            case 'PLASMA':         return { color: 0x33ffff, alpha: 0.8 };
+            default:               return { color: 0xffffff, alpha: 0.6 };
         }
-        
-        return graphics;
     }
-    
+
     /**
-     * Create poison effect graphics
+     * Build a distinctive centered symbol for the utility zones that otherwise
+     * look like generic tinted clouds. Returns a Graphics centered at the origin
+     * (sized to the effect radius), or null for types that don't get an icon.
+     * Symbols are vertically symmetric so the Y-flipped gameContainer renders
+     * them upright without extra handling.
      */
-    createPoisonGraphics(graphics, radius, effectData) {
-        // Create a pallor-like green cloud effect with multiple overlapping soft circles
-        // to simulate a misty, toxic gas cloud
-        
-        // Outer diffuse cloud - very pale sickly green
-        graphics.beginFill(0x9ccc65, 0.15);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
-        
-        // Create multiple overlapping cloud puffs for organic cloud shape
-        const numPuffs = 8;
-        for (let i = 0; i < numPuffs; i++) {
-            const angle = (i / numPuffs) * Math.PI * 2;
-            const puffDistance = radius * 0.4;
-            const x = Math.cos(angle) * puffDistance;
-            const y = Math.sin(angle) * puffDistance;
-            const puffSize = radius * (0.5 + Math.random() * 0.2);
-            
-            // Sickly pale green with varying opacity
-            graphics.beginFill(0x8bc34a, 0.2 + Math.random() * 0.15);
-            graphics.drawCircle(x, y, puffSize);
-            graphics.endFill();
+    createFieldEffectIcon(type, radius, effectData) {
+        const g = new PIXI.Graphics();
+
+        switch (type) {
+            case 'PROXIMITY_MINE': {
+                return this.createMineOverlay(radius, effectData);
+            }
+            case 'HEAL_ZONE': {
+                // Medical badge: white cross on a red rounded square.
+                const s = Math.min(radius * 1.1, 44); // badge edge length
+                g.roundRect(-s / 2, -s / 2, s, s, s * 0.22).fill(0xcc2222);
+                g.roundRect(-s / 2, -s / 2, s, s, s * 0.22).stroke({ width: Math.max(1.5, s * 0.05), color: 0xffffff, alpha: 0.9 });
+                const armT = s * 0.18; // half-thickness of the cross arms
+                const armL = s * 0.34; // half-length of the cross arms
+                g.rect(-armT, -armL, armT * 2, armL * 2).fill(0xffffff); // vertical bar
+                g.rect(-armL, -armT, armL * 2, armT * 2).fill(0xffffff); // horizontal bar
+                return g;
+            }
+            case 'SPEED_BOOST': {
+                // ">>" double chevron — reads as fast/forward.
+                const h = Math.min(radius * 0.5, 18);   // chevron half-height
+                const w = h * 0.8;                       // chevron depth
+                const lw = Math.max(2.5, h * 0.28);      // stroke width
+                // Tip x-positions shifted right so the pair is centered on the
+                // origin (each chevron spans [cx - w, cx], so without the shift
+                // the group's visual midpoint sat left of center).
+                for (const cx of [-w * 0.3, w * 1.3]) {  // two stacked chevrons
+                    g.moveTo(cx - w, -h);
+                    g.lineTo(cx, 0);
+                    g.lineTo(cx - w, h);
+                    g.stroke({ width: lw, color: 0xffffff, alpha: 0.95, cap: 'round', join: 'round' });
+                }
+                return g;
+            }
+            case 'WARNING_ZONE': {
+                // Exclamation mark — something is imminent. "!" is not vertically
+                // symmetric, so cancel the Y-flipped gameContainer and draw in
+                // natural screen coords (y increases downward).
+                g.scale.y = -1;
+                const s = Math.min(radius * 0.5, 20);
+                const stemW = s * 0.34;
+                const outline = { width: Math.max(1.5, s * 0.12), color: 0x1a1a1a, alpha: 0.9 };
+                // Stem (top) — slight taper handled by rounded corners.
+                g.roundRect(-stemW / 2, -s, stemW, s * 1.25, stemW * 0.4).fill(0xffffff);
+                g.roundRect(-stemW / 2, -s, stemW, s * 1.25, stemW * 0.4).stroke(outline);
+                // Dot (bottom).
+                g.circle(0, s * 0.72, stemW * 0.62).fill(0xffffff);
+                g.circle(0, s * 0.72, stemW * 0.62).stroke(outline);
+                return g;
+            }
+            case 'SLOW_FIELD': {
+                // Hourglass — reads as time/slowed.
+                const w = Math.min(radius * 0.42, 15);  // half-width
+                const h = Math.min(radius * 0.5, 18);   // half-height
+                const frame = Math.max(2, w * 0.32);
+                // Top and bottom bulbs (two triangles meeting at the waist).
+                g.moveTo(-w, -h); g.lineTo(w, -h); g.lineTo(0, 0); g.closePath();
+                g.moveTo(-w, h);  g.lineTo(w, h);  g.lineTo(0, 0); g.closePath();
+                g.fill({ color: 0xeaf2ff, alpha: 0.9 });
+                g.moveTo(-w, -h); g.lineTo(w, -h); g.lineTo(0, 0); g.lineTo(-w, h); g.lineTo(w, h); g.lineTo(0, 0); g.closePath();
+                g.stroke({ width: Math.max(2, w * 0.22), color: 0x1b3a66, alpha: 0.9, join: 'round' });
+                // End caps on the frame.
+                g.rect(-w - frame * 0.2, -h - frame * 0.35, (w + frame * 0.2) * 2, frame * 0.5).fill(0x1b3a66);
+                g.rect(-w - frame * 0.2, h - frame * 0.15, (w + frame * 0.2) * 2, frame * 0.5).fill(0x1b3a66);
+                return g;
+            }
+            default:
+                return null;
         }
-        
-        // Middle layer - more concentrated pallor
-        graphics.beginFill(0x7cb342, 0.25);
-        graphics.drawCircle(0, 0, radius * 0.65);
-        graphics.endFill();
-        
-        // Add smaller wispy cloud details
-        for (let i = 0; i < 12; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * radius * 0.7;
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const wispSize = radius * (0.15 + Math.random() * 0.15);
-            
-            // Varying shades of sickly green
-            const wispColors = [0x9ccc65, 0x8bc34a, 0x7cb342, 0x689f38];
-            const wispColor = wispColors[Math.floor(Math.random() * wispColors.length)];
-            
-            graphics.beginFill(wispColor, 0.2 + Math.random() * 0.15);
-            graphics.drawCircle(x, y, wispSize);
-            graphics.endFill();
-        }
-        
-        // Central denser cloud
-        graphics.beginFill(0x689f38, 0.3);
-        graphics.drawCircle(0, 0, radius * 0.35);
-        graphics.endFill();
-        
-        // Add a few darker spots for depth
-        for (let i = 0; i < 5; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * radius * 0.4;
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const spotSize = radius * (0.08 + Math.random() * 0.1);
-            
-            graphics.beginFill(0x558b2f, 0.25);
-            graphics.drawCircle(x, y, spotSize);
-            graphics.endFill();
-        }
-        
-        return graphics;
     }
-    
+
     /**
-     * Create heal zone effect graphics - classic medical red cross design
+     * Create graphic overlay for proximity mines.
      */
-    createHealZoneGraphics(graphics, radius, effectData) {
-        // Outer soft glow - subtle white aura
-        graphics.beginFill(0xf0f0f0, 0.15);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
-        
-        // Main background - greyish white circle
-        graphics.beginFill(0xe8e8e8, 0.7);
-        graphics.drawCircle(0, 0, radius * 0.75);
-        graphics.endFill();
-        
-        // Inner background - lighter center
-        graphics.beginFill(0xf5f5f5, 0.8);
-        graphics.drawCircle(0, 0, radius * 0.65);
-        graphics.endFill();
-        
-        // Create the classic red cross symbol
-        const crossSize = radius * 0.45;
-        const crossThickness = radius * 0.15;
-        
-        // Red cross color
-        const redCross = 0xdc143c; // Crimson red
-        
-        // Vertical bar of the cross
-        graphics.beginFill(redCross, 0.9);
-        graphics.drawRect(-crossThickness / 2, -crossSize, crossThickness, crossSize * 2);
-        graphics.endFill();
-        
-        // Horizontal bar of the cross
-        graphics.beginFill(redCross, 0.9);
-        graphics.drawRect(-crossSize, -crossThickness / 2, crossSize * 2, crossThickness);
-        graphics.endFill();
-        
-        // Add subtle border to the main circle
-        graphics.lineStyle(2, 0xcccccc, 0.5);
-        graphics.drawCircle(0, 0, radius * 0.75);
-        
-        // Add small healing sparkles around the edge
-        for (let i = 0; i < 12; i++) {
-            const angle = (i / 12) * Math.PI * 2;
-            const distance = radius * 0.85;
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const size = 2;
-            
-            graphics.beginFill(0xffffff, 0.6);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
-        }
-        
-        return graphics;
-    }
-    
-    
-    /**
-     * Create slow field effect graphics
-     */
-    createSlowFieldGraphics(graphics, radius, effectData) {
-        // Outer slow field - purple/blue
-        graphics.beginFill(0x8e44ad, 0.3);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
-        
-        // Middle field - darker purple
-        graphics.beginFill(0x663399, 0.4);
-        graphics.drawCircle(0, 0, radius * 0.7);
-        graphics.endFill();
-        
-        // Inner core - deep purple
-        graphics.beginFill(0x4a235a, 0.5);
-        graphics.drawCircle(0, 0, radius * 0.4);
-        graphics.endFill();
-        
-        // Add slow effect ripples
-        graphics.lineStyle(2, 0x9b59b6, 0.6);
-        for (let i = 1; i <= 4; i++) {
-            const rippleRadius = radius * (i / 5);
-            graphics.drawCircle(0, 0, rippleRadius);
-        }
-        
-        // Add slow particles (moving inward)
-        for (let i = 0; i < 12; i++) {
-            const angle = (i / 12) * Math.PI * 2;
-            const distance = radius * (0.6 + Math.random() * 0.3);
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const size = 1.5 + Math.random() * 2;
-            
-            graphics.beginFill(0xbb8fce, 0.8);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
-            
-            // Add inward-pointing arrows
-            const arrowSize = 4;
-            graphics.lineStyle(1, 0xbb8fce, 0.7);
-            graphics.moveTo(x + Math.cos(angle) * arrowSize, y + Math.sin(angle) * arrowSize);
-            graphics.lineTo(x - Math.cos(angle) * arrowSize, y - Math.sin(angle) * arrowSize);
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create shield barrier effect graphics
-     */
-    createShieldBarrierGraphics(graphics, radius, effectData) {
-        // Outer shield energy field - cyan/blue
-        graphics.beginFill(0x3498db, 0.2);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
-        
-        // Shield barrier ring
-        graphics.lineStyle(4, 0x2980b9, 0.8);
-        graphics.drawCircle(0, 0, radius * 0.8);
-        
-        // Inner shield core
-        graphics.beginFill(0x5dade2, 0.4);
-        graphics.drawCircle(0, 0, radius * 0.3);
-        graphics.endFill();
-        
-        // Add hexagonal shield pattern
-        graphics.lineStyle(2, 0x85c1e9, 0.6);
-        const hexRadius = radius * 0.6;
-        const hexPoints = [];
+    createMineOverlay(radius, effectData) {
+        const graphics = new PIXI.Graphics();
+        const isArmed = (effectData && effectData.isArmed) || false;
+        const ownerTeam = (effectData && effectData.ownerTeam) || 0;
+
+        // Mine center body - dark metallic disk
+        graphics.circle(0, 0, 8).fill({ color: 0x252f3a, alpha: 0.85 });
+        graphics.circle(0, 0, 8).stroke({ width: 1, color: 0x1e2329, alpha: 0.7 });
+
+        // Core highlight
+        graphics.circle(-1, -1, 2).fill({ color: 0x3a4a5a, alpha: 0.4 });
+
+        // Sensor spikes - 6 directional sensors
         for (let i = 0; i < 6; i++) {
             const angle = (i / 6) * Math.PI * 2;
-            hexPoints.push(Math.cos(angle) * hexRadius);
-            hexPoints.push(Math.sin(angle) * hexRadius);
-        }
-        graphics.drawPolygon(hexPoints);
-        
-        // Add shield energy sparks
-        for (let i = 0; i < 16; i++) {
-            const angle = (i / 16) * Math.PI * 2;
-            const distance = radius * 0.8;
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const sparkSize = 1 + Math.random() * 2;
-            
-            graphics.beginFill(0xaed6f1, 0.9);
-            graphics.drawCircle(x, y, sparkSize);
-            graphics.endFill();
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create gravity well effect graphics
-     */
-    createGravityWellGraphics(graphics, radius, effectData) {
-        // Outer gravity field - dark purple/black
-        graphics.beginFill(0x1a1a2e, 0.4);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
-        
-        // Gravity distortion rings
-        graphics.lineStyle(2, 0x6c5ce7, 0.5);
-        for (let i = 1; i <= 6; i++) {
-            const ringRadius = radius * (i / 7);
-            graphics.drawCircle(0, 0, ringRadius);
-        }
-        
-        // Central singularity
-        graphics.beginFill(0x0f0f23, 0.9);
-        graphics.drawCircle(0, 0, radius * 0.15);
-        graphics.endFill();
-        
-        // Event horizon glow
-        graphics.beginFill(0x6c5ce7, 0.6);
-        graphics.drawCircle(0, 0, radius * 0.25);
-        graphics.endFill();
-        
-        // Add gravitational particles (spiraling inward)
-        for (let i = 0; i < 20; i++) {
-            const angle = (i / 20) * Math.PI * 2;
-            const spiralOffset = (i / 20) * Math.PI * 4; // Multiple spirals
-            const distance = radius * (0.4 + Math.random() * 0.5);
-            const x = Math.cos(angle + spiralOffset) * distance;
-            const y = Math.sin(angle + spiralOffset) * distance;
-            const size = 1 + Math.random() * 1.5;
-            
-            graphics.beginFill(0xa29bfe, 0.7);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create vision reveal effect graphics
-     */
-    createVisionRevealGraphics(graphics, radius, effectData) {
-        // Outer reveal field - bright yellow/gold
-        graphics.beginFill(0xf1c40f, 0.2);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
-        
-        // Middle scanning ring
-        graphics.beginFill(0xe67e22, 0.3);
-        graphics.drawCircle(0, 0, radius * 0.7);
-        graphics.endFill();
-        
-        // Inner radar core
-        graphics.beginFill(0xf39c12, 0.5);
-        graphics.drawCircle(0, 0, radius * 0.2);
-        graphics.endFill();
-        
-        // Add radar sweep lines
-        graphics.lineStyle(2, 0xf1c40f, 0.7);
-        for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2;
-            graphics.moveTo(0, 0);
-            graphics.lineTo(Math.cos(angle) * radius * 0.9, Math.sin(angle) * radius * 0.9);
-        }
-        
-        // Add scanning pulses
-        graphics.lineStyle(3, 0xf39c12, 0.8);
-        for (let i = 1; i <= 3; i++) {
-            const pulseRadius = radius * (i / 4);
-            graphics.drawCircle(0, 0, pulseRadius);
-        }
-        
-        // Add vision enhancement particles
-        for (let i = 0; i < 12; i++) {
-            const angle = (i / 12) * Math.PI * 2;
-            const distance = radius * (0.5 + Math.random() * 0.4);
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const size = 1.5 + Math.random() * 2;
-            
-            graphics.beginFill(0xffd700, 0.8);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
-        }
-        
-        return graphics;
-    }
-    
-    /**
-     * Create speed boost effect graphics
-     */
-    createSpeedBoostGraphics(graphics, radius, effectData) {
-        // Outer speed field - bright green/lime
-        graphics.beginFill(0x2ecc71, 0.2);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
-        
-        // Middle boost ring
-        graphics.beginFill(0x27ae60, 0.3);
-        graphics.drawCircle(0, 0, radius * 0.7);
-        graphics.endFill();
-        
-        // Inner speed core
-        graphics.beginFill(0x00ff88, 0.5);
-        graphics.drawCircle(0, 0, radius * 0.3);
-        graphics.endFill();
-        
-        // Add speed boost arrows pointing outward
-        graphics.lineStyle(3, 0x00ff88, 0.8);
-        for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2;
-            const innerRadius = radius * 0.4;
-            const outerRadius = radius * 0.8;
-            const arrowSize = radius * 0.1;
-            
-            // Main arrow line
-            const startX = Math.cos(angle) * innerRadius;
-            const startY = Math.sin(angle) * innerRadius;
-            const endX = Math.cos(angle) * outerRadius;
-            const endY = Math.sin(angle) * outerRadius;
-            
-            graphics.moveTo(startX, startY);
-            graphics.lineTo(endX, endY);
-            
-            // Arrow head
-            const headAngle1 = angle + Math.PI * 0.8;
-            const headAngle2 = angle - Math.PI * 0.8;
-            
-            graphics.moveTo(endX, endY);
-            graphics.lineTo(
-                endX + Math.cos(headAngle1) * arrowSize,
-                endY + Math.sin(headAngle1) * arrowSize
+            const innerRadius = 6;
+            const outerRadius = 12;
+
+            graphics.moveTo(
+                Math.cos(angle) * innerRadius,
+                Math.sin(angle) * innerRadius
             );
-            
-            graphics.moveTo(endX, endY);
             graphics.lineTo(
-                endX + Math.cos(headAngle2) * arrowSize,
-                endY + Math.sin(headAngle2) * arrowSize
+                Math.cos(angle) * outerRadius,
+                Math.sin(angle) * outerRadius
             );
+            graphics.stroke({ width: 1.2, color: 0x2a3441, alpha: 0.8 });
+
+            graphics.circle(
+                Math.cos(angle) * outerRadius,
+                Math.sin(angle) * outerRadius,
+                1.2
+            ).fill({ color: 0x3a4a5a, alpha: 0.7 });
         }
-        
-        // Add speed particles (moving outward)
-        for (let i = 0; i < 16; i++) {
-            const angle = (i / 16) * Math.PI * 2;
-            const distance = radius * (0.3 + Math.random() * 0.4);
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const size = 1 + Math.random() * 2;
-            
-            graphics.beginFill(0x58d68d, 0.9);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
+
+        // Status indicator
+        const teamColor = this.getTeamColor(ownerTeam);
+        if (isArmed) {
+            const pulse = 0.6 + 0.4 * Math.sin(Date.now() * 0.01);
+            graphics.circle(0, 0, 10).stroke({ width: 2, color: teamColor, alpha: pulse });
+            const centerPulse = 0.3 + 0.7 * Math.sin(Date.now() * 0.015);
+            graphics.circle(0, 0, 1.5).fill({ color: teamColor, alpha: centerPulse });
+        } else {
+            graphics.circle(0, 0, 10).stroke({ width: 1.5, color: 0xffaa00, alpha: 0.5 });
+            graphics.circle(0, 0, 1.5).fill({ color: 0xffaa00, alpha: 0.8 });
         }
-        
+
         return graphics;
     }
-    
-    /**
-     * Create warning zone graphics (pulsing red/yellow indicator)
-     */
-    createWarningZoneGraphics(graphics, radius, effectData) {
-        // Outer warning ring (red)
-        graphics.lineStyle(4, 0xff4444, 0.8);
-        graphics.drawCircle(0, 0, radius);
-        
-        // Middle warning ring (yellow)
-        graphics.lineStyle(3, 0xffaa00, 0.6);
-        graphics.drawCircle(0, 0, radius * 0.85);
-        
-        // Inner warning area (semi-transparent red)
-        graphics.beginFill(0xff4444, 0.15);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
-        
-        // Add warning stripes
-        const stripeCount = 12;
-        for (let i = 0; i < stripeCount; i++) {
-            const angle = (i / stripeCount) * Math.PI * 2;
-            const x1 = Math.cos(angle) * radius * 0.7;
-            const y1 = Math.sin(angle) * radius * 0.7;
-            const x2 = Math.cos(angle) * radius * 0.95;
-            const y2 = Math.sin(angle) * radius * 0.95;
-            
-            graphics.lineStyle(2, 0xffaa00, 0.7);
-            graphics.moveTo(x1, y1);
-            graphics.lineTo(x2, y2);
-        }
-        
-        // Center warning symbol (exclamation mark)
-        graphics.lineStyle(0);
-        graphics.beginFill(0xff4444, 0.9);
-        // Exclamation body
-        graphics.drawRect(-3, -15, 6, 20);
-        // Exclamation dot
-        graphics.drawCircle(0, 10, 4);
-        graphics.endFill();
-        
-        return graphics;
-    }
-    
-    /**
-     * Create earthquake effect graphics (ground shake with cracks)
-     */
-    createEarthquakeGraphics(graphics, radius, effectData) {
-        // Base ground disturbance (brown/gray)
-        graphics.beginFill(0x8b7355, 0.4);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
-        
-        // Inner shake zone (darker)
-        graphics.beginFill(0x654321, 0.5);
-        graphics.drawCircle(0, 0, radius * 0.7);
-        graphics.endFill();
-        
-        // Add crack lines radiating from center
-        const crackCount = 8;
-        for (let i = 0; i < crackCount; i++) {
-            const angle = (i / crackCount) * Math.PI * 2 + Math.random() * 0.3;
-            const length = radius * (0.6 + Math.random() * 0.4);
-            
-            // Main crack
-            graphics.lineStyle(3, 0x3d2817, 0.8);
-            graphics.moveTo(0, 0);
-            
-            // Jagged crack path
-            const segments = 5;
-            for (let j = 1; j <= segments; j++) {
-                const t = j / segments;
-                const x = Math.cos(angle) * length * t + (Math.random() - 0.5) * 10;
-                const y = Math.sin(angle) * length * t + (Math.random() - 0.5) * 10;
-                graphics.lineTo(x, y);
-            }
-        }
-        
-        // Add dust/debris particles
-        for (let i = 0; i < 15; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * radius * 0.8;
-            const x = Math.cos(angle) * distance;
-            const y = Math.sin(angle) * distance;
-            const size = 2 + Math.random() * 4;
-            
-            graphics.beginFill(0xa0826d, 0.6);
-            graphics.drawCircle(x, y, size);
-            graphics.endFill();
-        }
-        
-        // Add shockwave rings
-        graphics.lineStyle(2, 0x8b7355, 0.5);
-        graphics.drawCircle(0, 0, radius * 0.4);
-        graphics.lineStyle(2, 0x8b7355, 0.3);
-        graphics.drawCircle(0, 0, radius * 0.6);
-        
-        return graphics;
-    }
-    
-    /**
-     * Create generic effect graphics
-     */
-    createGenericEffectGraphics(graphics, radius, effectData) {
-        graphics.beginFill(0x888888, 0.5);
-        graphics.drawCircle(0, 0, radius);
-        graphics.endFill();
-        
-        graphics.beginFill(0xcccccc, 0.7);
-        graphics.drawCircle(0, 0, radius * 0.5);
-        graphics.endFill();
-        
-        return graphics;
-    }
-    
+
+
     /**
      * Add animation to field effects
      */
@@ -6623,7 +4163,7 @@ class GameEngine {
         container.animationFunction = () => this.animateEffect(container);
         
         // Add to ticker for animation updates
-        this.app.ticker.add(container.animationFunction);
+        this.addTickerCallback(container.animationFunction);
     }
     
     /**
@@ -6633,7 +4173,7 @@ class GameEngine {
         if (!container.effectData || !container.parent || !container.effectGraphics) {
             // Effect has been removed, stop animating
             if (container.animationFunction) {
-                this.app.ticker.remove(container.animationFunction);
+                this.removeTickerCallback(container.animationFunction);
                 container.animationFunction = null;
             }
             return;
@@ -6663,22 +4203,20 @@ class GameEngine {
                 break;
             // Utility effect animations
             case 'HEAL_ZONE':
-                this.animateHealZone(container);
                 break;
             case 'SLOW_FIELD':
                 this.animateSlowField(container);
                 break;
             case 'SHIELD_BARRIER':
-                this.animateShieldBarrier(container);
                 break;
             case 'GRAVITY_WELL':
                 this.animateGravityWell(container);
                 break;
-            case 'VISION_REVEAL':
-                this.animateVisionReveal(container);
-                break;
             case 'SPEED_BOOST':
                 this.animateSpeedBoost(container);
+                break;
+            case 'SMOKE':
+                this.animateSmoke(container);
                 break;
             // Environmental event animations
             case 'WARNING_ZONE':
@@ -6686,6 +4224,9 @@ class GameEngine {
                 break;
             case 'EARTHQUAKE':
                 this.animateEarthquake(container);
+                break;
+            case 'PROXIMITY_MINE':
+                this.animateMine(container);
                 break;
         }
     }
@@ -6700,9 +4241,9 @@ class GameEngine {
         // Rapid expansion in first 0.1 seconds, then shrink slightly
         let scale;
         if (time < 0.1) {
-            scale = 0.3 + (time / 0.1) * 1.2; // Expand from 0.3 to 1.5
+            scale = 0.3 + (time / 0.1) * 0.7; // Expand from 0.3 up to the physics radius (1.0)
         } else {
-            scale = 1.5 - progress * 0.3; // Shrink based on server progress
+            scale = 1.0 - progress * 0.3; // Shrink based on server progress
         }
         container.scale.set(Math.max(0.1, scale));
         
@@ -6712,9 +4253,6 @@ class GameEngine {
         } else {
             container.alpha = Math.max(0, 1.0 - progress); // Fade based on server progress
         }
-        
-        // Slight rotation for dynamic feel
-        container.rotation = time * 2.0;
     }
     
     /**
@@ -6730,9 +4268,6 @@ class GameEngine {
         // Gentle scale variation (slowed down from 8 to 3)
         const scale = 0.9 + Math.sin(time * 3) * 0.1;
         container.scale.set(scale);
-        
-        // Very subtle rotation (slowed down from 3 to 1)
-        container.rotation = Math.sin(time * 1) * 0.1;
     }
     
     /**
@@ -6740,18 +4275,68 @@ class GameEngine {
      */
     animateElectric(container) {
         const time = container.animationTime;
-        
+
         // Rapid flickering
         const flicker = Math.random() > 0.3 ? 1.0 : 0.6;
         container.alpha = flicker;
-        
+
         // Electrical pulsing
         const pulse = 0.9 + Math.sin(time * 20) * 0.1;
         container.scale.set(pulse);
-        
+
         // Random rotation for chaotic effect
         if (Math.random() > 0.9) {
             container.rotation = Math.random() * Math.PI * 2;
+        }
+
+        // Regenerate arcing lightning bolts on a throttle (~12Hz) so they flicker
+        // and crawl without redrawing geometry every single frame.
+        const lightning = container.lightning;
+        if (lightning) {
+            const now = Date.now();
+            if (!container._lastBoltTime || now - container._lastBoltTime > 80) {
+                container._lastBoltTime = now;
+                this.drawElectricBolts(lightning, (container.effectData && container.effectData.radius) || 50);
+            }
+        }
+    }
+
+    /**
+     * Redraw a fresh set of jagged lightning bolts radiating from the centre of
+     * an electric field out toward its rim. Each bolt is stroked twice: a wide
+     * dim glow plus a thin bright core, for an arcing electric look.
+     */
+    drawElectricBolts(g, radius) {
+        g.clear();
+        const boltCount = 4;
+        const segments = 5;
+        const glowWidth = Math.max(3, radius * 0.06);
+        const coreWidth = Math.max(1.5, radius * 0.025);
+
+        for (let b = 0; b < boltCount; b++) {
+            const angle = Math.random() * Math.PI * 2;
+            const reach = radius * (0.55 + Math.random() * 0.45);
+            const fx = Math.cos(angle), fy = Math.sin(angle); // forward unit
+            const nx = -fy, ny = fx;                          // perpendicular unit
+
+            const pts = [{ x: 0, y: 0 }];
+            for (let i = 1; i <= segments; i++) {
+                const t = i / segments;
+                const dist = reach * t;
+                // Zigzag jitter perpendicular to the bolt; tip lands on the path.
+                const jitter = (i === segments) ? 0 : (Math.random() - 0.5) * radius * 0.3;
+                pts.push({ x: fx * dist + nx * jitter, y: fy * dist + ny * jitter });
+            }
+
+            // Outer glow pass.
+            g.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+            g.stroke({ width: glowWidth, color: 0x66ccff, alpha: 0.35, cap: 'round', join: 'round' });
+
+            // Inner bright core pass.
+            g.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+            g.stroke({ width: coreWidth, color: 0xffffff, alpha: 0.95, cap: 'round', join: 'round' });
         }
     }
     
@@ -6760,16 +4345,8 @@ class GameEngine {
      */
     animateFreeze(container) {
         const time = container.animationTime;
-        
-        // Slow, steady pulse
         const pulse = 0.95 + Math.sin(time * 5) * 0.05;
         container.scale.set(pulse);
-        
-        // Gradual rotation
-        container.rotation = time * 0.2;
-        
-        // Stable alpha
-        container.alpha = 0.8;
     }
     
     /**
@@ -6779,8 +4356,8 @@ class GameEngine {
         const time = container.animationTime;
         const progress = container.effectData.progress || 0;
         
-        // Rapid expansion throughout the effect
-        const scale = 0.3 + progress * 1.2;
+        // Rapid expansion up to the physics radius, never beyond
+        const scale = 0.3 + progress * 0.7;
         container.scale.set(scale);
         
         // Quick fade after brief visibility
@@ -6789,9 +4366,6 @@ class GameEngine {
         } else {
             container.alpha = Math.max(0, 1.0 - progress); // Fade based on server progress
         }
-        
-        // Fast spinning fragments
-        container.rotation = time * 8;
     }
     
     /**
@@ -6804,11 +4378,9 @@ class GameEngine {
         const billow1 = Math.sin(time * 1.2) * 0.04;
         const billow2 = Math.sin(time * 1.8) * 0.03;
         const billow3 = Math.sin(time * 2.3) * 0.02;
-        const totalBillow = 1.0 + billow1 + billow2 + billow3;
+        // Bias below 1.0 so the billow peaks at the physics radius, never over it
+        const totalBillow = 0.91 + billow1 + billow2 + billow3;
         container.scale.set(totalBillow);
-        
-        // Very slow rotation to simulate cloud swirling
-        container.rotation = time * 0.15;
         
         // Pulsing alpha to simulate cloud density changes - more subtle for pallor effect
         const pulse1 = Math.sin(time * 1.5) * 0.06;
@@ -6827,58 +4399,12 @@ class GameEngine {
     }
     
     /**
-     * Animate heal zone effects
-     */
-    animateHealZone(container) {
-        const time = container.animationTime;
-        
-        // Gentle pulsing scale for the entire zone (like a heartbeat)
-        const pulse = 0.95 + Math.sin(time * 3) * 0.05;
-        container.scale.set(pulse);
-        
-        // Pulsing alpha to make the red cross appear to "breathe" or pulse
-        // This creates the active healing indicator effect
-        const breathe = 0.85 + Math.sin(time * 4) * 0.15;
-        container.alpha = breathe;
-        
-        // No rotation - keep the cross upright and recognizable
-    }
-    
-    
-    /**
      * Animate slow field effects
      */
     animateSlowField(container) {
         const time = container.animationTime;
-        
-        // Slow ripple effect
-        const ripple = 0.95 + Math.sin(time * 3) * 0.05;
-        container.scale.set(ripple);
-        
-        // Pulsing alpha to show field strength
         const pulse = 0.7 + Math.sin(time * 2.5) * 0.2;
         container.alpha = pulse;
-        
-        // Slow counter-rotation
-        container.rotation = -time * 0.3;
-    }
-    
-    /**
-     * Animate shield barrier effects
-     */
-    animateShieldBarrier(container) {
-        const time = container.animationTime;
-        
-        // Shield energy fluctuation (slowed down)
-        const energy = 0.95 + Math.sin(time * 2) * 0.05;
-        container.scale.set(energy);
-        
-        // Shield shimmer effect (slowed down)
-        const shimmer = 0.8 + Math.sin(time * 3) * 0.15;
-        container.alpha = shimmer;
-        
-        // Steady rotation for energy field (slowed down)
-        container.rotation = time * 0.015;
     }
     
     /**
@@ -6886,34 +4412,8 @@ class GameEngine {
      */
     animateGravityWell(container) {
         const time = container.animationTime;
-        
-        // Gravitational distortion - slight scale variation
         const distortion = 0.98 + Math.sin(time * 5) * 0.02;
         container.scale.set(distortion);
-        
-        // Stable but ominous presence
-        container.alpha = 0.9;
-        
-        // Slow rotation suggesting gravitational forces
-        container.rotation = time * 0.8;
-    }
-    
-    /**
-     * Animate vision reveal effects
-     */
-    animateVisionReveal(container) {
-        const time = container.animationTime;
-        
-        // Radar sweep effect
-        const sweep = 0.9 + Math.sin(time * 8) * 0.1;
-        container.scale.set(sweep);
-        
-        // Scanning pulse alpha
-        const scan = 0.7 + Math.sin(time * 12) * 0.2;
-        container.alpha = scan;
-        
-        // Fast rotation for radar sweep
-        container.rotation = time * 3.0;
     }
     
     /**
@@ -6921,17 +4421,8 @@ class GameEngine {
      */
     animateSpeedBoost(container) {
         const time = container.animationTime;
-        
-        // Energetic pulsing
         const energy = 0.9 + Math.sin(time * 10) * 0.1;
         container.scale.set(energy);
-        
-        // Bright, active alpha
-        const active = 0.8 + Math.sin(time * 7) * 0.15;
-        container.alpha = active;
-        
-        // Fast rotation for dynamic feel
-        container.rotation = time * 2.0;
     }
     
     /**
@@ -6939,17 +4430,8 @@ class GameEngine {
      */
     animateWarningZone(container) {
         const time = container.animationTime;
-        
-        // Rapid pulsing to draw attention
-        const pulse = 0.85 + Math.sin(time * 15) * 0.15;
-        container.scale.set(pulse);
-        
-        // Flashing alpha for urgency
         const flash = 0.6 + Math.sin(time * 12) * 0.3;
         container.alpha = flash;
-        
-        // Slow rotation
-        container.rotation = time * 0.5;
     }
     
     /**
@@ -6980,6 +4462,15 @@ class GameEngine {
     }
     
     /**
+     * Animate smoke cloud (slow swirling drift)
+     */
+    animateSmoke(container) {
+        const time = container.animationTime;
+        const pulse = 0.96 + Math.sin(time * 1.2) * 0.04;
+        container.scale.set(pulse);
+    }
+
+    /**
      * Get animation speed for different effect types
      */
     getEffectAnimationSpeed(effectType) {
@@ -6997,14 +4488,14 @@ class GameEngine {
             // Utility effect speeds
             case 'HEAL_ZONE':
             case 'SLOW_FIELD':
-                return 0.08; // Slow, gentle animation
+                return 0.01; // Slow, gentle animation
             case 'SHIELD_BARRIER':
             case 'SPEED_BOOST':
-                return 0.12; // Medium-fast, energetic
+                return 0.07; // Medium-fast, energetic
             case 'GRAVITY_WELL':
                 return 0.06; // Slow, ominous
-            case 'VISION_REVEAL':
-                return 0.15; // Fast, active scanning
+            case 'SMOKE':
+                return 0.04; // Slow, drifting animation
             // Environmental event speeds
             case 'WARNING_ZONE':
                 return 0.2; // Fast, urgent pulsing
@@ -7016,6 +4507,33 @@ class GameEngine {
     }
     
     /**
+     * Animate proximity mine overlay
+     */
+    animateMine(container) {
+        if (!container.iconOverlay || !container.effectData) return;
+        const effectData = container.effectData;
+        const isArmed = (effectData && effectData.isArmed) || false;
+
+        // Recreate overlay if arming status changed
+        if (container.lastArmedState !== isArmed) {
+            container.lastArmedState = isArmed;
+            container.removeChild(container.iconOverlay);
+            container.iconOverlay.destroy({ context: true });
+            const newIcon = this.createMineOverlay(effectData.radius || 18, effectData);
+            container.addChild(newIcon);
+            container.iconOverlay = newIcon;
+        }
+
+        // Pulse scale/alpha for armed feedback
+        if (isArmed) {
+            const pulse = 0.85 + 0.15 * Math.sin(Date.now() * 0.008);
+            container.iconOverlay.alpha = pulse;
+        } else {
+            container.iconOverlay.alpha = 1.0;
+        }
+    }
+
+    /**
      * Update effect visual based on current state
      */
     updateEffectVisual(container, effectData) {
@@ -7024,7 +4542,7 @@ class GameEngine {
         
         // All effects now use server progress since server handles proper timing
         // The animation methods will override alpha as needed for visual polish
-        if (effectData.type === 'EXPLOSION' || effectData.type === 'FRAGMENTATION') {
+        if (effectData.type === 'EXPLOSION' || effectData.type === 'FRAGMENTATION' || effectData.type === 'PROXIMITY_MINE') {
             // Let animation handle these for visual polish, but server controls lifetime
         } else {
             // Duration effects use server progress
@@ -7033,39 +4551,42 @@ class GameEngine {
     }
     
     /**
-     * Fade out effect before removal
+     * Fade out effect before removal. Guarantees `callback` is invoked at most once,
+     * even if both the per-frame ticker and the safety timeout race.
      */
     fadeOutEffect(container, callback) {
         const fadeSpeed = 0.05;
-        
-        // Store fade function reference for proper cleanup
+        let finished = false;
+
+        const finalize = () => {
+            if (finished) return;
+            finished = true;
+            if (container && container.fadeOutFunction) {
+                this.removeTickerCallback(container.fadeOutFunction);
+                container.fadeOutFunction = null;
+            }
+            if (callback) callback();
+        };
+
         const fadeOut = () => {
-            if (!container || container.alpha === undefined) {
-                // Container was already destroyed, clean up ticker
-                this.app.ticker.remove(fadeOut);
-                if (callback) callback();
+            if (finished) return;
+            if (!container || container.destroyed || container.alpha === undefined) {
+                // Container was destroyed externally; ensure ticker is removed
+                finalize();
                 return;
             }
-            
+
             container.alpha -= fadeSpeed;
             if (container.alpha <= 0) {
-                this.app.ticker.remove(fadeOut);
-                if (callback) callback();
+                finalize();
             }
         };
-        
-        // Store reference on container for emergency cleanup
+
         container.fadeOutFunction = fadeOut;
-        this.app.ticker.add(fadeOut);
-        
-        // Safety timeout to prevent infinite fade
-        this.safeSetTimeout(() => {
-            if (container && container.fadeOutFunction) {
-                this.app.ticker.remove(container.fadeOutFunction);
-                container.fadeOutFunction = null;
-                if (callback) callback();
-            }
-        }, 5000); // 5 second timeout
+        this.addTickerCallback(fadeOut);
+
+        // Safety timeout to guarantee completion even if the ticker stalls
+        this.safeSetTimeout(finalize, 5000);
     }
     
     // Health bar methods removed - health now shown in consolidated HUD
@@ -7086,6 +4607,18 @@ class GameEngine {
         this.updateScoreboard(gameState.players);
     }
     
+    /**
+     * Assign a Text's fill colour only when it actually changes. Reassigning a
+     * TextStyle property forces the text to re-rasterise on the next render even
+     * if the value is identical, so guarding it avoids needless per-frame glyph
+     * rebuilds in the HUD. (PixiJS perf guide: "Text — avoid changing every frame".)
+     */
+    setTextFill(textObj, color) {
+        if (!textObj || textObj._lastFill === color) return;
+        textObj._lastFill = color;
+        textObj.style.fill = color;
+    }
+
     /**
      * Update the consolidated HUD with player information.
      */
@@ -7114,21 +4647,21 @@ class GameEngine {
             const teamNumber = myPlayer.team || 0;
             if (teamNumber === 0) {
                 this.hudTeamText.text = 'FFA';
-                this.hudTeamText.style.fill = 0x808080; // Gray for FFA
+                this.setTextFill(this.hudTeamText, 0x808080); // Gray for FFA
             } else {
                 this.hudTeamText.text = teamNumber.toString();
-                this.hudTeamText.style.fill = this.getTeamColor(teamNumber); // Team color
+                this.setTextFill(this.hudTeamText, this.getTeamColor(teamNumber)); // Team color
             }
         }
-        
+
         // Update input source info
         if (this.hudInputText && this.inputManager) {
             if (this.inputManager.gamepad.connected && this.inputManager.inputSource === 'gamepad') {
                 this.hudInputText.text = 'Gamepad';
-                this.hudInputText.style.fill = 0x44ff44; // Green for gamepad
+                this.setTextFill(this.hudInputText, 0x44ff44); // Green for gamepad
             } else {
                 this.hudInputText.text = 'Keyboard';
-                this.hudInputText.style.fill = 0xffffff; // White for keyboard
+                this.setTextFill(this.hudInputText, 0xffffff); // White for keyboard
             }
         }
         
@@ -7147,11 +4680,11 @@ class GameEngine {
                 if (livesRemaining === 0) {
                     // Eliminated
                     this.hudLivesText.text = 'ELIM';
-                    this.hudLivesText.style.fill = 0xff4444; // Red for eliminated
+                    this.setTextFill(this.hudLivesText, 0xff4444); // Red for eliminated
                 } else {
                     // Limited lives (stock mode)
                     this.hudLivesText.text = livesRemaining.toString();
-                    this.hudLivesText.style.fill = 0xffaa00; // Orange for limited lives
+                    this.setTextFill(this.hudLivesText, 0xffaa00); // Orange for limited lives
                 }
             }
         }
@@ -7160,6 +4693,11 @@ class GameEngine {
     updateScoreboard(players) {
         const content = document.getElementById('scoreboard-content');
         if (!content || !players) return;
+        
+        // Throttle DOM updates to ~4 times per second
+        const now = performance.now();
+        if (this._lastScoreboardUpdate && now - this._lastScoreboardUpdate < 250) return;
+        this._lastScoreboardUpdate = now;
         
         // Check if we're in team mode
         const hasTeams = players.some(p => p.team && p.team > 0);
@@ -7171,198 +4709,284 @@ class GameEngine {
         }
     }
     
+    /**
+     * Registry of every per-player score component the server can report. Each
+     * entry knows its column header and how to read the value from a player's
+     * serialized {@code score} map. KOTH/oddball/HQ-damage are doubles, so they're
+     * rounded for display. The set actually shown is driven by the server's
+     * scoringConfig.components (see {@link Rules#getActiveScoreComponents}).
+     */
+    static SCORE_COLUMN_DEFS = {
+        kills:       { label: 'Kills',   read: bd => bd.kills ?? 0 },
+        captures:    { label: '🚩 Caps', color: '#FFD700', read: bd => bd.captures ?? 0 },
+        koth:        { label: '👑 Zone', read: bd => Math.round(bd.koth ?? 0) },
+        oddball:     { label: '🏐 Ball', read: bd => Math.round(bd.oddball ?? 0) },
+        vipKills:    { label: '🎯 VIP',  read: bd => bd.vipKills ?? 0 },
+        hqDamage:    { label: '🏰 Dmg',  read: bd => Math.round(bd.hqDamage ?? 0) },
+        hqDestroyed: { label: '💥 HQ',   read: bd => bd.hqDestroyed ?? 0 },
+    };
+
+    /**
+     * Resolve the per-component score breakdown object for any scoreboard entry.
+     * Live gameState players carry it on {@code score} (an
+     * object); game-over finalScores rows carry it on {@code scoreBreakdown}
+     * (since their {@code score} is the numeric total). Falls back to the entry
+     * itself for legacy top-level fields.
+     */
+    getBreakdown(entry) {
+        if (entry.score && typeof entry.score === 'object') return entry.score;
+        if (entry.scoreBreakdown && typeof entry.scoreBreakdown === 'object') return entry.scoreBreakdown;
+        return entry;
+    }
+
+    /**
+     * The ordered list of score-component column defs to render, driven by the
+     * server's scoringConfig (live or event-supplied). Falls back (for older
+     * payloads / before the first config arrives) to kills plus any component
+     * some entry has scored in.
+     */
+    activeScoreColumns(entries, config = this.gameState?.scoringConfig) {
+        const defs = GameEngine.SCORE_COLUMN_DEFS;
+        let keys = config?.components;
+        if (!Array.isArray(keys) || keys.length === 0) {
+            keys = Object.keys(defs).filter(k =>
+                k === 'kills' || entries.some(e => (defs[k].read(this.getBreakdown(e)) || 0) > 0));
+        }
+        return keys.filter(k => defs[k]).map(k => ({ key: k, ...defs[k] }));
+    }
+
+    /** Authoritative total for any entry: breakdown.total, else numeric score, else kills. */
+    playerScoreTotal(entry) {
+        const bd = this.getBreakdown(entry);
+        if (bd && typeof bd.total === 'number') return bd.total;
+        if (typeof entry.score === 'number') return entry.score;
+        return entry.kills || 0;
+    }
+
+    /** Append one styled stat span per active score component to a stats element. */
+    appendScoreStats(statsEl, entry, columns) {
+        const bd = this.getBreakdown(entry);
+        columns.forEach(c => {
+            const span = document.createElement('span');
+            span.className = 'stat-' + c.key;
+            if (c.color) span.style.color = c.color;
+            span.textContent = `${c.read(bd)} ${c.label}`;
+            statsEl.appendChild(span);
+        });
+    }
+
+    /**
+     * Order players for the live board. Score modes: highest total first.
+     * Elimination: living players first, then by score (placement isn't in the
+     * per-tick payload; the game-over screen shows full placement order).
+     */
+    sortPlayersForBoard(players) {
+        const elimination = this.gameState?.scoringConfig?.sortBy === 'placement';
+        return [...players].sort((a, b) => {
+            if (elimination) {
+                const aDead = a.eliminated ? 1 : 0;
+                const bDead = b.eliminated ? 1 : 0;
+                if (aDead !== bDead) return aDead - bDead; // living first
+            }
+            return this.playerScoreTotal(b) - this.playerScoreTotal(a);
+        });
+    }
+
+    /** Whether to show a dedicated Score column (redundant in pure deathmatch). */
+    showsScoreColumn(columns) {
+        return !(columns.length === 1 && columns[0].key === 'kills');
+    }
+
     updateFFAScoreboard(content, players) {
-        const sortedPlayers = [...players].sort((a, b) => (b.kills || 0) - (a.kills || 0));
-        
-        // Check if any player has captures (CTF mode)
-        const hasCaptures = players.some(p => (p.captures || 0) > 0);
-        
+        const columns = this.activeScoreColumns(players);
+        const showScore = this.showsScoreColumn(columns);
+        const sortedPlayers = this.sortPlayersForBoard(players);
+
         content.innerHTML = `
+            <div style="text-align: center; margin-bottom: 8px; font-size: 12px; color: #aaa;">
+                Scoring: ${this.getScoreTypeName(this.gameState?.scoreStyle)}
+            </div>
             <table style="width: 100%; color: white;">
                 <thead>
                     <tr>
-                        <th>Player</th>
-                        <th>Kills</th>
+                        <th style="text-align: left;">Player</th>
+                        ${showScore ? '<th>Score</th>' : ''}
+                        ${columns.map(c => `<th>${c.label}</th>`).join('')}
                         <th>Deaths</th>
-                        ${hasCaptures ? '<th>Captures</th>' : ''}
                         <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${sortedPlayers.map(player => {
+                    ${sortedPlayers.map((player, i) => {
                         const vipIndicator = player.isVip ? ' 👑' : '';
+                        const dimmed = player.eliminated ? 'opacity: 0.5;' : '';
                         return `
-                        <tr style="${player.id === this.myPlayerId ? 'background: rgba(46, 204, 113, 0.2);' : ''}">
-                            <td><span style="color: ${this.getTeamColorCSS(player.team || 0)}">●</span> ${player.name || `Player ${player.id}`}${vipIndicator}</td>
-                            <td>${player.kills || 0}</td>
+                        <tr style="${player.id === this.myPlayerId ? 'background: rgba(46, 204, 113, 0.2);' : ''}${dimmed}">
+                            <td style="text-align: left;">#${i + 1} <span style="color: ${this.getTeamColorCSS(player.team || 0)}">●</span> ${player.name || `Player ${player.id}`}${vipIndicator}</td>
+                            ${showScore ? `<td style="font-weight: bold;">${this.playerScoreTotal(player)}</td>` : ''}
+                            ${columns.map(c => `<td${c.color ? ` style="color: ${c.color};"` : ''}>${c.read(this.getBreakdown(player))}</td>`).join('')}
                             <td>${player.deaths || 0}</td>
-                            ${hasCaptures ? `<td style="color: #FFD700;">${player.captures || 0} 🚩</td>` : ''}
-                            <td>${player.active ? 'Alive' : 'Dead'}</td>
+                            <td>${player.active ? 'Alive' : (player.eliminated ? 'Out' : 'Dead')}</td>
                         </tr>
                     `}).join('')}
                 </tbody>
             </table>
         `;
     }
-    
+
     updateTeamScoreboard(content, players) {
+        const columns = this.activeScoreColumns(players);
+
         // Group players by team
         const teams = {};
         players.forEach(player => {
             const teamNum = player.team || 0;
-            if (!teams[teamNum]) {
-                teams[teamNum] = [];
-            }
-            teams[teamNum].push(player);
+            (teams[teamNum] || (teams[teamNum] = [])).push(player);
         });
-        
-        // Check if any player has captures (CTF mode)
-        const hasCaptures = players.some(p => (p.captures || 0) > 0);
-        
-        // Get effective team scores from game state (includes all scoring mechanisms)
+
+        // Effective team scores are authoritative (server sums every mechanism).
         const effectiveTeamScores = this.gameState?.teamScores || {};
-        
-        // Sort teams by effective team score (from server rules)
-        const sortedTeams = Object.entries(teams).sort((a, b) => {
-            const teamA = parseInt(a[0]);
-            const teamB = parseInt(b[0]);
-            const scoreA = effectiveTeamScores[teamA] || 0;
-            const scoreB = effectiveTeamScores[teamB] || 0;
-            return scoreB - scoreA;
-        });
-        
-        // Get scoring style info for display
-        const scoreStyle = this.gameState?.scoreStyle || 'TOTAL_KILLS';
-        const scoreTypeName = this.getScoreTypeName(scoreStyle);
-        
+        const teamScoreOf = t => effectiveTeamScores[t] || 0;
+
+        const sortedTeams = Object.entries(teams).sort(
+            (a, b) => teamScoreOf(parseInt(b[0])) - teamScoreOf(parseInt(a[0])));
+
         let html = `<div style="color: white;">
             <div style="text-align: center; margin-bottom: 10px; font-size: 12px; color: #aaa;">
-                Scoring: ${scoreTypeName}
+                Scoring: ${this.getScoreTypeName(this.gameState?.scoreStyle)}
             </div>`;
-        
+
         sortedTeams.forEach(([teamNum, teamPlayers]) => {
-            const teamKills = teamPlayers.reduce((sum, p) => sum + (p.kills || 0), 0);
-            const teamDeaths = teamPlayers.reduce((sum, p) => sum + (p.deaths || 0), 0);
-            const teamCaptures = teamPlayers.reduce((sum, p) => sum + (p.captures || 0), 0);
-            const teamName = teamNum == 0 ? 'Free For All' : `Team ${teamNum}`;
-            const teamColor = this.getTeamColorCSS(parseInt(teamNum));
-            
-            // Get effective team score from server
-            const effectiveScore = effectiveTeamScores[parseInt(teamNum)] || 0;
-            
-            // Build team header with effective score prominently displayed
-            const teamStats = hasCaptures 
-                ? `Score: ${effectiveScore} | K: ${teamKills} | D: ${teamDeaths} | 🚩: ${teamCaptures}`
-                : `Score: ${effectiveScore} | K: ${teamKills} | D: ${teamDeaths}`;
-            
+            const teamInt = parseInt(teamNum);
+            const teamName = teamInt === 0 ? 'Free For All' : `Team ${teamNum}`;
+            const teamColor = this.getTeamColorCSS(teamInt);
+            const effectiveScore = teamScoreOf(teamInt);
+
+            // Per-component team totals (summing the same values shown per player).
+            const componentTotals = columns
+                .map(c => `${c.label}: ${teamPlayers.reduce((s, p) => s + (c.read(this.getBreakdown(p)) || 0), 0)}`)
+                .join(' | ');
+            const teamDeaths = teamPlayers.reduce((s, p) => s + (p.deaths || 0), 0);
+            const headerStats = `Score: ${effectiveScore}${componentTotals ? ' | ' + componentTotals : ''} | D: ${teamDeaths}`;
+
             html += `
                 <div style="margin-bottom: 15px; border: 1px solid ${teamColor}; border-radius: 5px; padding: 8px;">
-                    <h4 style="margin: 0 0 8px 0; color: ${teamColor};">${teamName} (${teamStats})</h4>
+                    <h4 style="margin: 0 0 8px 0; color: ${teamColor};">${teamName} <span style="font-size: 11px; color: #ccc; font-weight: normal;">(${headerStats})</span></h4>
                     <table style="width: 100%; font-size: 12px;">
-                        ${teamPlayers
-                            .sort((a, b) => (b.kills || 0) - (a.kills || 0))
-                            .map(player => {
-                                const vipIndicator = player.isVip ? ' 👑' : '';
-                                return `
-                                <tr style="${player.id === this.myPlayerId ? 'background: rgba(46, 204, 113, 0.2);' : ''}">
-                                    <td style="padding: 2px;">${player.name || `Player ${player.id}`}${vipIndicator}</td>
-                                    <td style="padding: 2px; text-align: center;">${player.kills || 0}K</td>
-                                    <td style="padding: 2px; text-align: center;">${player.deaths || 0}D</td>
-                                    ${hasCaptures ? `<td style="padding: 2px; text-align: center; color: #FFD700;">${player.captures || 0}🚩</td>` : ''}
-                                    <td style="padding: 2px; text-align: center;">${player.active ? '✓' : '✗'}</td>
-                                </tr>
-                            `}).join('')}
+                        <thead>
+                            <tr style="color: #aaa;">
+                                <th style="text-align: left;">Player</th>
+                                <th>Score</th>
+                                ${columns.map(c => `<th>${c.label}</th>`).join('')}
+                                <th>D</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        ${this.sortPlayersForBoard(teamPlayers).map(player => {
+                            const vipIndicator = player.isVip ? ' 👑' : '';
+                            const dimmed = player.eliminated ? 'opacity: 0.5;' : '';
+                            return `
+                            <tr style="${player.id === this.myPlayerId ? 'background: rgba(46, 204, 113, 0.2);' : ''}${dimmed}">
+                                <td style="padding: 2px; text-align: left;">${player.name || `Player ${player.id}`}${vipIndicator}</td>
+                                <td style="padding: 2px; text-align: center; font-weight: bold;">${this.playerScoreTotal(player)}</td>
+                                ${columns.map(c => `<td style="padding: 2px; text-align: center;${c.color ? ` color: ${c.color};` : ''}">${c.read(this.getBreakdown(player))}</td>`).join('')}
+                                <td style="padding: 2px; text-align: center;">${player.deaths || 0}</td>
+                                <td style="padding: 2px; text-align: center;">${player.active ? '✓' : '✗'}</td>
+                            </tr>
+                        `}).join('')}
+                        </tbody>
                     </table>
                 </div>
             `;
         });
-        
+
         html += '</div>';
         content.innerHTML = html;
     }
-    
+
     getScoreTypeName(scoreStyle) {
         switch (scoreStyle) {
             case 'TOTAL_KILLS': return 'Kills Only';
-            case 'CAPTURES': return 'Flag Captures Only';
-            case 'KOTH_ZONES': return 'Zone Control Only';
-            case 'TOTAL': return 'All Scoring Methods';
+            case 'OBJECTIVE': return 'Objectives Only';
+            case 'TOTAL': return 'Kills + Objectives';
             default: return 'Kills Only';
         }
     }
     
     updateMinimap() {
         if (!this.hudMinimap || !this.minimapWidth || !this.minimapHeight) return;
-        
-        // Clear previous minimap content (keep background and title)
-        if (this.minimapContent) {
-            // Properly destroy all Graphics objects to prevent memory leak
-            const childrenToDestroy = [...this.minimapContent.children];
-            childrenToDestroy.forEach(child => {
-                if (child.clear && typeof child.clear === 'function') {
-                    child.clear(); // Clear graphics content first
-                }
-                child.destroy({ children: true, texture: false, baseTexture: false });
-            });
-            
-            this.hudMinimap.removeChild(this.minimapContent);
-            this.minimapContent.destroy({ children: true, texture: false, baseTexture: false });
+
+        // Throttle minimap updates to ~10Hz instead of 60Hz to reduce CPU/GC pressure
+        const now = performance.now();
+        if (this._lastMinimapUpdate && now - this._lastMinimapUpdate < 100) return;
+        this._lastMinimapUpdate = now;
+
+        // Reuse a single Graphics object for all player dots; clear-and-redraw avoids
+        // allocating/destroying PIXI.Graphics every frame, which was a major leak source.
+        if (!this.minimapContent) {
+            this.minimapContent = new PIXI.Container();
+            this.minimapContent.position.set(2, 16); // Below title, within border
+            this.hudMinimap.addChild(this.minimapContent);
         }
-        
-        // Create new minimap content container
-        this.minimapContent = new PIXI.Container();
-        this.minimapContent.position.set(2, 16); // Below title, within border
-        
+        if (!this.minimapPlayerDots) {
+            this.minimapPlayerDots = new PIXI.Graphics();
+            this.minimapContent.addChild(this.minimapPlayerDots);
+        }
+
+        const dots = this.minimapPlayerDots;
+        dots.clear();
+
         // Use actual minimap dimensions minus borders and title space
         const mapWidth = this.minimapWidth - 4; // Account for 2px border on each side
         const mapHeight = this.minimapHeight - 18; // Account for borders and title space
-        
+
         // Use uniform scaling to maintain aspect ratio
         const scale = Math.min(mapWidth / this.worldBounds.width, mapHeight / this.worldBounds.height);
-        
+
         // Calculate actual scaled world dimensions
         const scaledWorldWidth = this.worldBounds.width * scale;
         const scaledWorldHeight = this.worldBounds.height * scale;
-        
+
         // Calculate offsets to center the scaled world within the available minimap space
         const offsetX = (mapWidth - scaledWorldWidth) / 2;
         const offsetY = (mapHeight - scaledWorldHeight) / 2;
 
-        // Draw players
+        // Draw players into the shared Graphics object
         this.players.forEach(player => {
             const data = player.playerData;
-            if (!data.active) return;
-            
+            if (!data || !data.active) return;
+
             const x = (data.x + this.worldBounds.width / 2) * scale + offsetX;
             const y = (-data.y + this.worldBounds.height / 2) * scale + offsetY; // Flip y-axis to match physics world
-            
-            const playerDot = new PIXI.Graphics();
-            
-            // Use team colors
+
             const teamColor = this.getTeamColor(data.team || 0);
-            playerDot.beginFill(teamColor);
-            
-            // Make current player slightly larger
-            const radius = data.id === this.myPlayerId ? 2.5 : 1.5;
-            playerDot.drawCircle(x, y, radius);
-            playerDot.endFill();
-            
-            // Add white border for current player
-            if (data.id === this.myPlayerId) {
-                playerDot.lineStyle(1, 0xffffff);
-                playerDot.drawCircle(x, y, radius);
+            const isMe = data.id === this.myPlayerId;
+            const radius = isMe ? 2.5 : 1.5;
+
+            dots.circle(x, y, radius).fill(teamColor);
+
+            if (isMe) {
+                dots.circle(x, y, radius).stroke({ width: 1, color: 0xffffff });
             }
-            
-            // Add golden ring for VIP players
+
             if (data.isVip) {
-                playerDot.lineStyle(1, 0xFFD700, 1.0);
-                playerDot.drawCircle(x, y, radius + 1.5);
+                dots.circle(x, y, radius + 1.5).stroke({ width: 1, color: 0xFFD700 });
             }
-            
-            this.minimapContent.addChild(playerDot);
         });
-        
-        this.hudMinimap.addChild(this.minimapContent);
+
+        // Draw oddball NPCs on minimap
+        this.oddballNpcs.forEach(container => {
+            const data = container.npcData;
+            if (!data) return;
+            const x = (data.x + this.worldBounds.width / 2) * scale + offsetX;
+            const y = (-data.y + this.worldBounds.height / 2) * scale + offsetY;
+            const isRampage = data.personality === 'RAMPAGE';
+            const color = isRampage ? 0xFF4400 : 0x00CCFF;
+            const r = isRampage ? 3.0 : 2.0;
+            dots.circle(x, y, r).fill(color);
+            dots.circle(x, y, r).stroke({ width: 1, color: 0xFFFFFF, alpha: 0.6 });
+        });
     }
     
     showDeathScreen(data) {
@@ -7379,46 +5003,57 @@ class GameEngine {
     
     showRespawnTimer(timeRemaining, playerData) {
         const deathScreen = document.getElementById('death-screen');
-        const countdown = document.getElementById('respawn-countdown');
+        const respawnTimer = document.getElementById('respawn-timer');
         const deathInfo = document.getElementById('death-info');
-        
-        if (deathScreen && countdown) {
-            deathScreen.style.display = 'flex';
-            
-            // Check if player is eliminated or out of lives
-            const livesRemaining = playerData?.livesRemaining || -1;
-            const isEliminated = playerData?.eliminated || false;
-            
-            if (isEliminated || livesRemaining === 0) {
-                // Player is eliminated - show elimination message
-                countdown.textContent = 'ELIMINATED';
-                countdown.style.color = '#ff4444';
-                countdown.style.fontWeight = 'bold';
-                
-                if (deathInfo) {
-                    deathInfo.innerHTML = `
-                        <p style="color: #ff6666; margin: 10px 0;">
-                            You have been eliminated from this round.
-                        </p>
-                        <p style="color: #cccccc; font-size: 14px;">
-                            Wait for the next round to respawn.
-                        </p>
-                    `;
-                }
-            } else {
-                // Normal respawn countdown
-                countdown.textContent = Math.ceil(timeRemaining);
-                countdown.style.color = '#f39c12';
-                countdown.style.fontWeight = 'normal';
-                
-                if (deathInfo && livesRemaining != -1) {
-                    const livesText = livesRemaining;
-                    deathInfo.innerHTML = `
-                        <p style="color: #cccccc; margin: 10px 0;">
-                            Lives remaining: <span style="color: #ffaa00; font-weight: bold;">${livesText}</span>
-                        </p>
-                    `;
-                }
+
+        if (!deathScreen || !respawnTimer) {
+            return;
+        }
+        deathScreen.style.display = 'flex';
+
+        const livesRemaining = playerData?.livesRemaining ?? -1;
+        const isEliminated = playerData?.eliminated || false;
+        const respawnWaiting = playerData?.respawnWaiting || false;
+
+        if (respawnWaiting) {
+            // LAST_STANDING: no countdown — held until the arena resolves to one survivor
+            const survivorNoun = this.teamCount > 0 ? 'team' : 'player';
+            respawnTimer.textContent = `Respawning when one ${survivorNoun} is left standing…`;
+            respawnTimer.style.color = '#f39c12';
+            respawnTimer.style.fontWeight = 'normal';
+
+            if (deathInfo) {
+                deathInfo.innerHTML = `
+                    <p style="color: #cccccc; margin: 10px 0;">
+                        Waiting for the round to resolve — you'll respawn with everyone else.
+                    </p>
+                `;
+            }
+        } else if (isEliminated || livesRemaining === 0) {
+            // Player is eliminated
+            respawnTimer.textContent = 'ELIMINATED';
+            respawnTimer.style.color = '#ff4444';
+            respawnTimer.style.fontWeight = 'bold';
+
+            if (deathInfo) {
+                deathInfo.innerHTML = `
+                    <p style="color: #ff6666; margin: 10px 0;">
+                        You have been eliminated from this round.
+                    </p>
+                `;
+            }
+        } else {
+            // Normal respawn countdown
+            respawnTimer.style.color = '#f39c12';
+            respawnTimer.style.fontWeight = 'normal';
+            respawnTimer.innerHTML = `Respawning in <span id="respawn-countdown">${Math.ceil(timeRemaining)}</span>s`;
+
+            if (deathInfo && livesRemaining != -1) {
+                deathInfo.innerHTML = `
+                    <p style="color: #cccccc; margin: 10px 0;">
+                        Lives remaining: <span style="color: #ffaa00; font-weight: bold;">${livesRemaining}</span>
+                    </p>
+                `;
             }
         }
     }
@@ -7436,44 +5071,14 @@ class GameEngine {
     }
     
     sendPlayerInput(input) {
+        // Once spectating (e.g. eliminated in a last-man-standing game) there's no
+        // player entity to drive, so swallow input.
+        if (this.isSpectator || this.spectatorMode) {
+            return;
+        }
         if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
             this.websocket.send(JSON.stringify(input));
         }
-    }
-    
-    sendPlayerConfiguration() {
-        const params = new URLSearchParams(window.location.search);
-        
-        // Try to decode Base64 encoded config first
-        let playerConfig = null;
-        const encodedConfig = params.get('config');
-        
-        if (encodedConfig) {
-            try {
-                const decodedString = decodeURIComponent(escape(atob(encodedConfig)));
-                playerConfig = JSON.parse(decodedString);
-            } catch (error) {
-                console.error('Failed to decode player config:', error);
-                playerConfig = null;
-            }
-        }
-        
-        // Use decoded config or fall back to legacy URL params
-        let weaponConfig, utilityWeapon;
-        
-        if (playerConfig && playerConfig.weaponConfig) {
-            weaponConfig = playerConfig.weaponConfig;
-            utilityWeapon = playerConfig.utilityWeapon;
-        } else {
-            throw Error("missing configuration")
-        }
-
-        const message = {
-            type: 'configChange',
-            weaponConfig: weaponConfig,
-            utilityWeapon: utilityWeapon
-        };
-        this.websocket.send(JSON.stringify(message));
     }
     
     updateLoadingProgress(percent, status) {
@@ -7499,9 +5104,6 @@ class GameEngine {
         // Create a graphics object for the grid
         const grid = new PIXI.Graphics();
         
-        // Set line style for the grid
-        grid.lineStyle(1, 0x3a5f3f, 0.4); // Semi-transparent green lines
-        
         // Draw vertical lines
         for (let x = -worldWidth/2; x <= worldWidth/2; x += gridSize) {
             grid.moveTo(x, -worldHeight/2);
@@ -7514,9 +5116,10 @@ class GameEngine {
             grid.lineTo(worldWidth/2, y);
         }
         
-        // Add crosshatch pattern (diagonal lines every 4th grid line)
-        grid.lineStyle(1, 0x4a6f4f, 0.2); // Even more subtle diagonal lines
+        // Apply stroke for grid lines
+        grid.stroke({ width: 1, color: 0x3a5f3f, alpha: 0.4 }); // Semi-transparent green lines
         
+        // Add crosshatch pattern (diagonal lines every 4th grid line)
         for (let x = -worldWidth/2; x <= worldWidth/2; x += gridSize * 4) {
             for (let y = -worldHeight/2; y <= worldHeight/2; y += gridSize * 4) {
                 // Draw small diagonal crosses
@@ -7532,9 +5135,11 @@ class GameEngine {
             }
         }
         
+        // Apply stroke for crosshatch lines
+        grid.stroke({ width: 1, color: 0x4a6f4f, alpha: 0.2 }); // Even more subtle diagonal lines
+        
         // Add world boundary
-        grid.lineStyle(3, 0x5a8f5f, 0.8); // Thicker, more visible boundary
-        grid.drawRect(-worldWidth/2, -worldHeight/2, worldWidth, worldHeight);
+        grid.rect(-worldWidth/2, -worldHeight/2, worldWidth, worldHeight).stroke({ width: 3, color: 0x5a8f5f, alpha: 0.8 }); // Thicker, more visible boundary
         
         this.backgroundContainer.addChild(grid);
         
@@ -7551,63 +5156,24 @@ class GameEngine {
             const teamColor = this.getTeamColor(parseInt(teamNum));
             
             // Draw semi-transparent team area
-            graphics.beginFill(teamColor, 0.1);
-            graphics.lineStyle(2, teamColor, 0.5);
-            graphics.drawRect(
+            graphics.rect(
                 areaData.minX, 
                 areaData.minY, // No inversion needed - coordinates match now!
                 areaData.maxX - areaData.minX,
                 areaData.maxY - areaData.minY
-            );
-            graphics.endFill();
+            ).fill({ color: teamColor, alpha: 0.1 });
+            
+            graphics.rect(
+                areaData.minX, 
+                areaData.minY,
+                areaData.maxX - areaData.minX,
+                areaData.maxY - areaData.minY
+            ).stroke({ width: 2, color: teamColor, alpha: 0.5 });
+            
             graphics.zIndex = -1; // Behind everything else
             
             this.backgroundContainer.addChild(graphics);
         });
-    }
-    
-    /**
-     * Create simple dark background (terrain features disabled for better visibility).
-     */
-    createProceduralTerrain() {
-        if (!this.terrainData || !this.terrainData.metadata) return;
-        const metadata = this.terrainData.metadata;
-        this.updateBackgroundForTerrain(metadata);
-    }
-    
-    /**
-     * Update background to simple dark color for better visibility.
-     */
-    updateBackgroundForTerrain(metadata) {
-        const darkBackground = 0x1a1a1a; // Dark grey
-        this.app.renderer.backgroundColor = darkBackground;
-        this.createSimpleDarkBackground();
-    }
-    
-    /**
-     * Create simple dark background for better visibility.
-     */
-    createSimpleDarkBackground() {
-        // Properly destroy existing background children to prevent memory leak
-        const childrenToDestroy = [...this.backgroundContainer.children];
-        childrenToDestroy.forEach(child => {
-            if (child.clear && typeof child.clear === 'function') {
-                child.clear();
-            }
-            child.destroy({ children: true, texture: false, baseTexture: false });
-        });
-        this.backgroundContainer.removeChildren();
-        const graphics = new PIXI.Graphics();
-        graphics.beginFill(0x1a1a1a); // Dark grey
-        graphics.drawRect(
-            -this.worldBounds.width / 2, 
-            -this.worldBounds.height / 2, 
-            this.worldBounds.width, 
-            this.worldBounds.height
-        );
-        graphics.endFill();
-        graphics.zIndex = -10; // Far background
-        this.backgroundContainer.addChild(graphics);
     }
     
     /**
@@ -7664,12 +5230,11 @@ class GameEngine {
             projectiles: this.projectiles.size,
             obstacles: this.obstacles.size,
             fieldEffects: this.fieldEffects.size,
-            beams: this.beams.size,
             utilityEntities: this.utilityEntities.size,
             flags: this.flags.size,
             kothZones: this.kothZones.size,
             totalEntities: this.players.size + this.projectiles.size + this.obstacles.size + 
-                          this.fieldEffects.size + this.beams.size + this.utilityEntities.size + 
+                          this.fieldEffects.size + this.utilityEntities.size + 
                           this.flags.size + this.kothZones.size
         };
         return stats;
@@ -7701,28 +5266,15 @@ class GameEngine {
         // Clean up any field effects with orphaned animation functions
         this.fieldEffects.forEach((effect, id) => {
             if (effect.animationFunction && (!effect.parent || !effect.effectData)) {
-                this.app.ticker.remove(effect.animationFunction);
+                this.removeTickerCallback(effect.animationFunction);
                 effect.animationFunction = null;
             }
             if (effect.fadeOutFunction && (!effect.parent || effect.alpha <= 0)) {
-                this.app.ticker.remove(effect.fadeOutFunction);
+                this.removeTickerCallback(effect.fadeOutFunction);
                 effect.fadeOutFunction = null;
             }
         });
         
-        // Clean up orphaned obstacle health bars
-        if (this.obstacleHealthBars) {
-            this.obstacleHealthBars.forEach((healthBar, obstacleId) => {
-                if (!this.obstacles.has(obstacleId)) {
-                    if (healthBar.parent) {
-                        healthBar.parent.removeChild(healthBar);
-                    }
-                    healthBar.destroy();
-                    this.obstacleHealthBars.delete(obstacleId);
-                }
-            });
-        }
-
         // Force garbage collection if available (Chrome DevTools)
         if (window.gc) {
             window.gc();
@@ -7734,7 +5286,7 @@ class GameEngine {
             console.log(`Memory usage: ${(memInfo.usedJSHeapSize / 1024 / 1024).toFixed(2)}MB / ${(memInfo.totalJSHeapSize / 1024 / 1024).toFixed(2)}MB`);
         }
     }
-    
+
     /**
      * Clean up all resources when the game engine is destroyed
      */
@@ -7744,29 +5296,35 @@ class GameEngine {
             clearInterval(this.memoryCleanupInterval);
             this.memoryCleanupInterval = null;
         }
-        
+
+        // Clear the lobby countdown interval, if any
+        if (this._lobbyCountdownInterval) {
+            clearInterval(this._lobbyCountdownInterval);
+            this._lobbyCountdownInterval = null;
+        }
+
         // Clear all pending timeouts
         this.pendingTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
         this.pendingTimeouts = [];
         
         // Remove all ticker callbacks
         if (this.app && this.app.ticker) {
-            this.tickerCallbacks.forEach(callback => {
-                this.app.ticker.remove(callback);
+            [...this.tickerCallbacks].forEach(callback => {
+                this.removeTickerCallback(callback);
             });
-            this.tickerCallbacks = [];
             
             // Stop ticker
             this.app.ticker.stop();
         }
         
         // Remove all event listeners
-        if (this.app && this.app.renderer && this.app.renderer.gl && this.app.renderer.gl.canvas) {
+        // In PixiJS v8, access canvas directly from app.canvas instead of renderer.gl.canvas
+        if (this.app && this.app.canvas) {
             if (this.eventHandlers.webglContextLost) {
-                this.app.renderer.gl.canvas.removeEventListener('webglcontextlost', this.eventHandlers.webglContextLost);
+                this.app.canvas.removeEventListener('webglcontextlost', this.eventHandlers.webglContextLost);
             }
             if (this.eventHandlers.webglContextRestored) {
-                this.app.renderer.gl.canvas.removeEventListener('webglcontextrestored', this.eventHandlers.webglContextRestored);
+                this.app.canvas.removeEventListener('webglcontextrestored', this.eventHandlers.webglContextRestored);
             }
         }
         
@@ -7810,56 +5368,36 @@ class GameEngine {
         this.fieldEffects.forEach(effect => this.cleanupFieldEffectContainer(effect));
         this.fieldEffects.clear();
         
-        this.beams.forEach(beam => this.cleanupBeamContainer(beam));
-        this.beams.clear();
-        
         this.utilityEntities.forEach(entity => this.cleanupUtilityEntityContainer(entity));
         this.utilityEntities.clear();
 
         // Clean up obstacles
         this.obstacles.forEach(obstacle => {
-            if (obstacle.clear && typeof obstacle.clear === 'function') {
-                obstacle.clear();
-            }
             obstacle.obstacleData = null;
-            obstacle.destroy();
+            obstacle.destroy({ children: true, context: true });
         });
         this.obstacles.clear();
         
-        // Clean up obstacle health bars
-        if (this.obstacleHealthBars) {
-            this.obstacleHealthBars.forEach(healthBar => {
-                if (healthBar.parent) {
-                    healthBar.parent.removeChild(healthBar);
-                }
-                healthBar.destroy();
-            });
-            this.obstacleHealthBars.clear();
-        }
-        
         // Clean up flags
         this.flags.forEach(flag => {
-            flag.destroy({ children: true });
+            flag.destroy({ children: true, context: true });
         });
         this.flags.clear();
         
         // Clean up KOTH zones
         this.kothZones.forEach(zone => {
-            zone.destroy({ children: true });
+            zone.destroy({ children: true, context: true });
         });
         this.kothZones.clear();
-        
-        // Clean up teleport pad connections
-        this.teleportConnections.forEach(connection => {
-            if (connection.animationFunction) {
-                this.app.ticker.remove(connection.animationFunction);
+
+        // Clean up smoke overlay
+        if (this.smokeOverlay) {
+            if (this.smokeOverlay.parent) {
+                this.smokeOverlay.parent.removeChild(this.smokeOverlay);
             }
-            if (connection.parent) {
-                connection.parent.removeChild(connection);
-            }
-            connection.destroy();
-        });
-        this.teleportConnections.clear();
+            this.smokeOverlay.destroy({ children: true, context: true });
+            this.smokeOverlay = null;
+        }
         
         // Close WebSocket connection
         if (this.websocket) {

@@ -8,7 +8,6 @@ import io.micronaut.websocket.WebSocketSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.function.BiConsumer;
@@ -18,17 +17,17 @@ import java.util.function.BiConsumer;
  * Handles targeting logic and message delivery through WebSockets.
  */
 public class GameEventManager {
-    
+
     private static final Logger log = LoggerFactory.getLogger(GameEventManager.class);
-    
+
     private final GameEntities gameEntities;
     private final BiConsumer<WebSocketSession, Object> messageSender;
-    
+
     public GameEventManager(GameEntities gameEntities, BiConsumer<WebSocketSession, Object> messageSender) {
         this.gameEntities = gameEntities;
         this.messageSender = messageSender;
     }
-    
+
     /**
      * Broadcast a game event to the appropriate recipients based on its targeting
      */
@@ -37,9 +36,9 @@ public class GameEventManager {
             log.warn("Attempted to broadcast null event or event with null target");
             return;
         }
-        
+
         Set<Integer> targetPlayerIds = determineTargetPlayers(event.getTarget());
-        
+
         // Send the event to each target player
         for (Integer playerId : targetPlayerIds) {
             PlayerSession playerSession = gameEntities.getPlayerSession(playerId);
@@ -58,13 +57,13 @@ public class GameEventManager {
      */
     private Set<Integer> determineTargetPlayers(GameEvent.EventTarget target) {
         Set<Integer> targetPlayers = new HashSet<>();
-        
+
         switch (target.getType()) {
             case ALL:
                 // All active players
                 targetPlayers.addAll(getAllActivePlayerIds());
                 break;
-                
+
             case TEAM:
                 // Players on specific teams
                 if (target.getTeamIds() != null) {
@@ -73,38 +72,38 @@ public class GameEventManager {
                     }
                 }
                 break;
-                
+
             case SPECIFIC:
                 // Specific players
                 if (target.getPlayerIds() != null) {
                     targetPlayers.addAll(target.getPlayerIds());
                 }
                 break;
-                
+
             case SPECTATORS:
                 // Only spectators
                 targetPlayers.addAll(getSpectatorPlayerIds());
                 break;
-                
+
             default:
                 log.warn("Unknown target type: {}", target.getType());
                 break;
         }
-        
+
         // Remove excluded players
         if (target.getExcludePlayerIds() != null) {
             targetPlayers.removeAll(target.getExcludePlayerIds());
         }
-        
+
         // Ensure all target players are actually active and have sessions
         targetPlayers.removeIf(playerId -> {
             PlayerSession session = gameEntities.getPlayerSession(playerId);
             return session == null || !session.getSession().isOpen();
         });
-        
+
         return targetPlayers;
     }
-    
+
     /**
      * Get all active player IDs
      */
@@ -117,7 +116,7 @@ public class GameEventManager {
         }
         return playerIds;
     }
-    
+
     /**
      * Get player IDs for a specific team
      */
@@ -133,7 +132,7 @@ public class GameEventManager {
         }
         return teamPlayers;
     }
-    
+
     /**
      * Get spectator player IDs
      */
@@ -146,101 +145,47 @@ public class GameEventManager {
         }
         return spectators;
     }
-    
+
     /**
      * Convenience method to broadcast a kill event with team colors
      */
-    public void broadcastKill(String killerName, String victimName, String weaponName, 
-                             Integer killerTeam, Integer victimTeam) {
+    public void broadcastKill(String killerName, String victimName, String weaponName,
+                              Integer killerTeam, Integer victimTeam) {
         broadcastEvent(GameEvent.createKillEvent(killerName, victimName, weaponName, killerTeam, victimTeam));
     }
-    
+
     /**
      * Convenience method to broadcast a player join event with team color
      */
     public void broadcastPlayerJoin(String playerName, int teamNumber) {
         broadcastEvent(GameEvent.createPlayerJoinEvent(playerName, teamNumber));
     }
-    
-    /**
-     * Convenience method to broadcast a capture event
-     */
-    public void broadcastCapture(String playerName, String locationName) {
-        broadcastEvent(GameEvent.createCaptureEvent(playerName, locationName));
-    }
-    
+
     /**
      * Convenience method to broadcast a system message
      */
     public void broadcastSystemMessage(String message) {
         broadcastEvent(GameEvent.createSystemEvent(message));
     }
-    
-    /**
-     * Convenience method to broadcast a team message
-     */
-    public void broadcastTeamMessage(String message, int teamId, GameEvent.EventCategory category) {
-        broadcastEvent(GameEvent.createTeamEvent(message, teamId, category));
-    }
-    
+
     /**
      * Convenience method to broadcast to a specific player
      */
     public void broadcastToPlayer(String message, int playerId, GameEvent.EventCategory category) {
         broadcastEvent(GameEvent.createPlayerEvent(message, playerId, category));
     }
-    
-    /**
-     * Convenience method to broadcast an achievement
-     */
-    public void broadcastAchievement(String playerName, String achievement) {
-        broadcastEvent(GameEvent.createAchievementEvent(playerName, achievement));
-    }
-    
+
     /**
      * Convenience method to broadcast headquarters destruction
      */
     public void broadcastHeadquartersDestroyed(int destroyedTeam, int attackingTeam) {
         broadcastEvent(GameEvent.createHeadquartersDestroyedEvent(destroyedTeam, attackingTeam));
     }
-    
+
     /**
      * Convenience method to broadcast player elimination (when they run out of lives)
      */
     public void broadcastElimination(String playerName, int teamNumber, int livesRemaining) {
         broadcastEvent(GameEvent.createEliminationEvent(playerName, teamNumber, livesRemaining));
-    }
-    
-    /**
-     * Convenience method to broadcast a custom message with color
-     */
-    public void broadcastCustomMessage(String message, String color, GameEvent.EventTarget target) {
-        broadcastEvent(GameEvent.createCustomEvent(message, color, target));
-    }
-    
-    /**
-     * Get statistics about current game state for debugging
-     */
-    public String getEventSystemStatus() {
-        int totalPlayers = getAllActivePlayerIds().size();
-        int spectators = getSpectatorPlayerIds().size();
-        
-        StringBuilder status = new StringBuilder();
-        status.append("GameEventManager Status:\n");
-        status.append("  Active Players: ").append(totalPlayers).append("\n");
-        status.append("  Spectators: ").append(spectators).append("\n");
-        
-        // Team breakdown
-        Set<Integer> teams = new HashSet<>();
-        for (Player player : gameEntities.getAllPlayers()) {
-            teams.add(player.getTeam());
-        }
-        
-        for (Integer teamId : teams) {
-            int teamSize = getPlayersOnTeam(teamId).size();
-            status.append("  Team ").append(teamId).append(": ").append(teamSize).append(" players\n");
-        }
-        
-        return status.toString();
     }
 }

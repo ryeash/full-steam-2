@@ -8,7 +8,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Integration tests for Headquarters game interactions.
@@ -45,17 +48,17 @@ class HeadquartersCollisionTest extends BaseTestClass {
 
         gameManager = new GameManager("test_game", gameConfig, null);
         gameEntities = gameManager.getGameEntities();
-        
+
         // Create test players
         team1Player = new Player(1, "Team1Player", 0, 0, 1, 100.0);
         team2Player = new Player(2, "Team2Player", 100, 100, 2, 100.0);
-        gameEntities.addPlayer(team1Player);
-        gameEntities.addPlayer(team2Player);
-        
+        gameEntities.add(team1Player);
+        gameEntities.add(team2Player);
+
         // Get headquarters
         team1HQ = gameEntities.getTeamHeadquarters(1);
         team2HQ = gameEntities.getTeamHeadquarters(2);
-        
+
         assertNotNull(team1HQ, "Team 1 HQ should exist");
         assertNotNull(team2HQ, "Team 2 HQ should exist");
     }
@@ -64,15 +67,14 @@ class HeadquartersCollisionTest extends BaseTestClass {
     @DisplayName("GameManager handles headquarters damage correctly")
     void testHeadquartersDamageHandling() {
         double initialHealth = team1HQ.getHealth();
-        
+
         // Deal damage (takeDamage must be called first)
         team1HQ.takeDamage(100.0);
         gameManager.handleHeadquartersDamage(team1HQ, team2Player, 100.0, false);
-        
+
         // HQ should have taken damage
         assertTrue(team1HQ.getHealth() < initialHealth);
         assertEquals(900.0, team1HQ.getHealth());
-        assertEquals(100.0, team1HQ.getTotalDamageTaken());
     }
 
     @Test
@@ -81,10 +83,10 @@ class HeadquartersCollisionTest extends BaseTestClass {
         // Destroy HQ
         boolean destroyed = team1HQ.takeDamage(1000.0);
         assertTrue(destroyed);
-        
+
         // Handle through GameManager
         gameManager.handleHeadquartersDamage(team1HQ, team2Player, 1000.0, true);
-        
+
         // Verify HQ is destroyed
         assertFalse(team1HQ.isActive());
         assertEquals(0.0, team1HQ.getHealth());
@@ -100,22 +102,21 @@ class HeadquartersCollisionTest extends BaseTestClass {
         gameManager.handleHeadquartersDamage(team1HQ, team2Player, 150.0, false);
         team1HQ.takeDamage(200.0);
         gameManager.handleHeadquartersDamage(team1HQ, team2Player, 200.0, false);
-        
+
         // Total: 450 damage
         assertEquals(550.0, team1HQ.getHealth());
-        assertEquals(450.0, team1HQ.getTotalDamageTaken());
     }
 
     @Test
     @DisplayName("Destruction creates explosion effect")
     void testDestructionExplosion() {
         int initialEffectCount = gameEntities.getAllFieldEffects().size();
-        
+
         // Destroy HQ
         boolean destroyed = team1HQ.takeDamage(1000.0);
         assertTrue(destroyed);
         gameManager.handleHeadquartersDamage(team1HQ, team2Player, 1000.0, true);
-        
+
         // Should have created an explosion field effect
         int finalEffectCount = gameEntities.getAllFieldEffects().size();
         assertEquals(initialEffectCount + 1, finalEffectCount);
@@ -127,11 +128,11 @@ class HeadquartersCollisionTest extends BaseTestClass {
         // Team 1 attacks Team 2's HQ
         team2HQ.takeDamage(200.0);
         gameManager.handleHeadquartersDamage(team2HQ, team1Player, 200.0, false);
-        
+
         // Team 2 attacks Team 1's HQ
         team1HQ.takeDamage(300.0);
         gameManager.handleHeadquartersDamage(team1HQ, team2Player, 300.0, false);
-        
+
         // Both HQs should have taken their respective damage
         assertEquals(800.0, team2HQ.getHealth());
         assertEquals(700.0, team1HQ.getHealth());

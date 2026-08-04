@@ -10,12 +10,14 @@ import org.dyn4j.world.World;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class RandomWeaponsTest extends BaseTestClass {
 
@@ -33,7 +35,8 @@ class RandomWeaponsTest extends BaseTestClass {
                 .teamCount(2)
                 .build();
         gameEntities = new GameEntities(config, world);
-        gameEventManager = new GameEventManager(gameEntities, (session, msg) -> {});
+        gameEventManager = new GameEventManager(gameEntities, (session, msg) -> {
+        });
     }
 
     @Test
@@ -68,7 +71,8 @@ class RandomWeaponsTest extends BaseTestClass {
                 rules,
                 gameEntities,
                 gameEventManager,
-                msg -> {},
+                msg -> {
+                },
                 2
         );
 
@@ -87,7 +91,8 @@ class RandomWeaponsTest extends BaseTestClass {
                 rules,
                 gameEntities,
                 gameEventManager,
-                msg -> {},
+                msg -> {
+                },
                 2
         );
 
@@ -96,8 +101,8 @@ class RandomWeaponsTest extends BaseTestClass {
         Player player2 = new Player(2, "Player2", 100, 100, 2, 100);
         player1.setActive(true);
         player2.setActive(true);
-        gameEntities.addPlayer(player1);
-        gameEntities.addPlayer(player2);
+        gameEntities.add(player1);
+        gameEntities.add(player2);
 
         String initialWeapon1 = player1.getWeapon().getName();
         String initialWeapon2 = player2.getWeapon().getName();
@@ -115,7 +120,7 @@ class RandomWeaponsTest extends BaseTestClass {
         Set<String> assignedWeapons = new HashSet<>();
 
         for (int i = 0; i < 100; i++) {
-            WeaponConfig weapon = com.fullsteam.ai.AIWeaponSelector.selectRandomNonHealingWeapon();
+            WeaponConfig weapon = com.fullsteam.ai.AIWeaponSelector.selectRandomWeapon();
             assignedWeapons.add(weapon.getType());
         }
 
@@ -140,7 +145,8 @@ class RandomWeaponsTest extends BaseTestClass {
                 rules,
                 gameEntities,
                 gameEventManager,
-                msg -> {},
+                msg -> {
+                },
                 2
         );
 
@@ -149,8 +155,8 @@ class RandomWeaponsTest extends BaseTestClass {
         Player inactivePlayer = new Player(2, "Inactive", 100, 100, 2, 100);
         activePlayer.setActive(true);
         inactivePlayer.setActive(false);
-        gameEntities.addPlayer(activePlayer);
-        gameEntities.addPlayer(inactivePlayer);
+        gameEntities.add(activePlayer);
+        gameEntities.add(inactivePlayer);
 
         String initialInactiveWeapon = inactivePlayer.getWeapon().getName();
 
@@ -179,7 +185,8 @@ class RandomWeaponsTest extends BaseTestClass {
                 rules,
                 gameEntities,
                 gameEventManager,
-                msg -> {},
+                msg -> {
+                },
                 2
         );
 
@@ -187,7 +194,7 @@ class RandomWeaponsTest extends BaseTestClass {
         for (int i = 1; i <= 10; i++) {
             Player player = new Player(i, "Player" + i, i * 10, i * 10, (i % 2) + 1, 100);
             player.setActive(true);
-            gameEntities.addPlayer(player);
+            gameEntities.add(player);
         }
 
         // Wait for rotation

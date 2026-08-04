@@ -1,6 +1,7 @@
 package com.fullsteam.ai;
 
 import com.fullsteam.model.PlayerInput;
+import com.fullsteam.model.UtilityCategory;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
@@ -23,10 +24,10 @@ public class IdleBehavior implements AIBehavior {
         PlayerInput input = new PlayerInput();
 
         // Check for environmental hazards first - high priority
-        double areaDanger = HazardAvoidance.getAreaDangerRating(aiPlayer.getPosition(), 150.0, gameEntities);
+        double areaDanger = HazardAvoidance.getAreaDangerRating(aiPlayer, aiPlayer.getPosition(), 150.0, gameEntities);
         if (areaDanger > 0.5) {
             // Dangerous area - flee to safety
-            Vector2 safePos = HazardAvoidance.findNearestSafePosition(aiPlayer.getPosition(), 200.0, gameEntities);
+            Vector2 safePos = HazardAvoidance.findNearestSafePosition(aiPlayer, aiPlayer.getPosition(), 200.0, gameEntities);
             if (safePos != null) {
                 Vector2 fleeDirection = safePos.copy().subtract(aiPlayer.getPosition());
                 fleeDirection.normalize();
@@ -59,7 +60,7 @@ public class IdleBehavior implements AIBehavior {
         direction.normalize();
 
         // Apply hazard avoidance to movement
-        direction = HazardAvoidance.calculateSafeMovement(playerPos, direction, gameEntities, 100.0);
+        direction = HazardAvoidance.calculateSafeMovement(aiPlayer, playerPos, direction, gameEntities, 100.0);
 
         // Speed scales with distance, but never goes to zero
         double moveSpeed = Math.max(0.3, Math.min(0.8, distance / 100.0));
@@ -108,7 +109,7 @@ public class IdleBehavior implements AIBehavior {
         if (shouldReload && !aiPlayer.isReloading()) {
             input.setReload(true);
         }
-        
+
         // Use support utilities when idle and safe
         evaluateIdleUtilityUsage(aiPlayer, input, nearestEnemy);
 
@@ -139,42 +140,41 @@ public class IdleBehavior implements AIBehavior {
     private void generateNewWanderTarget(AIPlayer aiPlayer, GameEntities gameEntities) {
         Vector2 playerPos = aiPlayer.getPosition();
 
+        double wallMargin = 50.0;
+        double halfW = gameEntities.getConfig().getWorldWidth() / 2.0 - wallMargin;
+        double halfH = gameEntities.getConfig().getWorldHeight() / 2.0 - wallMargin;
+
         // Try to find a safe wander target (avoid hazards)
         int attempts = 0;
         while (attempts < 5) {
-            // Generate a random point within reasonable distance - ensure minimum distance to keep moving
             double angle = ThreadLocalRandom.current().nextDouble() * 2 * Math.PI;
-            double distance = 150 + ThreadLocalRandom.current().nextDouble() * 250; // 150-400 units away (increased min)
+            double distance = 150 + ThreadLocalRandom.current().nextDouble() * 250;
 
             Vector2 candidateTarget = new Vector2(
                     playerPos.x + Math.cos(angle) * distance,
                     playerPos.y + Math.sin(angle) * distance
             );
 
-            // Keep within world bounds (rough approximation)
-            candidateTarget.x = Math.max(-900, Math.min(900, candidateTarget.x));
-            candidateTarget.y = Math.max(-900, Math.min(900, candidateTarget.y));
+            candidateTarget.x = Math.max(-halfW, Math.min(halfW, candidateTarget.x));
+            candidateTarget.y = Math.max(-halfH, Math.min(halfH, candidateTarget.y));
 
-            // Check if this target is safe
-            if (HazardAvoidance.isPositionSafe(candidateTarget, 30.0, gameEntities) &&
-                !HazardAvoidance.pathCrossesHazards(playerPos, candidateTarget, gameEntities)) {
+            if (HazardAvoidance.isPositionSafe(aiPlayer, candidateTarget, 30.0, gameEntities) &&
+                    !HazardAvoidance.pathCrossesHazards(aiPlayer, playerPos, candidateTarget, gameEntities)) {
                 wanderTarget = candidateTarget;
                 return;
             }
-            
+
             attempts++;
         }
 
-        // If we couldn't find a safe target after 5 attempts, just use the last candidate
-        // (better to move somewhere than stand still)
         double angle = ThreadLocalRandom.current().nextDouble() * 2 * Math.PI;
         double distance = 150 + ThreadLocalRandom.current().nextDouble() * 250;
         wanderTarget = new Vector2(
                 playerPos.x + Math.cos(angle) * distance,
                 playerPos.y + Math.sin(angle) * distance
         );
-        wanderTarget.x = Math.max(-900, Math.min(900, wanderTarget.x));
-        wanderTarget.y = Math.max(-900, Math.min(900, wanderTarget.y));
+        wanderTarget.x = Math.max(-halfW, Math.min(halfW, wanderTarget.x));
+        wanderTarget.y = Math.max(-halfH, Math.min(halfH, wanderTarget.y));
     }
 
     private AITargetWrapper findNearestEnemy(AIPlayer aiPlayer, GameEntities gameEntities) {
@@ -199,16 +199,16 @@ public class IdleBehavior implements AIBehavior {
                 nearest = AITargetWrapper.fromPlayer(player);
             }
         }
-        
+
         // Check all enemy turrets
         for (Turret turret : gameEntities.getAllTurrets()) {
             if (!turret.isActive()) {
                 continue;
             }
-            
+
             // Skip friendly turrets - only target enemies
             AITargetWrapper turretWrapper = AITargetWrapper.fromTurret(turret);
-            if (isTeammate(aiPlayer, turretWrapper)) {
+            if (turretWrapper.isTeammateOf(aiPlayer)) {
                 continue;
             }
 
@@ -221,22 +221,7 @@ public class IdleBehavior implements AIBehavior {
 
         return nearest;
     }
-    
-    private boolean isTeammate(AIPlayer aiPlayer, AITargetWrapper target) {
-        // In FFA mode (team 0), check if it's the AI's own turret
-        if (aiPlayer.getTeam() == 0) {
-            // Don't attack your own turrets in FFA
-            if (target.isTurret() && target.getOwnerId() == aiPlayer.getId()) {
-                return true;
-            }
-            // Everyone else is an enemy in FFA
-            return false;
-        }
-        
-        // In team mode, check if they're on the same team
-        return aiPlayer.getTeam() == target.getTeam();
-    }
-    
+
     /**
      * Evaluate utility weapon usage during idle behavior.
      * Focus on support and defensive utilities when safe.
@@ -246,44 +231,44 @@ public class IdleBehavior implements AIBehavior {
         if (!aiPlayer.canUseUtility()) {
             return;
         }
-        
+
         if (nearestEnemy != null && aiPlayer.getPosition().distance(nearestEnemy.getPosition()) < 200) {
             return; // Too dangerous to use utilities
         }
-        
+
         UtilityWeapon utility = aiPlayer.getUtilityWeapon();
         boolean shouldUseUtility = false;
         double usageChance = 0.0;
-        
+
         switch (utility.getCategory()) {
             case SUPPORT:
                 // Use support utilities when health is low or proactively
-                if (aiPlayer.getHealth() < 80) {
+                if (aiPlayer.healthPercent() < 0.8) {
                     usageChance = 0.3;
-                    if (aiPlayer.getHealth() < 50) usageChance += 0.4;
+                    if (aiPlayer.healthPercent() < 0.5) usageChance += 0.4;
                 } else if (nearestEnemy == null) {
                     // Proactive support usage when completely safe
                     usageChance = 0.1;
                 }
                 break;
-                
+
             case DEFENSIVE:
                 // Use defensive utilities when health is low or preparing for combat
-                if (aiPlayer.getHealth() < 70) {
+                if (aiPlayer.healthPercent() < 0.7) {
                     usageChance = 0.4;
                 } else if (nearestEnemy != null && aiPlayer.getPosition().distance(nearestEnemy.getPosition()) < 400) {
                     // Prepare defenses when enemy is at medium range
                     usageChance = 0.2;
                 }
                 break;
-                
+
             case TACTICAL:
                 // Use tactical utilities for map control when safe
                 if (nearestEnemy == null || aiPlayer.getPosition().distance(nearestEnemy.getPosition()) > 300) {
                     usageChance = 0.15;
                 }
                 break;
-                
+
             case CROWD_CONTROL:
                 // Generally don't use crowd control when idle unless preparing for combat
                 if (nearestEnemy != null && aiPlayer.getPosition().distance(nearestEnemy.getPosition()) < 350) {
@@ -291,26 +276,26 @@ public class IdleBehavior implements AIBehavior {
                 }
                 break;
         }
-        
+
         // Personality modifiers
         double personalityMultiplier = 1.0;
-        
+
         // Strategic personalities use utilities more proactively
         if (aiPlayer.getPersonality().getPatience() > 0.6) {
             personalityMultiplier += 0.4;
         }
-        
+
         // Defensive personalities use defensive utilities more often
-        if (utility.getCategory() == UtilityWeapon.UtilityCategory.DEFENSIVE && 
-            aiPlayer.getPersonality().getAggressiveness() < 0.4) {
+        if (utility.getCategory() == UtilityCategory.DEFENSIVE &&
+                aiPlayer.getPersonality().getAggressiveness() < 0.4) {
             personalityMultiplier += 0.3;
         }
-        
+
         usageChance *= personalityMultiplier;
-        
+
         // Random factor with lower base chance than combat
         shouldUseUtility = Math.random() < usageChance;
-        
+
         if (shouldUseUtility) {
             input.setAltFire(true);
         }

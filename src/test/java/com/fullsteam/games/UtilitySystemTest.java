@@ -1,9 +1,12 @@
 package com.fullsteam.games;
 
 import com.fullsteam.BaseTestClass;
+import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.UtilityWeapon;
+import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
+import com.fullsteam.physics.UtilityActivation;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.World;
@@ -13,7 +16,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Unit tests for UtilitySystem.
@@ -36,18 +40,18 @@ class UtilitySystemTest extends BaseTestClass {
                 .enableAIFilling(false)  // Disable AI filling for predictable test environment
                 .build();
         gameEntities = new GameEntities(testConfig, world);
-        
+
         // Create weapon system
         weaponSystem = new WeaponSystem(gameEntities, world);
-        
+
         // Create broadcaster
         broadcaster = new TestBroadcaster();
-        
+
         // Create utility system
         utilitySystem = new UtilitySystem(
                 gameEntities,
                 world,
-                pos -> true // Always allow placement for tests
+                (pos, radius) -> true // Always allow placement for tests
         );
     }
 
@@ -60,7 +64,7 @@ class UtilitySystemTest extends BaseTestClass {
     void testHealZoneCreation() {
         // Arrange
         Player player = createTestPlayer(1, 1);
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.HEAL_ZONE);
+        UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.HEAL_ZONE);
 
         // Act
         utilitySystem.handleUtilityActivation(activation);
@@ -75,7 +79,7 @@ class UtilitySystemTest extends BaseTestClass {
     void testDamageZoneCreation() {
         // Arrange
         Player player = createTestPlayer(1, 1);
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.SLOW_FIELD);
+        UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.SLOW_FIELD);
 
         // Act
         utilitySystem.handleUtilityActivation(activation);
@@ -92,8 +96,8 @@ class UtilitySystemTest extends BaseTestClass {
         Player player = createTestPlayer(1, 1);
         player.setPosition(100, 100);
         player.setAimDirection(new Vector2(1, 0)); // Aim right
-        
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.HEAL_ZONE);
+
+        UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.HEAL_ZONE);
 
         // Act
         utilitySystem.handleUtilityActivation(activation);
@@ -113,7 +117,7 @@ class UtilitySystemTest extends BaseTestClass {
     void testTurretCreation() {
         // Arrange
         Player player = createTestPlayer(1, 1);
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.TURRET_CONSTRUCTOR);
+        UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.TURRET_CONSTRUCTOR);
 
         // Act
         utilitySystem.handleUtilityActivation(activation);
@@ -124,26 +128,11 @@ class UtilitySystemTest extends BaseTestClass {
     }
 
     @Test
-    @DisplayName("Should create barrier entity")
-    void testBarrierCreation() {
-        // Arrange
-        Player player = createTestPlayer(1, 1);
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.WALL_BUILDER);
-
-        // Act
-        utilitySystem.handleUtilityActivation(activation);
-
-        // Assert
-        assertFalse(gameEntities.getObstacles().isEmpty(), "Barrier should be created");
-        assertEquals(1, gameEntities.getObstacles().size(), "Exactly one barrier should be created");
-    }
-
-    @Test
     @DisplayName("Should create net projectile entity")
     void testNetProjectileCreation() {
         // Arrange
         Player player = createTestPlayer(1, 1);
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.NET_LAUNCHER);
+        UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.NET_LAUNCHER);
 
         // Act
         utilitySystem.handleUtilityActivation(activation);
@@ -158,29 +147,39 @@ class UtilitySystemTest extends BaseTestClass {
     void testProximityMineCreation() {
         // Arrange
         Player player = createTestPlayer(1, 1);
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.MINE_LAYER);
+        UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.MINE_LAYER);
 
         // Act
         utilitySystem.handleUtilityActivation(activation);
 
         // Assert
         assertFalse(gameEntities.getFieldEffects().isEmpty(), "Proximity mine should be created");
-        assertEquals(1, gameEntities.getFieldEffects().size(), "Exactly one mine should be created");
+        assertEquals(2, gameEntities.getFieldEffects().size(), "Proximity mine creates warning zone + mine effect");
     }
 
     @Test
-    @DisplayName("Should create teleport pad entity")
-    void testTeleportPadCreation() {
-        // Arrange
+    @DisplayName("Should create DefenseLaser entity and update rotating beams")
+    void testDefenseLaserCreationAndBeamUpdate() {
         Player player = createTestPlayer(1, 1);
-        Player.UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.TELEPORTER);
+        UtilityActivation activation = createUtilityActivation(player, UtilityWeapon.DEFENSE_LASER);
 
-        // Act
         utilitySystem.handleUtilityActivation(activation);
 
-        // Assert
-        assertFalse(gameEntities.getAllTeleportPads().isEmpty(), "Teleport pad should be created");
-        assertEquals(1, gameEntities.getAllTeleportPads().size(), "Exactly one teleport pad should be created");
+        assertFalse(gameEntities.getAllDefenseLasers().isEmpty(), "DefenseLaser should be created");
+        assertEquals(1, gameEntities.getAllDefenseLasers().size(), "Exactly one DefenseLaser should be created");
+
+        DefenseLaser defenseLaser = gameEntities.getAllDefenseLasers().iterator().next();
+        assertEquals(3, defenseLaser.getBeams().size(), "DefenseLaser should have 3 arm beams");
+
+        // Update DefenseLaser and simulate endpoint update
+        defenseLaser.update(0.1);
+        for (FieldEffectBeam beam : defenseLaser.getBeams()) {
+            java.util.List<Vector2> path = weaponSystem.computeBeamPath(beam);
+            beam.setEndPoint(path.get(1));
+            beam.updateBodyTransform();
+            org.junit.jupiter.api.Assertions.assertTrue(beam.getStartPoint().distance(beam.getEndPoint()) > 10.0,
+                    "Beam should extend outwards from laser center");
+        }
     }
 
     /**
@@ -196,8 +195,8 @@ class UtilitySystemTest extends BaseTestClass {
     /**
      * Create a utility activation for testing.
      */
-    private Player.UtilityActivation createUtilityActivation(Player player, UtilityWeapon utilityWeapon) {
-        return new Player.UtilityActivation(
+    private UtilityActivation createUtilityActivation(Player player, UtilityWeapon utilityWeapon) {
+        return new UtilityActivation(
                 utilityWeapon,
                 player.getPosition().copy(),
                 player.getAimDirection().copy(),

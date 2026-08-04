@@ -21,10 +21,16 @@ public class WeaponConfig {
     public int projectileSpeed = 0;
     public int bulletsPerShot = 0;
     public int linearDamping = 0;
+    public int handling = 0;
+    public int caliber = 0;
+    public int knockback = 0;
     public Set<BulletEffect> bulletEffects = new HashSet<>();
-    public Ordinance ordinance = Ordinance.BULLET;
+    public Ordinance ordinance = Ordinance.PROJECTILE;
 
     public Weapon buildWeapon() {
+        // Strip effects that don't apply to the chosen ordnance (e.g. HOMING on a
+        // beam) so no weapon ever carries an inert effect into gameplay.
+        Set<BulletEffect> effects = BulletEffect.validFor(ordinance, bulletEffects);
         return new Weapon(type,
                 damage,
                 fireRate,
@@ -35,38 +41,47 @@ public class WeaponConfig {
                 projectileSpeed,
                 bulletsPerShot,
                 linearDamping,
-                bulletEffects,
+                handling,
+                caliber,
+                knockback,
+                effects,
                 ordinance);
     }
 
     public static final WeaponConfig ASSAULT_RIFLE_PRESET = new WeaponConfig(
             "Assault Rifle",
             20,
-            25,
-            10,
+            30,
+            5,
             0,
-            25,
-            10,
-            10,
+            36,
+            5,
+            4,
             0,
             0,
+            0,      // handling (move-speed mult)
+            0,      // caliber (size mult)
+            0,      // knockback (no recoil)
             Set.of(),
-            Ordinance.BULLET
+            Ordinance.PROJECTILE  // total: 100 pts (attr 100 + fx 0 + ord 0)
     );
 
     public static final WeaponConfig HAND_CANNON_PRESET = new WeaponConfig(
             "Hand Cannon",
-            40,
+            37,
+            21,
+            9,
+            0,
+            4,
+            14,
+            12,
+            0,
+            0,
+            -5,
+            3,
             5,
-            15,
-            0,
-            5,
-            15,
-            20,
-            0,
-            0,
             Set.of(),
-            Ordinance.BULLET
+            Ordinance.PROJECTILE  // total: 100 pts (attr 100 + fx 0 + ord 0)
     );
 
     // Pure Sniper Rifle - Maximizes range, damage, and projectile speed
@@ -74,33 +89,41 @@ public class WeaponConfig {
     // Trade-offs: Very slow fire rate, small magazine, long reload
     public static final WeaponConfig SNIPER_RIFLE_PRESET = new WeaponConfig(
             "Sniper Rifle",
-            30,     // High damage (40 dmg total)
-            2,      // Very slow fire rate (0.9 shots/sec)
-            30,     // Very long range (1200 units)
-            0,      // Perfect accuracy (1.0)
-            3,      // Very small magazine (8 rounds)
-            10,     // Medium reload (2.6 sec)
-            25,     // High projectile speed (800 units/sec)
-            0,      // Single shot
-            0,      // No damping (bullets maintain speed)
+            40,
+            2,
+            27,
+            0,
+            5,
+            5,
+            25,
+            0,
+            -2,
+            -5,
+            0,
+            1,
             Set.of(),
-            Ordinance.BULLET  // Total: 100 points
+            Ordinance.PROJECTILE  // total: 100 pts (attr 100 + fx 0 + ord 0)
     );
 
-    // Example: Explosive Sniper Rifle (75 points + 25 for explosive effect = 100 total)
-    public static final WeaponConfig EXPLOSIVE_SNIPER_PRESET = new WeaponConfig(
-            "Explosive Sniper Rifle",
-            35,
-            2,
-            15,
-            0,
-            3,
-            20,
-            0,
-            0,
-            0,
-            Set.of(BulletEffect.EXPLOSIVE),
-            Ordinance.BULLET
+    // Minigun - Maximum suppressive fire with extreme fire rate and magazine
+    // Focus: Overwhelming volume of fire, area suppression
+    // Trade-offs: Low damage per bullet, terrible accuracy, slow projectiles
+    public static final WeaponConfig MINIGUN_PRESET = new WeaponConfig(
+            "Minigun",
+            10,     // damage 20 (low per-bullet, compensated by volume)
+            30,     // Maximum fire rate (insane rate of fire)
+            10,     // range ~969 units
+            -10,    // Terrible accuracy (massive spread)
+            47,     // Maximum magazine size (never stop shooting)
+            2,     // reload ~2.55s
+            16,     // speed ~815 units/sec
+            0,      // 5 bullets per shot (multi-barrel spin-up)
+            -5,      // No damping
+            0,      // handling (move-speed mult)
+            0,      // caliber (size mult)
+            0,      // knockback (no recoil)
+            Set.of(),
+            Ordinance.PROJECTILE  // total: 100 pts (attr 100 + fx 0 + ord 0)
     );
 
     // Example: Bouncy SMG with damping (85 points + 15 for bouncy effect = 100 total)
@@ -108,287 +131,306 @@ public class WeaponConfig {
             "Bouncy SMG",
             15,
             30,
-            5,
+            2,
             0,
-            20,
-            10,
-            10,
+            29,
+            5,
+            4,
             0,
             -5,
+            5,     // handling (nimble)
+            0,      // caliber (size mult)
+            0,      // knockback (no recoil)
             Set.of(BulletEffect.BOUNCY),
-            Ordinance.BULLET
+            Ordinance.PROJECTILE  // total: 100 pts (attr 85 + fx 15 + ord 0)
     );
 
-    // Example: Rocket Launcher (55 points + 20 for rocket + 25 for explosive = 100 total)
+    // Example: Rocket Launcher (89 pts total)
     public static final WeaponConfig ROCKET_LAUNCHER_PRESET = new WeaponConfig(
             "Rocket Launcher",
-            25,
+            31,     // damage (5 pts → knockback; explosion AOE compensates)
             1,
-            12,
+            7,
             0,
-            2,
-            15,
+            7,
+            9,
+            0,     // projectile speed
             0,
             0,
-            0,
+            -5,     // handling (heavy)
+            20,     // caliber ×2.00
+            5,      // knockback → 200k (direct-hit shove)
             Set.of(BulletEffect.EXPLOSIVE),
-            Ordinance.ROCKET
+            Ordinance.PROJECTILE  // total: 100 pts (attr 75 + fx 25 + ord 0)
     );
 
-    // Example: Grenade Launcher (68 points + 10 for grenade + 22 for fragmenting = 100 total)
-    public static final WeaponConfig GRENADE_LAUNCHER_PRESET = new WeaponConfig(
-            "Grenade Launcher",
-            25,
-            3,
-            8,
-            -2,
-            6,
-            18,
-            10,
-            0,
-            -3,
-            Set.of(BulletEffect.EXPLOSIVE),
-            Ordinance.GRENADE
-    );
-
-    // Example: Plasma Rifle (65 points + 15 for plasma + 20 for piercing = 100 total)
-    public static final WeaponConfig PLASMA_RIFLE_PRESET = new WeaponConfig(
-            "Plasma Rifle",
-            25,
-            15,
-            15,
-            0,
-            10,
-            10,
-            10,
-            0,
-            0,
-            Set.of(),
-            Ordinance.PLASMA
-    );
-
-    // Dart Ordinance Showcase - Fast, precise, low damage
-    public static final WeaponConfig PRECISION_DART_GUN_PRESET = new WeaponConfig(
-            "Precision Dart Gun",
-            15,     // Low damage
-            20,     // Good fire rate
-            12,     // Good range
-            0,     // High accuracy
-            15,     // Decent magazine
-            13,      // Fast reload
-            20,     // Fast projectile
-            0,      // Single shot
-            0,      // No damping
-            Set.of(),
-            Ordinance.DART  // 5 points, total: 95 + 5 = 100
-    );
-
-    // Flamethrower Ordinance Showcase - Short range, area denial
-    public static final WeaponConfig FLAME_PROJECTOR_PRESET = new WeaponConfig(
-            "Flame Projector",
-            21,     // Good damage
-            30,     // High fire rate
-            3,      // Very short range
+    public static final WeaponConfig SHOTGUN_PRESET = new WeaponConfig(
+            "Shotgun",
+            36,     // damage 46
+            1,     // low fire rate
+            5,     // range ~533 units
             -10,    // Poor accuracy (spread)
-            30,     // Large magazine
-            5,      // Fast reload
-            8,      // Medium speed
-            10,      // Multiple streams
-            -5,     // Negative damping for spread
+            32,     // magazine ~35 rounds (8 pts → knockback)
+            2,     // reload ~3.32s
+            11,     // speed ~720 units/sec
+            25,     // Multiple streams
+            -10,     // Negative damping for spread
+            0,      // handling (move-speed mult)
+            0,      // caliber (size mult)
+            8,      // knockback → 320k (per-pellet split ≈ 1.2× total blowback)
             Set.of(),
-            Ordinance.FLAMETHROWER  // 8 points, total: 92 + 8 = 100
+            Ordinance.PROJECTILE  // total: 100 pts (attr 100 + fx 0 + ord 0)
+    );
+
+    // Concussion Cannon - showcases KNOCKBACK: a heavy slug that physically shoves
+    // targets back. High knockback + caliber make it sluggish to carry, since the
+    // KNOCKBACK→HANDLING and DAMAGE→HANDLING couplings stack on its move speed.
+    public static final WeaponConfig CONCUSSION_CANNON_PRESET = new WeaponConfig(
+            "Concussion Cannon",
+            30,     // damage
+            8,      // fire rate
+            8,      // range
+            0,      // accuracy
+            16,     // magazine
+            8,      // reload
+            8,      // projectile speed
+            0,      // single shot
+            0,      // damping
+            0,      // handling (couplings drag it down)
+            10,     // caliber ×1.50 (big slug)
+            12,     // knockback → ~480k impulse per hit
+            Set.of(),
+            Ordinance.PROJECTILE  // total: 100 pts (attr 100 + fx 0 + ord 0)
     );
 
     // Piercing Effect Showcase - Sniper that goes through enemies
     public static final WeaponConfig PIERCING_RIFLE_PRESET = new WeaponConfig(
             "Piercing Rifle",
-            25,     // High damage
-            8,      // Slow fire rate
-            20,     // Long range
+            40,     // damage 50
+            8,      // fire rate ~3.6 shots/s (4 pts → knockback)
+            13,     // range ~933 units
             0,     // Good accuracy
             5,      // Small magazine
-            10,     // Medium reload
-            12,      // Base speed
+            5,     // reload ~2.55s
+            5,     // speed ~539 units/sec
             0,      // Single shot
             0,      // No damping
-            Set.of(BulletEffect.PIERCING),  // 20 points
-            Ordinance.BULLET  // 0 points, total: 80 + 20 = 100
+            0,      // handling (move-speed mult)
+            0,      // caliber (size mult)
+            4,      // knockback → 160k (heavy AP round shoves each pierced target)
+            Set.of(BulletEffect.PIERCING),  // effects: 20 pts
+            Ordinance.PROJECTILE  // total: 100 pts (attr 80 + fx 20 + ord 0)
     );
 
     // Incendiary Effect Showcase - Sets targets on fire
     public static final WeaponConfig INCENDIARY_SHOTGUN_PRESET = new WeaponConfig(
             "Incendiary Shotgun",
-            20,     // Medium damage
+            32,     // damage (6 pts → knockback; fire DoT carries it)
             10,      // Slow fire rate
-            10,      // Short range
+            5,     // range ~533 units
             -8,     // Poor accuracy (shotgun spread)
             8,      // Small magazine
-            15,     // Long reload
-            12,     // Medium speed
+            9,     // reload ~1.85s
+            5,     // speed ~539 units/sec
             15,      // Multiple pellets
             0,      // No damping
-            Set.of(BulletEffect.INCENDIARY),  // 18 points
-            Ordinance.BULLET  // 0 points, total: 64 + 18 = 82
+            0,      // handling (move-speed mult)
+            0,      // caliber (size mult)
+            6,      // knockback → 240k (close-range blast, per-pellet split)
+            Set.of(BulletEffect.INCENDIARY),  // effects: 18 pts
+            Ordinance.PROJECTILE  // total: 100 pts (attr 82 + fx 18 + ord 0)
     );
 
     // Fragmenting Effect Showcase - Projectiles split on impact
     public static final WeaponConfig CLUSTER_MORTAR_PRESET = new WeaponConfig(
             "Cluster Mortar",
-            20,     // Medium damage
+            38,     // damage 48
             4,      // Slow fire rate
-            12,     // Good range
+            7,     // range ~653 units
             -5,     // Poor accuracy (mortar arc)
-            4,      // Small magazine
-            20,     // Long reload
-            16,      // Slow projectile
+            9,      // Small magazine
+            12,     // reload ~1.40s (4 pts → knockback)
+            7,     // projectile speed
             0,      // Single shot
             -3,     // Negative damping for arc
-            Set.of(BulletEffect.FRAGMENTING),  // 22 points
-            Ordinance.GRENADE  // 10 points, total: 58 + 22 + 10 = 90
+            -5,     // handling (heavy)
+            10,     // caliber ×1.50
+            4,      // knockback → 160k (shell + fragments shove)
+            Set.of(BulletEffect.FRAGMENTING),  // effects: 22 pts
+            Ordinance.PROJECTILE  // total: 100 pts (attr 78 + fx 22 + ord 0)
     );
 
     // Homing Effect Showcase - Tracking projectiles
     public static final WeaponConfig SEEKER_DART_PRESET = new WeaponConfig(
             "Seeker Dart",
-            12,     // Low damage
+            30,     // damage 40
             10,      // Medium fire rate
-            10,     // Medium range
+            5,     // range ~533 units
             0,      // Good accuracy
-            6,      // Small magazine
-            15,     // Medium reload
-            12,     // Fast projectile
+            1,      // Small magazine
+            9,     // reload ~1.85s
+            15,     // projectile speed
             0,      // Single shot
             0,      // No damping
-            Set.of(BulletEffect.HOMING),  // 30 points
-            Ordinance.DART  // 5 points, total: 65 + 30 + 5 = 100
+            5,     // handling (nimble)
+            -5,     // caliber ×0.75
+            0,      // knockback (no recoil)
+            Set.of(BulletEffect.HOMING),  // effects: 30 pts
+            Ordinance.PROJECTILE  // total: 100 pts (attr 70 + fx 30 + ord 0)
     );
 
     // Electric Effect Showcase - Chain lightning
     public static final WeaponConfig ARC_PISTOL_PRESET = new WeaponConfig(
             "Arc Pistol",
-            19,     // Medium damage
+            37,     // damage 47
             15,     // Medium fire rate
-            12,      // Short-medium range
+            7,     // range ~653 units
             0,      // Decent accuracy
-            8,      // Small magazine
-            18,      // Fast reload
-            12,     // Medium projectile speed
+            3,      // Small magazine
+            12,     // reload ~1.50s
+            5,     // speed ~539 units/sec
             0,      // Single shot
             0,      // No damping
-            Set.of(BulletEffect.ELECTRIC),  // 16 points
-            Ordinance.BULLET  // 0 points, total: 66 + 16 = 82
+            5,     // handling (nimble)
+            0,      // caliber (size mult)
+            0,      // knockback (no recoil)
+            Set.of(BulletEffect.ELECTRIC),  // effects: 16 pts
+            Ordinance.PROJECTILE  // total: 100 pts (attr 84 + fx 16 + ord 0)
     );
 
     // Poison Effect Showcase - Area denial with gas
     public static final WeaponConfig TOXIC_SPRAYER_PRESET = new WeaponConfig(
             "Toxic Sprayer",
             12,     // Low direct damage
-            24,     // High fire rate
-            6,      // Short range
+            30,     // fire rate ~7.1 shots/s
+            3,     // range ~395 units
             -5,     // Poor accuracy (spray)
-            20,     // Large magazine
-            10,     // Medium reload
-            8,      // Medium speed
-            10,      // Multiple streams
+            23,     // magazine 28 rounds
+            5,     // reload ~2.55s
+            3,     // speed ~455 units/sec
+            10,     // Multiple streams
             -3,     // Negative damping for spread
-            Set.of(BulletEffect.POISON),  // 18 points
-            Ordinance.BULLET  // 0 points, total: 75 + 18 = 93
+            0,      // handling (move-speed mult)
+            0,      // caliber (size mult)
+            0,      // knockback (no recoil)
+            Set.of(BulletEffect.POISON),  // effects: 22 pts
+            Ordinance.PROJECTILE  // total: 100 pts (attr 78 + fx 22 + ord 0)
     );
 
     // Freezing Effect Showcase - Slows enemies
     public static final WeaponConfig ICE_CANNON_PRESET = new WeaponConfig(
             "Ice Cannon",
-            20,     // Medium damage
+            39,     // damage 49
             10,     // Medium fire rate
-            20,     // Medium range
+            13,     // range ~933 units
             0,      // Good accuracy
-            8,      // Small magazine
-            18,     // Medium reload
-            10,     // Medium speed
+            13,      // Small magazine
+            12,     // reload ~1.50s
+            4,     // speed ~498 units/sec
             0,      // Single shot
             0,      // No damping
-            Set.of(BulletEffect.FREEZING),  // 14 points
-            Ordinance.BULLET  // 0 points, total: 71 + 14 = 85
+            -5,     // handling (heavy)
+            0,      // caliber (size mult)
+            0,      // knockback (no recoil)
+            Set.of(BulletEffect.FREEZING),  // effects: 14 pts
+            Ordinance.PROJECTILE  // total: 100 pts (attr 86 + fx 14 + ord 0)
     );
 
     // Twin Sixes - Dual-barrel high-damage weapon with spread
     public static final WeaponConfig TWIN_SIXES_PRESET = new WeaponConfig(
             "Twin Sixes",
             40,     // Very high damage
-            14,     // Medium fire rate
-            12,     // Good range
+            26,     // fire rate ~6.6 shots/s (4 pts → knockback)
+            7,     // range ~653 units
             -5,     // Imperfect accuracy (spread)
-            7,      // 12 rounds per magazine
-            15,     // Fast reload
-            12,     // Medium projectile speed
+            9,     // magazine 12 rounds (two six-shooters)
+            4,     // reload ~3.0s (slow, like reloading two revolvers)
+            5,     // speed ~539 units/sec
             5,      // 2 bullets per shot
             0,      // No damping
-            Set.of(),  // No effects
-            Ordinance.BULLET  // 0 points, total: 100 + 0 = 100
+            5,     // handling (nimble)
+            0,      // caliber (size mult)
+            4,      // knockback → 160k (revolver kick, split across 2 shots)
+            Set.of(),  // no effects
+            Ordinance.PROJECTILE  // total: 100 pts (attr 100 + fx 0 + ord 0)
     );
 
     // Laser Rifle - Instant-hit precision beam weapon
     public static final WeaponConfig LASER_RIFLE_PRESET = new WeaponConfig(
             "Laser Rifle",
-            20,     // High damage
+            25,     // damage 35 (4 pts moved to caliber for a wider beam)
             6,      // Medium fire rate
-            12,     // Long range
+            7,     // range ~653 units
             0,      // Perfect accuracy (beams are always accurate)
             15,     // Medium magazine
-            7,      // Fast reload
-            0,      // Not used for beams
+            3,     // reload ~3.04s
+            0,     // speed ~300 units/sec
             0,      // Single beam
             -10,      // Not used for beams
-            Set.of(),  // No effects
-            Ordinance.LASER
+            0,      // handling (move-speed mult)
+            4,      // caliber ×1.20 → beam width 2.40
+            0,      // knockback (no recoil)
+            Set.of(),  // no effects
+            Ordinance.LASER  // total: 100 pts (attr 50 + fx 0 + ord 50)
     );
 
     // Plasma Cannon - Continuous damage beam weapon
     public static final WeaponConfig PLASMA_CANNON_PRESET = new WeaponConfig(
             "Plasma Cannon",
-            20,     // Medium damage
+            23,     // damage 33 (8 pts moved to caliber for a thick beam)
             8,      // Medium fire rate
-            10,     // Good range
+            5,     // range ~533 units
             0,      // Perfect accuracy
-            12,     // Medium magazine
-            15,     // Medium reload
-            0,      // Not used for beams
+            17,     // Medium magazine
+            9,     // reload ~1.85s
+            0,     // speed ~300 units/sec
             0,      // Single beam
             -10,      // Not used for beams
-            Set.of(),  // No effects
-            Ordinance.PLASMA_BEAM
+            -5,     // handling (heavy)
+            8,      // caliber ×1.40 → beam width 2.80 (thicker than the laser)
+            0,      // knockback (no recoil)
+            Set.of(),  // no effects
+            Ordinance.PLASMA_BEAM  // total: 100 pts (attr 55 + fx 0 + ord 45)
     );
 
-    // Medic Beam - Healing support weapon
-    public static final WeaponConfig MEDIC_BEAM_PRESET = new WeaponConfig(
-            "Medic Beam",
-            20,     // Low damage (healing focused)
-            15,     // Medium fire rate
-            12,     // Medium range
+    // Railgun - Slow, heavy piercing plasma beam that punches through a whole line
+    public static final WeaponConfig RAILGUN_PRESET = new WeaponConfig(
+            "Railgun",
+            22,     // damage ~32
+            1,      // Very slow fire rate
+            9,      // range ~813 units (long)
             0,      // Perfect accuracy
-            20,     // Large magazine for sustained healing
-            8,      // Very fast reload
-            0,      // Not used for beams
+            6,      // small magazine
+            4,      // reload ~2.6s
+            0,      // speed (unused for beams)
             0,      // Single beam
-            -10,      // Not used for beams
-            Set.of(),  // No effects
-            Ordinance.HEAL_BEAM
+            -10,    // Not used for beams (reclaims budget)
+            -2,     // handling (heavy)
+            5,      // caliber ×1.25 → beam width 2.50
+            0,      // knockback (no recoil)
+            Set.of(BulletEffect.PIERCING),  // punches through everything in line
+            Ordinance.PLASMA_BEAM  // total: 100 pts (attr 35 + fx 20 + ord 45)
     );
 
-    // Rail Cannon - Piercing instant beam weapon
-    public static final WeaponConfig RAIL_CANNON_PRESET = new WeaponConfig(
-            "Rail Cannon",
-            15,     // High damage
-            4,      // Slow fire rate
-            15,     // Very long range
-            0,      // Perfect accuracy
-            6,      // Small magazine
-            15,     // Long reload
-            0,      // Not used for beams
-            0,      // Single beam
-            -10,      // Not used for beams
-            Set.of(),  // No effects
-            Ordinance.RAILGUN
+    // Ricochet Laser - Instant-hit laser that reflects off walls (BOUNCY beam).
+    // Heavy range investment gives the beam the travel budget to bank around
+    // corners through several bounces; thin (baseline caliber) and precise.
+    public static final WeaponConfig RICOCHET_LASER_PRESET = new WeaponConfig(
+            "Ricochet Laser",
+            14,     // damage ~24
+            6,      // medium fire rate
+            13,     // range ~817 units (long, to fuel bounces)
+            0,      // perfect accuracy (beams)
+            9,      // magazine
+            3,      // reload ~3.3s
+            0,      // speed (unused for beams)
+            0,      // single beam
+            -10,    // not used for beams (reclaims budget)
+            0,      // handling
+            0,      // caliber (thin, precise beam)
+            0,      // knockback (inert on beams)
+            Set.of(BulletEffect.BOUNCY),  // reflects off walls; 15 pts
+            Ordinance.LASER  // total: 100 pts (attr 35 + fx 15 + ord 50)
     );
 
     // ===== ADVANCED COMBINATION WEAPONS =====
@@ -397,243 +439,117 @@ public class WeaponConfig {
     public static final WeaponConfig STORM_CALLER_PRESET = new WeaponConfig(
             "Storm Caller",
             5,      // Low damage per shot
-            15,     // High fire rate
-            8,      // Medium range
+            29,     // fire rate ~7.0 shots/s
+            4,     // range ~466 units
             0,      // Good accuracy
             12,     // Medium magazine
-            4,      // Fast reload
-            15,     // Fast projectile
+            2,     // reload ~3.32s
+            17,     // projectile speed
             0,      // Single shot
             -10,    // Negative damping
-            Set.of(BulletEffect.ELECTRIC, BulletEffect.HOMING),  // 16 + 30 = 46 points
-            Ordinance.DART  // 5 points, total: 49 + 46 + 5 = 100
+            0,      // handling (move-speed mult)
+            -5,     // caliber ×0.75
+            0,      // knockback (no recoil)
+            Set.of(BulletEffect.ELECTRIC, BulletEffect.HOMING),  // effects: 46 pts
+            Ordinance.PROJECTILE  // total: 100 pts (attr 54 + fx 46 + ord 0)
     );
 
     // Napalm Launcher - Incendiary + Explosive massive burning explosion zones
     public static final WeaponConfig NAPALM_LAUNCHER_PRESET = new WeaponConfig(
             "Napalm Launcher",
-            15,     // Medium damage
+            31,     // damage 41
             2,      // Very slow fire rate
-            10,     // Medium range
+            5,     // range ~533 units
             -3,     // Poor accuracy
-            3,      // Very small magazine
-            15,     // Medium reload
-            8,      // Slow projectile
+            8,      // Very small magazine
+            9,     // reload ~1.85s
+            3,     // projectile speed
             0,      // Single shot
             -3,     // Negative damping
-            Set.of(BulletEffect.INCENDIARY, BulletEffect.EXPLOSIVE),  // 29 + 14 = 43 points
-            Ordinance.GRENADE  // 10 points, total: 47 + 43 + 10 = 100
-    );
-
-    // Cryo Shotgun - Freezing close-range freeze blast
-    public static final WeaponConfig CRYO_SHOTGUN_PRESET = new WeaponConfig(
-            "Cryo Shotgun",
-            25,     // High damage per pellet
-            8,      // Slow fire rate
-            6,      // Short range
-            -10,    // Very poor accuracy
-            6,      // Small magazine
-            18,     // Long reload
-            15,     // Fast projectile
-            20,     // Many pellets
-            -2,     // Negative damping
-            Set.of(BulletEffect.FREEZING),  // 14 points
-            Ordinance.BULLET  // 0 points, total: 86 + 14 = 100
+            -5,     // handling (heavy)
+            10,     // caliber ×1.50
+            0,      // knockback (no recoil)
+            Set.of(BulletEffect.INCENDIARY, BulletEffect.EXPLOSIVE),  // effects: 43 pts
+            Ordinance.PROJECTILE  // total: 100 pts (attr 57 + fx 43 + ord 0)
     );
 
     // Venom Needler - Poison + Piercing precise needles that poison all targets
     public static final WeaponConfig VENOM_NEEDLER_PRESET = new WeaponConfig(
             "Venom Needler",
             10,     // Low direct damage
-            18,     // Good fire rate
-            15,     // Good range
+            27,     // fire rate ~6.7 shots/s
+            9,     // range ~759 units
             0,      // Perfect accuracy
-            12,     // Medium magazine
-            10,     // Fast reload
-            2,      // Very fast projectile
+            7,     // Medium magazine
+            4,     // reload ~2.78s
+            11,     // projectile speed
             0,      // Single shot
             -10,    // Negative damping
-            Set.of(BulletEffect.POISON, BulletEffect.PIERCING),  // 18 + 20 = 38 points
-            Ordinance.DART  // 5 points, total: 57 + 38 + 5 = 100
-    );
-
-    // Thunderbolt Cannon - Electric + Explosive electric explosion rocket
-    public static final WeaponConfig THUNDERBOLT_CANNON_PRESET = new WeaponConfig(
-            "Thunderbolt Cannon",
-            16,     // Medium damage
-            1,      // Very slow fire rate
-            12,     // Long range
-            0,      // Perfect accuracy
-            2,      // Tiny magazine
-            13,     // Medium reload
-            5,      // Slow projectile
-            0,      // Single shot
-            -10,    // Negative damping
-            Set.of(BulletEffect.ELECTRIC, BulletEffect.EXPLOSIVE),  // 16 + 25 = 41 points
-            Ordinance.ROCKET  // 20 points, total: 39 + 41 + 20 = 100
-    );
-
-    // Ricochet Rifle
-    public static final WeaponConfig RICOCHET_RIFLE_PRESET = new WeaponConfig(
-            "Ricochet Rifle",
-            23,     // Medium damage
-            12,     // Medium fire rate
-            17,     // Medium range
-            0,      // Good accuracy
-            10,     // Medium magazine
-            8,      // Medium reload
-            15,     // Fast projectile
-            0,      // Single shot
-            0,    // Negative damping
-            Set.of(BulletEffect.BOUNCY),  // 15 + 20 = 35 points
-            Ordinance.BULLET  // 0 points, total: 65 + 35 = 100
-    );
-
-    // Plague Mortar - Poison + Fragmenting splits into poison clouds
-    public static final WeaponConfig PLAGUE_MORTAR_PRESET = new WeaponConfig(
-            "Plague Mortar",
-            15,     // Low damage
-            3,      // Slow fire rate
-            10,     // Medium range
-            -7,     // Poor accuracy
-            4,      // Small magazine
-            20,     // Long reload
-            10,     // Slow projectile
-            0,      // Single shot
-            -5,     // Negative damping
-            Set.of(BulletEffect.POISON, BulletEffect.FRAGMENTING),  // 24 + 16 = 40 points
-            Ordinance.GRENADE  // 10 points, total: 50 + 40 + 10 = 100
-    );
-
-    // Wildfire Sprayer - Incendiary + Bouncy bouncing fire streams
-    public static final WeaponConfig WILDFIRE_SPRAYER_PRESET = new WeaponConfig(
-            "Wildfire Sprayer",
-            9,     // Low damage per stream
-            20,     // High fire rate
-            4,      // Very short range
-            -10,     // Poor accuracy
-            19,     // Large magazine
-            8,      // Fast reload
-            9,     // Medium speed
-            10,     // Many streams
-            -10,    // High negative damping
-            Set.of(BulletEffect.INCENDIARY, BulletEffect.BOUNCY),  // 18 + 15 = 33 points
-            Ordinance.FLAMETHROWER  // 8 points, total: 59 + 33 + 8 = 100
+            5,     // handling (nimble)
+            -5,     // caliber ×0.75
+            0,      // knockback (no recoil)
+            Set.of(BulletEffect.POISON, BulletEffect.PIERCING),  // effects: 42 pts
+            Ordinance.PROJECTILE  // total: 100 pts (attr 58 + fx 42 + ord 0)
     );
 
     // Frost Lance - Freezing + Piercing ice beam that slows all in line
     public static final WeaponConfig FROST_LANCE_PRESET = new WeaponConfig(
             "Frost Lance",
-            12,     // Medium damage
+            29,     // damage 39
             10,     // Medium fire rate
-            10,     // Long range
+            5,     // range ~533 units
             0,      // Perfect accuracy
             7,      // Small magazine
-            7,     // Medium reload
-            15,     // Fast projectile
+            3,     // reload ~3.04s
+            17,     // projectile speed
             0,      // Single shot
             -10,    // Negative damping
-            Set.of(BulletEffect.FREEZING, BulletEffect.PIERCING),  // 14 + 20 = 34 points
-            Ordinance.PLASMA  // 15 points, total: 51 + 34 + 15 = 100
+            0,      // handling (move-speed mult)
+            5,     // caliber ×1.25
+            0,      // knockback (no recoil)
+            Set.of(BulletEffect.FREEZING, BulletEffect.PIERCING),  // effects: 34 pts
+            Ordinance.PROJECTILE  // total: 100 pts (attr 66 + fx 34 + ord 0)
     );
 
     // Shrapnel Cannon - Fragmenting + Explosive explosive fragments
     public static final WeaponConfig SHRAPNEL_CANNON_PRESET = new WeaponConfig(
             "Shrapnel Cannon",
-            14,     // Medium damage
+            25,     // damage 35
             8,     // Slow fire rate
-            9,     // Medium range
+            5,     // range ~533 units
             -3,     // Slight inaccuracy
-            3,      // Small magazine
-            5,     // Long reload
-            7,      // Slow projectile
-            0,      // Single shot
-            -10,    // Negative damping
-            Set.of(BulletEffect.FRAGMENTING, BulletEffect.EXPLOSIVE),  // 22 + 25 = 47 points
-            Ordinance.ROCKET  // 20 points, total: 45 + 47 + 20 = 100
-    );
-
-    // Seeking Inferno - Incendiary + Homing heat-seeking fire darts
-    public static final WeaponConfig SEEKING_INFERNO_PRESET = new WeaponConfig(
-            "Seeking Inferno",
-            10,      // Low damage
-            12,     // Medium fire rate
-            9,     // Medium range
-            0,      // Good accuracy
-            9,     // Medium magazine
-            8,     // Medium reload
-            9,     // Fast projectile
-            0,      // Single shot
-            -10,    // Negative damping
-            Set.of(BulletEffect.INCENDIARY, BulletEffect.HOMING),  // 18 + 30 = 48 points
-            Ordinance.DART  // 5 points, total: 47 + 48 + 5 = 100
-    );
-
-    // EMP Burst Gun - Electric + Fragmenting splits into electric bursts
-    public static final WeaponConfig EMP_BURST_GUN_PRESET = new WeaponConfig(
-            "EMP Burst Gun",
-            14,     // Low damage
-            12,     // Slow fire rate
-            12,     // Medium range
-            0,      // Good accuracy
             8,      // Small magazine
-            11,     // Medium reload
-            15,     // Medium projectile
+            2,     // reload ~3.32s
+            3,     // projectile speed
             0,      // Single shot
             -10,    // Negative damping
-            Set.of(BulletEffect.ELECTRIC, BulletEffect.FRAGMENTING),  // 16 + 22 = 38 points
-            Ordinance.BULLET  // 0 points, total: 62 + 38 = 100
-    );
-
-    // Glacial Mortar - Freezing + Explosive ice grenade area freeze
-    public static final WeaponConfig GLACIAL_MORTAR_PRESET = new WeaponConfig(
-            "Glacial Mortar",
-            20,     // Medium damage
-            13,     // Slow fire rate
-            12,     // Good range
-            -5,     // Poor accuracy
-            4,      // Small magazine
-            7,     // Long reload
-            10,     // Slow projectile
-            0,      // Single shot
-            -10,    // Negative damping
-            Set.of(BulletEffect.FREEZING, BulletEffect.EXPLOSIVE),  // 14 + 25 = 39 points
-            Ordinance.GRENADE  // 10 points, total: 51 + 39 + 10 = 100
+            -5,     // handling (heavy)
+            16,     // caliber ×1.80 (4 pts → knockback)
+            4,      // knockback → 160k (cannon blast; fragments inherit the punch)
+            Set.of(BulletEffect.FRAGMENTING, BulletEffect.EXPLOSIVE),  // effects: 47 pts
+            Ordinance.PROJECTILE  // total: 100 pts (attr 53 + fx 47 + ord 0)
     );
 
     // Phantom Needles - Homing + Bouncy tracking darts that bounce
     public static final WeaponConfig PHANTOM_NEEDLES_PRESET = new WeaponConfig(
             "Phantom Needles",
             6,      // Very low damage
-            20,     // High fire rate
-            8,     // Medium range
+            30,     // fire rate ~7.1 shots/s
+            4,     // range ~466 units
             -5,      // Good accuracy
-            13,     // Medium magazine
-            5,     // Fast reload
-            13,     // Fast projectile
+            12,     // magazine 22 rounds
+            2,     // reload ~3.32s
+            16,     // projectile speed
             0,      // Single shot
             -10,    // Negative damping
-            Set.of(BulletEffect.HOMING, BulletEffect.BOUNCY),  // 30 + 15 = 45 points
-            Ordinance.DART  // 5 points, total: 50 + 45 + 5 = 100
-    );
-
-    // Corrosive Cannon - Poison + Explosive massive poison explosion
-    public static final WeaponConfig CORROSIVE_CANNON_PRESET = new WeaponConfig(
-            "Corrosive Cannon",
-            13,     // Medium damage
-            7,     // Very slow fire rate
-            12,     // Medium range
-            0,      // Perfect accuracy
-            2,      // Tiny magazine
-            5,     // Long reload
-            8,      // Slow projectile
-            0,      // Single shot
-            -10,    // Negative damping
-            Set.of(BulletEffect.POISON, BulletEffect.EXPLOSIVE),  // 18 + 25 = 43 points
-            Ordinance.ROCKET  // 20 points, total: 51 + 43 + 20 = 100
+            5,     // handling (nimble)
+            -5,     // caliber ×0.75
+            0,      // knockback (no recoil)
+            Set.of(BulletEffect.HOMING, BulletEffect.BOUNCY),  // effects: 45 pts
+            Ordinance.PROJECTILE  // total: 100 pts (attr 55 + fx 45 + ord 0)
     );
 
     public int getAttributePoints() {
-        return damage + fireRate + range + accuracy + magazineSize + reloadTime + projectileSpeed + bulletsPerShot + linearDamping;
+        return damage + fireRate + range + accuracy + magazineSize + reloadTime + projectileSpeed + bulletsPerShot + linearDamping + handling + caliber + knockback;
     }
 }

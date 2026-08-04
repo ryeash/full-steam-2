@@ -1,41 +1,45 @@
 package com.fullsteam.physics;
 
-import lombok.Getter;
-import lombok.Setter;
+import com.fullsteam.Config;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 /**
  * King of the Hill zone - a circular area that awards points to the team with the most players inside.
  * Zones are sensor entities that detect player presence without physical collision.
  */
-@Getter
-@Setter
+@Data
+@EqualsAndHashCode(callSuper = true)
 public class KothZone extends GameEntity {
-    private static final double ZONE_RADIUS = 80.0; // Large enough for multiple players
+    /**
+     * Zone state enum
+     */
+    public enum ZoneState {
+        NEUTRAL,      // No team controls the zone
+        CONTROLLED,   // A team controls the zone (has majority)
+        CONTESTED     // Multiple teams fighting for control (tied)
+    }
+
+    private static final double ZONE_RADIUS = Config.PLAYER_RADIUS * 6; // Large enough for multiple players
 
     private final int zoneNumber; // 0-3 for up to 4 zones
     private final Vector2 homePosition; // Fixed position
     private final double pointsPerSecond; // Points awarded per second for controlling this zone
 
     // Control tracking
-    private int controllingTeam = -1; // -1 = contested/neutral, 0+ = team number
+    private int controllingTeam = -1;   // -1 = contested/neutral, 1+ = team number (team mode)
+    private int controllingPlayerId = -1; // used in FFA mode instead of controllingTeam
     private ZoneState state = ZoneState.NEUTRAL;
 
-    /**
-     * -- GETTER --
-     * Get the players currently in the zone.
-     */
     // Player tracking
     private Set<Player> playersInZone = new HashSet<>();
-    private final Map<Integer, Double> teamScores = new HashMap<>(); // teamNumber -> total points earned
 
     public KothZone(int id, int zoneNumber, double x, double y, double pointsPerSecond) {
         super(id, createZoneBody(x, y), Double.POSITIVE_INFINITY); // Zones are indestructible
@@ -59,18 +63,33 @@ public class KothZone extends GameEntity {
         if (playersInZone.isEmpty()) {
             state = ZoneState.NEUTRAL;
             controllingTeam = -1;
+            controllingPlayerId = -1;
             return;
         }
-        long teamCount = playersInZone.stream().map(Player::getTeam).distinct().count();
-        boolean contested = teamCount > 1;
-        if (contested) {
-            // Zone is contested - no team gets points
-            state = ZoneState.CONTESTED;
+
+        // FFA detection: all players share team 0 in free-for-all mode.
+        boolean isFfa = playersInZone.stream().allMatch(p -> p.getTeam() == 0);
+
+        if (isFfa) {
+            // In FFA each player is their own unit — sole occupant controls the zone.
             controllingTeam = -1;
+            if (playersInZone.size() == 1) {
+                state = ZoneState.CONTROLLED;
+                controllingPlayerId = playersInZone.iterator().next().getId();
+            } else {
+                state = ZoneState.CONTESTED;
+                controllingPlayerId = -1;
+            }
         } else {
-            // One team has majority - they control the zone immediately
-            state = ZoneState.CONTROLLED;
-            controllingTeam = playersInZone.iterator().next().getTeam();
+            controllingPlayerId = -1;
+            long distinctTeams = playersInZone.stream().map(Player::getTeam).distinct().count();
+            if (distinctTeams > 1) {
+                state = ZoneState.CONTESTED;
+                controllingTeam = -1;
+            } else {
+                state = ZoneState.CONTROLLED;
+                controllingTeam = playersInZone.iterator().next().getTeam();
+            }
         }
     }
 
@@ -90,10 +109,10 @@ public class KothZone extends GameEntity {
 
     /**
      * Check if the zone should award points.
-     * Awards points when a team has majority control (not contested).
+     * Awards points when a single entity (team or player) controls the zone uncontested.
      */
     public boolean shouldAwardPoints() {
-        return state == ZoneState.CONTROLLED && controllingTeam >= 0;
+        return state == ZoneState.CONTROLLED && (controllingTeam >= 0 || controllingPlayerId >= 0);
     }
 
     /**
@@ -118,43 +137,5 @@ public class KothZone extends GameEntity {
      */
     public double getCaptureProgress() {
         return state == ZoneState.CONTROLLED ? 1.0 : 0.0;
-    }
-
-    /**
-     * Award points to a team for controlling this zone.
-     *
-     * @param team   The team number to award points to
-     * @param points The number of points to award
-     */
-    public void awardPointsToTeam(int team, double points) {
-        teamScores.put(team, teamScores.getOrDefault(team, 0.0) + points);
-    }
-
-    /**
-     * Get the total points earned by a team from this zone.
-     *
-     * @param team The team number
-     * @return The total points earned by this team
-     */
-    public double getTeamScore(int team) {
-        return teamScores.getOrDefault(team, 0.0);
-    }
-
-    /**
-     * Get all team scores for this zone.
-     *
-     * @return A map of team number to total points earned
-     */
-    public Map<Integer, Double> getAllTeamScores() {
-        return new HashMap<>(teamScores);
-    }
-
-    /**
-     * Zone state enum
-     */
-    public enum ZoneState {
-        NEUTRAL,      // No team controls the zone
-        CONTROLLED,   // A team controls the zone (has majority)
-        CONTESTED     // Multiple teams fighting for control (tied)
     }
 }

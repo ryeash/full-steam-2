@@ -1,10 +1,10 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.Config;
-import com.fullsteam.util.IdGenerator;
 import com.fullsteam.model.AttributeModification;
-import com.fullsteam.model.Ordinance;
+import com.fullsteam.model.HasWeapon;
 import com.fullsteam.model.PlayerInput;
+import com.fullsteam.model.Scoring;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.Weapon;
 import com.fullsteam.model.WeaponConfig;
@@ -15,15 +15,12 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Getter
 @Setter
-public class Player extends GameEntity {
+public class Player extends OwnedGameEntity implements HasWeapon {
     private String playerName;
     private int team; // 0 = no team (FFA), 1+ = team number
     private Weapon weapon;
@@ -33,13 +30,13 @@ public class Player extends GameEntity {
     private Vector2 aimDirection = new Vector2(1, 0);
     private long lastShotTime = 0;
     private long lastUtilityUseTime = 0;
-    private int kills = 0;
-    private int deaths = 0;
-    private int captures = 0; // Flag captures in CTF mode
+    private Scoring scoring = new Scoring();
     private long respawnTime = 0;
     private Vector2 respawnPoint;
     private double maxSpeed = Config.PLAYER_SPEED;
-    private final Set<AttributeModification> attributeModifications = new HashSet<>();
+    private final Set<AttributeModification> attributeModifications = ConcurrentHashMap.newKeySet();
+
+    private boolean visionObscured = false; // Set true each tick while inside SMOKE field, reset before collision processing
 
     private int livesRemaining = -1; // -1 = unlimited, 0 = eliminated
     private boolean eliminated = false; // Permanently eliminated (no more respawns)
@@ -47,7 +44,7 @@ public class Player extends GameEntity {
     private int placement = 0; // Final placement in elimination modes (1 = winner, 2 = 2nd place, etc.)
 
     public Player(int id, String playerName, double x, double y, int team, double maxHealth) {
-        super(id, createPlayerBody(x, y), maxHealth);
+        super(id, createPlayerBody(x, y), maxHealth, id, team);
         this.playerName = playerName != null ? playerName : "Player " + id;
         this.team = team;
         this.respawnPoint = new Vector2(x, y);
@@ -155,6 +152,9 @@ public class Player extends GameEntity {
         if (primary != null) {
             weapon = primary.buildWeapon();
             weapon.reload();
+            // Handling scales the wielder's move speed (1.0 = baseline). Heavy
+            // weapons (incl. the DAMAGE→HANDLING coupling) move you slower.
+            this.maxSpeed = Config.PLAYER_SPEED * weapon.getHandling();
         }
         if (utility != null) {
             this.utilityWeapon = utility;
@@ -162,7 +162,7 @@ public class Player extends GameEntity {
     }
 
     public boolean canShoot() {
-        Weapon weapon = this.weapon;
+        Weapon weapon = this.getCurrentWeapon();
         long now = System.currentTimeMillis();
         double fireInterval = 1000.0 / weapon.getFireRate();
         // Check if we have enough ammo for at least one bullet (partial bursts are allowed)
@@ -184,101 +184,28 @@ public class Player extends GameEntity {
     }
 
     /**
+     * Utility-weapon cooldown progress for the HUD ring: 0.0 just after use,
+     * ramping to 1.0 when the utility is ready again. Returns 1.0 when there is no
+     * utility or no cooldown.
+     */
+    public double getUtilityCooldownProgress() {
+        if (utilityWeapon == null) {
+            return 1.0;
+        }
+        double cooldownMs = utilityWeapon.getCooldown() * 1000.0;
+        if (cooldownMs <= 0) {
+            return 1.0;
+        }
+        double elapsed = System.currentTimeMillis() - lastUtilityUseTime;
+        return Math.max(0.0, Math.min(1.0, elapsed / cooldownMs));
+    }
+
+    /**
      * Refund the utility cooldown (e.g. when placement fails).
      * Resets the cooldown timer to allow immediate reuse.
      */
     public void refundUtilityCooldown() {
         lastUtilityUseTime = 0;
-    }
-
-    public List<Projectile> shoot() {
-        Weapon weapon = this.weapon; // Always use primary weapon
-        if (!canShoot()) {
-            if (!isReloading && weapon.getCurrentAmmo() <= 0) {
-                startReload();
-            }
-            return List.of();
-        }
-
-        lastShotTime = System.currentTimeMillis();
-
-        Vector2 pos = getPosition();
-        Vector2 baseDirection = aimDirection.copy();
-        double baseAngle = Math.atan2(baseDirection.y, baseDirection.x);
-
-        int bulletsPerShot = weapon.getBulletsPerShot();
-        int actualBulletsToFire = Math.min(bulletsPerShot, weapon.getCurrentAmmo());
-        weapon.setCurrentAmmo(weapon.getCurrentAmmo() - actualBulletsToFire);
-
-        // Calculate maximum accuracy-based spread for each bullet
-        double maxAccuracySpread = (1.0 - weapon.getAccuracy()) * 0.17; // Reduced from 0.2 for multi-shot
-
-        List<Projectile> toFire = new LinkedList<>();
-        // Store additional projectiles for GameManager to retrieve
-        double angle = baseAngle;
-        for (int i = 0; i < actualBulletsToFire; i++) {
-            // Apply random accuracy spread independently for each bullet
-            angle += (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * maxAccuracySpread;
-
-            Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
-            Vector2 velocity = direction.multiply(weapon.getProjectileSpeed());
-
-            toFire.add(new Projectile(
-                    id,
-                    pos.x + ((i > 0) ? ThreadLocalRandom.current().nextDouble(-3, 3) : 0),
-                    pos.y + ((i > 0) ? ThreadLocalRandom.current().nextDouble(-3, 3) : 0),
-                    velocity.x,
-                    velocity.y,
-                    weapon.getDamage(),
-                    weapon.getRange(),
-                    team,
-                    weapon.getLinearDamping(),
-                    weapon.getBulletEffects(),
-                    weapon.getOrdinance()
-            ));
-
-        }
-        return toFire;
-    }
-
-    /**
-     * Shoot a beam weapon instead of projectiles
-     *
-     * @return Beam object if weapon can fire beams and conditions are met, null otherwise
-     */
-    public Beam shootBeam() {
-        Weapon weapon = this.weapon; // Always use primary weapon
-        if (!canShoot() || !weapon.getOrdinance().isBeamType()) {
-            if (!isReloading && weapon.getCurrentAmmo() <= 0) {
-                startReload();
-            }
-            return null;
-        }
-
-        lastShotTime = System.currentTimeMillis();
-        weapon.setCurrentAmmo(weapon.getCurrentAmmo() - 1); // Beams consume 1 ammo
-
-        Vector2 pos = getPosition();
-        Vector2 direction = aimDirection.copy();
-        direction.normalize();
-
-        Ordinance ordinance = weapon.getOrdinance();
-        double range = weapon.getRange() * 0.6; // Beams have 60% the range of bullets
-        double damage = weapon.getDamage();
-
-        // Create the appropriate beam type based on ordinance
-        return createBeamFromOrdinance(ordinance, pos, direction, range, damage);
-    }
-
-    /**
-     * Factory method to create a beam based on ordinance (simplified single-class approach)
-     */
-    private Beam createBeamFromOrdinance(Ordinance ordinance, Vector2 startPoint, Vector2 direction,
-                                         double range, double damage) {
-        int beamId = IdGenerator.nextEntityId();
-
-        // Single Beam class handles all beam types via ordinance
-        return new Beam(beamId, startPoint, direction, range, damage, getId(), getTeam(), ordinance, weapon.getBulletEffects());
     }
 
     /**
@@ -303,36 +230,33 @@ public class Player extends GameEntity {
         );
     }
 
-    /**
-     * Data class for utility weapon activation
-     */
-    public static class UtilityActivation {
-        public final UtilityWeapon utilityWeapon;
-        public final Vector2 position;
-        public final Vector2 direction;
-        public final int playerId;
-        public final int team;
-
-        public UtilityActivation(UtilityWeapon utilityWeapon, Vector2 position, Vector2 direction, int playerId, int team) {
-            this.utilityWeapon = utilityWeapon;
-            this.position = position;
-            this.direction = direction;
-            this.playerId = playerId;
-            this.team = team;
-        }
-    }
-
-    private void startReload() {
-        Weapon weapon = this.weapon; // Always reload primary weapon
+    public void startReload() {
+        Weapon weapon = this.getCurrentWeapon();
         if (weapon.needsReload()) {
             isReloading = true;
             reloadTimeRemaining = weapon.getReloadTime();
         }
     }
 
+    /**
+     * Reload progress for player HUD / reload bar: 0.0 when reloading just started,
+     * ramping to 1.0 when reload is complete. Returns 1.0 when not reloading.
+     */
+    public double getReloadPercent() {
+        if (!isReloading || weapon == null) {
+            return 1.0;
+        }
+        double totalTime = weapon.getReloadTime();
+        if (totalTime <= 0) {
+            return 1.0;
+        }
+        double elapsed = totalTime - reloadTimeRemaining;
+        return Math.max(0.0, Math.min(1.0, elapsed / totalTime));
+    }
+
     public void die() {
         active = false;
-        deaths++;
+        scoring.addDeath();
         health = 0;
         attributeModifications.removeIf(am -> {
             am.revert(this);
@@ -341,11 +265,38 @@ public class Player extends GameEntity {
     }
 
     public void addKill() {
-        kills++;
+        scoring.addKill();
     }
 
     public void addCapture() {
-        captures++;
+        scoring.addCapture();
+    }
+
+    // --- Convenience delegators so existing call sites keep working while all
+    //     scoring state lives in the Scoring object. ---
+
+    public int getKills() {
+        return scoring.getKills();
+    }
+
+    public void setKills(int kills) {
+        scoring.setKills(kills);
+    }
+
+    public int getDeaths() {
+        return scoring.getDeaths();
+    }
+
+    public void setDeaths(int deaths) {
+        scoring.setDeaths(deaths);
+    }
+
+    public int getCaptures() {
+        return scoring.getFlagCaptures();
+    }
+
+    public void setCaptures(int captures) {
+        scoring.setFlagCaptures(captures);
     }
 
     /**
@@ -357,8 +308,9 @@ public class Player extends GameEntity {
     }
 
     /**
-     * Consume one life. Returns true if player is now eliminated.
-     * In ELIMINATION mode (livesRemaining = -1), first death eliminates the player.
+     * Consume one life. Returns true if player is now eliminated. Modes without
+     * limited lives leave livesRemaining = -1 (unlimited), so this is a no-op for
+     * them; LIMITED with maxLives = 1 eliminates on first death (one-life play).
      */
     public boolean loseLife() {
         if (livesRemaining > 0) {
@@ -409,12 +361,10 @@ public class Player extends GameEntity {
         if (!active) {
             return false;
         }
-
         double modifiedDamage = damage;
         for (AttributeModification attributeModification : attributeModifications) {
             modifiedDamage = attributeModification.modifyDamageReceived(modifiedDamage);
         }
-
         return super.takeDamage(modifiedDamage);
     }
 

@@ -1,7 +1,8 @@
 package com.fullsteam.physics;
 
-import com.fullsteam.util.IdGenerator;
-import com.fullsteam.model.Ordinance;
+import com.fullsteam.Config;
+import com.fullsteam.model.FieldEffectBeam;
+import com.fullsteam.model.FieldEffectType;
 import lombok.Getter;
 import lombok.Setter;
 import org.dyn4j.dynamics.Body;
@@ -13,73 +14,75 @@ import org.dyn4j.world.World;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Defense Laser utility weapon that creates three rotating plasma beams
- * around itself for area denial and damage over time
+ * around itself for area denial and damage over time.
+ *
+ * <p>The three arm beams are {@link FieldEffectBeam} objects held directly by this
+ * entity (not added to the global {@code fieldEffects} map). Their geometry is
+ * updated in-place every tick via {@link #updateBeamPositions()}; the
+ * {@link com.fullsteam.games.GameManager} reads their current start/end points to
+ * compute obstacle-clipped effective endpoints each frame.
  */
 @Getter
 @Setter
-public class DefenseLaser extends GameEntity {
-    private final int ownerId;
-    private final int ownerTeam;
+public class DefenseLaser extends OwnedGameEntity {
     private final double detectionRange;
     private final double beamLength;
     private final double rotationSpeed; // radians per second
     private final double damage;
     private final long expires;
-    
-    // Three rotating beams
-    private final List<Beam> beams = new ArrayList<>();
-    private double currentRotation = 0.0;
+
+    // Three rotating arm beams (not added to the global fieldEffects map)
+    private final List<FieldEffectBeam> beams = new ArrayList<>();
+    private double currentRotation = ThreadLocalRandom.current().nextDouble(2 * Math.PI);
     private final World<Body> world;
 
-    public DefenseLaser(int id, int ownerId, int ownerTeam, Vector2 position, double lifespan, World<Body> world) {
-        super(id, createDefenseLaserBody(position), 75.0); // 75 HP
-        this.ownerId = ownerId;
-        this.ownerTeam = ownerTeam;
+    public DefenseLaser(int ownerId, int ownerTeam, Vector2 position, double lifespan, World<Body> world) {
+        super(Config.nextEntityId(), createDefenseLaserBody(position), 75.0, ownerId, ownerTeam); // 75 HP
         this.detectionRange = 300.0;
         this.beamLength = 200.0;
         this.rotationSpeed = Math.PI / 2.0; // 90 degrees per second
-        this.damage = 40.0; // Moderate DOT damage
+        this.damage = 80.0; // Moderate DOT damage
         this.expires = (long) (System.currentTimeMillis() + (lifespan * 1000));
         this.world = world;
-        
-        // Create initial beams at 120-degree intervals
         createRotatingBeams();
     }
 
     private static Body createDefenseLaserBody(Vector2 position) {
         Body body = new Body();
-        Circle circle = new Circle(20.0 * 0.8); // Slightly smaller than player (20.0 is player radius)
+        Circle circle = new Circle(Config.PLAYER_RADIUS * 0.8);
         body.addFixture(circle);
-        body.setMass(MassType.INFINITE); // Stationary
+        body.setMass(MassType.INFINITE);
         body.getTransform().setTranslation(position.x, position.y);
         return body;
     }
 
     /**
-     * Create the three rotating beams at 120-degree intervals
+     * Create the three arm beams at 120-degree intervals.
      */
     private void createRotatingBeams() {
         beams.clear();
         Vector2 center = getPosition();
-        
+
         for (int i = 0; i < 3; i++) {
             double angle = currentRotation + (i * 2 * Math.PI / 3);
             Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
-            
-            Beam beam = new Beam(
-                IdGenerator.nextEntityId(),
-                center,
-                direction,
-                beamLength,
-                damage,
-                ownerId,
-                ownerTeam,
-                Ordinance.PLASMA_BEAM, // Reuse existing plasma beam
-                Set.of() // No special effects needed
+
+            FieldEffectBeam beam = new FieldEffectBeam(
+                    center,
+                    direction,
+                    beamLength,
+                    damage,
+                    ownerId,
+                    ownerTeam,
+                    FieldEffectType.PLASMA,
+                    Set.of(),
+                    1.0
             );
+            // Arm beams live as long as the DefenseLaser itself.
             beam.setExpires(this.getExpires());
             beams.add(beam);
         }
@@ -91,59 +94,35 @@ public class DefenseLaser extends GameEntity {
             return;
         }
 
-        // Check expiration
         if (System.currentTimeMillis() > expires) {
             active = false;
             return;
         }
 
-        // Rotate beams
         currentRotation += rotationSpeed * deltaTime;
         updateBeamPositions();
-        
+
         lastUpdateTime = System.currentTimeMillis();
     }
 
     /**
-     * Update the positions and directions of all three beams
-     * Now that Beam endPoint is mutable, we can update existing beams efficiently
+     * Update the positions and directions of all three arm beams in-place.
      */
     private void updateBeamPositions() {
         Vector2 center = getPosition();
-        
+
         for (int i = 0; i < beams.size(); i++) {
-            Beam beam = beams.get(i);
+            FieldEffectBeam beam = beams.get(i);
             double angle = currentRotation + (i * 2 * Math.PI / 3);
             Vector2 direction = new Vector2(Math.cos(angle), Math.sin(angle));
-            
-            // Update beam start point (if needed)
+
             beam.getStartPoint().set(center);
-            
-            // Update beam direction
             beam.getDirection().set(direction);
             beam.getDirection().normalize();
-            
-            // Update beam end point
-            Vector2 offset = direction.copy();
-            offset.multiply(beamLength);
+
+            Vector2 offset = direction.copy().multiply(beamLength);
             beam.getEndPoint().set(center);
             beam.getEndPoint().add(offset);
-            
-            // Note: Effective endpoint will be updated by WeaponSystem via updateBeamEffectiveEndpoints()
-        }
-    }
-    
-    /**
-     * Update the effective endpoints of all beams based on obstacle collisions.
-     * This method should be called by WeaponSystem after updateBeamPositions().
-     */
-    public void updateBeamEffectiveEndpoints(Vector2[] effectiveEndpoints) {
-        if (effectiveEndpoints.length != beams.size()) {
-            throw new IllegalArgumentException("Effective endpoints array size must match beam count");
-        }
-        
-        for (int i = 0; i < beams.size(); i++) {
-            beams.get(i).setEffectiveEndPoint(effectiveEndpoints[i]);
         }
     }
 }

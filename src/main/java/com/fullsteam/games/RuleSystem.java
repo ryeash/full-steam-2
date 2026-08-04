@@ -1,21 +1,16 @@
 package com.fullsteam.games;
 
 import com.fullsteam.ai.AIWeaponSelector;
-import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.GameState;
 import com.fullsteam.model.RespawnMode;
-import com.fullsteam.model.RoundScore;
 import com.fullsteam.model.Rules;
-import com.fullsteam.model.ScoreStyle;
+import com.fullsteam.model.Scoring;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.VictoryCondition;
 import com.fullsteam.model.WeaponConfig;
-import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
-import com.fullsteam.physics.KothZone;
 import com.fullsteam.physics.Player;
-import com.fullsteam.physics.PowerUp;
 import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,16 +39,9 @@ public class RuleSystem {
     // Event system (optional)
     private EventSystem eventSystem = null;
 
-    // Round state
+    // Game state (always PLAYING; games run continuously until a victory condition ends them)
     @Getter
-    private GameState gameState = GameState.PLAYING;
-    @Getter
-    private int currentRound = 1;
-    @Getter
-    private long roundEndTime = 0L;
-    @Getter
-    private long restTimeEnd = 0L;
-    private final Map<Integer, RoundScore> roundScores = new HashMap<>();
+    private final GameState gameState = GameState.PLAYING;
 
     // Victory state
     @Getter
@@ -67,14 +55,9 @@ public class RuleSystem {
     @Getter
     private long waveRespawnTime = 0;
 
-    // Bonus points tracking (for HQ damage, objectives, etc.)
-    private final Map<Integer, Integer> bonusTeamPoints = new HashMap<>();
-
-    // Oddball scoring tracking (playerId -> total points earned)
-    private final Map<Integer, Double> oddballPlayerScores = new HashMap<>();
-
-    // VIP kill tracking (team number -> VIP kills scored)
-    private final Map<Integer, Integer> vipKillScores = new HashMap<>();
+    // All scoring (kills, captures, KOTH, oddball, HQ damage, VIP kills, etc.) is
+    // tracked per player in Player.getScoring(); team/FFA totals are derived by
+    // summing Scoring.total(rules). See com.fullsteam.model.Scoring.
 
     // VIP validation timer (check every 2 seconds)
     private long lastVipCheckTime = 0;
@@ -93,11 +76,6 @@ public class RuleSystem {
         this.broadcaster = broadcaster;
         this.teamCount = teamCount;
 
-        // Initialize round timer if rounds are enabled
-        if (rules.getRoundDuration() > 0) {
-            this.roundEndTime = (long) (System.currentTimeMillis() + (rules.getRoundDuration() * 1000));
-        }
-
         // Initialize VIP mode if enabled
         if (rules.hasVip()) {
             initializeVipMode();
@@ -109,16 +87,11 @@ public class RuleSystem {
         }
     }
 
-    // ===== UPDATE METHODS =====
-
     /**
      * Initialize the event system if enabled.
      * Must be called after construction with the required dependencies.
      */
-    public void initializeEventSystem(TerrainGenerator terrainGenerator,
-                                      Consumer<FieldEffect> fieldEffectSpawner,
-                                      Consumer<PowerUp> powerUpSpawner,
-                                      double worldWidth, double worldHeight) {
+    public void initializeEventSystem(TerrainGenerator terrainGenerator, double worldWidth, double worldHeight) {
         if (rules.isEnableRandomEvents() && eventSystem == null) {
             this.eventSystem = new EventSystem(
                     gameId,
@@ -165,10 +138,10 @@ public class RuleSystem {
         }
 
         // Select first player as VIP (could be randomized or based on score)
-        Player vip = teamPlayers.get(0);
+        Player vip = teamPlayers.getFirst();
         setPlayerAsVip(vip);
 
-        log.info("Player {} ({}) selected as VIP for team {}",
+        log.debug("Player {} ({}) selected as VIP for team {}",
                 vip.getId(), vip.getPlayerName(), teamNumber);
     }
 
@@ -194,8 +167,7 @@ public class RuleSystem {
 
         // Broadcast VIP selection event
         gameEventManager.broadcastSystemMessage(
-                String.format("👑 %s is now the VIP for Team %d!",
-                        player.getPlayerName(), teamNumber));
+                String.format("👑 %s is now the VIP for Team %d!", player.getPlayerName(), teamNumber));
     }
 
     /**
@@ -241,23 +213,6 @@ public class RuleSystem {
     }
 
     /**
-     * Award points for a VIP kill.
-     * Only VIP kills count towards objective scoring in VIP mode.
-     */
-    public void awardVipKill(int killerTeam) {
-        if (!rules.hasVip() || killerTeam <= 0) {
-            return;
-        }
-
-        vipKillScores.merge(killerTeam, 1, Integer::sum);
-        log.info("Team {} scored VIP kill. Total VIP kills: {} (Score Style: {})",
-                killerTeam, vipKillScores.get(killerTeam), rules.getScoreStyle());
-
-        // Check victory conditions after VIP kill
-        checkVictoryConditions();
-    }
-
-    /**
      * Update all rule systems with the given time delta.
      */
     public void update(double deltaTime) {
@@ -265,14 +220,14 @@ public class RuleSystem {
             return;
         }
 
-        // Update round state if rounds are enabled
-        if (rules.getRoundDuration() > 0) {
-            updateRoundState();
-        }
-
         // Update wave respawn timer if using wave mode
         if (rules.usesWaveRespawn()) {
             updateWaveRespawn();
+        }
+
+        // Release the waiting group if the arena has collapsed to one survivor
+        if (rules.usesLastStanding()) {
+            updateLastStanding();
         }
 
         // Update event system if enabled
@@ -294,121 +249,48 @@ public class RuleSystem {
         checkVictoryConditions();
     }
 
-    private void updateRoundState() {
-        switch (gameState) {
-            case PLAYING:
-                updatePlayingState();
-                break;
-            case ROUND_END:
-                updateRoundEndState();
-                break;
-            case REST_PERIOD:
-                updateRestPeriodState();
-                break;
-        }
-    }
-
-    private void updatePlayingState() {
-        if (System.currentTimeMillis() > roundEndTime) {
-            endRound();
-        }
-    }
-
-    private void endRound() {
-        gameState = GameState.ROUND_END;
-        roundEndTime = 0;
-        restTimeEnd = (long) (System.currentTimeMillis() + (rules.getRestDuration() * 1000));
-
-        // Capture current scores
-        roundScores.clear();
-        for (Player player : gameEntities.getAllPlayers()) {
-            // Get team bonus points for this player's team
-            int teamBonus = bonusTeamPoints.getOrDefault(player.getTeam(), 0);
-
-            RoundScore score = RoundScore.builder()
-                    .playerId(player.getId())
-                    .playerName(player.getPlayerName())
-                    .team(player.getTeam())
-                    .kills(player.getKills())
-                    .deaths(player.getDeaths())
-                    .captures(player.getCaptures())
-                    .bonusPoints(teamBonus)
-                    .build();
-            roundScores.put(player.getId(), score);
-        }
-
-        log.info("Round {} ended in game {}. {} players scored.", currentRound, gameId, roundScores.size());
-
-        // Broadcast round end event with scores
-        Map<String, Object> roundEndEvent = new HashMap<>();
-        roundEndEvent.put("type", "roundEnd");
-        roundEndEvent.put("round", currentRound);
-        roundEndEvent.put("scores", new ArrayList<>(roundScores.values()));
-        roundEndEvent.put("restDuration", rules.getRestDuration());
-        broadcaster.accept(roundEndEvent);
-    }
-
-    private void updateRoundEndState() {
-        gameState = GameState.REST_PERIOD;
-    }
-
-    private void updateRestPeriodState() {
-        if (System.currentTimeMillis() > restTimeEnd) {
-            startNextRound();
-        }
-    }
-
-    /**
-     * Start the next round - to be called by GameManager for player reset logic.
-     * Returns true if a new round was started.
-     */
-    public void startNextRound() {
-        currentRound++;
-        gameState = GameState.PLAYING;
-        roundEndTime = (long) (System.currentTimeMillis() + (rules.getRoundDuration() * 1000));
-        restTimeEnd = 0;
-
-        // Reset player lives for stock mode (LIMITED respawn mode)
-        resetPlayerLivesForNewRound();
-
-        gameEntities.getPlayers().values().forEach(p -> {
-            // force a respawn of all players
-            p.setActive(false);
-            p.setRespawnTime(1L);
-            // reset scoring
-            p.setKills(0);
-            p.setDeaths(0);
-        });
-
-        bonusTeamPoints.clear();
-        vipKillScores.clear();
-
-        gameEntities.getFlags().values().forEach(Flag::returnToHome);
-        gameEntities.getDefenseLasers().clear();
-        gameEntities.getFieldEffects().clear();
-        gameEntities.getBeams().clear();
-        gameEntities.getProjectiles().clear();
-
-        // Reassign VIPs for new round
-        if (rules.hasVip()) {
-            for (int team = 1; team <= teamCount; team++) {
-                selectVipForTeam(team);
-            }
-        }
-
-        // Broadcast round start event
-        Map<String, Object> roundStartEvent = new HashMap<>();
-        roundStartEvent.put("type", "roundStart");
-        roundStartEvent.put("round", currentRound);
-        roundStartEvent.put("duration", rules.getRoundDuration());
-        broadcaster.accept(roundStartEvent);
-    }
-
     private void updateWaveRespawn() {
         if (System.currentTimeMillis() >= waveRespawnTime) {
             // Broadcast wave respawn event
             gameEventManager.broadcastSystemMessage("⚡ Wave Respawn!");
             waveRespawnTime = (long) (System.currentTimeMillis() + (rules.getWaveRespawnInterval() * 1000));
+        }
+    }
+
+    /**
+     * "Last one standing" respawn: dead players are parked (no timer) until the
+     * arena resolves to a single survivor — one alive player in FFA, or one team
+     * with anyone still alive in team mode — then the whole waiting group respawns
+     * together. Requires at least one waiting player so it never fires at match
+     * start or with a lone participant in the lobby.
+     */
+    private void updateLastStanding() {
+        var all = gameEntities.getAllPlayers();
+
+        // Players held out awaiting the next skirmish (unlimited lives, so never eliminated).
+        List<Player> waiting = all.stream()
+                .filter(p -> !p.isActive() && !p.isEliminated())
+                .toList();
+        if (waiting.isEmpty()) {
+            return; // nothing to bring back yet — don't trigger at spawn
+        }
+
+        boolean collapsed;
+        if (teamCount > 0) {
+            // Last team standing == last man standing: only one team has anyone alive.
+            long teamsAlive = all.stream()
+                    .filter(Player::isActive)
+                    .map(Player::getTeam)
+                    .distinct()
+                    .count();
+            collapsed = teamsAlive <= 1;
+        } else {
+            collapsed = all.stream().filter(Player::isActive).count() <= 1;
+        }
+
+        if (collapsed) {
+            gameEventManager.broadcastSystemMessage("⚔️ Last one standing — respawning!");
+            waiting.forEach(p -> p.setRespawnTime(1L)); // release ASAP; GameManager respawns next tick
         }
     }
 
@@ -420,9 +302,10 @@ public class RuleSystem {
         if (player.isActive()) {
             return false; // Player is already active
         }
-        return player.hasLivesRemaining()
-                && player.getRespawnTime() > 0
-                && System.currentTimeMillis() > player.getRespawnTime();
+        boolean hasLives = player.hasLivesRemaining();
+        boolean hasRespawnTime = player.getRespawnTime() > 0;
+        boolean timeElapsed = System.currentTimeMillis() > player.getRespawnTime();
+        return hasLives && hasRespawnTime && timeElapsed;
     }
 
     public void setRespawnTime(Player player) {
@@ -431,23 +314,22 @@ public class RuleSystem {
             player.setRespawnTime(0);
             return;
         }
+        if (player.isEliminated()) {
+            log.debug("Player {} eliminated, no respawn", player.getId());
+            player.setRespawnTime(0);
+            return;
+        }
         switch (rules.getRespawnMode()) {
-            case INSTANT:
+            case DELAYED, LIMITED:
                 player.setRespawnTime((long) (System.currentTimeMillis() + (rules.getRespawnDelay() * 1000)));
                 break;
             case WAVE:
                 player.setRespawnTime(waveRespawnTime);
                 break;
-            case NEXT_ROUND:
-            case ELIMINATION:
-                player.setRespawnTime(roundEndTime);
-                break;
-            case LIMITED:
-                if (player.isEliminated()) {
-                    player.setRespawnTime(0);
-                } else {
-                    player.setRespawnTime((long) (System.currentTimeMillis() + (rules.getRespawnDelay() * 1000)));
-                }
+            case LAST_STANDING:
+                // Park indefinitely; updateLastStanding() releases the whole
+                // waiting group at once when the arena collapses to one survivor.
+                player.setRespawnTime(Long.MAX_VALUE);
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + rules.getRespawnMode());
@@ -473,9 +355,6 @@ public class RuleSystem {
                 break;
             case ELIMINATION:
                 checkEliminationVictory();
-                break;
-            case OBJECTIVE:
-                checkObjectiveVictory();
                 break;
         }
     }
@@ -567,7 +446,7 @@ public class RuleSystem {
     private void checkEliminationVictory() {
         RespawnMode respawnMode = rules.getRespawnMode();
 
-        if (respawnMode != RespawnMode.ELIMINATION && respawnMode != RespawnMode.LIMITED) {
+        if (respawnMode != RespawnMode.LIMITED) {
             return;
         }
 
@@ -609,10 +488,6 @@ public class RuleSystem {
         }
     }
 
-    private void checkObjectiveVictory() {
-        // Objective victory uses score limit (e.g., CTF captures, KOTH points)
-        checkScoreLimitVictory();
-    }
 
     private void enableSuddenDeath() {
         if (gameOver) {
@@ -652,6 +527,7 @@ public class RuleSystem {
         victoryEvent.put("victoryMessage", message);
         victoryEvent.put("victoryCondition", rules.getVictoryCondition());
         victoryEvent.put("finalScores", calculateFinalScores());
+        victoryEvent.put("scoringConfig", buildScoringConfig());
         broadcaster.accept(victoryEvent);
 
         gameEventManager.broadcastSystemMessage("🏆 " + message);
@@ -671,6 +547,7 @@ public class RuleSystem {
         victoryEvent.put("victoryMessage", message);
         victoryEvent.put("victoryCondition", rules.getVictoryCondition());
         victoryEvent.put("finalScores", calculateFinalScores());
+        victoryEvent.put("scoringConfig", buildScoringConfig());
         broadcaster.accept(victoryEvent);
 
         gameEventManager.broadcastSystemMessage("🏆 " + message);
@@ -678,130 +555,61 @@ public class RuleSystem {
 
     // ===== SCORING HELPERS =====
 
+    /**
+     * Scoreboard config shared by the live gameState, round-end, and game-over
+     * payloads: the contributing score components (display order) and how to
+     * order the board. Derived from {@link Rules} so it always matches scoring.
+     */
+    private Map<String, Object> buildScoringConfig() {
+        Map<String, Object> scoringConfig = new HashMap<>();
+        scoringConfig.put("components", rules.getActiveScoreComponents());
+        scoringConfig.put("scoreStyle", rules.getScoreStyle().name());
+        scoringConfig.put("sortBy",
+                rules.getVictoryCondition() == VictoryCondition.ELIMINATION ? "placement" : "score");
+        return scoringConfig;
+    }
+
+    /**
+     * Per-component score breakdown for a player, matching the live gameState
+     * player {@code score} map so round-end/game-over screens reuse the same
+     * client rendering. KOTH/oddball/HQ-damage stay as doubles.
+     */
+    private Map<String, Object> buildScoreBreakdown(Player player) {
+        Scoring s = player.getScoring();
+        Map<String, Object> m = new HashMap<>();
+        m.put("kills", s.getKills());
+        m.put("deaths", s.getDeaths());
+        m.put("captures", s.getFlagCaptures());
+        m.put("koth", s.getKingOfTheHillPoints());
+        m.put("oddball", s.getOddball());
+        m.put("hqDamage", s.getHeadquarterDamage());
+        m.put("hqDestroyed", s.getHeadquartersDestroyed());
+        m.put("vipKills", s.getVipKills());
+        m.put("bonus", s.bonusPoints(rules));
+        m.put("total", s.total(rules));
+        return m;
+    }
+
     private Map<Integer, Integer> calculateTeamScores() {
         Map<Integer, Integer> teamScores = new HashMap<>();
 
-        // Add player-based scores based on ScoreStyle
-        if (rules.getScoreStyle() == ScoreStyle.TOTAL_KILLS ||
-                rules.getScoreStyle() == ScoreStyle.TOTAL) {
-
-            for (Player player : gameEntities.getAllPlayers()) {
-                int score = getPlayerScore(player);
-                teamScores.merge(player.getTeam(), score, Integer::sum);
-            }
-        }
-
-        // Add objective scores (KOTH zones, captures, oddball, VIP kills) based on ScoreStyle
-        if (rules.getScoreStyle() == ScoreStyle.OBJECTIVE ||
-                rules.getScoreStyle() == ScoreStyle.TOTAL) {
-
-            // Add player captures
-            for (Player player : gameEntities.getAllPlayers()) {
-                teamScores.merge(player.getTeam(), player.getCaptures(), Integer::sum);
-            }
-
-            // Add KOTH zone scores
-            for (KothZone zone : gameEntities.getAllKothZones()) {
-                Map<Integer, Double> zoneTeamScores = zone.getAllTeamScores();
-                for (Map.Entry<Integer, Double> entry : zoneTeamScores.entrySet()) {
-                    int team = entry.getKey();
-                    double kothPoints = entry.getValue();
-                    // Convert KOTH points to integer for scoring
-                    int kothScore = (int) Math.round(kothPoints);
-                    teamScores.merge(team, kothScore, Integer::sum);
-                }
-            }
-
-            // Add oddball scores (per player, then summed to team)
-            if (rules.hasOddball()) {
-                for (Map.Entry<Integer, Double> entry : oddballPlayerScores.entrySet()) {
-                    Player player = gameEntities.getPlayer(entry.getKey());
-                    if (player != null) {
-                        int oddballScore = (int) Math.round(entry.getValue());
-                        teamScores.merge(player.getTeam(), oddballScore, Integer::sum);
-                    }
-                }
-            }
-
-            // Add VIP kill scores
-            if (rules.hasVip()) {
-                for (Map.Entry<Integer, Integer> entry : vipKillScores.entrySet()) {
-                    teamScores.merge(entry.getKey(), entry.getValue(), Integer::sum);
-                }
-            }
-        }
-
-        // Add bonus points (HQ damage, objectives, etc.) - always included
-        for (Map.Entry<Integer, Integer> entry : bonusTeamPoints.entrySet()) {
-            teamScores.merge(entry.getKey(), entry.getValue(), Integer::sum);
+        // Every scoring mechanism is now credited to the player who earned it, so
+        // team (and FFA) totals are simply the sum of each player's Scoring.total().
+        for (Player player : gameEntities.getAllPlayers()) {
+            teamScores.merge(player.getTeam(), getPlayerScore(player), Integer::sum);
         }
 
         return teamScores;
     }
 
-    /**
-     * Add bonus points to a team's score (for HQ damage, objectives, etc.).
-     * These points are always added regardless of ScoreStyle.
-     */
-    public void addTeamPoints(int team, int points) {
-        if (team > 0 && points > 0) {
-            bonusTeamPoints.merge(team, points, Integer::sum);
-            log.debug("Added {} bonus points to team {}. Total bonus: {}",
-                    points, team, bonusTeamPoints.get(team));
-
-            // Check victory conditions after adding points
-            checkVictoryConditions();
-        }
-    }
-
-    /**
-     * Award oddball points to a player for holding the ball.
-     * This method is called by CollisionProcessor during gameplay.
-     *
-     * @param playerId The player ID to award points to
-     * @param points   The number of points to award
-     */
-    public void awardOddballPoints(int playerId, double points) {
-        if (playerId >= 0 && points > 0) {
-            oddballPlayerScores.merge(playerId, points, Double::sum);
-            log.debug("Awarded {} oddball points to player {}. Total: {}",
-                    points, playerId, oddballPlayerScores.get(playerId));
-
-            // Check victory conditions after adding points
-            checkVictoryConditions();
-        }
-    }
-
-    /**
-     * Get the oddball score for a specific player.
-     *
-     * @param playerId The player ID
-     * @return The total oddball points earned by this player
-     */
-    public double getOddballScore(int playerId) {
-        return oddballPlayerScores.getOrDefault(playerId, 0.0);
-    }
-
     private int getPlayerScore(Player player) {
-        int score = switch (rules.getScoreStyle()) {
-            case TOTAL_KILLS -> player.getKills();
-            case OBJECTIVE -> player.getCaptures(); // Only captures for individual scoring; KOTH is team-based
-            case TOTAL -> player.getKills() + player.getCaptures();
-        };
-
-        // Add oddball scores for this player
-        if (rules.hasOddball()) {
-            double oddballScore = getOddballScore(player.getId());
-            score += (int) Math.round(oddballScore);
-        }
-
-        return score;
+        return player.getScoring().total(rules);
     }
 
     private String getScoreTypeName() {
         return switch (rules.getScoreStyle()) {
             case TOTAL_KILLS -> "kills";
-            case OBJECTIVE -> "objectives";
+            case OBJECTIVE -> "objective points";
             case TOTAL -> "points";
         };
     }
@@ -825,12 +633,17 @@ public class RuleSystem {
             Map<Integer, Integer> teamKills = new HashMap<>();
             Map<Integer, Integer> teamDeaths = new HashMap<>();
             Map<Integer, Integer> teamCaptures = new HashMap<>();
+            // Per-team aggregate of every score component, summing the same
+            // breakdown shown per player so the team row totals reconcile.
+            Map<Integer, Map<String, Object>> teamBreakdown = new HashMap<>();
 
             for (Player player : gameEntities.getAllPlayers()) {
                 int team = player.getTeam();
                 teamKills.merge(team, player.getKills(), Integer::sum);
                 teamDeaths.merge(team, player.getDeaths(), Integer::sum);
                 teamCaptures.merge(team, player.getCaptures(), Integer::sum);
+                accumulateBreakdown(teamBreakdown.computeIfAbsent(team, k -> new HashMap<>()),
+                        buildScoreBreakdown(player));
             }
 
             for (Map.Entry<Integer, Integer> entry : teamScores.entrySet()) {
@@ -840,6 +653,12 @@ public class RuleSystem {
                 teamScore.put("kills", teamKills.getOrDefault(entry.getKey(), 0));
                 teamScore.put("deaths", teamDeaths.getOrDefault(entry.getKey(), 0));
                 teamScore.put("captures", teamCaptures.getOrDefault(entry.getKey(), 0));
+                // Per-component breakdown (object) under a distinct key, since
+                // "score" here is the numeric team total. The authoritative team
+                // total overrides the summed-doubles total.
+                Map<String, Object> breakdown = teamBreakdown.getOrDefault(entry.getKey(), new HashMap<>());
+                breakdown.put("total", entry.getValue());
+                teamScore.put("scoreBreakdown", breakdown);
                 scores.add(teamScore);
             }
         } else {
@@ -875,6 +694,9 @@ public class RuleSystem {
                 playerScore.put("captures", player.getCaptures());
                 playerScore.put("placement", player.getPlacement());
                 playerScore.put("eliminationTime", player.getEliminationTime());
+                // Per-component breakdown (object) under a distinct key, since
+                // "score" here is the numeric player total.
+                playerScore.put("scoreBreakdown", buildScoreBreakdown(player));
                 scores.add(playerScore);
             }
         }
@@ -883,20 +705,33 @@ public class RuleSystem {
     }
 
     /**
+     * Add the numeric values of {@code src} into {@code dst} key-by-key (used to
+     * sum per-player score breakdowns into a team aggregate).
+     */
+    private void accumulateBreakdown(Map<String, Object> dst, Map<String, Object> src) {
+        for (Map.Entry<String, Object> e : src.entrySet()) {
+            if (!(e.getValue() instanceof Number n)) {
+                continue;
+            }
+            double prev = dst.get(e.getKey()) instanceof Number p ? p.doubleValue() : 0.0;
+            dst.put(e.getKey(), prev + n.doubleValue());
+        }
+    }
+
+    /**
      * Get game state data for broadcasting to clients.
      */
     public Map<String, Object> getStateData() {
         Map<String, Object> data = new HashMap<>();
 
-        // Round data
-        if (rules.getRoundDuration() > 0) {
-            data.put("roundEnabled", true);
-            data.put("currentRound", currentRound);
-            data.put("gameState", gameState.name());
-            data.put("roundTimeRemaining", Math.max(0, (roundEndTime - System.currentTimeMillis()) / 1000));
-            data.put("restTimeRemaining", Math.max(0, (restTimeEnd - System.currentTimeMillis()) / 1000));
+        // Game timer data (single continuous timer; only present for time-limited games)
+        data.put("gameState", gameState.name());
+        if (rules.hasTimeLimit()) {
+            data.put("gameTimed", true);
+            long endTime = start + (long) (rules.getTimeLimit() * 1000);
+            data.put("gameTimeRemaining", Math.max(0, (endTime - System.currentTimeMillis()) / 1000));
         } else {
-            data.put("roundEnabled", false);
+            data.put("gameTimed", false);
         }
 
         // Victory data
@@ -913,6 +748,11 @@ public class RuleSystem {
         // Scoring style info
         data.put("scoreStyle", rules.getScoreStyle().name());
 
+        // Scoreboard config: which per-player score components actually feed the
+        // team total under these rules (in display order), plus how to order the
+        // board. Lets the client render exactly the contributing columns.
+        data.put("scoringConfig", buildScoringConfig());
+
         // Event data
         if (eventSystem != null) {
             data.put("activeEvents", eventSystem.getEventData());
@@ -927,39 +767,20 @@ public class RuleSystem {
     public void initializePlayerLives(Player player) {
         if (rules.hasLimitedLives()) {
             player.initializeLives(rules.getMaxLives());
-            log.info("Player {} initialized with {} lives", player.getId(), rules.getMaxLives());
-        }
-    }
-
-    /**
-     * Reset all player lives for a new round (stock mode).
-     * This ensures players get their lives back at the start of each round.
-     */
-    private void resetPlayerLivesForNewRound() {
-        if (rules.hasLimitedLives()) {
-            for (Player player : gameEntities.getAllPlayers()) {
-                player.initializeLives(rules.getMaxLives());
-                log.info("Player {} lives reset to {} for round {}",
-                        player.getId(), rules.getMaxLives(), currentRound);
-            }
-
-            // Broadcast lives reset message
-            gameEventManager.broadcastSystemMessage(
-                    String.format("🔄 Round %d - All players have %d lives!",
-                            currentRound, rules.getMaxLives()));
+            log.debug("Player {} initialized with {} lives", player.getId(), rules.getMaxLives());
         }
     }
 
     // ===== RANDOM WEAPON ROTATION =====
 
+    private WeaponConfig newWeapon = AIWeaponSelector.selectRandomWeapon();
+    private UtilityWeapon newUtility = AIWeaponSelector.selectRandomUtilityWeapon();
+
     /**
      * Schedule the next weapon rotation.
      */
     private void scheduleNextWeaponRotation() {
-        nextWeaponRotationTime = (long) (System.currentTimeMillis() +
-                (rules.getRandomWeaponInterval() * 1000));
-        log.debug("Next weapon rotation scheduled for game {} in {} seconds",
-                gameId, rules.getRandomWeaponInterval());
+        nextWeaponRotationTime = (long) (System.currentTimeMillis() + (rules.getRandomWeaponInterval() * 1000));
     }
 
     /**
@@ -972,6 +793,14 @@ public class RuleSystem {
         }
     }
 
+    public void assignPlayerRandomWeapons(Player player) {
+        if (rules.hasRandomWeapons()) {
+            player.applyWeaponConfig(newWeapon, newUtility);
+            player.getCurrentWeapon().setCurrentAmmo(0); // force everyone to reload
+            player.setLastUtilityUseTime(System.currentTimeMillis());
+        }
+    }
+
     /**
      * Rotate all active players to new random weapons.
      * Excludes healing weapons to maintain combat focus.
@@ -979,27 +808,20 @@ public class RuleSystem {
     private void rotateAllPlayerWeapons() {
         int rotatedCount = 0;
 
+        newWeapon = AIWeaponSelector.selectRandomWeapon();
+        newUtility = AIWeaponSelector.selectRandomUtilityWeapon();
+
         for (Player player : gameEntities.getAllPlayers()) {
-            if (player.isActive()) {
-                WeaponConfig newWeapon = AIWeaponSelector.selectRandomNonHealingWeapon();
-                UtilityWeapon newUtility = AIWeaponSelector.selectRandomUtilityWeapon();
-
-                // Notify player of their new loadout
-                String message = String.format("🔀 New Loadout: %s + %s", newWeapon.getType(), newUtility.getDisplayName());
-                gameEventManager.broadcastToPlayer(message, player.getId(), GameEvent.EventCategory.INFO);
-
-                player.applyWeaponConfig(newWeapon, newUtility);
-                rotatedCount++;
-
-                log.debug("Player {} ({}) assigned new weapons: {}, {}",
-                        player.getId(), player.getPlayerName(),
-                        newWeapon.getType(), newUtility.getDisplayName());
-            }
+            // Notify player of their new loadout
+            String message = String.format("🔀 New Loadout: %s + %s", newWeapon.getType(), newUtility.getDisplayName());
+            gameEventManager.broadcastToPlayer(message, player.getId(), GameEvent.EventCategory.INFO);
+            assignPlayerRandomWeapons(player);
+            rotatedCount++;
         }
 
         if (rotatedCount > 0) {
             gameEventManager.broadcastSystemMessage("🔄 Weapon Rotation! New loadouts assigned!");
-            log.info("Game {} - Rotated weapons for {} players", gameId, rotatedCount);
+            log.debug("Game {} - Rotated weapons for {} players", gameId, rotatedCount);
         }
     }
 }

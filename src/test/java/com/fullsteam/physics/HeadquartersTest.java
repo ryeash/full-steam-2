@@ -9,7 +9,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for Headquarters entity.
@@ -18,9 +23,6 @@ import static org.junit.jupiter.api.Assertions.*;
 class HeadquartersTest extends BaseTestClass {
 
     private GameManager gameManager;
-    private GameConfig gameConfig;
-    private Player team1Player;
-    private Player team2Player;
 
     @BeforeEach
     void setUp() {
@@ -33,7 +35,7 @@ class HeadquartersTest extends BaseTestClass {
                 .headquartersDestructionEndsGame(true)
                 .build();
 
-        gameConfig = GameConfig.builder()
+        GameConfig gameConfig = GameConfig.builder()
                 .maxPlayers(10)
                 .teamCount(2)
                 .worldWidth(2000.0)
@@ -44,12 +46,12 @@ class HeadquartersTest extends BaseTestClass {
 
         // Create game manager
         gameManager = new GameManager("test_game", gameConfig, null);
-        
+
         // Create test players on different teams
-        team1Player = new Player(1, "Team1Player", 0, 0, 1, 100.0);
-        team2Player = new Player(2, "Team2Player", 100, 100, 2, 100.0);
-        gameManager.getGameEntities().addPlayer(team1Player);
-        gameManager.getGameEntities().addPlayer(team2Player);
+        Player team1Player = new Player(1, "Team1Player", 0, 0, 1, 100.0);
+        Player team2Player = new Player(2, "Team2Player", 100, 100, 2, 100.0);
+        gameManager.getGameEntities().add(team1Player);
+        gameManager.getGameEntities().add(team2Player);
     }
 
     @Test
@@ -57,19 +59,18 @@ class HeadquartersTest extends BaseTestClass {
     void testHeadquartersCreation() {
         // Get all headquarters
         var headquarters = gameManager.getGameEntities().getAllHeadquarters();
-        
+
         // Should have 2 headquarters (one per team)
         assertEquals(2, headquarters.size());
-        
+
         // Check HQ properties
         for (Headquarters hq : headquarters) {
             assertNotNull(hq);
             assertTrue(hq.isActive());
             assertEquals(1000.0, hq.getMaxHealth());
             assertEquals(1000.0, hq.getHealth());
-            assertTrue(hq.getTeamNumber() >= 1 && hq.getTeamNumber() <= 2);
+            assertTrue(hq.getOwnerTeam() >= 1 && hq.getOwnerTeam() <= 2);
             assertNotNull(hq.getPosition());
-            assertEquals(0.0, hq.getTotalDamageTaken());
         }
     }
 
@@ -79,11 +80,11 @@ class HeadquartersTest extends BaseTestClass {
         // Get HQ for each team
         Headquarters team1HQ = gameManager.getGameEntities().getTeamHeadquarters(1);
         Headquarters team2HQ = gameManager.getGameEntities().getTeamHeadquarters(2);
-        
+
         assertNotNull(team1HQ);
         assertNotNull(team2HQ);
-        assertEquals(1, team1HQ.getTeamNumber());
-        assertEquals(2, team2HQ.getTeamNumber());
+        assertEquals(1, team1HQ.getOwnerTeam());
+        assertEquals(2, team2HQ.getOwnerTeam());
         assertNotEquals(team1HQ.getId(), team2HQ.getId());
     }
 
@@ -91,17 +92,15 @@ class HeadquartersTest extends BaseTestClass {
     @DisplayName("Headquarters takes damage correctly")
     void testHeadquartersDamage() {
         Headquarters hq = gameManager.getGameEntities().getAllHeadquarters().iterator().next();
-        
+
         double initialHealth = hq.getHealth();
         assertEquals(1000.0, initialHealth);
-        assertEquals(0.0, hq.getTotalDamageTaken());
-        
+
         // Apply damage
         boolean destroyed = hq.takeDamage(250.0);
-        
+
         assertFalse(destroyed); // Should not be destroyed yet
         assertEquals(750.0, hq.getHealth());
-        assertEquals(250.0, hq.getTotalDamageTaken());
         assertTrue(hq.isActive());
     }
 
@@ -109,13 +108,12 @@ class HeadquartersTest extends BaseTestClass {
     @DisplayName("Headquarters destruction when health reaches zero")
     void testHeadquartersDestruction() {
         Headquarters hq = gameManager.getGameEntities().getAllHeadquarters().iterator().next();
-        
+
         // Apply enough damage to destroy
         boolean destroyed = hq.takeDamage(1000.0);
-        
+
         assertTrue(destroyed);
         assertEquals(0.0, hq.getHealth());
-        assertEquals(1000.0, hq.getTotalDamageTaken());
         assertFalse(hq.isActive()); // Should be inactive after destruction
     }
 
@@ -123,16 +121,13 @@ class HeadquartersTest extends BaseTestClass {
     @DisplayName("Headquarters tracks total damage for scoring")
     void testDamageTracking() {
         Headquarters hq = gameManager.getGameEntities().getAllHeadquarters().iterator().next();
-        
+
         // Apply multiple hits
         hq.takeDamage(100.0);
-        assertEquals(100.0, hq.getTotalDamageTaken());
-        
+
         hq.takeDamage(150.0);
-        assertEquals(250.0, hq.getTotalDamageTaken());
-        
+
         hq.takeDamage(200.0);
-        assertEquals(450.0, hq.getTotalDamageTaken());
         assertEquals(550.0, hq.getHealth());
     }
 
@@ -140,31 +135,16 @@ class HeadquartersTest extends BaseTestClass {
     @DisplayName("Headquarters cannot take damage when inactive")
     void testInactiveHeadquartersIgnoreDamage() {
         Headquarters hq = gameManager.getGameEntities().getAllHeadquarters().iterator().next();
-        
+
         // Destroy the HQ
         hq.takeDamage(1000.0);
         assertFalse(hq.isActive());
-        
+
         // Try to apply more damage
-        double totalDamage = hq.getTotalDamageTaken();
         boolean destroyed = hq.takeDamage(100.0);
-        
+
         assertFalse(destroyed); // Already destroyed
         assertEquals(0.0, hq.getHealth()); // Health stays at 0
-        assertEquals(totalDamage, hq.getTotalDamageTaken()); // Damage tracking doesn't change
-    }
-
-    @Test
-    @DisplayName("Headquarters has proper shape data for rendering")
-    void testHeadquartersShapeData() {
-        Headquarters hq = gameManager.getGameEntities().getAllHeadquarters().iterator().next();
-        
-        var shapeData = hq.getShapeData();
-        
-        assertNotNull(shapeData);
-        assertEquals("RECTANGLE", shapeData.get("shapeCategory"));
-        assertEquals(80.0, shapeData.get("width"));
-        assertEquals(60.0, shapeData.get("height"));
     }
 
     @Test
@@ -173,18 +153,18 @@ class HeadquartersTest extends BaseTestClass {
         // Get both HQs
         Headquarters team1HQ = gameManager.getGameEntities().getTeamHeadquarters(1);
         Headquarters team2HQ = gameManager.getGameEntities().getTeamHeadquarters(2);
-        
+
         assertNotNull(team1HQ);
         assertNotNull(team2HQ);
-        
+
         Vector2 pos1 = team1HQ.getPosition();
         Vector2 pos2 = team2HQ.getPosition();
-        
+
         // HQs should be positioned away from center (defensive position)
         // They should be far apart (in different spawn zones)
         double distance = pos1.distance(pos2);
         assertTrue(distance > 300, "HQs should be far apart in different spawn zones");
-        
+
         // Both should be within world bounds
         assertTrue(Math.abs(pos1.x) < 1000);
         assertTrue(Math.abs(pos1.y) < 1000);
@@ -196,11 +176,11 @@ class HeadquartersTest extends BaseTestClass {
     @DisplayName("Headquarters update does not throw exceptions")
     void testHeadquartersUpdate() {
         Headquarters hq = gameManager.getGameEntities().getAllHeadquarters().iterator().next();
-        
+
         // Update should not throw
         assertDoesNotThrow(() -> hq.update(0.016)); // ~60 FPS
         assertDoesNotThrow(() -> hq.update(1.0));   // 1 second
-        
+
         // Update should work even when inactive
         hq.takeDamage(1000.0);
         assertFalse(hq.isActive());
@@ -211,10 +191,10 @@ class HeadquartersTest extends BaseTestClass {
     @DisplayName("Headquarters home position is stored correctly")
     void testHomePosition() {
         Headquarters hq = gameManager.getGameEntities().getAllHeadquarters().iterator().next();
-        
+
         Vector2 homePos = hq.getHomePosition();
         Vector2 currentPos = hq.getPosition();
-        
+
         assertNotNull(homePos);
         assertEquals(homePos.x, currentPos.x, 0.01);
         assertEquals(homePos.y, currentPos.y, 0.01);
@@ -238,7 +218,7 @@ class HeadquartersTest extends BaseTestClass {
                 .build();
 
         GameManager gmNoHQ = new GameManager("test_no_hq", configNoHQ, null);
-        
+
         // Should have no headquarters
         assertTrue(gmNoHQ.getGameEntities().getAllHeadquarters().isEmpty());
     }
@@ -261,7 +241,7 @@ class HeadquartersTest extends BaseTestClass {
                 .build();
 
         GameManager gmFFA = new GameManager("test_ffa", configFFA, null);
-        
+
         // Should have no headquarters in FFA
         assertTrue(gmFFA.getGameEntities().getAllHeadquarters().isEmpty());
     }

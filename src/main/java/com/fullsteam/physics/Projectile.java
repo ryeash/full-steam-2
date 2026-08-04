@@ -1,10 +1,11 @@
 package com.fullsteam.physics;
 
-import com.fullsteam.util.IdGenerator;
+import com.fullsteam.Config;
 import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.Ordinance;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
+import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
@@ -13,34 +14,37 @@ import java.util.HashSet;
 import java.util.Set;
 
 @Getter
-public class Projectile extends GameEntity {
-    private final int ownerId;
-    private final int ownerTeam; // Team of the player who fired this projectile
+public class Projectile extends OwnedGameEntity {
     private final double damage;
-    private double timeToLive; // Time in seconds before projectile is removed
-    private final double linearDamping; // How much the projectile slows down over time
-    private final Set<BulletEffect> bulletEffects; // Special effects this projectile has
-    private final Ordinance ordinance; // Type of projectile (bullet, rocket, grenade, etc.)
-    private boolean hasExploded = false; // Track if explosive projectiles have already exploded
-    private boolean dismissedByVelocity = false; // Track if dismissed due to low velocity
-    private boolean dismissedByRange = false; // Track if dismissed due to reaching max range/time
+    private final Vector2 initialPosition;
+    private double timeToLive;
+    private final double linearDamping;
+    private final Set<BulletEffect> bulletEffects;
+    private final Ordinance ordinance;
+    private boolean hasExploded = false;
+    private boolean dismissedByVelocity = false;
+    private boolean dismissedByRange = false;
+    private final double caliber;
+    private final double knockback;
 
     // prevent double hits
     private final Set<Integer> affectedPlayers;
     private final Set<Integer> affectedObstacles;
 
-    public Projectile(int ownerId, double x, double y, double vx, double vy, double damage, double maxRange,
-                      int ownerTeam, double linearDamping, Set<BulletEffect> bulletEffects, Ordinance ordinance) {
-        super(IdGenerator.nextEntityId(), createProjectileBody(x, y, vx, vy, linearDamping, ordinance, bulletEffects), 1.0);
-        this.ownerId = ownerId;
-        this.ownerTeam = ownerTeam;
+    public Projectile(int ownerId, Vector2 position, Vector2 velocity, double damage, double maxRange,
+                      int ownerTeam, double linearDamping, Set<BulletEffect> bulletEffects, Ordinance ordinance,
+                      double caliber, double knockback) {
+        super(Config.nextEntityId(), createProjectileBody(position, velocity, linearDamping, bulletEffects, caliber), 1.0, ownerId, ownerTeam);
+        this.initialPosition = position.copy();
         this.damage = damage;
         this.linearDamping = linearDamping;
         this.bulletEffects = new HashSet<>(bulletEffects);
         this.ordinance = ordinance;
+        this.caliber = caliber;
+        this.knockback = knockback;
 
         // Calculate time to live based on range and speed
-        double speed = new Vector2(vx, vy).getMagnitude();
+        double speed = velocity.copy().getMagnitude();
         if (speed > 0) {
             this.timeToLive = maxRange / speed;
         } else {
@@ -50,21 +54,27 @@ public class Projectile extends GameEntity {
         this.affectedObstacles = new HashSet<>();
     }
 
-    private static Body createProjectileBody(double x, double y, double vx, double vy, double linearDamping, Ordinance ordinance, Set<BulletEffect> bulletEffects) {
+    /**
+     * Base projectile radius at caliber 1.0; CALIBER is the only size input.
+     */
+    private static final double BASE_RADIUS = 2.0;
+
+    private static Body createProjectileBody(Vector2 position, Vector2 velocity, double linearDamping, Set<BulletEffect> bulletEffects, double caliber) {
         Body body = new Body();
-        Circle circle = new Circle(ordinance.getSize());
-        body.addFixture(circle);
-        
+        // Radius comes entirely from the weapon's caliber (baseline ×1.0 = BASE_RADIUS).
+        Circle circle = new Circle(BASE_RADIUS * caliber);
+        BodyFixture bodyFixture = body.addFixture(circle);
+
         // Set restitution for bouncy projectiles
         if (bulletEffects.contains(BulletEffect.BOUNCY)) {
-            body.getFixture(0).setRestitution(0.8); // High bounce - retains 80% of velocity
+            bodyFixture.setRestitution(0.8); // High bounce - retains 80% of velocity
         } else {
-            body.getFixture(0).setRestitution(0.0); // No bounce for non-bouncy projectiles
+            bodyFixture.setRestitution(0.0); // No bounce for non-bouncy projectiles
         }
-        
+
         body.setMass(MassType.NORMAL);
-        body.getTransform().setTranslation(x, y);
-        body.setLinearVelocity(vx, vy);
+        body.getTransform().setTranslation(position);
+        body.setLinearVelocity(velocity);
         body.setBullet(true);
         body.setLinearDamping(linearDamping);
         return body;
@@ -85,9 +95,10 @@ public class Projectile extends GameEntity {
             return;
         }
 
-        // Check velocity threshold for dismissal
+        // Check velocity threshold for dismissal. Bigger-caliber (heavier) rounds
+        // carry momentum, so they persist to a lower speed before dismissal.
         double currentSpeed = body.getLinearVelocity().getMagnitude();
-        if (currentSpeed < ordinance.getMinimumVelocity() && !dismissedByVelocity) {
+        if (currentSpeed < ordinance.getMinimumVelocity() / caliber && !dismissedByVelocity) {
             // Mark as dismissed by velocity to trigger effects
             dismissedByVelocity = true;
             active = false;
@@ -103,22 +114,10 @@ public class Projectile extends GameEntity {
      * @return true if projectile can damage this player, false if teammate or self
      */
     public boolean canDamage(Player player) {
-        if (player == null) {
+        if (player == null || player.getId() == ownerId) {
             return false;
         }
-
-        // Can't damage self
-        if (player.getId() == ownerId) {
-            return false;
-        }
-
-        // In FFA mode (team 0), can damage anyone except self
-        if (ownerTeam == 0 || player.getTeam() == 0) {
-            return true;
-        }
-
-        // In team mode, can only damage players on different teams
-        return ownerTeam != player.getTeam();
+        return ownerTeam == 0 || player.getTeam() == 0 || ownerTeam != player.getTeam();
     }
 
     public boolean hasBulletEffect(BulletEffect effect) {
@@ -132,7 +131,7 @@ public class Projectile extends GameEntity {
     public void markAsExploded() {
         this.hasExploded = true;
     }
-    
+
     /**
      * Check if this projectile should trigger effects on dismissal.
      * This includes explosive effects, electric discharges, etc.
