@@ -11,7 +11,10 @@ import java.util.Set;
 @Data
 public class Weapon {
     private final String name;
-    private final double damage;
+    private final double minDamage;
+    private final double maxDamage;
+    private final DamageVarianceFormula varianceFormula;
+    private final double damage; // Expected average damage
     private final double damagePerBullet;
     private final double fireRate;
     private final double range;
@@ -32,7 +35,9 @@ public class Weapon {
     private int currentAmmo;
 
     public Weapon(String name,
-                  int damage,
+                  int minDamage,
+                  int maxDamage,
+                  DamageVarianceFormula varianceFormula,
                   int fireRate,
                   int range,
                   int accuracy,
@@ -47,26 +52,29 @@ public class Weapon {
                   Set<BulletEffect> bulletEffects,
                   Ordinance ordinance
     ) {
-        // Calculate total points including bullet effects and ordinance
-        this.attributePoints = damage + fireRate + range + accuracy + magazineSize + reloadTime + projectileSpeed + bulletsPerShot + linearDamping + handling + caliber + knockback;
+        // Calculate total points including bullet effects, ordinance, and variance formula cost
+        this.attributePoints = minDamage + maxDamage + fireRate + range + accuracy + magazineSize + reloadTime + projectileSpeed + bulletsPerShot + linearDamping + handling + caliber + knockback;
         int effectPoints = bulletEffects.stream().mapToInt(BulletEffect::getPointCost).sum();
         int ordinancePoints = ordinance.getPointCost();
-        int totalPoints = attributePoints + effectPoints + ordinancePoints;
+        int varianceCost = varianceFormula != null ? varianceFormula.getPointCost() : 0;
+        int totalPoints = attributePoints + effectPoints + ordinancePoints + varianceCost;
 
         if (totalPoints > 100) {
             throw new IllegalArgumentException("Total points cannot exceed 100. Current total: " + totalPoints +
-                    " (Attributes: " + attributePoints + ", Effects: " + effectPoints + ", Ordinance: " + ordinancePoints + ")");
+                    " (Attributes: " + attributePoints + ", Effects: " + effectPoints + ", Ordinance: " + ordinancePoints + ", Variance: " + varianceCost + ")");
         }
 
         this.name = name;
         this.bulletEffects = new HashSet<>(bulletEffects);
         this.ordinance = ordinance;
+        this.varianceFormula = varianceFormula != null ? varianceFormula : DamageVarianceFormula.UNIFORM;
 
         // Resolve all attributes together so cross-attribute couplings (e.g. fire
-        // rate → accuracy, magazine → reload, damage → handling) are applied in a
+        // rate → accuracy, magazine → reload, min/max damage → handling) are applied in a
         // single pass before each stat is read out.
         Map<WeaponAttribute, Integer> allocated = new EnumMap<>(WeaponAttribute.class);
-        allocated.put(WeaponAttribute.DAMAGE, damage);
+        allocated.put(WeaponAttribute.MIN_DAMAGE, minDamage);
+        allocated.put(WeaponAttribute.MAX_DAMAGE, maxDamage);
         allocated.put(WeaponAttribute.FIRE_RATE, fireRate);
         allocated.put(WeaponAttribute.RANGE, range);
         allocated.put(WeaponAttribute.ACCURACY, accuracy);
@@ -80,7 +88,12 @@ public class Weapon {
         allocated.put(WeaponAttribute.KNOCKBACK, knockback);
         Map<WeaponAttribute, Double> stats = WeaponAttribute.resolve(allocated);
 
-        this.damage = stats.get(WeaponAttribute.DAMAGE);
+        double rawMin = stats.get(WeaponAttribute.MIN_DAMAGE);
+        double rawMax = stats.get(WeaponAttribute.MAX_DAMAGE);
+        this.minDamage = Math.min(rawMin, rawMax);
+        this.maxDamage = Math.max(rawMin, rawMax);
+        this.damage = this.varianceFormula.expectedValue(this.minDamage, this.maxDamage);
+
         this.fireRate = stats.get(WeaponAttribute.FIRE_RATE);
         this.range = stats.get(WeaponAttribute.RANGE);
         this.accuracy = stats.get(WeaponAttribute.ACCURACY);
@@ -100,6 +113,9 @@ public class Weapon {
     // clone constructor
     public Weapon(Weapon other) {
         this.name = other.name;
+        this.minDamage = other.minDamage;
+        this.maxDamage = other.maxDamage;
+        this.varianceFormula = other.varianceFormula;
         this.damage = other.damage;
         this.damagePerBullet = other.damagePerBullet;
         this.fireRate = other.fireRate;
@@ -118,6 +134,20 @@ public class Weapon {
         this.bulletEffects = other.bulletEffects;
         this.ordinance = other.ordinance;
         this.attributePoints = other.attributePoints;
+    }
+
+    /**
+     * Roll damage for a single trigger pull using the weapon's variance formula.
+     */
+    public double rollDamage() {
+        return varianceFormula.evaluate(minDamage, maxDamage);
+    }
+
+    /**
+     * Roll per-bullet damage for a single trigger pull.
+     */
+    public double rollDamagePerBullet() {
+        return damagePerBullet(rollDamage(), bulletsPerShot);
     }
 
     /**

@@ -106,6 +106,7 @@ public class GameManager {
     private double lastUpdateTime = System.nanoTime() / 1e9;
 
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
+    private volatile boolean hadHumanPlayers = false;
 
     public GameManager(String gameId, GameConfig gameConfig, ObjectMapper objectMapper) {
         this.gameId = gameId;
@@ -211,6 +212,7 @@ public class GameManager {
         }
 
         if (!asSpectator) {
+            hadHumanPlayers = true;
             if (getPlayingAndLobbyCount() >= getMaxPlayers()) {
                 return false;
             }
@@ -438,8 +440,11 @@ public class GameManager {
         if (!gameConfig.getRules().shouldLockGame()) {
             return false; // Game never locks
         }
+        if (ruleSystem.isCountdown()) {
+            return false; // Never lock during pre-game countdown
+        }
 
-        double elapsedSeconds = (System.currentTimeMillis() - gameStartTime) / 1000.0;
+        double elapsedSeconds = (System.currentTimeMillis() - ruleSystem.getMatchStartTime()) / 1000.0;
         return elapsedSeconds >= gameConfig.getRules().getLockGameAfterSeconds();
     }
 
@@ -532,6 +537,10 @@ public class GameManager {
      */
     public boolean hasHumanPlayers() {
         return getPlayingAndLobbyCount() > 0;
+    }
+
+    public boolean hadHumanPlayers() {
+        return hadHumanPlayers;
     }
 
     /**
@@ -748,8 +757,10 @@ public class GameManager {
 
             gameEntities.getPlayerInputs().forEach(this::processPlayerInput);
             gameEntities.updateAll(deltaTime);
-            updateCarriedFlags(); // Update flag positions for carried flags
-            collisionProcessor.updateKothZones(deltaTime);
+            if (!ruleSystem.isCountdown()) {
+                updateCarriedFlags(); // Update flag positions for carried flags
+                collisionProcessor.updateKothZones(deltaTime);
+            }
             gameEntities.getProjectiles().entrySet().removeIf(entry -> {
                 Projectile projectile = entry.getValue();
                 if (!projectile.isActive()) {
@@ -809,10 +820,12 @@ public class GameManager {
             }
         }
 
-        for (Oddball oddball : gameEntities.getAllOddballNpcs()) {
-            if (oddball.isActive()) {
-                oddball.tickAI(Collections.unmodifiableCollection(gameEntities.getAllPlayers()));
-                weaponSystem.handleOddballFire(oddball);
+        if (!ruleSystem.isCountdown()) {
+            for (Oddball oddball : gameEntities.getAllOddballNpcs()) {
+                if (oddball.isActive()) {
+                    oddball.tickAI(Collections.unmodifiableCollection(gameEntities.getAllPlayers()));
+                    weaponSystem.handleOddballFire(oddball);
+                }
             }
         }
     }
@@ -939,16 +952,26 @@ public class GameManager {
     protected void processPlayerInput(Integer playerId, PlayerInput input) {
         Player player = gameEntities.getPlayer(playerId);
         if (player != null && input != null) {
+            if (ruleSystem.isCountdown()) {
+                input.setMoveX(0.0);
+                input.setMoveY(0.0);
+                input.setLeft(false);
+                input.setRight(false);
+                input.setAltFire(false);
+                input.setReload(false);
+            }
             player.processInput(input);
 
-            // Handle primary weapon fire (delegated to WeaponSystem)
-            weaponSystem.handlePrimaryFire(player, input);
+            if (!ruleSystem.isCountdown()) {
+                // Handle primary weapon fire (delegated to WeaponSystem)
+                weaponSystem.handlePrimaryFire(player, input);
 
-            // Handle utility weapon fire (delegated to UtilitySystem)
-            if (input.isAltFire()) {
-                UtilityActivation activation = player.useUtility();
-                if (activation != null) {
-                    utilitySystem.handleUtilityActivation(activation);
+                // Handle utility weapon fire (delegated to UtilitySystem)
+                if (input.isAltFire()) {
+                    UtilityActivation activation = player.useUtility();
+                    if (activation != null) {
+                        utilitySystem.handleUtilityActivation(activation);
+                    }
                 }
             }
         }

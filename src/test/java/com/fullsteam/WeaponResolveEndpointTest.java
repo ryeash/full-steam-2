@@ -30,7 +30,8 @@ class WeaponResolveEndpointTest extends BaseTestClass {
         WeaponConfig cfg = new WeaponConfig();
         cfg.type = "Custom";
         cfg.fireRate = 30; // max → FIRE_RATE→ACCURACY recoil coupling
-        cfg.damage = 40;   // → DAMAGE→HANDLING coupling
+        cfg.minDamage = 20; // → MIN_DAMAGE/MAX_DAMAGE→HANDLING coupling
+        cfg.maxDamage = 20;
         cfg.ordinance = Ordinance.PROJECTILE;
 
         HttpResponse<Map<String, Object>> resp = controller.resolveCustomization(cfg);
@@ -58,7 +59,7 @@ class WeaponResolveEndpointTest extends BaseTestClass {
     @Test
     void rejectsOutOfRangePoints() {
         WeaponConfig cfg = new WeaponConfig();
-        cfg.damage = 999; // outside DAMAGE [0,40]
+        cfg.minDamage = 999; // outside MIN_DAMAGE [0,40]
         HttpResponse<Map<String, Object>> resp = controller.resolveCustomization(cfg);
         assertEquals(400, resp.code());
     }

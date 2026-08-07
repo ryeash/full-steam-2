@@ -96,6 +96,17 @@ public class Rules {
     private double lockGameAfterSeconds = 0.0;
 
     /**
+     * Countdown in seconds before the game officially starts (prep/ready-up phase).
+     * 0 = start immediately (no countdown).
+     * Allows players to enter the game and configure loadouts before action begins.
+     */
+    @Min(0)
+    @Max(300)
+    @JsonProperty("gameStartCountdown")
+    @Builder.Default
+    private double gameStartCountdown = 0.0;
+
+    /**
      * How players respawn after death.
      */
     @NotNull
@@ -520,5 +531,12 @@ public class Rules {
      */
     public boolean hasRandomWeapons() {
         return enableRandomWeapons;
+    }
+
+    /**
+     * Check if this game has a start countdown (prep phase).
+     */
+    public boolean hasGameStartCountdown() {
+        return gameStartCountdown > 0;
     }
 }

@@ -153,7 +153,7 @@ public class Player extends OwnedGameEntity implements HasWeapon {
             weapon = primary.buildWeapon();
             weapon.reload();
             // Handling scales the wielder's move speed (1.0 = baseline). Heavy
-            // weapons (incl. the DAMAGE→HANDLING coupling) move you slower.
+            // weapons (incl. the MIN_DAMAGE/MAX_DAMAGE→HANDLING coupling) move you slower.
             this.maxSpeed = Config.PLAYER_SPEED * weapon.getHandling();
         }
         if (utility != null) {

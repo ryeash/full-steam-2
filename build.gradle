@@ -1,3 +1,12 @@
+buildscript {
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
 plugins {
     id 'java'
     id 'io.micronaut.application' version '5.0.0'
@@ -13,6 +22,7 @@ java {
 }
 
 repositories {
+    maven { url 'https://maven.aliyun.com/repository/public' }
     mavenCentral()
 }
 
@@ -48,20 +58,32 @@ dependencies {
 
 test {
     useJUnitPlatform()
+
+    // Test output configuration
     testLogging {
-        showStandardStreams = true
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+        showCauses true
+        showExceptions true
+        showStackTraces true
     }
+
+    // Performance optimizations for faster test execution
+    maxParallelForks = Runtime.runtime.availableProcessors().intdiv(2) ?: 1
+    forkEvery = 100
+
+    // JVM args for Java 25 compatibility
+    jvmArgs += [
+        '--enable-native-access=ALL-UNNAMED',
+        '-XX:+UseG1GC',
+        '-Xms256m',
+        '-Xmx1024m'
+    ]
 }
 
-shadowJar {
-    mergeServiceFiles()
-//    mainClassName = 'com.fullsteam.Application'
-    manifest {
-        attributes 'Main-Class': 'com.fullsteam.Application'
-    }
-    archiveBaseName.set('full-steam')
-    archiveVersion.set(project.version)
-    archiveClassifier.set('')
-    zip64 = true
+// Enable annotation processing
+tasks.withType(JavaCompile) {
+    options.compilerArgs += [
+        "-Aincremental=true"
+    ]
 }
-

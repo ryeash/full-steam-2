@@ -7,12 +7,13 @@ import java.util.Map;
 import static com.fullsteam.model.WeaponAttribute.ACCURACY;
 import static com.fullsteam.model.WeaponAttribute.BULLETS_PER_SHOT;
 import static com.fullsteam.model.WeaponAttribute.CALIBER;
-import static com.fullsteam.model.WeaponAttribute.DAMAGE;
 import static com.fullsteam.model.WeaponAttribute.FIRE_RATE;
 import static com.fullsteam.model.WeaponAttribute.HANDLING;
 import static com.fullsteam.model.WeaponAttribute.KNOCKBACK;
 import static com.fullsteam.model.WeaponAttribute.LINEAR_DAMPING;
 import static com.fullsteam.model.WeaponAttribute.MAGAZINE_SIZE;
+import static com.fullsteam.model.WeaponAttribute.MIN_DAMAGE;
+import static com.fullsteam.model.WeaponAttribute.MAX_DAMAGE;
 import static com.fullsteam.model.WeaponAttribute.PROJECTILE_SPEED;
 import static com.fullsteam.model.WeaponAttribute.RANGE;
 import static com.fullsteam.model.WeaponAttribute.RELOAD_TIME;
@@ -39,8 +40,10 @@ class WeaponAttributeTest {
 
     @Test
     void baseCurveEndpoints() {
-        assertEquals(10, DAMAGE.compute(0), EPS);
-        assertEquals(50, DAMAGE.compute(40), EPS);
+        assertEquals(10, MIN_DAMAGE.compute(0), EPS);
+        assertEquals(50, MIN_DAMAGE.compute(40), EPS);
+        assertEquals(10, MAX_DAMAGE.compute(0), EPS);
+        assertEquals(50, MAX_DAMAGE.compute(40), EPS);
         assertEquals(0.5, FIRE_RATE.compute(0), EPS);
         assertEquals(7.07, FIRE_RATE.compute(30), EPS);
         assertEquals(150, RANGE.compute(0), EPS);
@@ -76,8 +79,10 @@ class WeaponAttributeTest {
 
     @Test
     void computeRejectsOutOfRangePoints() {
-        assertThrows(IllegalArgumentException.class, () -> DAMAGE.compute(41));
-        assertThrows(IllegalArgumentException.class, () -> DAMAGE.compute(-1));
+        assertThrows(IllegalArgumentException.class, () -> MIN_DAMAGE.compute(41));
+        assertThrows(IllegalArgumentException.class, () -> MIN_DAMAGE.compute(-1));
+        assertThrows(IllegalArgumentException.class, () -> MAX_DAMAGE.compute(41));
+        assertThrows(IllegalArgumentException.class, () -> MAX_DAMAGE.compute(-1));
         assertThrows(IllegalArgumentException.class, () -> ACCURACY.compute(-11));
         assertThrows(IllegalArgumentException.class, () -> ACCURACY.compute(26));
     }
@@ -121,8 +126,8 @@ class WeaponAttributeTest {
 
     @Test
     void heavyDamageReducesHandling() {
-        assertEquals(0.94, resolved(HANDLING, Map.of(DAMAGE, 20)), EPS);
-        assertEquals(0.88, resolved(HANDLING, Map.of(DAMAGE, 40)), EPS);
+        assertEquals(0.94, resolved(HANDLING, Map.of(MIN_DAMAGE, 20, MAX_DAMAGE, 20)), EPS);
+        assertEquals(0.88, resolved(HANDLING, Map.of(MIN_DAMAGE, 40, MAX_DAMAGE, 40)), EPS);
     }
 
     @Test
@@ -214,10 +219,10 @@ class WeaponAttributeTest {
 
     @Test
     void couplingsReadAllocatedNotCoupledValues() {
-        // DAMAGE→HANDLING must not feed back: investing in HANDLING shouldn't change
+        // MIN_DAMAGE/MAX_DAMAGE→HANDLING must not feed back: investing in HANDLING shouldn't change
         // the damage-driven penalty, only the starting point it's applied to.
-        double h0 = resolved(HANDLING, Map.of(DAMAGE, 40));            // 0 + (-6) → 0.88
-        double h5 = resolved(HANDLING, Map.of(DAMAGE, 40, HANDLING, 5)); // 5 + (-6) → -1 → 0.98
+        double h0 = resolved(HANDLING, Map.of(MIN_DAMAGE, 40, MAX_DAMAGE, 40));            // 0 + (-6) → 0.88
+        double h5 = resolved(HANDLING, Map.of(MIN_DAMAGE, 40, MAX_DAMAGE, 40, HANDLING, 5)); // 5 + (-6) → -1 → 0.98
         assertEquals(0.88, h0, EPS);
         assertEquals(0.98, h5, EPS);
     }

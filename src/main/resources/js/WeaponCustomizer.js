@@ -45,9 +45,10 @@ class WeaponCustomizer {
         // THE state. currentWeapon/currentUtilityWeapon in the old version were the
         // same data, just spread across two fields and mutated in many places.
         this.state = {
-            attributes: {},          // { DAMAGE: 0, FIRE_RATE: 0, ... }
+            attributes: {},          // { MIN_DAMAGE: 0, MAX_DAMAGE: 0, FIRE_RATE: 0, ... }
             effects: [],             // ['EXPLOSIVE', ...]
             ordinance: 'PROJECTILE',
+            varianceFormula: 'UNIFORM',
             utility: 'HEAL_ZONE'
         };
 
@@ -80,7 +81,7 @@ class WeaponCustomizer {
      */
     getPlayerConfig() {
         const attributeMapping = {
-            'DAMAGE': 'damage', 'FIRE_RATE': 'fireRate', 'RANGE': 'range',
+            'MIN_DAMAGE': 'minDamage', 'MAX_DAMAGE': 'maxDamage', 'FIRE_RATE': 'fireRate', 'RANGE': 'range',
             'ACCURACY': 'accuracy', 'MAGAZINE_SIZE': 'magazineSize', 'RELOAD_TIME': 'reloadTime',
             'PROJECTILE_SPEED': 'projectileSpeed', 'BULLETS_PER_SHOT': 'bulletsPerShot',
             'LINEAR_DAMPING': 'linearDamping', 'HANDLING': 'handling', 'CALIBER': 'caliber',
@@ -95,6 +96,7 @@ class WeaponCustomizer {
             type: 'Custom Weapon',
             bulletEffects: this.state.effects,
             ordinance: this.state.ordinance,
+            varianceFormula: this.state.varianceFormula,
             ...mappedAttributes
         };
         return { weaponConfig, utilityWeapon: this.state.utility };
@@ -148,6 +150,7 @@ class WeaponCustomizer {
                                     <span class="pt-breakdown-label">Attr:</span><span id="attr-points" class="pt-breakdown-value">0</span>
                                     <span class="pt-breakdown-label">FX:</span><span id="effect-points" class="pt-breakdown-value">0</span>
                                     <span class="pt-breakdown-label">Ord:</span><span id="ordinance-points" class="pt-breakdown-value">0</span>
+                                    <span class="pt-breakdown-label">Var:</span><span id="variance-points" class="pt-breakdown-value">0</span>
                                 </div>
                             </div>
                             <h3>Primary Weapon Attributes</h3>
@@ -158,11 +161,16 @@ class WeaponCustomizer {
                             <div id="effect-checkboxes"></div>
                         </div>
                         <div class="customization-section">
-                            <h3>Munitions</h3>
+                            <h3>Munitions & Variance</h3>
                             <div class="munitions-field">
                                 <label class="munitions-label" for="ordinance-select">Ordnance Type</label>
                                 <select id="ordinance-select" class="loadout-select" aria-label="Ordnance type"></select>
                                 <div id="ordinance-detail" class="munitions-detail"></div>
+                            </div>
+                            <div class="munitions-field">
+                                <label class="munitions-label" for="variance-select">Damage Variance Formula</label>
+                                <select id="variance-select" class="loadout-select" aria-label="Damage variance formula"></select>
+                                <div id="variance-detail" class="munitions-detail"></div>
                             </div>
                             <div class="munitions-field">
                                 <label class="munitions-label" for="utility-select">Utility Weapon</label>
@@ -191,6 +199,7 @@ class WeaponCustomizer {
         this._buildAttributeSliders();
         this._buildEffectCheckboxes();
         this._buildOrdinanceOptions();
+        this._buildVarianceOptions();
         this._buildUtilityOptions();
         this._buildPresetButtons();
 
@@ -274,6 +283,22 @@ class WeaponCustomizer {
         });
     }
 
+    _buildVarianceOptions() {
+        const select = this._q('#variance-select');
+        if (!select || !this.weaponData.varianceFormulas) return;
+        select.innerHTML = '';
+        this.weaponData.varianceFormulas.forEach(vf => {
+            const opt = document.createElement('option');
+            opt.value = vf.name;
+            opt.textContent = vf.cost !== 0 ? `${vf.displayName} — ${vf.cost > 0 ? '+' : ''}${vf.cost} pts` : vf.displayName;
+            select.appendChild(opt);
+        });
+        select.addEventListener('change', () => {
+            this.state.varianceFormula = select.value;
+            this._commit();
+        });
+    }
+
     _buildUtilityOptions() {
         const select = this._q('#utility-select');
         if (!select) return;
@@ -335,6 +360,7 @@ class WeaponCustomizer {
         this.state.attributes = { ...preset.attributes }; // _normalize fills the rest with 0
         this.state.effects = [...preset.effects];
         this.state.ordinance = preset.ordinance;
+        this.state.varianceFormula = preset.varianceFormula || 'UNIFORM';
         this._commit();
     }
 
@@ -381,6 +407,11 @@ class WeaponCustomizer {
             if (!e) return false;                       // unknown effect
             return !(isBeam && !e.validForBeams);       // beam-forbidden
         });
+
+        const vfNames = (d.varianceFormulas || []).map(v => v.name);
+        if (vfNames.length && !vfNames.includes(this.state.varianceFormula)) {
+            this.state.varianceFormula = vfNames[0];
+        }
 
         const utilNames = (d.utilityWeapons || []).map(u => u.name);
         if (utilNames.length && !utilNames.includes(this.state.utility)) {
@@ -434,6 +465,12 @@ class WeaponCustomizer {
         const ordDetail = this._q('#ordinance-detail');
         if (ordDetail) ordDetail.textContent = ord ? ord.description : '';
 
+        const varSelect = this._q('#variance-select');
+        if (varSelect) varSelect.value = this.state.varianceFormula;
+        const varDetail = this._q('#variance-detail');
+        const vf = (d.varianceFormulas || []).find(x => x.name === this.state.varianceFormula);
+        if (varDetail) varDetail.textContent = vf ? `${vf.description}` : '';
+
         const utilSelect = this._q('#utility-select');
         if (utilSelect) utilSelect.value = this.state.utility;
         const utilDetail = this._q('#utility-detail');
@@ -448,7 +485,8 @@ class WeaponCustomizer {
         const attrPoints = this._attrPoints();
         const effectPoints = this._effectPoints();
         const ordinancePoints = this._ordinancePoints();
-        const totalPoints = attrPoints + effectPoints + ordinancePoints;
+        const variancePoints = this._variancePoints();
+        const totalPoints = attrPoints + effectPoints + ordinancePoints + variancePoints;
         const maxPoints = this.weaponData.maxPoints;
 
         const pointsUsedEl = this._q('#points-used');
@@ -458,6 +496,8 @@ class WeaponCustomizer {
         this._q('#attr-points').textContent = attrPoints;
         this._q('#effect-points').textContent = effectPoints;
         this._q('#ordinance-points').textContent = ordinancePoints;
+        const varPtsEl = this._q('#variance-points');
+        if (varPtsEl) varPtsEl.textContent = variancePoints;
 
         let valid;
         if (totalPoints > maxPoints) {
@@ -499,8 +539,13 @@ class WeaponCustomizer {
         const o = this.weaponData.ordinances.find(x => x.name === this.state.ordinance);
         return o ? o.cost : 0;
     }
+    _variancePoints() {
+        if (!this.weaponData || !this.weaponData.varianceFormulas) return 0;
+        const vf = this.weaponData.varianceFormulas.find(x => x.name === this.state.varianceFormula);
+        return vf ? vf.cost : 0;
+    }
     _totalPoints() {
-        return this._attrPoints() + this._effectPoints() + this._ordinancePoints();
+        return this._attrPoints() + this._effectPoints() + this._ordinancePoints() + this._variancePoints();
     }
 
     // ===================================================================
@@ -531,7 +576,7 @@ class WeaponCustomizer {
 
     _renderResolved(panel, data) {
         const attrs = data.attributes || {};
-        const order = ['DAMAGE', 'FIRE_RATE', 'BULLETS_PER_SHOT', 'MAGAZINE_SIZE', 'RELOAD_TIME',
+        const order = ['MIN_DAMAGE', 'MAX_DAMAGE', 'FIRE_RATE', 'BULLETS_PER_SHOT', 'MAGAZINE_SIZE', 'RELOAD_TIME',
                        'RANGE', 'PROJECTILE_SPEED', 'ACCURACY', 'HANDLING', 'LINEAR_DAMPING', 'CALIBER', 'KNOCKBACK'];
         const statRows = order.filter(k => attrs[k]).map(k => {
             const a = attrs[k];
@@ -542,6 +587,7 @@ class WeaponCustomizer {
         const d = data.derived || {};
         const derivedRows = `
             <div class="rs-row"><span class="rs-label">DPS</span><span class="rs-val">${Math.round(d.dps || 0)}</span></div>
+            <div class="rs-row"><span class="rs-label">Expected Damage</span><span class="rs-val">${Math.round(d.expectedDamage || 0)}</span></div>
             <div class="rs-row"><span class="rs-label">Damage / bullet</span><span class="rs-val">${(d.damagePerBullet || 0).toFixed(1)}</span></div>
             <div class="rs-row"><span class="rs-label">Move speed</span><span class="rs-val">${Math.round((d.moveSpeedMultiplier || 1) * 100)}%</span></div>`;
 
@@ -567,7 +613,8 @@ class WeaponCustomizer {
                 weapon: {
                     attributes: this.state.attributes,
                     effects: this.state.effects,
-                    ordinance: this.state.ordinance
+                    ordinance: this.state.ordinance,
+                    varianceFormula: this.state.varianceFormula
                 },
                 utilityWeapon: this.state.utility,
                 timestamp: Date.now()
@@ -589,6 +636,7 @@ class WeaponCustomizer {
             this.state.attributes = { ...config.weapon.attributes };
             this.state.effects = [...config.weapon.effects];
             this.state.ordinance = config.weapon.ordinance;       // normalize coerces if stale
+            if (config.weapon.varianceFormula) this.state.varianceFormula = config.weapon.varianceFormula;
             if (config.utilityWeapon) this.state.utility = config.utilityWeapon;
             return true;
         } catch (error) {

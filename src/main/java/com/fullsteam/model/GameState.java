@@ -7,7 +7,12 @@ package com.fullsteam.model;
  */
 public enum GameState {
     /**
-     * Normal gameplay is active
+     * Pre-game countdown / prep phase before gameplay begins.
+     */
+    COUNTDOWN,
+
+    /**
+     * Normal gameplay is active.
      */
     PLAYING
 }

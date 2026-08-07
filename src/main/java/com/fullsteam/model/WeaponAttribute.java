@@ -35,8 +35,11 @@ import java.util.function.IntToDoubleFunction;
  */
 @Getter
 public enum WeaponAttribute {
-    // Damage: 10 (0 pts) → 50 (40 pts). Linear.
-    DAMAGE(0, 40, linear(10, 1)),
+    // Minimum damage: 10 (0 pts) → 50 (40 pts). Linear.
+    MIN_DAMAGE(0, 40, linear(10, 1)),
+
+    // Maximum damage: 10 (0 pts) → 50 (40 pts). Linear.
+    MAX_DAMAGE(0, 40, linear(10, 1)),
 
     // Fire rate (shots/sec): diminishing DPS multiplier. 0→0.5, 10→4.3, 30→7.1.
     FIRE_RATE(0, 30, sqrtDim(0.5, 1.2)),
@@ -71,7 +74,7 @@ public enum WeaponAttribute {
 
     // Handling: a move-speed multiplier applied to the wielder. TWO-SIDED:
     // negative points = heavier/slower (refund budget), positive = nimble (costs).
-    // 0 pts → 1.0, -10 → 0.8, 15 → 1.3. Targeted by the DAMAGE→HANDLING coupling
+    // 0 pts → 1.0, -10 → 0.8, 15 → 1.3. Targeted by the MIN_DAMAGE/MAX_DAMAGE→HANDLING coupling
     // (heavy-hitting weapons handle worse).
     HANDLING(-10, 15, linear(1.0, 0.02).clamp(0.75, 1.30)),
 
@@ -210,7 +213,8 @@ public enum WeaponAttribute {
             // Synergy: flatter, faster trajectory is easier to land.
             new Coupling(PROJECTILE_SPEED, ACCURACY, +5),
             // Weight: hard-hitting weapons are heavy and handle worse.
-            new Coupling(DAMAGE, HANDLING, -6),
+            new Coupling(MIN_DAMAGE, HANDLING, -3),
+            new Coupling(MAX_DAMAGE, HANDLING, -3),
             // Kickback: rounds made extra-zippy (positive LINEAR_DAMPING investment,
             // low drag) buck the frame and hurt handling. Positive-investment-only,
             // so baseline and draggy builds pay nothing — only deliberate zippiness.
@@ -223,7 +227,7 @@ public enum WeaponAttribute {
             // Synergy: a heavy weapon is a stable firing platform. Negative-handling
             // (deliberately heavy) builds claw back accuracy — only meaningful for a
             // weapon that sacrificed accuracy, since baseline accuracy already clamps
-            // at 1.0. Reads allocated handling points (not the DAMAGE→HANDLING result),
+            // at 1.0. Reads allocated handling points (not the MIN_DAMAGE/MAX_DAMAGE→HANDLING result),
             // so it stays first-order and loop-free like every other coupling.
             new Coupling(HANDLING, ACCURACY, +5, HANDLING::negativeFrac),
             // Heft: bigger rounds are slower and fewer fit in a magazine.

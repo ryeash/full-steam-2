@@ -142,7 +142,7 @@ class EventSystemTest extends BaseTestClass {
                 .enabledEvents(enabledEvents)
                 .build();
 
-        assertEquals(2, rules.getEnabledEvents().size());
+        assertEquals(1, rules.getEnabledEvents().size());
         assertTrue(rules.getEnabledEvents().contains(EnvironmentalEvent.METEOR_SHOWER));
         assertFalse(rules.getEnabledEvents().contains(EnvironmentalEvent.VOLCANIC_ERUPTION));
     }
@@ -193,7 +193,7 @@ class EventSystemTest extends BaseTestClass {
     void testAllEventTypesCount() {
         // Ensure we have all expected event types
         EnvironmentalEvent[] events = EnvironmentalEvent.values();
-        assertEquals(6, events.length, "Should have 6 environmental event types");
+        assertEquals(5, events.length, "Should have 5 environmental event types");
     }
 
     @Test

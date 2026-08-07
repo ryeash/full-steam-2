@@ -242,7 +242,7 @@ public class HeadquartersScoringTest extends BaseTestClass {
         var effects = gameEntities.getAllFieldEffects();
         assertTrue(effects.stream().anyMatch(e ->
                 e.getType().name().equals("EXPLOSION") &&
-                        e.getRadius() == 100.0
+                        e.getDamage() == 100.0
         ));
     }
 

@@ -509,6 +509,11 @@
                         <small style="color: #888; font-size: 0.8em;">Prevent new players from joining after this time
                             (0 = never lock, useful for Battle Royale)</small>
                     </div>
+                    <div class="config-item">
+                        <label for="gameStartCountdown">Game Start Countdown (seconds):</label>
+                        <input type="number" id="gameStartCountdown" min="0" max="300" step="5" value="0">
+                        <small style="color: #888; font-size: 0.8em;">Prep/config window before game action begins (0 = start immediately)</small>
+                    </div>
                 </div>
 
                 <div class="config-section">
@@ -623,6 +628,38 @@
     const serverStatus = document.getElementById('server-status');
 
     let lastUpdateTime = Date.now();
+    let gamePresets = [];
+    let gamePresetsMap = {};
+
+    async function fetchGamePresets() {
+        try {
+            const response = await fetch('/api/game-presets');
+            if (response.ok) {
+                gamePresets = await response.json();
+                gamePresetsMap = {};
+                gamePresets.forEach(preset => {
+                    gamePresetsMap[preset.id] = preset.config;
+                });
+                renderPresetButtons();
+            }
+        } catch (error) {
+            console.error('Error fetching game presets:', error);
+        }
+    }
+
+    function renderPresetButtons() {
+        createButtons.innerHTML = '';
+        if (gamePresets && gamePresets.length > 0) {
+            gamePresets.forEach(preset => {
+                createButtons.appendChild(createPresetButton(preset.label, preset.id));
+            });
+        }
+        const customButton = document.createElement('button');
+        customButton.textContent = '⚙️ Custom Game';
+        customButton.className = 'custom-game';
+        customButton.onclick = () => openCustomGameModal();
+        createButtons.appendChild(customButton);
+    }
 
     function fetchLobbyInfo() {
         fetch('/api/games')
@@ -670,33 +707,7 @@
         gamesCountValue.textContent = lobbyInfo.activeGames ? lobbyInfo.activeGames.length : 0;
 
         // Update "Create Game" buttons
-        createButtons.innerHTML = '';
-
-        const presets = [
-            ['⚔️ Team Battle',      'team-battle'],
-            ['💥 Free For All',     'ffa'],
-            ['🚩 Capture The Flag', 'ctf'],
-            ['👑 Domination',       'domination'],
-            ['🎯 Battle Royale',    'elimination'],
-            ['❤️ Stock Battle',     'stock-battle'],
-            ['🏛️ Headquarters',     'headquarters-assault'],
-            ['🌋 Chaos Mode',       'chaos-mode'],
-            ['⭐ Oddball',          'oddball'],
-            ['🎖️ VIP',              'vip-assassination'],
-            ['👑 Kingpin',          'kingpin'],
-            ['⚔️ Last Stand',       'last-stand'],
-        ];
-
-        presets.forEach(([label, presetType]) => {
-            createButtons.appendChild(createPresetButton(label, presetType));
-        });
-
-        // Add custom game button
-        const customButton = document.createElement('button');
-        customButton.textContent = '⚙️ Custom Game';
-        customButton.className = 'custom-game';
-        customButton.onclick = () => openCustomGameModal();
-        createButtons.appendChild(customButton);
+        renderPresetButtons();
 
         // Update active games list
         gamesList.innerHTML = '';
@@ -852,6 +863,9 @@
         if (rules.lockGameAfterSeconds > 0) {
             tags.push(`🔒 Locks in ${formatTime(rules.lockGameAfterSeconds)}`);
         }
+        if (rules.gameStartCountdown > 0) {
+            tags.push(`⏳ ${rules.gameStartCountdown}s Countdown`);
+        }
         
         // Generate HTML
         const tagHtml = tags.map(tag => {
@@ -892,342 +906,7 @@
     }
 
     function getPresetConfig(presetType) {
-        if (presetType === 'team-battle') {
-            return {
-                maxPlayers: 20,
-                teamCount: 4,
-                worldWidth: 2500,
-                worldHeight: 2500,
-                playerMaxHealth: 100,
-                aiCheckIntervalMs: 10000,
-                enableAIFilling: true,
-                rules: {
-                    flagsPerTeam: 0,
-                    scoreStyle: 'TOTAL_KILLS',
-                    victoryCondition: 'TIME_LIMIT',
-                    scoreLimit: 50,
-                    timeLimit: 600,  // 10 minutes
-                    suddenDeath: true,
-                    respawnMode: 'DELAYED',
-                    respawnDelay: 5,
-                    waveRespawnInterval: 30,
-                    maxLives: -1,
-                    kothZones: 0,
-                    kothPointsPerSecond: 1.0,                }
-            };
-        } else if (presetType === 'ffa') {
-            return {
-                maxPlayers: 10,
-                teamCount: 0,
-                worldWidth: 1500,
-                worldHeight: 1500,
-                playerMaxHealth: 100,
-                aiCheckIntervalMs: 10000,
-                enableAIFilling: true,
-                rules: {
-                    flagsPerTeam: 0,
-                    scoreStyle: 'TOTAL_KILLS',
-                    victoryCondition: 'SCORE_LIMIT',
-                    scoreLimit: 25,  // First to 25 kills
-                    suddenDeath: false,
-                    respawnMode: 'DELAYED',
-                    respawnDelay: 3,  // Faster respawn for FFA
-                    waveRespawnInterval: 30,
-                    maxLives: -1,
-                    kothZones: 0,
-                    kothPointsPerSecond: 1.0,                }
-            };
-        } else if (presetType === 'ctf') {
-            return {
-                maxPlayers: 24,                 // Increased for 3 teams
-                teamCount: 3,                   // 3-way CTF battle
-                worldWidth: 2500,               // Larger world for 3 teams
-                worldHeight: 2500,
-                playerMaxHealth: 100,
-                aiCheckIntervalMs: 10000,
-                enableAIFilling: true,
-                rules: {
-                    flagsPerTeam: 1,            // Classic CTF - 1 flag per team
-                    scoreStyle: 'OBJECTIVE',    // Score by objectives only
-                    victoryCondition: 'SCORE_LIMIT',  // first to the capture limit
-                    scoreLimit: 5,              // First to 5 captures wins (more for 3 teams)
-                    suddenDeath: true,          // Sudden death if tied
-                    respawnMode: 'WAVE',        // Wave respawns for coordinated pushes
-                    respawnDelay: 5,
-                    waveRespawnInterval: 20,    // 20 second waves for CTF
-                    maxLives: -1,
-                    kothZones: 0,               // No KOTH zones in CTF
-                    kothPointsPerSecond: 1.0,                }
-            };
-        } else if (presetType === 'domination') {
-            return {
-                maxPlayers: 15,
-                teamCount: 3,                   // 3-way battle for zones
-                worldWidth: 2200,
-                worldHeight: 2200,
-                playerMaxHealth: 100,
-                aiCheckIntervalMs: 10000,
-                enableAIFilling: true,
-                rules: {
-                    flagsPerTeam: 0,            // No flags in domination
-                    scoreStyle: 'OBJECTIVE',    // Points from zone control only
-                    victoryCondition: 'SCORE_LIMIT',
-                    scoreLimit: 200,            // First to 200 points (zone control only)
-                    suddenDeath: true,
-                    respawnMode: 'DELAYED',
-                    respawnDelay: 4,
-                    waveRespawnInterval: 30,
-                    maxLives: -1,
-                    kothZones: 3,               // 3 zones to fight over!
-                    kothPointsPerSecond: 2.0    // 2 points/second for holding zones
-                }
-            };
-        } else if (presetType === 'elimination') {
-            return {
-                maxPlayers: 50,                 // Battle royale scale - 50 players!
-                teamCount: 0,                   // Every player for themselves (FFA)
-                worldWidth: 4000,               // Much larger world for 50 players
-                worldHeight: 4000,              // Gives space to spread out and strategize
-                playerMaxHealth: 250,           // More health for more engaging firefights
-                aiCheckIntervalMs: 10000,
-                enableAIFilling: true,
-                rules: {
-                    flagsPerTeam: 0,            // No flags
-                    scoreStyle: 'TOTAL_KILLS',  // Kills matter for placement
-                    victoryCondition: 'ELIMINATION',  // Last player standing wins!
-                    scoreLimit: 50,
-                    suddenDeath: false,
-                    lockGameAfterSeconds: 15,   // Lock game after 15s - no late joins in BR!
-                    respawnMode: 'LIMITED',     // ONE LIFE (maxLives: 1) - Battle Royale style!
-                    respawnDelay: 0,
-                    waveRespawnInterval: 30,
-                    maxLives: 1,
-                    kothZones: 0,               // No KOTH zones - pure survival
-                    kothPointsPerSecond: 1.0,                    enableRandomEvents: true,   // Random events add BR excitement
-                    randomEventInterval: 60,    // Event every ~60 seconds
-                    randomEventIntervalVariance: 0.4,  // Good variance
-                    eventWarningDuration: 4,    // 4 second warning for events
-                    addHeadquarters: false      // No headquarters in BR
-                }
-            };
-        } else if (presetType === 'stock-battle') {
-            return {
-                maxPlayers: 16,
-                teamCount: 4,                   // 4 teams, Smash Bros style
-                worldWidth: 1800,
-                worldHeight: 1800,
-                playerMaxHealth: 100,
-                aiCheckIntervalMs: 10000,
-                enableAIFilling: true,
-                rules: {
-                    flagsPerTeam: 0,
-                    scoreStyle: 'TOTAL_KILLS',
-                    victoryCondition: 'ELIMINATION',  // Last team with lives wins
-                    scoreLimit: 50,
-                    suddenDeath: true,          // Sudden death if time runs out
-                    respawnMode: 'LIMITED',     // Limited lives per player
-                    respawnDelay: 3,            // Quick respawn to keep action flowing
-                    waveRespawnInterval: 30,
-                    maxLives: 5,                // 5 stocks per player (like Smash Bros!)
-                    kothZones: 0,
-                    kothPointsPerSecond: 1.0,                }
-            };
-        } else if (presetType === 'headquarters-assault') {
-            return {
-                maxPlayers: 16,
-                teamCount: 2,                   // 2 teams competing for headquarters destruction
-                worldWidth: 4000,               // Wide battlefield
-                worldHeight: 1000,              // Shorter height creates lanes/frontlines
-                playerMaxHealth: 100,
-                aiCheckIntervalMs: 10000,
-                enableAIFilling: true,
-                rules: {
-                    flagsPerTeam: 0,            // No flags in HQ assault
-                    scoreStyle: 'TOTAL',        // Kills + HQ damage points
-                    victoryCondition: 'SCORE_LIMIT',  // Win by destroying enemy HQ (HQ damage feeds the score limit)
-                    scoreLimit: 1000,            // Fallback score limit
-                    suddenDeath: false,
-                    respawnMode: 'WAVE',        // Wave respawns for coordinated attacks
-                    respawnDelay: 5,
-                    waveRespawnInterval: 25,    // 25 second waves
-                    maxLives: -1,               // Infinite lives
-                    kothZones: 0,               // No KOTH zones
-                    addHeadquarters: true,
-                    headquartersMaxHealth: 5000,  // Durable headquarters
-                    headquartersPointsPerDamage: 0.01,  // Points for damaging HQ
-                    headquartersDestructionBonus: 1000,  // Big bonus for destroying enemy HQ
-                    headquartersDestructionEndsGame: true  // Game ends when HQ destroyed
-                }
-            };
-        } else if (presetType === 'chaos-mode') {
-            return {
-                maxPlayers: 15,
-                teamCount: 3,                   // 3-way battle increases chaos
-                worldWidth: 3000,
-                worldHeight: 2000,
-                playerMaxHealth: 100,
-                aiCheckIntervalMs: 10000,
-                enableAIFilling: true,
-                rules: {
-                    flagsPerTeam: 0,
-                    scoreStyle: 'TOTAL',        // All points count
-                    victoryCondition: 'TIME_LIMIT',  // Survive the chaos for 10 minutes
-                    scoreLimit: 100,
-                    timeLimit: 600,             // 10 minutes of mayhem
-                    suddenDeath: true,
-                    respawnMode: 'DELAYED',     // Fast respawns keep action flowing
-                    respawnDelay: 3,
-                    waveRespawnInterval: 30,
-                    maxLives: -1,
-                    kothZones: 2,               // Some zones to fight over
-                    kothPointsPerSecond: 1.5,
-                    addHeadquarters: false,
-                    headquartersMaxHealth: 1000,
-                    headquartersPointsPerDamage: 0.1,
-                    headquartersDestructionBonus: 100,
-                    headquartersDestructionEndsGame: false,
-                    enableRandomEvents: true,
-                    randomEventInterval: 15,     // Events every 15 seconds on average
-                    eventWarningDuration: 5,     // 5 second warning
-                    meteorShowerDensity: 'CHOKED',  // Intense meteor showers
-                    volcanicEruptionDensity: 'DENSE',
-                    ionStormDensity: 'DENSE',
-                    earthquakeDensity: 'DENSE',
-                    blizzardDensity: 'DENSE'
-                }
-            };
-        } else if (presetType === 'oddball') {
-            return {
-                maxPlayers: 12,
-                teamCount: 4,
-                worldWidth: 2500,
-                worldHeight: 2500,
-                playerMaxHealth: 100,
-                aiCheckIntervalMs: 10000,
-                enableAIFilling: true,
-                rules: {
-                    flagsPerTeam: 0,
-                    scoreStyle: 'OBJECTIVE',
-                    victoryCondition: 'SCORE_LIMIT',
-                    scoreLimit: 1000,
-                    suddenDeath: true,
-                    respawnMode: 'DELAYED',
-                    respawnDelay: 4,
-                    waveRespawnInterval: 30,
-                    maxLives: -1,
-                    kothZones: 0,
-                    kothPointsPerSecond: 1.0,
-                    enableRandomEvents: false,
-                    randomEventInterval: 40,
-                    eventWarningDuration: 3,
-                    enableOddballNpcs: true,    // NPC oddball mode
-                    rampageBallCount: 1,        // One big angry ball
-                    seekerBallCount: 2,         // Two fast harassers
-                    oddballNpcPointsPerDamage: 0.1
-                }
-            };
-        } else if (presetType === 'kingpin') {
-            return {
-                maxPlayers: 5,                  // Intimate FFA — every fight matters
-                teamCount: 0,                   // Free-for-all, no teams
-                worldWidth: 1600,
-                worldHeight: 1600,              // Compact world forces everyone toward the zone
-                playerMaxHealth: 100,
-                aiCheckIntervalMs: 10000,
-                enableAIFilling: true,
-                rules: {
-                    flagsPerTeam: 0,
-                    scoreStyle: 'OBJECTIVE',    // Only zone hold-time counts; kills are just harassment
-                    victoryCondition: 'SCORE_LIMIT',
-                    scoreLimit: 90,             // 90 pts ≈ 90 seconds of solo zone control
-                    suddenDeath: true,
-                    respawnMode: 'DELAYED',
-                    respawnDelay: 3,            // Fast respawn — dying just costs you the zone
-                    maxLives: -1,
-                    kothZones: 1,               // Single central zone — everyone converges here
-                    kothPointsPerSecond: 1.0,   // 1 pt/s held → 90 s to win                    headquartersMaxHealth: 1000,
-                    headquartersPointsPerDamage: 0.1,
-                    headquartersDestructionBonus: 0,
-                    headquartersDestructionEndsGame: false,
-                    enableRandomEvents: true,   // Light environmental events keep the zone dynamic
-                    randomEventInterval: 60,
-                    eventWarningDuration: 4,
-                    meteorShowerDensity: 'SPARSE',
-                    volcanicEruptionDensity: 'SPARSE',
-                    ionStormDensity: 'SPARSE',
-                    earthquakeDensity: 'SPARSE',
-                    blizzardDensity: 'SPARSE',
-                    enableVip: false,
-                    obstacleDensity: 'DENSE',
-                    pointsPerFlagCapture: 1,
-                    enableRandomWeapons: true
-                }
-            };
-        } else if (presetType === 'vip-assassination') {
-            return {
-                maxPlayers: 15,
-                teamCount: 3,                   // 3 teams - asymmetric VIP hunting
-                worldWidth: 2200,
-                worldHeight: 2200,
-                playerMaxHealth: 100,
-                aiCheckIntervalMs: 10000,
-                enableAIFilling: true,
-                rules: {
-                    flagsPerTeam: 0,            // No flags - focus on VIP kills
-                    scoreStyle: 'OBJECTIVE',    // Only VIP kills count!
-                    victoryCondition: 'SCORE_LIMIT',
-                    scoreLimit: 10,             // First to 10 VIP kills wins
-                    suddenDeath: true,
-                    respawnMode: 'WAVE',        // Wave respawns for coordinated VIP protection/hunting
-                    respawnDelay: 5,
-                    waveRespawnInterval: 20,    // 20 second waves - keeps action flowing
-                    maxLives: -1,
-                    kothZones: 0,
-                    kothPointsPerSecond: 0.5,
-                    addHeadquarters: false,     // No HQ - pure VIP assassination
-                    headquartersMaxHealth: 1000,
-                    headquartersPointsPerDamage: 0.1,
-                    headquartersDestructionBonus: 100,
-                    headquartersDestructionEndsGame: false,
-                    enableRandomEvents: true,   // Random events add chaos to VIP protection
-                    randomEventInterval: 50,    // Occasional events
-                    eventWarningDuration: 4,
-                    meteorShowerDensity: 'CHOKED',  // Really make it wild
-                    volcanicEruptionDensity: 'SPARSE',
-                    ionStormDensity: 'DENSE',
-                    earthquakeDensity: 'SPARSE',
-                    blizzardDensity: 'SPARSE',
-                    enableVip: true,            // VIP MODE ENABLED!
-                    obstacleDensity: 'DENSE'    // Dense obstacles for tactical VIP protection
-                }
-            };
-        } else if (presetType === 'last-stand') {
-            return {
-                maxPlayers: 12,
-                teamCount: 0,                   // FFA - every player for themselves
-                worldWidth: 1600,               // Tight arena keeps skirmishes fast
-                worldHeight: 1600,
-                playerMaxHealth: 100,
-                aiCheckIntervalMs: 10000,
-                enableAIFilling: true,
-                rules: {
-                    flagsPerTeam: 0,
-                    scoreStyle: 'TOTAL_KILLS',        // Kills win it
-                    victoryCondition: 'SCORE_LIMIT',
-                    scoreLimit: 20,                   // First to 20 kills across skirmishes
-                    suddenDeath: false,
-                    respawnMode: 'LAST_STANDING',     // Dead wait until one is left, then all respawn
-                    respawnDelay: 0,
-                    waveRespawnInterval: 30,
-                    maxLives: -1,                     // Unlimited lives - you always come back next round
-                    kothZones: 0,
-                    kothPointsPerSecond: 1.0,
-                    obstacleDensity: 'DENSE',         // Cover for tense final duels
-                    addHeadquarters: false
-                }
-            };
-        }
-        return null;
+        return gamePresetsMap[presetType] || null;
     }
 
     async function createPresetGame(presetType) {
@@ -1277,6 +956,7 @@
     });
 
     // Initialize page
+    fetchGamePresets();
     fetchLobbyInfo();
     
     // Refresh every 3 seconds for better responsiveness
@@ -1323,6 +1003,7 @@
                 document.getElementById('timeLimit').value = r.timeLimit ?? 600;
                 document.getElementById('suddenDeath').checked = r.suddenDeath ?? false;
                 document.getElementById('lockGameAfterSeconds').value = r.lockGameAfterSeconds ?? 0;
+                document.getElementById('gameStartCountdown').value = r.gameStartCountdown ?? 0;
                 // Coerce the retired ELIMINATION mode to its equivalent (LIMITED, 1 life).
                 document.getElementById('respawnMode').value =
                     (r.respawnMode === 'ELIMINATION' ? 'LIMITED' : r.respawnMode) || 'DELAYED';
@@ -1445,6 +1126,7 @@
                 timeLimit: parseFloat(document.getElementById('timeLimit').value),
                 suddenDeath: document.getElementById('suddenDeath').checked,
                 lockGameAfterSeconds: parseFloat(document.getElementById('lockGameAfterSeconds').value),
+                gameStartCountdown: parseFloat(document.getElementById('gameStartCountdown').value || 0),
                 respawnMode: document.getElementById('respawnMode').value,
                 respawnDelay: parseFloat(document.getElementById('respawnDelay').value),
                 waveRespawnInterval: parseFloat(document.getElementById('waveRespawnInterval').value),

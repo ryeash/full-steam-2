@@ -295,6 +295,8 @@ public class WeaponSystem {
         double baseAngle = Math.atan2(direction.y, direction.x);
         double spread = (1.0 - weapon.getAccuracy()) * 0.17;
         int shots = Math.max(1, weapon.getBulletsPerShot());
+        double rolledDamage = weapon.rollDamage();
+        double rolledDamagePerBullet = Weapon.damagePerBullet(rolledDamage, shots);
         List<GameEntity> fired = new ArrayList<>(shots);
         double angle = baseAngle;
         for (int i = 0; i < shots; i++) {
@@ -304,18 +306,18 @@ public class WeaponSystem {
                     (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0,
                     (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0);
             fired.add(weapon.getOrdinance().isBeamType()
-                    ? fireBeam(ownerId, ownerTeam, weapon, position, aimDir)
-                    : fireProjectile(ownerId, ownerTeam, weapon, position.copy().add(jitter), aimDir));
+                    ? fireBeam(ownerId, ownerTeam, weapon, position, aimDir, rolledDamage)
+                    : fireProjectile(ownerId, ownerTeam, weapon, position.copy().add(jitter), aimDir, rolledDamagePerBullet));
         }
         return fired;
     }
 
-    private static FieldEffectBeam fireBeam(int ownerId, int ownerTeam, Weapon weapon, Vector2 pos, Vector2 dir) {
+    private static FieldEffectBeam fireBeam(int ownerId, int ownerTeam, Weapon weapon, Vector2 pos, Vector2 dir, double damage) {
         return new FieldEffectBeam(
                 pos,
                 dir,
                 weapon.getRange() * BEAM_RANGE_PENALTY,
-                weapon.getDamage(),
+                damage,
                 ownerId,
                 ownerTeam,
                 weapon.getOrdinance() == Ordinance.PLASMA_BEAM
@@ -326,12 +328,12 @@ public class WeaponSystem {
         );
     }
 
-    private static Projectile fireProjectile(int ownerId, int ownerTeam, Weapon weapon, Vector2 pos, Vector2 dir) {
+    private static Projectile fireProjectile(int ownerId, int ownerTeam, Weapon weapon, Vector2 pos, Vector2 dir, double damagePerBullet) {
         return new Projectile(
                 ownerId,
                 pos,
                 dir.copy().multiply(weapon.getProjectileSpeed()),
-                weapon.getDamagePerBullet(),
+                damagePerBullet,
                 weapon.getRange(),
                 ownerTeam,
                 weapon.getLinearDamping(),

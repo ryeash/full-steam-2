@@ -282,8 +282,13 @@ class GameEngine {
 
         this.gameTimerContainer.visible = true;
 
-        // Update the countdown (only present for timed games)
-        if (data.gameTimed) {
+        // Update the countdown (present for start countdown or timed games)
+        if (data.isCountdown || data.gameState === 'COUNTDOWN') {
+            this.gameTimerText.visible = true;
+            const remainingSec = Math.ceil(data.startCountdownRemaining || 0);
+            this.gameTimerText.text = `STARTING IN ${remainingSec}s`;
+            this.setTextFill(this.gameTimerText, 0xffaa00);
+        } else if (data.gameTimed) {
             this.gameTimerText.visible = true;
 
             const timeRemaining = data.gameTimeRemaining;
@@ -1346,6 +1351,38 @@ class GameEngine {
     handleGameState(data) {
         this.gameState = data;
         
+        // Update pre-game countdown banner & loadout banner if active
+        const isCountdown = data.isCountdown || data.gameState === 'COUNTDOWN';
+        if (isCountdown) {
+            const remainingSec = Math.ceil(data.startCountdownRemaining || 0);
+            const banner = document.getElementById('game-start-banner');
+            const countdownText = document.getElementById('game-start-countdown-text');
+            if (banner && countdownText) {
+                countdownText.textContent = `${remainingSec}s`;
+                banner.style.display = 'block';
+            }
+            this.showLoadoutBanner(`Game starting in ${remainingSec}s - prepare loadout!`);
+        } else if (this.wasCountdown) {
+            const banner = document.getElementById('game-start-banner');
+            const countdownText = document.getElementById('game-start-countdown-text');
+            if (banner && countdownText) {
+                const label = banner.querySelector('.game-start-label');
+                if (label) label.textContent = 'BATTLE STARTED';
+                countdownText.textContent = 'FIGHT!';
+                banner.style.borderColor = '#00ff88';
+                banner.style.boxShadow = '0 0 25px rgba(0, 255, 136, 0.5)';
+                setTimeout(() => {
+                    banner.style.display = 'none';
+                    if (label) label.textContent = 'GAME STARTING IN';
+                    banner.style.borderColor = '#ffaa00';
+                    banner.style.boxShadow = '0 0 25px rgba(255, 170, 0, 0.4)';
+                }, 1500);
+            }
+            const loadoutBanner = document.getElementById('loadout-banner');
+            if (loadoutBanner) loadoutBanner.classList.remove('visible');
+        }
+        this.wasCountdown = isCountdown;
+
         // Update the game timer (countdown for timed games, plus team scores)
         if (data.gameState !== undefined) {
             this.updateGameTimer(data);

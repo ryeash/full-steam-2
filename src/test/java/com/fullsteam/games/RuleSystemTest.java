@@ -517,6 +517,59 @@ class RuleSystemTest extends BaseTestClass {
     }
 
     // ============================================================================
+    // Game Start Countdown Tests
+    // ============================================================================
+
+    @Test
+    @DisplayName("Should initialize in COUNTDOWN state when gameStartCountdown > 0")
+    void testGameStartCountdownInitialization() {
+        Rules countdownRules = Rules.builder()
+                .gameStartCountdown(5.0)
+                .build();
+
+        RuleSystem countdownRuleSystem = new RuleSystem(
+                "countdown-test",
+                countdownRules,
+                gameEntities,
+                gameEventManager,
+                broadcaster,
+                2
+        );
+
+        assertTrue(countdownRuleSystem.isCountdown(), "RuleSystem should be in COUNTDOWN state");
+        assertEquals(GameState.COUNTDOWN, countdownRuleSystem.getGameState());
+        assertEquals(5.0, countdownRuleSystem.getStartCountdownRemaining(), 0.001);
+    }
+
+    @Test
+    @DisplayName("Should transition from COUNTDOWN to PLAYING when countdown expires")
+    void testGameStartCountdownExpiration() {
+        Rules countdownRules = Rules.builder()
+                .gameStartCountdown(4.0)
+                .build();
+
+        RuleSystem countdownRuleSystem = new RuleSystem(
+                "countdown-test",
+                countdownRules,
+                gameEntities,
+                gameEventManager,
+                broadcaster,
+                2
+        );
+
+        // Tick 2 seconds
+        countdownRuleSystem.update(2.0);
+        assertTrue(countdownRuleSystem.isCountdown(), "Should still be in COUNTDOWN");
+        assertEquals(2.0, countdownRuleSystem.getStartCountdownRemaining(), 0.001);
+
+        // Tick 2.5 more seconds (total 4.5s > 4.0s)
+        countdownRuleSystem.update(2.5);
+        assertFalse(countdownRuleSystem.isCountdown(), "Should no longer be in COUNTDOWN");
+        assertEquals(GameState.PLAYING, countdownRuleSystem.getGameState());
+        assertEquals(0.0, countdownRuleSystem.getStartCountdownRemaining(), 0.001);
+    }
+
+    // ============================================================================
     // Helper Methods
     // ============================================================================
 

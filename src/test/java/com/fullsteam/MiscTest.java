@@ -26,7 +26,8 @@ public class MiscTest extends BaseTestClass {
                 WeaponConfig config = (WeaponConfig) field.get(null);
                 System.out.println(config);
 
-                WeaponAttribute.DAMAGE.validate(config.bulletsPerShot);
+                WeaponAttribute.MIN_DAMAGE.validate(config.minDamage);
+                WeaponAttribute.MAX_DAMAGE.validate(config.maxDamage);
                 WeaponAttribute.FIRE_RATE.validate(config.fireRate);
                 WeaponAttribute.ACCURACY.validate(config.accuracy);
                 WeaponAttribute.MAGAZINE_SIZE.validate(config.magazineSize);
@@ -38,8 +39,9 @@ public class MiscTest extends BaseTestClass {
 
                 int effectPoints = config.getBulletEffects().stream().mapToInt(BulletEffect::getPointCost).sum();
                 int ordinancePoints = config.getOrdinance().getPointCost();
+                int variancePoints = config.getVarianceFormula() != null ? config.getVarianceFormula().getPointCost() : 0;
                 int attributePoints = config.getAttributePoints();
-                int totalPoints = attributePoints + effectPoints + ordinancePoints;
+                int totalPoints = attributePoints + effectPoints + ordinancePoints + variancePoints;
                 if (totalPoints < 100) {
                     fail("under allocated on " + field.getName() + " " + totalPoints + "/100");
                 }
