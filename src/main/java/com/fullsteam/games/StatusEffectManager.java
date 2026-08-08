@@ -305,9 +305,11 @@ public final class StatusEffectManager {
             @Override
             public void update(Player player, double delta) {
                 double damage = damagePerSecond * (delta / 1000);
-                if (player.takeDamage(damage)) {
+                boolean killed = player.takeDamage(damage);
+                if (killed) {
                     gameManager.killPlayer(player, effectOwner);
                 }
+                gameManager.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, effectOwner, player.getId(), killed);
             }
         });
     }

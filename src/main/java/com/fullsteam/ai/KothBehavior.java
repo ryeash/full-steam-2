@@ -389,7 +389,7 @@ public class KothBehavior implements AIBehavior {
         double zoneRadius = 80.0;
 
         for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() == aiPlayer.getId() || !player.isActive()) {
+            if (player.getId() == aiPlayer.getId() || !player.isActive() || player.isVisionObscured()) {
                 continue;
             }
 
@@ -411,7 +411,7 @@ public class KothBehavior implements AIBehavior {
         double zoneRadius = 80.0;
 
         for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() == aiPlayer.getId() || !player.isActive()) {
+            if (player.getId() == aiPlayer.getId() || !player.isActive() || player.isVisionObscured()) {
                 continue;
             }
 
@@ -431,7 +431,7 @@ public class KothBehavior implements AIBehavior {
         int myTeam = aiPlayer.getTeam();
 
         for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() == aiPlayer.getId() || !player.isActive()) {
+            if (player.getId() == aiPlayer.getId() || !player.isActive() || player.isVisionObscured()) {
                 continue;
             }
 

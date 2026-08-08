@@ -103,7 +103,7 @@ public interface AIBehavior {
         List<AITargetWrapper> targets = new ArrayList<>();
 
         for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() == aiPlayer.getId() || !player.isActive()) {
+            if (player.getId() == aiPlayer.getId() || !player.isActive() || player.isVisionObscured()) {
                 continue;
             }
             AITargetWrapper wrapper = AITargetWrapper.fromPlayer(player);

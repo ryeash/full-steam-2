@@ -6,6 +6,7 @@ import com.fullsteam.RandomNames;
 import com.fullsteam.ai.AIPersonality;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
+import com.fullsteam.model.DamageHit;
 import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.FieldEffectCircle;
 import com.fullsteam.model.FieldEffectType;
@@ -107,11 +108,67 @@ public class GameManager {
 
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
     private volatile boolean hadHumanPlayers = false;
+    private final GameLobby gameLobby;
+
+    private final List<DamageHit> pendingDamageHits = new ArrayList<>();
+    private final Map<Long, Double> dotHitAccumulator = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Record a discrete damage hit for client UI display (e.g. floating damage numbers).
+     * Damage is rounded to nearest integer (or 1 if < 1).
+     */
+    public void recordDamageHit(double x, double y, double damage, int attackerId, int victimId, boolean isKill) {
+        if (damage <= 0.0) {
+            return;
+        }
+        long displayDamage = Math.max(1, Math.round(damage));
+        double rX = Math.round(x * 10.0) / 10.0;
+        double rY = Math.round(y * 10.0) / 10.0;
+        synchronized (pendingDamageHits) {
+            pendingDamageHits.add(new DamageHit(rX, rY, (double) displayDamage, attackerId, victimId, isKill));
+        }
+    }
+
+    /**
+     * Accumulate continuous DOT damage and record a hit once accumulated damage is significant.
+     */
+    public void recordDotDamageHit(double x, double y, double frameDamage, int attackerId, int victimId, boolean isKill) {
+        if (frameDamage <= 0) {
+            return;
+        }
+        long key = (((long) attackerId) << 32) | (victimId & 0xFFFFFFFFL);
+        double total = dotHitAccumulator.getOrDefault(key, 0.0) + frameDamage;
+        if (total >= 4.0 || isKill) {
+            recordDamageHit(x, y, total, attackerId, victimId, isKill);
+            dotHitAccumulator.put(key, 0.0);
+        } else {
+            dotHitAccumulator.put(key, total);
+        }
+    }
+
+    /**
+     * Retrieve and clear damage hits collected during the tick for state serialization.
+     */
+    public List<DamageHit> getAndClearDamageHits() {
+        synchronized (pendingDamageHits) {
+            if (pendingDamageHits.isEmpty()) {
+                return List.of();
+            }
+            List<DamageHit> copy = new ArrayList<>(pendingDamageHits);
+            pendingDamageHits.clear();
+            return copy;
+        }
+    }
 
     public GameManager(String gameId, GameConfig gameConfig, ObjectMapper objectMapper) {
+        this(gameId, gameConfig, objectMapper, null);
+    }
+
+    public GameManager(String gameId, GameConfig gameConfig, ObjectMapper objectMapper, GameLobby gameLobby) {
         this.gameId = gameId;
         this.gameConfig = gameConfig;
         this.objectMapper = objectMapper;
+        this.gameLobby = gameLobby;
         this.gameStartTime = System.currentTimeMillis();
         this.aiPlayerManager = new AIPlayerManager(gameConfig);
 
@@ -171,6 +228,7 @@ public class GameManager {
                 teamSpawnManager,
                 terrainGenerator
         );
+        this.gameStateSerializer.setGameManager(this);
 
         entitySpawner.createWorldBoundaries();
         entitySpawner.createObstacles();
@@ -197,7 +255,7 @@ public class GameManager {
             log.debug("AI filling disabled for game {} - no initial AI players added", gameId);
         }
 
-        this.shutdownHook = Config.EXECUTOR.scheduleAtFixedRate(this::update, 0, 16, TimeUnit.MILLISECONDS);
+        this.shutdownHook = Config.EXECUTOR.scheduleAtFixedRate(this::update, 0, 33, TimeUnit.MILLISECONDS);
     }
 
     public boolean addPlayer(PlayerSession playerSession) {
@@ -410,7 +468,10 @@ public class GameManager {
      * count that gates new joins against {@link #getMaxPlayers()}.
      */
     public int getPlayingAndLobbyCount() {
-        return (int) gameEntities.getPlayerSessions().values().stream()
+        return (int) gameEntities.getPlayerSessions()
+                .values()
+                .stream()
+                .filter(player -> player.getSession().isOpen())
                 .filter(s -> s.getState() != PlayerSessionState.SPECTATOR)
                 .count();
     }
@@ -728,7 +789,7 @@ public class GameManager {
         }
     }
 
-    protected void update() {
+    public void update() {
         if (shutdown.get()) {
             return;
         }
@@ -741,6 +802,8 @@ public class GameManager {
             if (ruleSystem.isGameOver()) {
                 return;
             }
+
+            purgeClosedSessions();
 
             // Update rule systems (rounds, victory conditions, respawns)
             ruleSystem.update(deltaTime);
@@ -788,6 +851,31 @@ public class GameManager {
             sendGameState();
         } catch (Throwable t) {
             log.error("Error in update loop", t);
+        }
+    }
+
+    private void purgeClosedSessions() {
+        List<PlayerSession> closedSessions = gameEntities.getPlayerSessions().values().stream()
+                .filter(session -> session.getSession() != null && !session.getSession().isOpen())
+                .toList();
+
+        if (closedSessions.isEmpty()) {
+            return;
+        }
+
+        for (PlayerSession closedSession : closedSessions) {
+            log.info("Purging closed WebSocket session for player {} in game {}", closedSession.getPlayerId(), gameId);
+            removePlayer(closedSession.getPlayerId());
+            if (closedSession.isCountedInGlobalPlayerCount()) {
+                if (gameLobby != null) {
+                    gameLobby.decrementPlayerCount();
+                }
+                closedSession.setCountedInGlobalPlayerCount(false);
+            }
+        }
+
+        if ((!hasHumanPlayers() || ruleSystem.isGameOver()) && gameLobby != null) {
+            gameLobby.removeGame(gameId);
         }
     }
 

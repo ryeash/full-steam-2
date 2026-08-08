@@ -1,6 +1,7 @@
 package com.fullsteam.games;
 
 import com.fullsteam.model.AttributeModification;
+import com.fullsteam.model.DamageHit;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Rules;
@@ -45,6 +46,7 @@ public class GameStateSerializer {
     private final RuleSystem ruleSystem;
     private final TeamSpawnManager teamSpawnManager;
     private final TerrainGenerator terrainGenerator;
+    private GameManager gameManager;
 
     public GameStateSerializer(GameConfig gameConfig, GameEntities gameEntities,
                                RuleSystem ruleSystem, TeamSpawnManager teamSpawnManager,
@@ -54,6 +56,10 @@ public class GameStateSerializer {
         this.ruleSystem = ruleSystem;
         this.teamSpawnManager = teamSpawnManager;
         this.terrainGenerator = terrainGenerator;
+    }
+
+    public void setGameManager(GameManager gameManager) {
+        this.gameManager = gameManager;
     }
 
     /**
@@ -101,6 +107,13 @@ public class GameStateSerializer {
 
         if (gameConfig.getRules().hasOddballNpcs()) {
             gameState.put("oddballNpcs", createOddballNpcStates());
+        }
+
+        if (gameManager != null) {
+            List<DamageHit> hits = gameManager.getAndClearDamageHits();
+            if (!hits.isEmpty()) {
+                gameState.put("hits", hits);
+            }
         }
 
         return gameState;
@@ -199,7 +212,8 @@ public class GameStateSerializer {
             if (key.equals("players") || key.equals("projectiles")
                     || key.equals("fieldEffects") || key.equals("beams")
                     || key.equals("turrets") || key.equals("nets")
-                    || key.equals("defenseLasers") || key.equals("powerUps")) {
+                    || key.equals("defenseLasers") || key.equals("powerUps")
+                    || key.equals("hits")) {
                 continue;
             }
             state.put(key, entry.getValue());
@@ -254,6 +268,9 @@ public class GameStateSerializer {
     private List<Map<String, Object>> createPlayerStates() {
         List<Map<String, Object>> playerStates = new ArrayList<>();
         for (Player player : gameEntities.getAllPlayers()) {
+            if (player.isVisionObscured()) {
+                continue; // Players inside smoke fields are hidden from other players
+            }
             playerStates.add(serializePlayerState(player, false));
         }
         return playerStates;
@@ -269,12 +286,15 @@ public class GameStateSerializer {
      */
     private Map<String, Object> serializePlayerState(Player player, boolean stripPowerUps) {
         Vector2 pos = player.getPosition();
+        Vector2 vel = player.getBody().getLinearVelocity();
         Map<String, Object> s = new HashMap<>();
         s.put("id", player.getId());
         s.put("name", player.getPlayerName());
         s.put("team", player.getTeam());
         s.put("x", pos.x);
         s.put("y", pos.y);
+        s.put("vx", Math.round(vel.x * 10.0) / 10.0);
+        s.put("vy", Math.round(vel.y * 10.0) / 10.0);
         s.put("rotation", player.getRotation());
         s.put("health", player.healthPercent());
         s.put("active", player.isActive());
@@ -487,7 +507,8 @@ public class GameStateSerializer {
                     && !key.equals("players") && !key.equals("projectiles")
                     && !key.equals("fieldEffects") && !key.equals("beams")
                     && !key.equals("turrets") && !key.equals("nets")
-                    && !key.equals("defenseLasers") && !key.equals("powerUps")) {
+                    && !key.equals("defenseLasers") && !key.equals("powerUps")
+                    && !key.equals("hits")) {
                 state.put(key, entry.getValue());
             }
         }
@@ -514,6 +535,18 @@ public class GameStateSerializer {
             }
         }
         state.put("fieldEffects", smokeEffects);
+
+        @SuppressWarnings("unchecked")
+        List<DamageHit> hits = (List<DamageHit>) fullState.get("hits");
+        if (hits != null && !hits.isEmpty()) {
+            List<DamageHit> playerHits = hits.stream()
+                    .filter(h -> h.getAttackerId() == blindedPlayer.getId() || h.getVictimId() == blindedPlayer.getId())
+                    .toList();
+            if (!playerHits.isEmpty()) {
+                state.put("hits", playerHits);
+            }
+        }
+
         // Omit all other transient collections — absent field == empty array on the client.
         // Obstacles are excluded entirely: they're static and already on the client
         // from the initial-state payload.

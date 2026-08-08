@@ -184,7 +184,7 @@ public class IdleBehavior implements AIBehavior {
 
         // Check all enemy players
         for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() == aiPlayer.getId() || !player.isActive()) {
+            if (player.getId() == aiPlayer.getId() || !player.isActive() || player.isVisionObscured()) {
                 continue;
             }
 

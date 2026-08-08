@@ -76,7 +76,7 @@ public class HeadquartersBehavior implements AIBehavior {
             }
 
             // Check if enemies are near our HQ
-            if (areEnemiesNearHQ(aiPlayer, myHQ, gameEntities, 300)) {
+            if (areEnemiesNearHQ(aiPlayer, myHQ, gameEntities)) {
                 currentRole = HQRole.DEFENDER;
                 targetHQId = myHQ.getId();
                 return;
@@ -431,7 +431,7 @@ public class HeadquartersBehavior implements AIBehavior {
         }
 
         // Higher priority if enemies are near HQ
-        if (areEnemiesNearHQ(aiPlayer, myHQ, gameEntities, 300)) {
+        if (areEnemiesNearHQ(aiPlayer, myHQ, gameEntities)) {
             priority += 20;
         }
 
@@ -481,19 +481,21 @@ public class HeadquartersBehavior implements AIBehavior {
         return nearest;
     }
 
-    private boolean areEnemiesNearHQ(AIPlayer aiPlayer, Headquarters hq, GameEntities gameEntities, double radius) {
-        if (hq == null) return false;
+    private boolean areEnemiesNearHQ(AIPlayer aiPlayer, Headquarters hq, GameEntities gameEntities) {
+        if (hq == null) {
+            return false;
+        }
 
         Vector2 hqPos = hq.getPosition();
         int myTeam = aiPlayer.getTeam();
 
         for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getTeam() == myTeam || !player.isActive()) {
+            if (player.getTeam() == myTeam || !player.isActive() || player.isVisionObscured()) {
                 continue;
             }
 
             double distance = hqPos.distance(player.getPosition());
-            if (distance < radius) {
+            if (distance < player.getWeapon().getRange()) {
                 return true;
             }
         }
@@ -502,7 +504,9 @@ public class HeadquartersBehavior implements AIBehavior {
     }
 
     private int countDefendersNearHQ(AIPlayer aiPlayer, Headquarters hq, GameEntities gameEntities) {
-        if (hq == null) return 0;
+        if (hq == null) {
+            return 0;
+        }
 
         int count = 0;
         Vector2 hqPos = hq.getPosition();

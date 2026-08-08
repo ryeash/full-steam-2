@@ -100,7 +100,7 @@ public class Turret extends OwnedGameEntity implements HasWeapon {
 
     private boolean isValidTarget(Player player) {
         double distance = getPosition().distance(player.getPosition());
-        if (!player.isActive() || player.getHealth() <= 0 || distance > weapon.getRange()) {
+        if (!player.isActive() || player.getHealth() <= 0 || distance > weapon.getRange() || player.isVisionObscured()) {
             return false;
         }
         if (player.getId() == ownerId) {

@@ -118,4 +118,46 @@ class GameLobbyTest extends BaseTestClass {
         // Finished game should not be listed in active games
         assertEquals(0, gameLobby.getActiveGames().size());
     }
+
+    @Test
+    @DisplayName("Closed WebSocket session is purged on game update and game reaped")
+    void testClosedSessionPurgedDuringGameUpdate() {
+        GameManager game = gameLobby.createGameWithConfig(GameConfig.builder().enableAIFilling(false).build());
+        String gameId = game.getGameId();
+
+        boolean[] isOpen = {true};
+        Map<String, Object> attributes = new HashMap<>();
+        WebSocketSession ws = (WebSocketSession) Proxy.newProxyInstance(
+                getClass().getClassLoader(),
+                new Class<?>[]{WebSocketSession.class},
+                (proxy, method, args) -> {
+                    if ("isOpen".equals(method.getName())) return isOpen[0];
+                    if ("isWritable".equals(method.getName())) return isOpen[0];
+                    if ("getAttributes".equals(method.getName())) return attributes;
+                    if ("get".equals(method.getName())) {
+                        Object val = attributes.get((String) args[0]);
+                        return Optional.ofNullable(val);
+                    }
+                    if ("put".equals(method.getName())) {
+                        attributes.put((String) args[0], args[1]);
+                        return null;
+                    }
+                    return null;
+                }
+        );
+
+        connectionService.connectPlayer(ws, gameId, false);
+        assertEquals(1, gameLobby.getGlobalPlayerCount());
+        assertTrue(game.hasHumanPlayers());
+
+        // Simulate abrupt socket closure without explicit disconnect call
+        isOpen[0] = false;
+
+        // Trigger update loop
+        game.update();
+
+        // GameManager update should detect closed session, purge it, and remove game
+        assertNull(gameLobby.getGame(gameId));
+        assertEquals(0, gameLobby.getGlobalPlayerCount());
+    }
 }

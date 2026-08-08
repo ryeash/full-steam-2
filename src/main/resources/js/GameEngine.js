@@ -116,6 +116,9 @@ class GameEngine {
             const deltaTime = ticker.deltaTime;
             const dt = deltaTime / 60.0; // Convert to seconds
             
+            // Update all player interpolations for smooth 60+ FPS player movement
+            this.updatePlayersInterpolation(deltaTime);
+
             // Update all projectile interpolators every frame
             this.projectileInterpolators.forEach(interpolator => {
                 interpolator.update(deltaTime);
@@ -143,23 +146,28 @@ class GameEngine {
         this.backgroundContainer = new PIXI.Container();
         this.gameContainer = new PIXI.Container();
         this.nameContainer = new PIXI.Container(); // Separate container for name labels
+        this.damageTextContainer = new PIXI.Container(); // Separate container for damage numbers
         this.uiContainer = new PIXI.Container();
+        this.floatingDamageTexts = [];
 
         // Flip Y-axis to match dyn4j physics coordinate system (Y-up)
         // This eliminates the need for coordinate conversions between physics and rendering
         this.gameContainer.scale.y = -1;
         this.nameContainer.scale.y = -1; // Also flip nameContainer to match
+        this.damageTextContainer.scale.y = -1;
 
         // Set up proper z-ordering
         this.backgroundContainer.zIndex = 0;
         this.gameContainer.zIndex = 1;
         this.gameContainer.sortableChildren = true
         this.nameContainer.zIndex = 50; // Above game objects but below UI
+        this.damageTextContainer.zIndex = 60; // Above game objects and names
         this.uiContainer.zIndex = 100;
 
         this.app.stage.addChild(this.backgroundContainer);
         this.app.stage.addChild(this.gameContainer);
         this.app.stage.addChild(this.nameContainer);
+        this.app.stage.addChild(this.damageTextContainer);
         this.app.stage.addChild(this.uiContainer);
 
         // Enable sorting for proper z-index handling
@@ -178,6 +186,21 @@ class GameEngine {
             this.updateGameTimerPosition();
         };
         window.addEventListener('resize', this.eventHandlers.resize);
+
+        // Handle window navigation/unload events
+        this.eventHandlers.pagehide = () => this.destroy();
+        this.eventHandlers.beforeunload = () => this.destroy();
+        this.eventHandlers.popstate = () => this.destroy();
+        this.eventHandlers.pageshow = (e) => {
+            if (e.persisted) {
+                window.location.reload();
+            }
+        };
+
+        window.addEventListener('pagehide', this.eventHandlers.pagehide);
+        window.addEventListener('beforeunload', this.eventHandlers.beforeunload);
+        window.addEventListener('popstate', this.eventHandlers.popstate);
+        window.addEventListener('pageshow', this.eventHandlers.pageshow);
     }
     
     /**
@@ -892,12 +915,14 @@ class GameEngine {
             // Normal player camera logic
             if (this.myPlayerId && this.players.has(this.myPlayerId)) {
                 const myPlayer = this.players.get(this.myPlayerId);
-                if (myPlayer && myPlayer.playerData) {
-                    this.camera.targetX = myPlayer.playerData.x;
-                    this.camera.targetY = myPlayer.playerData.y; // No inversion needed - coordinates match now!
+                if (myPlayer) {
+                    this.camera.targetX = myPlayer.x;
+                    this.camera.targetY = myPlayer.y;
                     
-                    // Update target zoom based on weapon range
-                    this.updateZoomForWeaponRange(myPlayer.playerData);
+                    if (myPlayer.playerData) {
+                        // Update target zoom based on weapon range
+                        this.updateZoomForWeaponRange(myPlayer.playerData);
+                    }
                 }
             } else {
                 // Default camera position if no player yet
@@ -913,6 +938,7 @@ class GameEngine {
         this.zoomLevel += (this.targetZoomLevel - this.zoomLevel) * this.zoomSmoothingFactor;
         this.updateCameraTransform();
         this.updateMinimap();
+        this.updateFloatingDamageNumbers(deltaTime);
     }
     
     updateZoomForWeaponRange(playerData) {
@@ -954,12 +980,14 @@ class GameEngine {
         const centerX = this.app.screen.width / 2;
         const centerY = this.app.screen.height / 2;
         
-        // Apply camera transform to game and name containers (both Y-flipped)
-        [this.gameContainer, this.nameContainer].forEach(container => {
-            container.position.set(centerX, centerY);
-            container.scale.set(this.zoomLevel, -this.zoomLevel); // Preserve Y-flip
-            container.pivot.x = this.camera.x;
-            container.pivot.y = this.camera.y;
+        // Apply camera transform to game, name, and damage text containers (all Y-flipped)
+        [this.gameContainer, this.nameContainer, this.damageTextContainer].forEach(container => {
+            if (container) {
+                container.position.set(centerX, centerY);
+                container.scale.set(this.zoomLevel, -this.zoomLevel); // Preserve Y-flip
+                container.pivot.x = this.camera.x;
+                container.pivot.y = this.camera.y;
+            }
         });
         
         // Background container needs same transform but also Y-flipped to match world coordinates
@@ -1382,6 +1410,13 @@ class GameEngine {
             if (loadoutBanner) loadoutBanner.classList.remove('visible');
         }
         this.wasCountdown = isCountdown;
+
+        // Render damage numbers if present in state snapshot
+        if (data.hits && data.hits.length > 0) {
+            data.hits.forEach(hit => {
+                this.createFloatingDamageNumber(hit);
+            });
+        }
 
         // Update the game timer (countdown for timed games, plus team scores)
         if (data.gameState !== undefined) {
@@ -1996,6 +2031,12 @@ class GameEngine {
         // Set player z-index to ensure it's on top
         sprite.zIndex = 10;
         
+        sprite.targetX = playerData.x;
+        sprite.targetY = playerData.y;
+        sprite.targetRotation = playerData.rotation || 0;
+        sprite.vx = playerData.vx || 0;
+        sprite.vy = playerData.vy || 0;
+
         sprite.playerData = playerData;
         this.players.set(playerData.id, sprite);
         this.gameContainer.addChild(sprite);
@@ -2005,9 +2046,33 @@ class GameEngine {
         const sprite = this.players.get(playerData.id);
         if (!sprite) return;
 
-        // Direct position update - no interpolation
-        sprite.position.set(playerData.x, playerData.y);
-        sprite.rotation = playerData.rotation || 0;
+        const targetX = playerData.x;
+        const targetY = playerData.y;
+        const targetRot = playerData.rotation || 0;
+        const vx = playerData.vx || 0;
+        const vy = playerData.vy || 0;
+
+        // Check if player teleports, respawns, or has large position delta (>150px)
+        const currentTargetX = typeof sprite.targetX === 'number' ? sprite.targetX : sprite.x;
+        const currentTargetY = typeof sprite.targetY === 'number' ? sprite.targetY : sprite.y;
+        const dx = currentTargetX - targetX;
+        const dy = currentTargetY - targetY;
+        const distSq = dx * dx + dy * dy;
+
+        if (!playerData.active || distSq > 150 * 150) {
+            // Snap immediately for respawns/teleports
+            sprite.position.set(targetX, targetY);
+            sprite.rotation = targetRot;
+            sprite.targetX = targetX;
+            sprite.targetY = targetY;
+        } else {
+            sprite.targetX = targetX;
+            sprite.targetY = targetY;
+        }
+
+        sprite.targetRotation = targetRot;
+        sprite.vx = vx;
+        sprite.vy = vy;
         
         // Handle death marker logic
         const isDead = !playerData.active && playerData.respawnTime > 0;
@@ -2040,6 +2105,59 @@ class GameEngine {
         }
 
         sprite.playerData = playerData;
+    }
+
+    /**
+     * Smoothly interpolate player positions and rotations every frame
+     */
+    updatePlayersInterpolation(deltaTime) {
+        if (!this.players || this.players.size === 0) return;
+
+        // Convert PIXI deltaTime (at 60 FPS = 1.0) to seconds
+        const dt = (deltaTime || 1) / 60.0;
+
+        this.players.forEach(sprite => {
+            if (!sprite || !sprite.visible) return;
+
+            if (typeof sprite.targetX !== 'number') {
+                sprite.targetX = sprite.x;
+                sprite.targetY = sprite.y;
+                sprite.targetRotation = sprite.rotation;
+            }
+
+            const vx = sprite.vx || 0;
+            const vy = sprite.vy || 0;
+
+            // Predict target location slightly using velocity
+            const predX = sprite.targetX + vx * dt;
+            const predY = sprite.targetY + vy * dt;
+
+            // Smoothly lerp sprite position towards predicted target
+            const lerpFactor = Math.min(1.0, 18.0 * dt);
+            sprite.x += (predX - sprite.x) * lerpFactor;
+            sprite.y += (predY - sprite.y) * lerpFactor;
+
+            // Angle lerp for rotation
+            if (typeof sprite.targetRotation === 'number') {
+                let diff = sprite.targetRotation - sprite.rotation;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                sprite.rotation += diff * lerpFactor;
+            }
+
+            // Update child component positions to match the interpolated sprite position
+            const isDead = !sprite.playerData || (!sprite.playerData.active && sprite.playerData.respawnTime > 0);
+            if (sprite.deathMarker && isDead) {
+                sprite.deathMarker.position.set(sprite.x, sprite.y);
+            }
+            if (sprite.nameLabel) {
+                sprite.nameLabel.position.set(sprite.x, sprite.y - 25);
+            }
+            if (sprite.healthBar) {
+                const yOffset = (sprite.healthBar.config && sprite.healthBar.config.yOffset) || 0;
+                sprite.healthBar.position.set(sprite.x, sprite.y - yOffset);
+            }
+        });
     }
     
     removePlayer(playerId) {
@@ -2154,6 +2272,128 @@ class GameEngine {
         return healthBarContainer;
     }
     
+    /**
+     * Create floating damage number at hit position in world space
+     */
+    createFloatingDamageNumber(hit) {
+        if (!hit || typeof hit.damage !== 'number' || hit.damage <= 0) {
+            return;
+        }
+
+        const isAttacker = (this.myPlayerId && hit.attackerId === this.myPlayerId);
+        const isVictim = (this.myPlayerId && hit.victimId === this.myPlayerId);
+        const isSpectator = !!this.spectatorMode || !this.myPlayerId;
+
+        if (!isAttacker && !isVictim && !isSpectator) {
+            return;
+        }
+
+        const displayDamage = Math.max(1, Math.round(hit.damage));
+        let textStr = '';
+        let fillColor = 0xFFFF55; // Default bright yellow
+        let fontSize = 13;
+        let strokeThickness = 3;
+        let initialScale = 1.0;
+
+        if (isAttacker) {
+            if (hit.kill) {
+                textStr = `${displayDamage} 💀`;
+                fillColor = 0xFF3330; // Bright orange-red
+                fontSize = 16;
+                initialScale = 1.3;
+            } else {
+                textStr = `${displayDamage}`;
+                fillColor = 0xFFFF55; // Yellow
+                fontSize = 13;
+            }
+        } else if (isVictim) {
+            textStr = `-${displayDamage}`;
+            fillColor = 0xFF3344; // Red for taking damage
+            fontSize = 13;
+        } else {
+            // Spectator
+            textStr = `${displayDamage}`;
+            fillColor = 0xFFAA44; // Orange
+            fontSize = 12;
+        }
+
+        const textStyle = new PIXI.TextStyle({
+            fontFamily: 'Arial, sans-serif',
+            fontSize: fontSize,
+            fontWeight: 'bold',
+            fill: fillColor,
+            stroke: 0x000000,
+            strokeThickness: strokeThickness,
+            dropShadow: true,
+            dropShadowColor: 0x000000,
+            dropShadowBlur: 2,
+            dropShadowDistance: 1
+        });
+
+        const textObj = new PIXI.Text(textStr, textStyle);
+        textObj.anchor.set(0.5, 0.5);
+        textObj.scale.y = -1; // Flip Y back inside damageTextContainer
+        if (initialScale > 1.0) {
+            textObj.scale.set(initialScale, -initialScale);
+        }
+
+        const startX = hit.x + (Math.random() * 12 - 6);
+        const startY = hit.y + (Math.random() * 12 - 6);
+        textObj.position.set(startX, startY);
+
+        const floatingObj = {
+            pixiText: textObj,
+            x: startX,
+            y: startY,
+            vx: (Math.random() - 0.5) * 16,
+            vy: 35 + Math.random() * 15,
+            life: 0,
+            maxLife: hit.kill ? 0.95 : 0.75,
+            initialScale: initialScale
+        };
+
+        if (this.damageTextContainer) {
+            this.damageTextContainer.addChild(textObj);
+            this.floatingDamageTexts.push(floatingObj);
+        }
+    }
+
+    /**
+     * Animate floating damage numbers upward and fade out
+     */
+    updateFloatingDamageNumbers(deltaTime) {
+        if (!this.floatingDamageTexts || this.floatingDamageTexts.length === 0) {
+            return;
+        }
+
+        for (let i = this.floatingDamageTexts.length - 1; i >= 0; i--) {
+            const item = this.floatingDamageTexts[i];
+            item.life += deltaTime;
+            const progress = item.life / item.maxLife;
+
+            if (progress >= 1.0) {
+                if (this.damageTextContainer) {
+                    this.damageTextContainer.removeChild(item.pixiText);
+                }
+                item.pixiText.destroy({ context: true });
+                this.floatingDamageTexts.splice(i, 1);
+                continue;
+            }
+
+            item.x += item.vx * deltaTime;
+            item.y += item.vy * deltaTime;
+            item.pixiText.position.set(item.x, item.y);
+
+            if (item.initialScale > 1.0) {
+                const scaleProgress = Math.min(1.0, progress * 4.0);
+                const currentScale = item.initialScale - (item.initialScale - 1.0) * scaleProgress;
+                item.pixiText.scale.set(currentScale, -currentScale);
+            }
+
+            item.pixiText.alpha = Math.max(0, 1 - Math.pow(progress, 2));
+        }
+    }
+
     /**
      * Update a health bar for any entity
      * @param {PIXI.Container} healthBarContainer - The health bar container
@@ -5328,6 +5568,25 @@ class GameEngine {
      * Clean up all resources when the game engine is destroyed
      */
     destroy() {
+        if (this.destroyed) return;
+        this.destroyed = true;
+
+        this.expectingSocketClose = true;
+
+        if (this.eventHandlers) {
+            if (this.eventHandlers.pagehide) {
+                window.removeEventListener('pagehide', this.eventHandlers.pagehide);
+            }
+            if (this.eventHandlers.beforeunload) {
+                window.removeEventListener('beforeunload', this.eventHandlers.beforeunload);
+            }
+            if (this.eventHandlers.popstate) {
+                window.removeEventListener('popstate', this.eventHandlers.popstate);
+            }
+            if (this.eventHandlers.pageshow) {
+                window.removeEventListener('pageshow', this.eventHandlers.pageshow);
+            }
+        }
         // Clear the memory cleanup interval
         if (this.memoryCleanupInterval) {
             clearInterval(this.memoryCleanupInterval);
@@ -5427,6 +5686,15 @@ class GameEngine {
         });
         this.kothZones.clear();
 
+        // Clean up floating damage text
+        if (this.floatingDamageTexts) {
+            this.floatingDamageTexts.forEach(item => {
+                if (item.pixiText) item.pixiText.destroy({ context: true });
+            });
+            this.floatingDamageTexts = [];
+        }
+        this.damageTextContainer = null;
+
         // Clean up smoke overlay
         if (this.smokeOverlay) {
             if (this.smokeOverlay.parent) {
@@ -5438,7 +5706,11 @@ class GameEngine {
         
         // Close WebSocket connection
         if (this.websocket) {
-            this.websocket.close();
+            try {
+                this.websocket.close(1000, "Navigated away");
+            } catch (e) {
+                // ignore
+            }
             this.websocket = null;
         }
         

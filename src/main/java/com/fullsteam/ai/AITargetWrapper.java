@@ -51,6 +51,19 @@ public class AITargetWrapper {
         return entity.isActive();
     }
 
+    /**
+     * Check if this target is visible (active and not obscured by smoke)
+     */
+    public boolean isVisible() {
+        if (!entity.isActive()) {
+            return false;
+        }
+        if (entity instanceof Player player) {
+            return !player.isVisionObscured();
+        }
+        return true;
+    }
+
     public double getHealth() {
         return entity.getHealth();
     }

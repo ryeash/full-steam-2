@@ -274,7 +274,7 @@ public class VipBehavior implements AIBehavior {
             Integer vipId = gameEntities.getTeamVip(t);
             if (vipId == null) continue;
             Player vip = gameEntities.getPlayer(vipId);
-            if (vip == null || !vip.isActive()) continue;
+            if (vip == null || !vip.isActive() || vip.isVisionObscured()) continue;
 
             double d = aiPlayer.getPosition().distance(vip.getPosition());
             if (d < nearestDist) {

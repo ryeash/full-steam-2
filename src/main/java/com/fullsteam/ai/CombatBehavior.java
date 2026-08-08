@@ -19,7 +19,7 @@ public class CombatBehavior implements AIBehavior {
     private int targetId = -1;
     private boolean targetIsPlayer = true; // Track if target is a player or turret
     private double lastShotTime = 0;
-    private double combatTimeout = 8.0; // Longer combat persistence
+    private final double combatTimeout = 8.0; // Longer combat persistence
     private double timeSinceLastTarget = 0;
 
     // Enhanced tactical state
@@ -361,7 +361,7 @@ public class CombatBehavior implements AIBehavior {
         // First, try to maintain current target if valid
         if (targetId != -1) {
             AITargetWrapper currentTarget = findTargetById(gameEntities, targetId, targetIsPlayer);
-            if (currentTarget != null && currentTarget.isActive() && !currentTarget.isTeammateOf(aiPlayer)) {
+            if (currentTarget != null && currentTarget.isVisible() && !currentTarget.isTeammateOf(aiPlayer)) {
                 double distance = aiPlayer.getPosition().distance(currentTarget.getPosition());
                 if (distance <= 800) { // Increased persistence range
                     return currentTarget;
@@ -388,7 +388,7 @@ public class CombatBehavior implements AIBehavior {
 
         // Add all enemy players
         for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() != aiPlayer.getId() && player.isActive()) {
+            if (player.getId() != aiPlayer.getId() && player.isActive() && !player.isVisionObscured()) {
                 AITargetWrapper wrapper = AITargetWrapper.fromPlayer(player);
                 if (!wrapper.isTeammateOf(aiPlayer)) {
                     allTargets.add(wrapper);

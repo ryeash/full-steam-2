@@ -211,7 +211,7 @@ public class Oddball extends GameEntity implements HasWeapon {
         double nearestDist = DETECTION_RANGE;
         Vector2 myPos = getPosition();
         for (Player p : players) {
-            if (!p.isActive() || p.getHealth() <= 0) {
+            if (!p.isActive() || p.getHealth() <= 0 || p.isVisionObscured()) {
                 continue;
             }
             double d = myPos.distance(p.getPosition());
@@ -228,7 +228,7 @@ public class Oddball extends GameEntity implements HasWeapon {
         int count = 0;
         Vector2 myPos = getPosition();
         for (Player p : players) {
-            if (!p.isActive() || p.getHealth() <= 0) {
+            if (!p.isActive() || p.getHealth() <= 0 || p.isVisionObscured()) {
                 continue;
             }
             if (myPos.distance(p.getPosition()) < DETECTION_RANGE) {
@@ -245,7 +245,7 @@ public class Oddball extends GameEntity implements HasWeapon {
         double bestScore = -1;
         Vector2 myPos = getPosition();
         for (Player p : players) {
-            if (!p.isActive() || p.getHealth() <= 0) {
+            if (!p.isActive() || p.getHealth() <= 0 || p.isVisionObscured()) {
                 continue;
             }
             if (myPos.distance(p.getPosition()) >= DETECTION_RANGE) {

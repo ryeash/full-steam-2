@@ -559,7 +559,7 @@ public class FlagBehavior implements AIBehavior {
         int myTeam = aiPlayer.getTeam();
 
         for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getTeam() == myTeam || !player.isActive()) {
+            if (player.getTeam() == myTeam || !player.isActive() || player.isVisionObscured()) {
                 continue;
             }
 

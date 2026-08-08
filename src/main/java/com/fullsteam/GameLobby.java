@@ -29,7 +29,7 @@ public class GameLobby {
     @Inject
     public GameLobby(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
-        Config.EXECUTOR.scheduleAtFixedRate(this::cleanupAIOnlyGames, CLEANUP_CHECK_INTERVAL_MS, CLEANUP_CHECK_INTERVAL_MS, TimeUnit.MILLISECONDS);
+        Config.EXECUTOR.scheduleAtFixedRate(this::cleanupGames, CLEANUP_CHECK_INTERVAL_MS, CLEANUP_CHECK_INTERVAL_MS, TimeUnit.MILLISECONDS);
     }
 
     public List<GameInfo> getActiveGames() {
@@ -61,7 +61,7 @@ public class GameLobby {
             throw new IllegalStateException("Maximum number of games reached");
         }
         String gameId = Config.nextGameId();
-        GameManager game = new GameManager(gameId, gameConfig, objectMapper);
+        GameManager game = new GameManager(gameId, gameConfig, objectMapper, this);
         activeGames.put(gameId, game);
         log.info("Created new game: {} with config: maxPlayers={}, teamCount={}, world={}x{}",
                 gameId, gameConfig.getMaxPlayers(), gameConfig.getTeamCount(),
@@ -92,7 +92,7 @@ public class GameLobby {
     /**
      * Clean up games that have ended or no longer contain human players.
      */
-    private void cleanupAIOnlyGames() {
+    private void cleanupGames() {
         long currentTime = System.currentTimeMillis();
         List<String> gamesToRemove = new ArrayList<>();
 

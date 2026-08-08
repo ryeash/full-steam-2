@@ -65,13 +65,18 @@ class InputManager {
         document.addEventListener('mouseup', (e) => this.handleMouseUp(e));
         document.addEventListener('contextmenu', (e) => e.preventDefault());
         
-        // Gamepad connection events
-        window.addEventListener('gamepadconnected', (e) => this.handleGamepadConnected(e));
-        window.addEventListener('gamepaddisconnected', (e) => this.handleGamepadDisconnected(e));
-        
         // Window events
-        window.addEventListener('beforeunload', () => this.handleBeforeUnload());
-        window.addEventListener('unload', () => this.destroy());
+        this.eventHandlers = {
+            gamepadconnected: (e) => this.handleGamepadConnected(e),
+            gamepaddisconnected: (e) => this.handleGamepadDisconnected(e),
+            beforeunload: () => this.destroy(),
+            pagehide: () => this.destroy()
+        };
+
+        window.addEventListener('gamepadconnected', this.eventHandlers.gamepadconnected);
+        window.addEventListener('gamepaddisconnected', this.eventHandlers.gamepaddisconnected);
+        window.addEventListener('beforeunload', this.eventHandlers.beforeunload);
+        window.addEventListener('pagehide', this.eventHandlers.pagehide);
         
         // Send input at fixed 20ms intervals (50 FPS)
         setInterval(() => this.sendInput(), this.inputInterval);
@@ -588,6 +593,9 @@ class InputManager {
      * Clean up InputManager resources
      */
     destroy() {
+        if (this.destroyed) return;
+        this.destroyed = true;
+
         // Clear the memory cleanup interval
         if (this.memoryCleanupInterval) {
             clearInterval(this.memoryCleanupInterval);
@@ -600,10 +608,13 @@ class InputManager {
         document.removeEventListener('mousemove', this.handleMouseMove);
         document.removeEventListener('mousedown', this.handleMouseDown);
         document.removeEventListener('mouseup', this.handleMouseUp);
-        document.removeEventListener('contextmenu', (e) => e.preventDefault());
-        
-        window.removeEventListener('gamepadconnected', this.handleGamepadConnected);
-        window.removeEventListener('gamepaddisconnected', this.handleGamepadDisconnected);
+
+        if (this.eventHandlers) {
+            window.removeEventListener('gamepadconnected', this.eventHandlers.gamepadconnected);
+            window.removeEventListener('gamepaddisconnected', this.eventHandlers.gamepaddisconnected);
+            window.removeEventListener('beforeunload', this.eventHandlers.beforeunload);
+            window.removeEventListener('pagehide', this.eventHandlers.pagehide);
+        }
         
         // Clear all references
         this.keys = null;

@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
 
@@ -31,9 +32,9 @@ public class AIPlayerManager {
     // How far ahead of an obstacle's surface the AI starts steering around it.
     private static final double OBSTACLE_LOOK_AHEAD = 70.0;
 
-    private final Map<Integer, AIPlayer> aiPlayers = new HashMap<>();
-    private final Map<Integer, List<AIBehavior>> availableBehaviors = new HashMap<>();
-    private final Map<Integer, PlayerInput> generatedInputs = new HashMap<>();
+    private final Map<Integer, AIPlayer> aiPlayers = new ConcurrentSkipListMap<>();
+    private final Map<Integer, List<AIBehavior>> availableBehaviors = new ConcurrentSkipListMap<>();
+    private final Map<Integer, PlayerInput> generatedInputs = new ConcurrentSkipListMap<>();
 
     // Factories for the behaviors each AI can choose between. Each AI gets its own
     // fresh instances so behavior state (targets, timers, etc.) is independent.
@@ -202,7 +203,7 @@ public class AIPlayerManager {
     private void updateAIMemory(AIPlayer aiPlayer, GameEntities gameEntities) {
         // Update memory with observations of other players
         for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() != aiPlayer.getId() && player.isActive()) {
+            if (player.getId() != aiPlayer.getId() && player.isActive() && !player.isVisionObscured()) {
                 // AI can "see" players within a certain range
                 double distance = aiPlayer.getPosition().distance(player.getPosition());
                 if (distance < 400) { // Sight range
