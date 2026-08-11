@@ -1,37 +1,3 @@
-/**
- * Weapon customization UI — render-from-state, no dependencies.
- *
- * Renders the loadout picker (attribute sliders, bullet-effect checkboxes,
- * ordnance/utility dropdowns, preset chooser, point tracker) into a host
- * container. The host page owns the "Ready" button and listens for validity
- * changes via `onValidityChange`. Element IDs and CSS class names match
- * unified.css, and #name-select/#name-randomize are populated by the host.
- *
- * Architecture — state is the single source of truth:
- *
- *     state is authoritative → every interaction mutates state and calls
- *     _commit() → _commit() normalizes state, then _render() syncs the DOM to
- *     match. Handlers NEVER touch the DOM directly.
- *
- * Consequences:
- *   - _applyPreset / load / reset just assign state and _commit() — no hand-poking
- *     of individual sliders/checkboxes/selects.
- *   - All validation (stale-ordnance coercion, step-snapping, dropping effects
- *     forbidden by the current ordnance) lives in one place: _normalizeState().
- *   - There is exactly one DOM-writing path (_render()), so "set the value but
- *     forget the detail line / gating / budget" desync bugs can't occur.
- *
- * Build-once + sync-update (not innerHTML-rebuild) means sliders/selects keep
- * focus and don't get torn down mid-drag — _render() only sets .value/.checked/
- * .disabled/text on nodes that already exist, which is idempotent and cheap.
- *
- * Usage:
- *   const customizer = new WeaponCustomizer(rootEl, {
- *     onValidityChange: (isValid) => { readyButton.disabled = !isValid; }
- *   });
- *   await customizer.init();                     // fetches /api/weapon-customization
- *   const cfg = customizer.getPlayerConfig();    // { weaponConfig, utilityWeapon }
- */
 class WeaponCustomizer {
     constructor(rootEl, options = {}) {
         if (!rootEl) {
@@ -41,12 +7,9 @@ class WeaponCustomizer {
         this.onValidityChange = options.onValidityChange || (() => {});
 
         this.weaponData = null;
-
-        // THE state. currentWeapon/currentUtilityWeapon in the old version were the
-        // same data, just spread across two fields and mutated in many places.
         this.state = {
-            attributes: {},          // { MIN_DAMAGE: 0, MAX_DAMAGE: 0, FIRE_RATE: 0, ... }
-            effects: [],             // ['EXPLOSIVE', ...]
+            attributes: {},
+            effects: [],
             ordinance: 'PROJECTILE',
             varianceFormula: 'UNIFORM',
             utility: 'HEAL_ZONE'
@@ -71,7 +34,9 @@ class WeaponCustomizer {
     }
 
     isValid() {
-        if (!this.weaponData) return false;
+        if (!this.weaponData) {
+            return false;
+        }
         return this._totalPoints() <= this.weaponData.maxPoints;
     }
 
@@ -81,10 +46,18 @@ class WeaponCustomizer {
      */
     getPlayerConfig() {
         const attributeMapping = {
-            'MIN_DAMAGE': 'minDamage', 'MAX_DAMAGE': 'maxDamage', 'FIRE_RATE': 'fireRate', 'RANGE': 'range',
-            'ACCURACY': 'accuracy', 'MAGAZINE_SIZE': 'magazineSize', 'RELOAD_TIME': 'reloadTime',
-            'PROJECTILE_SPEED': 'projectileSpeed', 'BULLETS_PER_SHOT': 'bulletsPerShot',
-            'LINEAR_DAMPING': 'linearDamping', 'HANDLING': 'handling', 'CALIBER': 'caliber',
+            'MIN_DAMAGE': 'minDamage',
+            'MAX_DAMAGE': 'maxDamage',
+            'FIRE_RATE': 'fireRate',
+            'RANGE': 'range',
+            'ACCURACY': 'accuracy',
+            'MAGAZINE_SIZE': 'magazineSize',
+            'RELOAD_TIME': 'reloadTime',
+            'PROJECTILE_SPEED': 'projectileSpeed',
+            'BULLETS_PER_SHOT': 'bulletsPerShot',
+            'LINEAR_DAMPING': 'linearDamping',
+            'HANDLING': 'handling',
+            'CALIBER': 'caliber',
             'KNOCKBACK': 'knockback'
         };
         const mappedAttributes = {};

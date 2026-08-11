@@ -51,7 +51,10 @@ class InputManager {
         this.inputSource = 'keyboard'; // 'keyboard' or 'gamepad'
         
         this.setupEventListeners();
-        this.inputInterval = 20; // 50 FPS (20ms intervals)
+        this.inputInterval = 33; // ~30 FPS (33ms intervals, matching server tick rate)
+        this.lastSentInput = null;
+        this.lastSentTime = 0;
+        this.inputTimer = null;
         
         // Start gamepad polling
         this.pollGamepads();
@@ -78,8 +81,8 @@ class InputManager {
         window.addEventListener('beforeunload', this.eventHandlers.beforeunload);
         window.addEventListener('pagehide', this.eventHandlers.pagehide);
         
-        // Send input at fixed 20ms intervals (50 FPS)
-        setInterval(() => this.sendInput(), this.inputInterval);
+        // Send input at fixed 33ms intervals (~30 FPS)
+        this.inputTimer = setInterval(() => this.sendInput(), this.inputInterval);
     }
     
     updateMovementAxes() {
@@ -113,6 +116,7 @@ class InputManager {
             case 'arrowleft': this.keys.arrowLeft = true; break;
             case 'arrowright': this.keys.arrowRight = true; break;
         }
+        this.sendInput(true);
     }
 
     handleKeyUp(e) {
@@ -129,6 +133,7 @@ class InputManager {
             case 'arrowleft': this.keys.arrowLeft = false; break;
             case 'arrowright': this.keys.arrowRight = false; break;
         }
+        this.sendInput(true);
     }
     
     handleMouseMove(e) {
@@ -169,6 +174,7 @@ class InputManager {
             this.mouse.right = true;
         }
         e.preventDefault();
+        this.sendInput(true);
     }
     
     handleMouseUp(e) {
@@ -176,6 +182,7 @@ class InputManager {
             this.mouse.left = false;
         }
         if (e.button === 2) this.mouse.right = false;
+        this.sendInput(true);
     }
     
     /**
@@ -337,7 +344,9 @@ class InputManager {
      * Update movement from gamepad input
      */
     updateGamepadMovement() {
-        if (!this.gamepad.connected) return;
+        if (!this.gamepad.connected) {
+            return;
+        }
         
         // Use left stick for movement
         this.movement.moveX = this.gamepad.leftStick.x;
@@ -538,53 +547,81 @@ class InputManager {
         // Optional: any cleanup before page unload
     }
     
-    sendInput() {
-        if (this.onInputChange) {
-            // Update mouse world coordinates every time we send input
-            this.updateMouseWorldCoordinates();
-            
-            // Update gamepad aiming if connected
-            if (this.gamepad.connected) {
-                this.updateGamepadAiming();
-            }
-            
-            // Determine input values based on active input source
-            let moveX, moveY, fire, altFire, reload;
-            
-            if (this.gamepad.connected && this.inputSource === 'gamepad') {
-                // Use gamepad input
-                moveX = this.movement.moveX; // Already updated by updateGamepadMovement
-                moveY = this.movement.moveY;
-                fire = this.gamepad.buttons.rt || this.gamepad.buttons.a; // Right trigger or A button
-                altFire = this.gamepad.buttons.rb || this.gamepad.buttons.b; // Right bumper or B button for utility
-                reload = this.gamepad.buttons.x;
+    sendInput(force = false) {
+        if (!this.onInputChange || this.destroyed) {
+            return;
+        }
+
+        // Update mouse world coordinates every time we evaluate sending input
+        this.updateMouseWorldCoordinates();
+        
+        // Update gamepad aiming if connected
+        if (this.gamepad.connected) {
+            this.updateGamepadAiming();
+        }
+        
+        // Determine input values based on active input source
+        let moveX, moveY, fire, altFire, reload;
+        
+        if (this.gamepad.connected && this.inputSource === 'gamepad') {
+            // Use gamepad input
+            moveX = this.movement.moveX; // Already updated by updateGamepadMovement
+            moveY = this.movement.moveY;
+            fire = this.gamepad.buttons.rt || this.gamepad.buttons.a; // Right trigger or A button
+            altFire = this.gamepad.buttons.rb || this.gamepad.buttons.b; // Right bumper or B button for utility
+            reload = this.gamepad.buttons.x;
+        } else {
+            // Use keyboard/mouse input
+            moveX = this.movement.moveX;
+            moveY = this.movement.moveY;
+            // Arrow keys give 8-way aim+fire; while held they set the aim
+            // direction (overriding the mouse) and fire.
+            const arrowFiring = this.updateArrowAiming();
+            fire = this.mouse.left || arrowFiring;
+            altFire = this.mouse.right || this.keys.space; // Right click OR space bar for utility
+            reload = this.keys.r;
+        }
+        
+        const input = {
+            type: 'playerInput',
+            moveX: moveX,
+            moveY: moveY,
+            mouseX: this.mouse.x || 0,
+            mouseY: this.mouse.y || 0,
+            worldX: this.mouse.worldX || 0,
+            worldY: this.mouse.worldY || 0,
+            left: !!fire,
+            right: !!altFire, // Legacy field - now maps to altFire
+            altFire: !!altFire, // New field for utility weapons
+            reload: !!reload,
+            inputSource: this.inputSource // Let server know input source
+        };
+
+        const now = performance.now();
+        let shouldSend = force;
+
+        if (!shouldSend) {
+            if (!this.lastSentInput || (now - this.lastSentTime >= 500)) {
+                // Heartbeat packet every 500ms when stationary
+                shouldSend = true;
             } else {
-                // Use keyboard/mouse input
-                moveX = this.movement.moveX;
-                moveY = this.movement.moveY;
-                // Arrow keys give 8-way aim+fire; while held they set the aim
-                // direction (overriding the mouse) and fire.
-                const arrowFiring = this.updateArrowAiming();
-                fire = this.mouse.left || arrowFiring;
-                altFire = this.mouse.right || this.keys.space; // Right click OR space bar for utility
-                reload = this.keys.r;
+                const last = this.lastSentInput;
+                const moveChanged = input.moveX !== last.moveX || input.moveY !== last.moveY;
+                const buttonsChanged = input.left !== last.left || input.altFire !== last.altFire || input.reload !== last.reload;
+                const sourceChanged = input.inputSource !== last.inputSource;
+
+                // Mouse aim movement shift check (> 0.5 world units squared = 0.25)
+                const dx = input.worldX - last.worldX;
+                const dy = input.worldY - last.worldY;
+                const mouseMoved = (dx * dx + dy * dy) > 0.25;
+
+                shouldSend = moveChanged || buttonsChanged || sourceChanged || mouseMoved;
             }
-            
-            const input = {
-                type: 'playerInput',
-                moveX: moveX,
-                moveY: moveY,
-                mouseX: this.mouse.x || 0,
-                mouseY: this.mouse.y || 0,
-                worldX: this.mouse.worldX || 0,
-                worldY: this.mouse.worldY || 0,
-                left: !!fire,
-                right: !!altFire, // Legacy field - now maps to altFire
-                altFire: !!altFire, // New field for utility weapons
-                reload: !!reload,
-                inputSource: this.inputSource // Let server know input source
-            };
-            
+        }
+
+        if (shouldSend) {
+            this.lastSentInput = input;
+            this.lastSentTime = now;
             this.onInputChange(input);
         }
     }
@@ -595,6 +632,11 @@ class InputManager {
     destroy() {
         if (this.destroyed) return;
         this.destroyed = true;
+
+        if (this.inputTimer) {
+            clearInterval(this.inputTimer);
+            this.inputTimer = null;
+        }
 
         // Clear the memory cleanup interval
         if (this.memoryCleanupInterval) {

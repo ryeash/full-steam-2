@@ -13,7 +13,8 @@ public class SecurityHeadersFilter {
             // 'unsafe-eval' is required by PixiJS (it generates shader/batch code via
             // new Function); without it Pixi aborts with an "unsafe-eval" error.
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com",
-            "style-src 'self' 'unsafe-inline'",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+            "font-src 'self' https://fonts.gstatic.com data:",
             "img-src 'self' data:",
             "connect-src 'self'",
             "base-uri 'self'",

@@ -176,14 +176,14 @@
         /* Split preset buttons — rendered as a single capsule */
         .preset-btn-group {
             display: flex;
+            position: relative;
             border-radius: 25px;
-            overflow: hidden;   /* clips inner buttons to capsule shape */
         }
 
         /* Reset radius from unified.css so the group handles the capsule */
         .preset-btn-main {
             flex: 3;
-            border-radius: 0 !important;
+            border-radius: 25px 0 0 25px !important;
             border: none;
             padding: 12px 20px;
             cursor: pointer;
@@ -203,7 +203,7 @@
             color: #ffa500;
             cursor: pointer;
             font-size: 1.05em;
-            border-radius: 0;
+            border-radius: 0 25px 25px 0;
             transition: background 0.2s, color 0.2s;
             display: flex;
             align-items: center;
@@ -213,6 +213,46 @@
         .preset-btn-customize:hover {
             background: rgba(255, 149, 0, 0.35);
             color: #fff;
+        }
+
+        .preset-tooltip {
+            position: absolute;
+            bottom: calc(100% + 10px);
+            left: 50%;
+            transform: translateX(-50%) translateY(5px);
+            background: rgba(10, 20, 25, 0.95);
+            border: 1px solid #5fc4b8;
+            color: #e0f2f1;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.82em;
+            font-weight: 400;
+            line-height: 1.4;
+            width: 220px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+            z-index: 100;
+        }
+
+        .preset-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 6px;
+            border-style: solid;
+            border-color: #5fc4b8 transparent transparent transparent;
+        }
+
+        .preset-btn-group:hover .preset-tooltip {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
         }
         
         .game-config-summary {
@@ -248,11 +288,137 @@
             border-color: rgba(95, 196, 184, 0.4);
             color: #5fc4b8;
         }
+
+        .lobby-header-bar {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .lobby-header-bar h1 {
+            margin: 0;
+            text-align: center;
+        }
+
+        .help-button {
+            background: rgba(95, 196, 184, 0.12);
+            --border: 1px solid #5fc4b8;
+            color: #5fc4b8;
+            font-size: 0.25em;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: inline-flex;
+            align-items: right;
+            gap: 2px;
+        }
+
+        .help-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+        }
+
+        .help-card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(95, 196, 184, 0.25);
+            border-radius: 10px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .help-card.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .help-card h3 {
+            margin: 0;
+            color: #5fc4b8;
+            font-size: 1.15em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid rgba(95, 196, 184, 0.2);
+            padding-bottom: 8px;
+        }
+
+        .help-card p {
+            margin: 0;
+            color: #ccc;
+            font-size: 0.92em;
+            line-height: 1.5;
+        }
+
+        .help-card ul {
+            margin: 0;
+            padding-left: 20px;
+            color: #ccc;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+
+        .help-card li {
+            margin-bottom: 8px;
+        }
+
+        .help-card li:last-child {
+            margin-bottom: 0;
+        }
+
+        .controls-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }
+
+        .controls-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            color: #ccc;
+        }
+
+        .controls-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .kbd {
+            display: inline-block;
+            padding: 3px 7px;
+            font-family: monospace;
+            font-size: 0.85em;
+            font-weight: bold;
+            color: #fff;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+            box-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
+            white-space: nowrap;
+        }
+
+        .help-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            background: rgba(95, 196, 184, 0.2);
+            color: #5fc4b8;
+            border: 1px solid rgba(95, 196, 184, 0.4);
+            margin-right: 6px;
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body>
 <div id="lobby-wrapper">
-    <h1>Full Steam</h1>
+    <div>
+        <h1>Full Steam
+            <button id="help-btn" class="help-button" onclick="openHelpModal()">❓</button>
+        </h1>
+    </div>
 
     <div id="stats-bar">
         <div class="stat-item">
@@ -390,22 +556,26 @@
                     <div class="config-item">
                         <label for="enableOddballNpcs">NPC Oddball Mode:</label>
                         <input type="checkbox" id="enableOddballNpcs">
-                        <small style="color: #888; font-size: 0.8em;">Invincible NPCs bounce around shooting at players — hit them to score!</small>
+                        <small style="color: #888; font-size: 0.8em;">Invincible NPCs bounce around shooting at players
+                            — hit them to score!</small>
                     </div>
                     <div class="config-item">
                         <label for="rampageBallCount">Rampage Balls:</label>
                         <input type="number" id="rampageBallCount" min="0" max="5" value="1">
-                        <small style="color: #888; font-size: 0.8em;">Slow, heavy, high-DPS — primary target (2× points per hit)</small>
+                        <small style="color: #888; font-size: 0.8em;">Slow, heavy, high-DPS — primary target (2× points
+                            per hit)</small>
                     </div>
                     <div class="config-item">
                         <label for="seekerBallCount">Seeker Balls:</label>
                         <input type="number" id="seekerBallCount" min="0" max="10" value="2">
-                        <small style="color: #888; font-size: 0.8em;">Fast, light, harassing — secondary target (1× points)</small>
+                        <small style="color: #888; font-size: 0.8em;">Fast, light, harassing — secondary target (1×
+                            points)</small>
                     </div>
                     <div class="config-item">
                         <label for="oddballNpcPointsPerDamage">Points Per Damage:</label>
                         <input type="number" id="oddballNpcPointsPerDamage" min="0.01" max="10" step="0.01" value="0.1">
-                        <small style="color: #888; font-size: 0.8em;">Score per 1 unit of damage dealt (0.1 = 1 pt per 10 dmg)</small>
+                        <small style="color: #888; font-size: 0.8em;">Score per 1 unit of damage dealt (0.1 = 1 pt per
+                            10 dmg)</small>
                     </div>
                 </div>
 
@@ -437,7 +607,8 @@
                         <small style="color: #888; font-size: 0.8em;">How often weapons change (30s default)</small>
                     </div>
                     <div class="config-item">
-                        <small style="color: #ff9500; font-size: 0.8em;">⚠️ Creates chaotic, unpredictable gameplay!</small>
+                        <small style="color: #ff9500; font-size: 0.8em;">⚠️ Creates chaotic, unpredictable
+                            gameplay!</small>
                     </div>
                 </div>
 
@@ -446,7 +617,8 @@
                     <div class="config-item">
                         <label for="addHeadquarters">Enable Headquarters:</label>
                         <input type="checkbox" id="addHeadquarters">
-                        <small style="color: #888; font-size: 0.8em;">Each team gets a destructible base in their spawn zone</small>
+                        <small style="color: #888; font-size: 0.8em;">Each team gets a destructible base in their spawn
+                            zone</small>
                     </div>
                     <div class="config-item">
                         <label for="headquartersMaxHealth">Max Health:</label>
@@ -512,7 +684,8 @@
                     <div class="config-item">
                         <label for="gameStartCountdown">Game Start Countdown (seconds):</label>
                         <input type="number" id="gameStartCountdown" min="0" max="300" step="5" value="0">
-                        <small style="color: #888; font-size: 0.8em;">Prep/config window before game action begins (0 = start immediately)</small>
+                        <small style="color: #888; font-size: 0.8em;">Prep/config window before game action begins (0 =
+                            start immediately)</small>
                     </div>
                 </div>
 
@@ -620,6 +793,79 @@
     </div>
 </div>
 
+<!-- Help & How to Play Modal -->
+<div id="help-modal" class="modal hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Full Steam — Game Guide & How to Play</h2>
+            <button class="modal-close" onclick="closeHelpModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="help-grid">
+                <div class="help-card full-width">
+                    <h3>Overview</h3>
+                    <p>
+                        <strong>Full Steam</strong> is a fast-paced, top-down 2D multiplayer tactical shooter powered by
+                        real-time physics and WebSockets.
+                        Battle human opponents and AI bots across diverse game modes, design fully customized 100-point
+                        weapon loadouts, and adapt to environmental hazards!
+                    </p>
+                </div>
+
+                <div class="help-card">
+                    <h3>How to Play (Create or Join)</h3>
+                    <ul>
+                        <li><strong>Creating a Game:</strong> Click any preset under <em>Create New Game</em> (e.g. Free
+                            For All, CTF, KOTH, Headquarters). Click the <strong>⚙️ gear icon</strong> on a preset to
+                            tweak its rules, or click <strong>⚙️ Custom Game</strong> to build a match from scratch.
+                        </li>
+                        <li><strong>Joining a Game:</strong> Browse <em>Join Active Games</em> in the lobby list. Click
+                            <strong>🎯 Join Game</strong> to deploy into combat immediately.
+                        </li>
+                        <li><strong>Loadout:</strong> After creating or joining a game, you will customize your loadout:
+                            selecting your primary weapon attributes, utility weapon, and name
+                        </li>
+                        <li><strong>Spectating:</strong> Click <strong>👁️ Spectate</strong> to observe active matches
+                            with spectator controls without occupying a player slot.
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="help-card">
+                    <h3>⌨️ Game Controls</h3>
+                    <table class="controls-table">
+                        <tr>
+                            <td><strong>Move Player</strong></td>
+                            <td><span class="kbd">W</span> <span class="kbd">A</span> <span class="kbd">S</span> <span
+                                    class="kbd">D</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Aim Direction</strong></td>
+                            <td><span class="kbd">Mouse Cursor or <span class="kbd">↑</span> <span class="kbd">←</span> <span
+                                    class="kbd">↓</span> <span class="kbd">→</span></span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Primary Weapon</strong></td>
+                            <td><span class="kbd">Left Click</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Utility Special</strong></td>
+                            <td><span class="kbd">Space Bar</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Reload Weapon</strong></td>
+                            <td><span class="kbd">R</span></td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="modal-button cancel" onclick="closeHelpModal()">Got It!</button>
+        </div>
+    </div>
+</div>
+
 <script type="text/javascript">
     const gamesList = document.getElementById('games-list');
     const createButtons = document.getElementById('create-buttons');
@@ -651,12 +897,13 @@
         createButtons.innerHTML = '';
         if (gamePresets && gamePresets.length > 0) {
             gamePresets.forEach(preset => {
-                createButtons.appendChild(createPresetButton(preset.label, preset.id));
+                createButtons.appendChild(createPresetButton(preset.label, preset.id, preset.description));
             });
         }
         const customButton = document.createElement('button');
         customButton.textContent = '⚙️ Custom Game';
         customButton.className = 'custom-game';
+        customButton.title = 'Build a custom game mode from scratch';
         customButton.onclick = () => openCustomGameModal();
         createButtons.appendChild(customButton);
     }
@@ -885,9 +1132,12 @@
         window.location.href = `/game.html?gameId=${gameId}`;
     }
 
-    function createPresetButton(label, presetType) {
+    function createPresetButton(label, presetType, description) {
         const group = document.createElement('div');
         group.className = 'preset-btn-group';
+        if (description) {
+            group.title = description;
+        }
 
         const mainBtn = document.createElement('button');
         mainBtn.className = 'preset-btn-main';
@@ -902,6 +1152,14 @@
 
         group.appendChild(mainBtn);
         group.appendChild(gearBtn);
+
+        if (description) {
+            const tooltip = document.createElement('div');
+            tooltip.className = 'preset-tooltip';
+            tooltip.textContent = description;
+            group.appendChild(tooltip);
+        }
+
         return group;
     }
 
@@ -1108,6 +1366,14 @@
         document.getElementById('custom-game-modal').classList.add('hidden');
     }
 
+    function openHelpModal() {
+        document.getElementById('help-modal').classList.remove('hidden');
+    }
+
+    function closeHelpModal() {
+        document.getElementById('help-modal').classList.add('hidden');
+    }
+
     async function createCustomGame() {
         const gameConfig = {
             maxPlayers: parseInt(document.getElementById('maxPlayers').value),
@@ -1181,17 +1447,24 @@
         }
     }
 
-    // Close modal when clicking outside
+    // Close modals when clicking outside
     document.getElementById('custom-game-modal').addEventListener('click', function(event) {
         if (event.target === this) {
             closeCustomGameModal();
         }
     });
 
-    // Close modal on Escape key
+    document.getElementById('help-modal').addEventListener('click', function(event) {
+        if (event.target === this) {
+            closeHelpModal();
+        }
+    });
+
+    // Close modals on Escape key
     document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') {
             closeCustomGameModal();
+            closeHelpModal();
         }
     });
 

@@ -39,6 +39,8 @@ public class GamePresetsTest extends BaseTestClass {
         for (GamePresets.Preset preset : GamePresets.ALL_PRESETS) {
             assertNotNull(preset.id(), "Preset ID should not be null");
             assertNotNull(preset.label(), "Preset label should not be null");
+            assertNotNull(preset.description(), "Preset description should not be null");
+            assertTrue(!preset.description().isBlank(), "Preset description should not be blank");
             assertNotNull(preset.config(), "Preset config should not be null");
 
             Set<ConstraintViolation<GameConfig>> violations = validator.validate(preset.config());

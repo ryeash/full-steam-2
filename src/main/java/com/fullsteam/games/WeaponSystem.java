@@ -281,7 +281,8 @@ public class WeaponSystem {
         return switch (entity) {
             case FieldEffect fieldEffect -> fieldEffect.getType() == FieldEffectType.SHIELD_BARRIER;
             case Obstacle _ -> true;
-            case Player _, Projectile _, NetProjectile _, Turret _, Oddball _, KothZone _, DefenseLaser _, Headquarters _, Flag _ -> false;
+            case Player _, Projectile _, NetProjectile _, Turret _, Oddball _,
+                 KothZone _, DefenseLaser _, Headquarters _, Flag _ -> false;
             case null -> false;
             default -> true; // the world boundaries
         };
@@ -295,8 +296,6 @@ public class WeaponSystem {
         double baseAngle = Math.atan2(direction.y, direction.x);
         double spread = (1.0 - weapon.getAccuracy()) * 0.17;
         int shots = Math.max(1, weapon.getBulletsPerShot());
-        double rolledDamage = weapon.rollDamage();
-        double rolledDamagePerBullet = Weapon.damagePerBullet(rolledDamage, shots);
         List<GameEntity> fired = new ArrayList<>(shots);
         double angle = baseAngle;
         for (int i = 0; i < shots; i++) {
@@ -305,9 +304,10 @@ public class WeaponSystem {
             Vector2 jitter = new Vector2(
                     (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0,
                     (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0);
+            double rolledDamage = weapon.rollDamagePerBullet();
             fired.add(weapon.getOrdinance().isBeamType()
                     ? fireBeam(ownerId, ownerTeam, weapon, position, aimDir, rolledDamage)
-                    : fireProjectile(ownerId, ownerTeam, weapon, position.copy().add(jitter), aimDir, rolledDamagePerBullet));
+                    : fireProjectile(ownerId, ownerTeam, weapon, position.copy().add(jitter), aimDir, rolledDamage));
         }
         return fired;
     }

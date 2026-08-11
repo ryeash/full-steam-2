@@ -14,6 +14,7 @@ import io.micronaut.websocket.annotation.OnMessage;
 import io.micronaut.websocket.annotation.OnOpen;
 import io.micronaut.websocket.annotation.ServerWebSocket;
 import jakarta.inject.Inject;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tools.jackson.databind.JsonNode;
@@ -21,6 +22,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 import static com.fullsteam.controller.PlayerConnectionService.SESSION_KEY;
@@ -43,13 +45,11 @@ public class GameWebSocketEndpoint {
                                  @Value("${app.allowed-origins:}") List<String> allowedOrigins) {
         this.connectionService = connectionService;
         this.objectMapper = objectMapper;
-        // An unset property binds the empty string as ["" ] (a one-element list),
-        // not an empty list — strip blank entries so a blank config means
-        // "no allowlist / allow any origin".
         this.allowedOrigins = Optional.ofNullable(allowedOrigins)
                 .orElse(List.of())
-                .stream().map(String::trim)
-                .filter(s -> !s.isEmpty())
+                .stream()
+                .map(StringUtils::trimToNull)
+                .filter(Objects::nonNull)
                 .toList();
     }
 
@@ -63,18 +63,9 @@ public class GameWebSocketEndpoint {
             session.close();
             return;
         }
-
-        // Check if this is a spectator connection by parsing the request URI
-        boolean asSpectator = false;
-        try {
-            String requestUri = session.getRequestURI().toString();
-            asSpectator = requestUri.contains("spectate=true");
-        } catch (Exception e) {
-            log.debug("Could not parse spectate parameter from URI: {}", e.getMessage());
-        }
-
-        log.debug("WebSocket connection opened for gameId: {} (spectator: {})", gameId, asSpectator);
-
+        boolean asSpectator = session.getRequestParameters()
+                .get("spectate", Boolean.class)
+                .orElse(false);
         ConnectResult result = connectionService.connectPlayer(session, gameId, asSpectator);
         if (result instanceof ConnectResult.Rejected(GameManager.JoinRejectReason reason)) {
             log.warn("Failed to connect {} to game {} (reason: {}), closing session", asSpectator ? "spectator" : "player", gameId, reason);
@@ -101,13 +92,10 @@ public class GameWebSocketEndpoint {
     private void sendJoinRejected(WebSocketSession session, String reason) {
         try {
             if (session.isOpen() && session.isWritable()) {
-                String json = objectMapper.writeValueAsString(Map.of(
+                session.sendSync(Map.of(
                         "type", "joinRejected",
                         "reason", reason
                 ));
-                // Use sendSync where available so the client receives the
-                // message before we close the socket; fall back to async otherwise.
-                session.sendSync(json);
             }
         } catch (Exception e) {
             log.debug("Failed to send joinRejected before close: {}", e.getMessage());

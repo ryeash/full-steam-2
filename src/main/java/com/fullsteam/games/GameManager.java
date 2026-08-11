@@ -45,17 +45,18 @@ import org.slf4j.LoggerFactory;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
+@Getter
 public class GameManager {
     protected static final Logger log = LoggerFactory.getLogger(GameManager.class);
 
@@ -66,38 +67,25 @@ public class GameManager {
      */
     public static final long LOBBY_TIMEOUT_MS = 180_000L;
 
-    @Getter
-    protected final String gameId;
-    @Getter
-    protected final GameConfig gameConfig;
-    @Getter
-    protected final GameEntities gameEntities;
-    @Getter
-    protected final CollisionProcessor collisionProcessor;
-    @Getter
-    protected final AIPlayerManager aiPlayerManager;
-    @Getter
-    protected final TeamSpawnManager teamSpawnManager;
-    @Getter
-    protected final TerrainGenerator terrainGenerator;
-    @Getter
-    protected final GameEventManager gameEventManager;
-    @Getter
-    protected final RuleSystem ruleSystem;
-    @Getter
-    protected final WeaponSystem weaponSystem;
-    @Getter
-    protected final UtilitySystem utilitySystem;
-    @Getter
-    protected final EntitySpawner entitySpawner;
-    @Getter
-    protected final SpawnPointManager spawnPointManager;
-    @Getter
-    protected final GameStateSerializer gameStateSerializer;
+    public static final long FRAME_RATE = 24L;
+    public static final long FRAME_PERIOD = 1000L / FRAME_RATE; // ms/s / frame/s = ms/frame
 
+    protected final String gameId;
+    protected final GameConfig gameConfig;
+    protected final GameEntities gameEntities;
+    protected final CollisionProcessor collisionProcessor;
+    protected final AIPlayerManager aiPlayerManager;
+    protected final TeamSpawnManager teamSpawnManager;
+    protected final TerrainGenerator terrainGenerator;
+    protected final GameEventManager gameEventManager;
+    protected final RuleSystem ruleSystem;
+    protected final WeaponSystem weaponSystem;
+    protected final UtilitySystem utilitySystem;
+    protected final EntitySpawner entitySpawner;
+    protected final SpawnPointManager spawnPointManager;
+    protected final GameStateSerializer gameStateSerializer;
     protected final ObjectMapper objectMapper;
 
-    @Getter
     protected long gameStartTime;
     protected boolean gameRunning = false;
     private final long aiCheckIntervalMs;
@@ -111,7 +99,7 @@ public class GameManager {
     private final GameLobby gameLobby;
 
     private final List<DamageHit> pendingDamageHits = new ArrayList<>();
-    private final Map<Long, Double> dotHitAccumulator = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<Long, Double> dotHitAccumulator = new ConcurrentHashMap<>();
 
     /**
      * Record a discrete damage hit for client UI display (e.g. floating damage numbers).
@@ -255,7 +243,7 @@ public class GameManager {
             log.debug("AI filling disabled for game {} - no initial AI players added", gameId);
         }
 
-        this.shutdownHook = Config.EXECUTOR.scheduleAtFixedRate(this::update, 0, 33, TimeUnit.MILLISECONDS);
+        this.shutdownHook = Config.EXECUTOR.scheduleAtFixedRate(this::update, FRAME_PERIOD, FRAME_PERIOD, TimeUnit.MILLISECONDS);
     }
 
     public boolean addPlayer(PlayerSession playerSession) {
@@ -590,12 +578,6 @@ public class GameManager {
         return aiPlayerManager.isAIPlayer(playerId);
     }
 
-    /**
-     * Check if the game has any human player sessions occupying a slot
-     * (LOBBY or PLAYING). Spectators are intentionally excluded so the
-     * AI-only cleanup sweep ({@link GameLobby#cleanupAIOnlyGames()})
-     * can reap a game that has nothing but spectators hanging around.
-     */
     public boolean hasHumanPlayers() {
         return getPlayingAndLobbyCount() > 0;
     }
@@ -640,11 +622,7 @@ public class GameManager {
                 candidates.add(t);
             }
         }
-        int bestTeam = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
-
-        log.debug("Team assignment – counts: {} → assigning to team {} (min={})",
-                Arrays.toString(teamCounts), bestTeam, minCount);
-        return bestTeam;
+        return candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
     }
 
     /**
@@ -697,7 +675,9 @@ public class GameManager {
      */
     private void rebalanceAITeams() {
         int teamCount = gameConfig.getTeamCount();
-        if (teamCount < 2) return;
+        if (teamCount < 2) {
+            return;
+        }
 
         for (int iteration = 0; iteration < teamCount * 2; iteration++) {
             // Build a fresh per-team headcount each pass.
@@ -705,7 +685,9 @@ public class GameManager {
             Map<Integer, List<Integer>> aiByTeam = new HashMap<>();
             for (Player p : gameEntities.getAllPlayers()) {
                 int t = p.getTeam();
-                if (t < 1 || t > teamCount) continue;
+                if (t < 1 || t > teamCount) {
+                    continue;
+                }
                 teamCounts[t]++;
                 if (isAIPlayer(p.getId())) {
                     aiByTeam.computeIfAbsent(t, k -> new ArrayList<>()).add(p.getId());
@@ -715,16 +697,24 @@ public class GameManager {
             // Find most- and least-populated teams.
             int maxTeam = 1, minTeam = 1;
             for (int t = 2; t <= teamCount; t++) {
-                if (teamCounts[t] > teamCounts[maxTeam]) maxTeam = t;
-                if (teamCounts[t] < teamCounts[minTeam]) minTeam = t;
+                if (teamCounts[t] > teamCounts[maxTeam]) {
+                    maxTeam = t;
+                }
+                if (teamCounts[t] < teamCounts[minTeam]) {
+                    minTeam = t;
+                }
             }
 
             // Already balanced (gap ≤ 1) — done.
-            if (teamCounts[maxTeam] - teamCounts[minTeam] <= 1) break;
+            if (teamCounts[maxTeam] - teamCounts[minTeam] <= 1) {
+                break;
+            }
 
             // Can only fix the imbalance if the over-full team has a removable AI.
             List<Integer> aiOnMaxTeam = aiByTeam.getOrDefault(maxTeam, List.of());
-            if (aiOnMaxTeam.isEmpty()) break; // all excess players on that team are human — can't move
+            if (aiOnMaxTeam.isEmpty()) {
+                break; // all excess players on that team are human — can't move
+            }
 
             int aiToMove = aiOnMaxTeam.getFirst();
             removeAIPlayer(aiToMove);
@@ -748,7 +738,9 @@ public class GameManager {
             // In FFA there are no teams; just pick any AI.
             for (Player p : gameEntities.getAllPlayers()) {
                 int t = p.getTeam();
-                if (t >= 1 && t < teamCounts.length) teamCounts[t]++;
+                if (t >= 1 && t < teamCounts.length) {
+                    teamCounts[t]++;
+                }
             }
 
             // Find the team with the most total players (AI or human).
@@ -766,14 +758,20 @@ public class GameManager {
             // Remove one AI from that team (or any AI in FFA).
             boolean found = false;
             for (Player p : gameEntities.getAllPlayers()) {
-                if (!isAIPlayer(p.getId())) continue;
-                if (targetTeam != 0 && p.getTeam() != targetTeam) continue;
+                if (!isAIPlayer(p.getId())) {
+                    continue;
+                }
+                if (targetTeam != 0 && p.getTeam() != targetTeam) {
+                    continue;
+                }
                 removeAIPlayer(p.getId());
                 removed++;
                 found = true;
                 break;
             }
-            if (!found) break; // no more AI to remove
+            if (!found) {
+                break; // no more AI to remove
+            }
         }
         return removed;
     }
@@ -1093,7 +1091,9 @@ public class GameManager {
      * names so that the server-assigned random name is kept as the fallback.
      */
     private void applyPlayerNameFromRequest(PlayerSession playerSession, PlayerConfigRequest request) {
-        if (request == null || request.getPlayerName() == null) return;
+        if (request == null || request.getPlayerName() == null) {
+            return;
+        }
         String name = request.getPlayerName().trim();
         if (RandomNames.getNames().contains(name)) {
             playerSession.setPlayerName(name);
