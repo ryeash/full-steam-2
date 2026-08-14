@@ -184,7 +184,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         }
 
         Vector2 hitPos = projectile.getPosition();
-        gameManager.recordDamageHit(hitPos.x, hitPos.y, damage, projectile.getOwnerId(), player.getId(), killed);
+        gameEntities.recordDamageHit(hitPos.x, hitPos.y, damage, projectile.getOwnerId(), player.getId(), killed);
 
         // Check if projectile should pierce through the target
         boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, player);
@@ -243,7 +243,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                     if (killed) {
                         gameManager.killPlayer(player, fieldEffect.getOwnerId());
                     }
-                    gameManager.recordDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
+                    gameEntities.recordDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
                 }
             }
             case PLASMA, FIRE -> {
@@ -252,7 +252,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 if (killed) {
                     gameManager.killPlayer(player, fieldEffect.getOwnerId());
                 }
-                gameManager.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
+                gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
             }
             case ELECTRIC -> {
                 double damage = fieldEffect.getDamage() * deltaTime;
@@ -260,7 +260,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 if (killed) {
                     gameManager.killPlayer(player, fieldEffect.getOwnerId());
                 }
-                gameManager.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
+                gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
                 StatusEffectManager.applySlowEffect(player, Config.PLAYER_LINEAR_DAMPING * 2.0, 0.5,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Electric Field"));
             }
@@ -270,7 +270,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 if (killed) {
                     gameManager.killPlayer(player, fieldEffect.getOwnerId());
                 }
-                gameManager.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
+                gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
                 StatusEffectManager.applySlowEffect(player, Config.PLAYER_LINEAR_DAMPING * 3.0, 1.0,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Freeze Field"));
             }
@@ -280,7 +280,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 if (killed) {
                     gameManager.killPlayer(player, fieldEffect.getOwnerId());
                 }
-                gameManager.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
+                gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
                 StatusEffectManager.applyPoison(gameManager, player, fieldEffect.getDamage() * 0.2, 1.5, fieldEffect.getOwnerId());
             }
             case EARTHQUAKE -> {
@@ -289,7 +289,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 if (killed) {
                     gameManager.killPlayer(player, fieldEffect.getOwnerId());
                 }
-                gameManager.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
+                gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
                 // Apply slowing effect (ground shaking makes movement difficult)
                 StatusEffectManager.applySlowEffect(player, Config.PLAYER_LINEAR_DAMPING * 1.5, 0.7, "Earthquake");
             }
@@ -383,7 +383,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         if (turretDestroyed) {
             createTurretDestructionExplosion(turret);
         }
-        gameManager.recordDamageHit(hitPosition.x, hitPosition.y, damage, projectile.getOwnerId(), turret.getId(), turretDestroyed);
+        gameEntities.recordDamageHit(hitPosition.x, hitPosition.y, damage, projectile.getOwnerId(), turret.getId(), turretDestroyed);
 
         // Check if projectile should pierce through the turret
         boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, turret);
@@ -436,7 +436,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                     if (destroyed) {
                         createTurretDestructionExplosion(turret);
                     }
-                    gameManager.recordDamageHit(turret.getPosition().x, turret.getPosition().y, damage, fieldEffect.getOwnerId(), turret.getId(), destroyed);
+                    gameEntities.recordDamageHit(turret.getPosition().x, turret.getPosition().y, damage, fieldEffect.getOwnerId(), turret.getId(), destroyed);
                 }
             }
             // Damage over time effects
@@ -447,7 +447,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                     if (destroyed) {
                         createTurretDestructionExplosion(turret);
                     }
-                    gameManager.recordDotDamageHit(turret.getPosition().x, turret.getPosition().y, frameDamage, fieldEffect.getOwnerId(), turret.getId(), destroyed);
+                    gameEntities.recordDotDamageHit(turret.getPosition().x, turret.getPosition().y, frameDamage, fieldEffect.getOwnerId(), turret.getId(), destroyed);
                 }
             }
             // Non-damaging effects that turrets should ignore
@@ -659,7 +659,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                     * gameManager.getGameConfig().getRules().getOddballNpcPointsPerDamage();
             attacker.getScoring().addOddball(points);
             Vector2 hitPos = projectile.getPosition();
-            gameManager.recordDamageHit(hitPos.x, hitPos.y, damage, projectile.getOwnerId(), npc.getId(), false);
+            gameEntities.recordDamageHit(hitPos.x, hitPos.y, damage, projectile.getOwnerId(), npc.getId(), false);
         }
 
         projectile.setActive(false);
@@ -687,7 +687,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                     if (attacker != null) {
                         gameManager.handleHeadquartersDamage(hq, attacker, damageDealt, destroyed);
                     }
-                    gameManager.recordDamageHit(hq.getPosition().x, hq.getPosition().y, damageDealt, fieldEffect.getOwnerId(), hq.getId(), destroyed);
+                    gameEntities.recordDamageHit(hq.getPosition().x, hq.getPosition().y, damageDealt, fieldEffect.getOwnerId(), hq.getId(), destroyed);
                 }
             }
             case PLASMA, FIRE, ELECTRIC, FREEZE, POISON, EARTHQUAKE, EXPLOSION, FRAGMENTATION -> {
@@ -697,7 +697,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 if (attacker != null) {
                     gameManager.handleHeadquartersDamage(hq, attacker, damageDealt, destroyed);
                 }
-                gameManager.recordDotDamageHit(hq.getPosition().x, hq.getPosition().y, damageDealt, fieldEffect.getOwnerId(), hq.getId(), destroyed);
+                gameEntities.recordDotDamageHit(hq.getPosition().x, hq.getPosition().y, damageDealt, fieldEffect.getOwnerId(), hq.getId(), destroyed);
             }
             default -> { /* Non-damaging field effects don't affect HQ */ }
         }
@@ -731,7 +731,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                         * npc.getPointsMultiplier()
                         * gameManager.getGameConfig().getRules().getOddballNpcPointsPerDamage();
                 attacker.getScoring().addOddball(points);
-                gameManager.recordDamageHit(npc.getPosition().x, npc.getPosition().y, damage, fieldEffect.getOwnerId(), npc.getId(), false);
+                gameEntities.recordDamageHit(npc.getPosition().x, npc.getPosition().y, damage, fieldEffect.getOwnerId(), npc.getId(), false);
             }
             case PLASMA, FIRE, ELECTRIC, FREEZE, POISON, EARTHQUAKE -> {
                 if (fieldEffect.getDamage() > 0) {
@@ -740,7 +740,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                             * npc.getPointsMultiplier()
                             * gameManager.getGameConfig().getRules().getOddballNpcPointsPerDamage();
                     attacker.getScoring().addOddball(points);
-                    gameManager.recordDotDamageHit(npc.getPosition().x, npc.getPosition().y, frameDamage, fieldEffect.getOwnerId(), npc.getId(), false);
+                    gameEntities.recordDotDamageHit(npc.getPosition().x, npc.getPosition().y, frameDamage, fieldEffect.getOwnerId(), npc.getId(), false);
                 }
             }
             default -> { /* Non-damaging field effects don't affect Oddballs */ }
@@ -778,7 +778,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         if (attacker != null) {
             gameManager.handleHeadquartersDamage(hq, attacker, damageDealt, hqDestroyed);
         }
-        gameManager.recordDamageHit(hitPosition.x, hitPosition.y, damageDealt, projectile.getOwnerId(), hq.getId(), hqDestroyed);
+        gameEntities.recordDamageHit(hitPosition.x, hitPosition.y, damageDealt, projectile.getOwnerId(), hq.getId(), hqDestroyed);
 
         // Check if projectile should pierce
         boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, hq);

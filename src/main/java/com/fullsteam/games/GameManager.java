@@ -6,7 +6,6 @@ import com.fullsteam.RandomNames;
 import com.fullsteam.ai.AIPersonality;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
-import com.fullsteam.model.DamageHit;
 import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.FieldEffectCircle;
 import com.fullsteam.model.FieldEffectType;
@@ -49,7 +48,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -98,56 +96,6 @@ public class GameManager {
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
     private volatile boolean hadHumanPlayers = false;
     private final GameLobby gameLobby;
-
-    private final List<DamageHit> pendingDamageHits = new ArrayList<>();
-    private final Map<Long, Double> dotHitAccumulator = new ConcurrentHashMap<>();
-
-    /**
-     * Record a discrete damage hit for client UI display (e.g. floating damage numbers).
-     * Damage is rounded to nearest integer (or 1 if < 1).
-     */
-    public void recordDamageHit(double x, double y, double damage, int attackerId, int victimId, boolean isKill) {
-        if (damage <= 0.0) {
-            return;
-        }
-        long displayDamage = Math.max(1, Math.round(damage));
-        double rX = Math.round(x * 10.0) / 10.0;
-        double rY = Math.round(y * 10.0) / 10.0;
-        synchronized (pendingDamageHits) {
-            pendingDamageHits.add(new DamageHit(rX, rY, (double) displayDamage, attackerId, victimId, isKill));
-        }
-    }
-
-    /**
-     * Accumulate continuous DOT damage and record a hit once accumulated damage is significant.
-     */
-    public void recordDotDamageHit(double x, double y, double frameDamage, int attackerId, int victimId, boolean isKill) {
-        if (frameDamage <= 0) {
-            return;
-        }
-        long key = (((long) attackerId) << 32) | (victimId & 0xFFFFFFFFL);
-        double total = dotHitAccumulator.getOrDefault(key, 0.0) + frameDamage;
-        if (total >= 4.0 || isKill) {
-            recordDamageHit(x, y, total, attackerId, victimId, isKill);
-            dotHitAccumulator.put(key, 0.0);
-        } else {
-            dotHitAccumulator.put(key, total);
-        }
-    }
-
-    /**
-     * Retrieve and clear damage hits collected during the tick for state serialization.
-     */
-    public List<DamageHit> getAndClearDamageHits() {
-        synchronized (pendingDamageHits) {
-            if (pendingDamageHits.isEmpty()) {
-                return List.of();
-            }
-            List<DamageHit> copy = new ArrayList<>(pendingDamageHits);
-            pendingDamageHits.clear();
-            return copy;
-        }
-    }
 
     public GameManager(String gameId, GameConfig gameConfig, ObjectMapper objectMapper) {
         this(gameId, gameConfig, objectMapper, null);
@@ -288,8 +236,7 @@ public class GameManager {
     public int addMixedAIPlayers(int count) {
         int added = 0;
         for (int i = 0; i < count; i++) {
-            AIPersonality.Type personality = AIPersonality.Type.values()[i % AIPersonality.Type.values().length];
-            if (addAIPlayer(personality)) {
+            if (addAIPlayer()) {
                 added++;
             } else {
                 log.warn("Could not add AI player {} of {} - game may be full", i + 1, count);
@@ -447,19 +394,23 @@ public class GameManager {
     }
 
     public void broadcast(Object message) {
-        gameEntities.getPlayerSessions().values().forEach(player -> {
-            if (player.getSession().isOpen()) {
-                send(player.getSession(), message);
-            }
-        });
+        gameEntities.getPlayerSessions()
+                .values()
+                .forEach(player -> {
+                    if (player.getSession().isOpen()) {
+                        send(player.getSession(), message);
+                    }
+                });
     }
 
     public void broadcastBinary(byte[] bytes) {
-        gameEntities.getPlayerSessions().values().forEach(player -> {
-            if (player.getSession().isOpen()) {
-                sendBinary(player.getSession(), bytes);
-            }
-        });
+        gameEntities.getPlayerSessions()
+                .values()
+                .forEach(player -> {
+                    if (player.getSession().isOpen()) {
+                        sendBinary(player.getSession(), bytes);
+                    }
+                });
     }
 
     public GameInfo getGameInfo() {
@@ -471,10 +422,6 @@ public class GameManager {
                 gameRunning ? "running" : "waiting",
                 gameConfig
         );
-    }
-
-    public int getPlayerCount() {
-        return gameEntities.getPlayerSessions().size();
     }
 
     /**
@@ -532,7 +479,7 @@ public class GameManager {
     /**
      * Add an AI player with a specific personality type.
      */
-    public boolean addAIPlayer(AIPersonality.Type personalityType) {
+    public boolean addAIPlayer() {
         if (gameEntities.getAllPlayers().size() >= getMaxPlayers()) {
             return false;
         }
@@ -592,13 +539,11 @@ public class GameManager {
      * Get the number of AI players in the game.
      */
     public int getAIPlayerCount() {
-        int count = 0;
-        for (Player player : gameEntities.getAllPlayers()) {
-            if (aiPlayerManager.isAIPlayer(player.getId())) {
-                count++;
-            }
-        }
-        return count;
+        return (int) gameEntities.getAllPlayers()
+                .stream()
+                .map(Player::getId)
+                .filter(aiPlayerManager::isAIPlayer)
+                .count();
     }
 
     /**
@@ -866,7 +811,7 @@ public class GameManager {
                 return false;
             });
 
-            updateUtilityEntities(deltaTime);
+            updateUtilityEntities();
             updateDefenseLaserBeamEndpoints();
 
             // Reset vision flags before physics collision pass re-evaluates them
@@ -928,7 +873,7 @@ public class GameManager {
     /**
      * Update utility entities and handle their special behaviors
      */
-    private void updateUtilityEntities(double deltaTime) {
+    private void updateUtilityEntities() {
         for (Turret turret : gameEntities.getAllTurrets()) {
             if (turret.isActive()) {
                 turret.acquireTarget(gameEntities.getAllPlayers().stream().toList());

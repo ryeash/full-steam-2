@@ -44,9 +44,9 @@ public class DamageHitsTest {
     public void testRecordDamageHit() {
         GameManager gameManager = new GameManager("test-game", gameConfig, new ObjectMapper());
         gameManager.shutdown();
-        gameManager.recordDamageHit(100.123, -50.456, 25.67, 1, 2, false);
+        gameEntities.recordDamageHit(100.123, -50.456, 25.67, 1, 2, false);
 
-        List<DamageHit> hits = gameManager.getAndClearDamageHits();
+        List<DamageHit> hits = gameEntities.getAndClearDamageHits();
         assertEquals(1, hits.size());
         DamageHit hit = hits.get(0);
         assertEquals(100.1, hit.getX());
@@ -57,13 +57,13 @@ public class DamageHitsTest {
         assertFalse(hit.isKill());
 
         // Test damage less than 1 displays as 1
-        gameManager.recordDamageHit(0, 0, 0.3, 1, 2, false);
-        hits = gameManager.getAndClearDamageHits();
+        gameEntities.recordDamageHit(0, 0, 0.3, 1, 2, false);
+        hits = gameEntities.getAndClearDamageHits();
         assertEquals(1, hits.size());
         assertEquals(1.0, hits.get(0).getDamage(), "Damage < 1 should display as 1");
 
         // Second fetch should be empty
-        assertTrue(gameManager.getAndClearDamageHits().isEmpty());
+        assertTrue(gameEntities.getAndClearDamageHits().isEmpty());
     }
 
     @Test
@@ -73,14 +73,14 @@ public class DamageHitsTest {
         gameManager.shutdown();
 
         // Small tick damage (e.g., 1.5 per tick)
-        gameManager.recordDotDamageHit(0, 0, 1.5, 1, 2, false);
-        assertTrue(gameManager.getAndClearDamageHits().isEmpty(), "DOT under 4.0 should not emit hit yet");
+        gameEntities.recordDotDamageHit(0, 0, 1.5, 1, 2, false);
+        assertTrue(gameEntities.getAndClearDamageHits().isEmpty(), "DOT under 4.0 should not emit hit yet");
 
-        gameManager.recordDotDamageHit(0, 0, 1.5, 1, 2, false);
-        assertTrue(gameManager.getAndClearDamageHits().isEmpty(), "Total 3.0 < 4.0, should not emit yet");
+        gameEntities.recordDotDamageHit(0, 0, 1.5, 1, 2, false);
+        assertTrue(gameEntities.getAndClearDamageHits().isEmpty(), "Total 3.0 < 4.0, should not emit yet");
 
-        gameManager.recordDotDamageHit(0, 0, 1.5, 1, 2, false);
-        List<DamageHit> hits = gameManager.getAndClearDamageHits();
+        gameEntities.recordDotDamageHit(0, 0, 1.5, 1, 2, false);
+        List<DamageHit> hits = gameEntities.getAndClearDamageHits();
         assertEquals(1, hits.size(), "Total 4.5 >= 4.0, should emit hit");
         assertEquals(5.0, hits.get(0).getDamage(), "4.5 rounds up to 5");
     }
@@ -99,20 +99,20 @@ public class DamageHitsTest {
         gameEntities.add(p2);
         gameEntities.add(p3);
 
-        gameManager.recordDamageHit(100, 100, 35.0, 1, 2, false);
+        gameEntities.recordDamageHit(100, 100, 35.0, 1, 2, false);
 
         byte[] fullState = binarySerializer.serializeGameState();
         assertTrue(fullState.length > 0);
 
         // Blinded Bystander (p3) should NOT see hits between p1 and p2
         p3.setVisionObscured(true);
-        gameManager.recordDamageHit(100, 100, 35.0, 1, 2, false);
+        gameEntities.recordDamageHit(100, 100, 35.0, 1, 2, false);
         byte[] bystanderBlindedState = binarySerializer.serializeBlindedGameState(p3);
         assertTrue(bystanderBlindedState.length > 0);
 
         // Blinded Victim (p2) SHOULD see the hit done to them
         p2.setVisionObscured(true);
-        gameManager.recordDamageHit(100, 100, 35.0, 1, 2, false);
+        gameEntities.recordDamageHit(100, 100, 35.0, 1, 2, false);
         byte[] victimBlindedState = binarySerializer.serializeBlindedGameState(p2);
         assertTrue(victimBlindedState.length > 0);
     }

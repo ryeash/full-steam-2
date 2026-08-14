@@ -16,7 +16,7 @@ import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 
 @Getter
 @Setter
@@ -34,7 +34,7 @@ public class Player extends OwnedGameEntity implements HasWeapon {
     private long respawnTime = 0;
     private Vector2 respawnPoint;
     private double maxSpeed = Config.PLAYER_SPEED;
-    private final Set<AttributeModification> attributeModifications = ConcurrentHashMap.newKeySet();
+    private final Set<AttributeModification> attributeModifications = new ConcurrentSkipListSet<>();
 
     private boolean visionObscured = false; // Set true each tick while inside SMOKE field, reset before collision processing
 

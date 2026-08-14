@@ -309,7 +309,7 @@ public final class StatusEffectManager {
                 if (killed) {
                     gameManager.killPlayer(player, effectOwner);
                 }
-                gameManager.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, effectOwner, player.getId(), killed);
+                gameManager.getGameEntities().recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, effectOwner, player.getId(), killed);
             }
         });
     }

@@ -1,6 +1,7 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.games.GameConfig;
+import com.fullsteam.model.DamageHit;
 import com.fullsteam.model.FieldEffect;
 import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.PlayerInput;
@@ -11,6 +12,7 @@ import org.dyn4j.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Deque;
@@ -18,8 +20,10 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -48,6 +52,9 @@ public class GameEntities {
     private final Map<Integer, Oddball> oddballNpcs = new ConcurrentSkipListMap<>();
     private final Map<Integer, KothZone> kothZones = new ConcurrentSkipListMap<>();
     private final Map<Integer, Headquarters> headquarters = new ConcurrentSkipListMap<>();
+
+    private final Set<DamageHit> pendingDamageHits = new ConcurrentSkipListSet<>();
+    private final Map<Long, Double> dotHitAccumulator = new ConcurrentSkipListMap<>();
 
     private final Map<Integer, Integer> teamVips = new ConcurrentSkipListMap<>();
     private final Deque<Runnable> postWorldUpdateHooks = new ConcurrentLinkedDeque<>();
@@ -192,18 +199,6 @@ public class GameEntities {
         return kothZones.values();
     }
 
-    /**
-     * Remove all entities in the given map from the physics world, then clear the map.
-     * Prevents orphaned physics bodies from continuing to trigger collision callbacks
-     * after entities are logically removed (e.g., between rounds).
-     */
-    public <T extends GameEntity> void clearEntitiesFromWorld(Map<Integer, T> entityMap) {
-        for (T entity : entityMap.values()) {
-            world.removeBody(entity.getBody());
-        }
-        entityMap.clear();
-    }
-
     public void addPostUpdateHook(Runnable runnable) {
         postWorldUpdateHooks.offer(Objects.requireNonNull(runnable));
     }
@@ -245,5 +240,48 @@ public class GameEntities {
         }
         Integer vipId = teamVips.get(player.getTeam());
         return vipId != null && vipId == playerId;
+    }
+
+    /**
+     * Record a discrete damage hit for client UI display (e.g. floating damage numbers).
+     * Damage is rounded to nearest integer (or 1 if < 1).
+     */
+    public void recordDamageHit(double x, double y, double damage, int attackerId, int victimId, boolean isKill) {
+        if (damage <= 0.0) {
+            return;
+        }
+        long displayDamage = Math.max(1, Math.round(damage));
+        double rX = Math.round(x * 10.0) / 10.0;
+        double rY = Math.round(y * 10.0) / 10.0;
+        pendingDamageHits.add(new DamageHit(rX, rY, (double) displayDamage, attackerId, victimId, isKill));
+    }
+
+    /**
+     * Accumulate continuous DOT damage and record a hit once accumulated damage is significant.
+     */
+    public void recordDotDamageHit(double x, double y, double frameDamage, int attackerId, int victimId, boolean isKill) {
+        if (frameDamage <= 0) {
+            return;
+        }
+        long key = (((long) attackerId) << 32) | (victimId & 0xFFFFFFFFL);
+        double total = dotHitAccumulator.getOrDefault(key, 0.0) + frameDamage;
+        if (total >= 4.0 || isKill) {
+            recordDamageHit(x, y, total, attackerId, victimId, isKill);
+            dotHitAccumulator.put(key, 0.0);
+        } else {
+            dotHitAccumulator.put(key, total);
+        }
+    }
+
+    /**
+     * Retrieve and clear damage hits collected during the tick for state serialization.
+     */
+    public List<DamageHit> getAndClearDamageHits() {
+        if (pendingDamageHits.isEmpty()) {
+            return List.of();
+        }
+        List<DamageHit> copy = new ArrayList<>(pendingDamageHits);
+        pendingDamageHits.clear();
+        return copy;
     }
 }

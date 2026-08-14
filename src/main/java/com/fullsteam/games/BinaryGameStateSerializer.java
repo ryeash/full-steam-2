@@ -73,7 +73,7 @@ public class BinaryGameStateSerializer {
                 .filter(p -> !p.isVisionObscured())
                 .toList();
 
-        List<DamageHit> hits = (gameManager != null) ? gameManager.getAndClearDamageHits() : List.of();
+        List<DamageHit> hits = gameEntities.getAndClearDamageHits();
 
         return serializeInternal(
                 players,
@@ -94,7 +94,7 @@ public class BinaryGameStateSerializer {
     }
 
     public byte[] serializeBlindedGameState(Player blindedPlayer) {
-        List<DamageHit> allHits = (gameManager != null) ? gameManager.getAndClearDamageHits() : List.of();
+        List<DamageHit> allHits = gameEntities.getAndClearDamageHits();
         List<DamageHit> playerHits = allHits.stream()
                 .filter(h -> h.getAttackerId() == blindedPlayer.getId() || h.getVictimId() == blindedPlayer.getId())
                 .toList();

@@ -2,11 +2,13 @@ package com.fullsteam.model;
 
 import com.fullsteam.physics.Player;
 
+import java.util.Objects;
+
 /**
  * Represents a temporary modification to player or weapon attributes.
  * This is the foundation for status effects, buffs, debuffs, and temporary enhancements.
  */
-public interface AttributeModification {
+public interface AttributeModification extends Comparable<AttributeModification> {
 
     String uniqueKey();
 
@@ -29,4 +31,9 @@ public interface AttributeModification {
     }
 
     boolean isExpired();
+
+    @Override
+    default int compareTo(AttributeModification o) {
+        return Objects.compare(this.uniqueKey(), o.uniqueKey(), String.CASE_INSENSITIVE_ORDER);
+    }
 }
