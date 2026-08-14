@@ -61,12 +61,19 @@ class InputManager {
     }
     
     setupEventListeners() {
-        document.addEventListener('keydown', (e) => this.handleKeyDown(e));
-        document.addEventListener('keyup', (e) => this.handleKeyUp(e));
-        document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
-        document.addEventListener('mousedown', (e) => this.handleMouseDown(e));
-        document.addEventListener('mouseup', (e) => this.handleMouseUp(e));
-        document.addEventListener('contextmenu', (e) => e.preventDefault());
+        this.boundKeyDown = (e) => this.handleKeyDown(e);
+        this.boundKeyUp = (e) => this.handleKeyUp(e);
+        this.boundMouseMove = (e) => this.handleMouseMove(e);
+        this.boundMouseDown = (e) => this.handleMouseDown(e);
+        this.boundMouseUp = (e) => this.handleMouseUp(e);
+        this.boundContextMenu = (e) => e.preventDefault();
+
+        document.addEventListener('keydown', this.boundKeyDown);
+        document.addEventListener('keyup', this.boundKeyUp);
+        document.addEventListener('mousemove', this.boundMouseMove);
+        document.addEventListener('mousedown', this.boundMouseDown);
+        document.addEventListener('mouseup', this.boundMouseUp);
+        document.addEventListener('contextmenu', this.boundContextMenu);
         
         // Window events
         this.eventHandlers = {
@@ -591,8 +598,7 @@ class InputManager {
             worldX: this.mouse.worldX || 0,
             worldY: this.mouse.worldY || 0,
             left: !!fire,
-            right: !!altFire, // Legacy field - now maps to altFire
-            altFire: !!altFire, // New field for utility weapons
+            altFire: !!altFire, // Utility weapon activation
             reload: !!reload,
             inputSource: this.inputSource // Let server know input source
         };
@@ -645,11 +651,14 @@ class InputManager {
         }
         
         // Remove event listeners
-        document.removeEventListener('keydown', this.handleKeyDown);
-        document.removeEventListener('keyup', this.handleKeyUp);
-        document.removeEventListener('mousemove', this.handleMouseMove);
-        document.removeEventListener('mousedown', this.handleMouseDown);
-        document.removeEventListener('mouseup', this.handleMouseUp);
+        if (this.boundKeyDown) {
+            document.removeEventListener('keydown', this.boundKeyDown);
+            document.removeEventListener('keyup', this.boundKeyUp);
+            document.removeEventListener('mousemove', this.boundMouseMove);
+            document.removeEventListener('mousedown', this.boundMouseDown);
+            document.removeEventListener('mouseup', this.boundMouseUp);
+            document.removeEventListener('contextmenu', this.boundContextMenu);
+        }
 
         if (this.eventHandlers) {
             window.removeEventListener('gamepadconnected', this.eventHandlers.gamepadconnected);

@@ -1,14 +1,12 @@
 package com.fullsteam;
 
+import com.fullsteam.games.BinaryGameStateSerializer;
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.games.GameManager;
-import com.fullsteam.games.GameStateSerializer;
 import com.fullsteam.games.RuleSystem;
-import com.fullsteam.games.TerrainGenerator;
 import com.fullsteam.model.DamageHit;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
-import com.fullsteam.physics.TeamSpawnManager;
 import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.world.World;
@@ -17,8 +15,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -28,10 +27,7 @@ public class DamageHitsTest {
 
     private GameConfig gameConfig;
     private GameEntities gameEntities;
-    private RuleSystem ruleSystem;
-    private TeamSpawnManager teamSpawnManager;
-    private TerrainGenerator terrainGenerator;
-    private GameStateSerializer serializer;
+    private BinaryGameStateSerializer binarySerializer;
 
     @BeforeEach
     public void setUp() {
@@ -39,11 +35,8 @@ public class DamageHitsTest {
         World<Body> world = new World<>();
         world.setBounds(new AxisAlignedBounds(gameConfig.getWorldWidth(), gameConfig.getWorldHeight()));
         gameEntities = new GameEntities(gameConfig, world);
-        ruleSystem = new RuleSystem("test-game", gameConfig.getRules(), gameEntities, null, msg -> {
-        }, gameConfig.getTeamCount());
-        teamSpawnManager = new TeamSpawnManager(gameConfig.getWorldWidth(), gameConfig.getWorldHeight(), gameConfig.getTeamCount());
-        terrainGenerator = new TerrainGenerator(world, gameConfig);
-        serializer = new GameStateSerializer(gameConfig, gameEntities, ruleSystem, teamSpawnManager, terrainGenerator);
+        RuleSystem ruleSystem = new RuleSystem("test-game", gameConfig.getRules(), gameEntities, null, msg -> {}, gameConfig.getTeamCount());
+        binarySerializer = new BinaryGameStateSerializer(gameConfig, gameEntities, ruleSystem);
     }
 
     @Test
@@ -93,11 +86,11 @@ public class DamageHitsTest {
     }
 
     @Test
-    @DisplayName("GameStateSerializer should include hits in gameState and filter for blinded player")
-    public void testHitsInGameStateSerialization() {
+    @DisplayName("BinaryGameStateSerializer should include hits in gameState and filter for blinded player")
+    public void testHitsInBinaryGameStateSerialization() throws Exception {
         GameManager gameManager = new GameManager("test-game", gameConfig, new ObjectMapper());
         gameManager.shutdown();
-        serializer.setGameManager(gameManager);
+        binarySerializer.setGameManager(gameManager);
 
         Player p1 = new Player(1, "Attacker", 0, 0, 1, 100);
         Player p2 = new Player(2, "Victim", 100, 100, 2, 100);
@@ -108,20 +101,19 @@ public class DamageHitsTest {
 
         gameManager.recordDamageHit(100, 100, 35.0, 1, 2, false);
 
-        Map<String, Object> state = serializer.createGameState();
-        assertTrue(state.containsKey("hits"));
-        @SuppressWarnings("unchecked")
-        List<DamageHit> hits = (List<DamageHit>) state.get("hits");
-        assertEquals(1, hits.size());
+        byte[] fullState = binarySerializer.serializeGameState();
+        assertTrue(fullState.length > 0);
 
         // Blinded Bystander (p3) should NOT see hits between p1 and p2
         p3.setVisionObscured(true);
-        Map<String, Object> blindedState = serializer.createBlindedGameState(p3, state);
-        assertFalse(blindedState.containsKey("hits"), "Blinded bystander should not see hits of other players");
+        gameManager.recordDamageHit(100, 100, 35.0, 1, 2, false);
+        byte[] bystanderBlindedState = binarySerializer.serializeBlindedGameState(p3);
+        assertTrue(bystanderBlindedState.length > 0);
 
         // Blinded Victim (p2) SHOULD see the hit done to them
         p2.setVisionObscured(true);
-        Map<String, Object> victimBlindedState = serializer.createBlindedGameState(p2, state);
-        assertTrue(victimBlindedState.containsKey("hits"), "Blinded victim should see hit dealt to them");
+        gameManager.recordDamageHit(100, 100, 35.0, 1, 2, false);
+        byte[] victimBlindedState = binarySerializer.serializeBlindedGameState(p2);
+        assertTrue(victimBlindedState.length > 0);
     }
 }

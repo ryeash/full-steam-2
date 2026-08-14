@@ -104,7 +104,7 @@ public class AIPlayerManager {
             if (input != null) {
                 // If stuck, override movement with an escape direction
                 if (aiPlayer.isStuck()) {
-                    applyUnstickMovement(aiPlayer, input, gameEntities);
+                    applyUnstickMovement(aiPlayer, input);
                 }
 
                 // Steer around solid map obstacles. Applied here (after behavior and
@@ -123,7 +123,7 @@ public class AIPlayerManager {
      * Picks a direction roughly opposite to the current (failed) movement,
      * with some randomization to avoid oscillating between two stuck states.
      */
-    private void applyUnstickMovement(AIPlayer aiPlayer, PlayerInput input, GameEntities gameEntities) {
+    private void applyUnstickMovement(AIPlayer aiPlayer, PlayerInput input) {
         Vector2 stuckDirection = aiPlayer.getCurrentMovementDirection();
 
         Vector2 escapeDirection;
@@ -304,7 +304,7 @@ public class AIPlayerManager {
             input.setReload(true);
             // Don't try to shoot when out of ammo
             input.setLeft(false);
-            input.setRight(false);
+            input.setAltFire(false);
         }
 
         // Apply reaction speed delays (not implemented in this simple version)

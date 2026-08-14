@@ -2031,12 +2031,6 @@ class GameEngine {
         
         // Set player z-index to ensure it's on top
         sprite.zIndex = 10;
-        
-        sprite.targetX = playerData.x;
-        sprite.targetY = playerData.y;
-        sprite.targetRotation = playerData.rotation || 0;
-        sprite.vx = playerData.vx || 0;
-        sprite.vy = playerData.vy || 0;
 
         sprite.interpolator = new EntityInterpolator(sprite, {
             vx: playerData.vx || 0,
@@ -2055,21 +2049,13 @@ class GameEngine {
         const sprite = this.players.get(playerData.id);
         if (!sprite) return;
 
-        if (sprite.interpolator) {
-            sprite.interpolator.updateFromServer(
-                playerData.x,
-                playerData.y,
-                playerData.vx || 0,
-                playerData.vy || 0,
-                playerData.rotation || 0
-            );
-        } else {
-            sprite.position.set(playerData.x, playerData.y);
-            sprite.rotation = playerData.rotation || 0;
-        }
-
-        sprite.vx = playerData.vx || 0;
-        sprite.vy = playerData.vy || 0;
+        sprite.interpolator.updateFromServer(
+            playerData.x,
+            playerData.y,
+            playerData.vx || 0,
+            playerData.vy || 0,
+            playerData.rotation || 0
+        );
         
         // Handle death marker logic
         const isDead = !playerData.active && playerData.respawnTime > 0;
@@ -3137,16 +3123,12 @@ class GameEngine {
         projectileContainer.projectileData = projectileData;
         
         // Use interpolator for smooth movement
-        if (projectileContainer.interpolator) {
-            projectileContainer.interpolator.updateFromServer(
-                projectileData.x,
-                projectileData.y,
-                projectileData.vx || 0,
-                projectileData.vy || 0
-            );
-        } else {
-            projectileContainer.position.set(projectileData.x, projectileData.y);
-        }
+        projectileContainer.interpolator.updateFromServer(
+            projectileData.x,
+            projectileData.y,
+            projectileData.vx || 0,
+            projectileData.vy || 0
+        );
     }
     
     removeProjectile(projectileId) {
@@ -3236,10 +3218,6 @@ class GameEngine {
      *   { type: 'circle',  cx, cy, r }
      *   { type: 'polygon', points: [[x,y], ...] }
      */
-    parseShapes(shapesData) {
-        return BinaryStateDecoder.parseShapes(shapesData);
-    }
-
     areShapesEqual(a, b) {
         if (a === b) return true;
         if (!a || !b) return false;
@@ -3273,7 +3251,7 @@ class GameEngine {
         const obstacleType = obstacleData.type || 'BOULDER';
         const color = this.getObstacleColor(obstacleType);
         const outlineColor = this.darkenColor(color);
-        const shapes = this.parseShapes(obstacleData.shapes);
+        const shapes = BinaryStateDecoder.parseShapes(obstacleData.shapes);
         for (const shape of shapes) {
             if (shape.type === 'circle') {
                 graphics.circle(shape.cx, shape.cy, shape.r);
@@ -3448,6 +3426,13 @@ class GameEngine {
         this.createCTFFlagGraphics(flagContainer, flagData);
         flagContainer.zIndex = 11;
         flagContainer.flagData = flagData;
+
+        flagContainer.interpolator = new EntityInterpolator(flagContainer, {
+            vx: flagData.vx || 0,
+            vy: flagData.vy || 0,
+            snapThreshold: 150
+        });
+
         this.flags.set(flagData.id, flagContainer);
         this.gameContainer.addChild(flagContainer);
     }
@@ -3546,16 +3531,12 @@ class GameEngine {
         const container = this.oddballNpcs.get(npcData.id);
         if (!container) return;
 
-        if (container.interpolator) {
-            container.interpolator.updateFromServer(
-                npcData.x,
-                npcData.y,
-                npcData.vx || 0,
-                npcData.vy || 0
-            );
-        } else {
-            container.position.set(npcData.x, npcData.y);
-        }
+        container.interpolator.updateFromServer(
+            npcData.x,
+            npcData.y,
+            npcData.vx || 0,
+            npcData.vy || 0
+        );
         container.npcData = npcData;
     }
 
@@ -3578,13 +3559,6 @@ class GameEngine {
             return;
         }
 
-        if (!flagContainer.interpolator) {
-            flagContainer.interpolator = new EntityInterpolator(flagContainer, {
-                vx: flagData.vx || 0,
-                vy: flagData.vy || 0,
-                snapThreshold: 150
-            });
-        }
         flagContainer.interpolator.updateFromServer(
             flagData.x,
             flagData.y,
@@ -3612,6 +3586,10 @@ class GameEngine {
     removeFlag(flagId) {
         const flagContainer = this.flags.get(flagId);
         if (flagContainer) {
+            if (flagContainer.interpolator) {
+                flagContainer.interpolator.destroy();
+                flagContainer.interpolator = null;
+            }
             flagContainer.destroy({ children: true, context: true });
             this.gameContainer.removeChild(flagContainer);
             this.flags.delete(flagId);
@@ -4097,7 +4075,7 @@ class GameEngine {
     createHeadquartersGraphics(graphics, entityData) {
         // Derive dimensions from the compact shapes string; fall back to
         // sensible defaults so the renderer never breaks on missing data.
-        const shapes = this.parseShapes(entityData.shapes);
+        const shapes = BinaryStateDecoder.parseShapes(entityData.shapes);
 
         // The physics body is composed of wall polygon(s) plus one circle fixture
         // per corner turret. Honor that data directly rather than synthesizing
@@ -4552,7 +4530,7 @@ class GameEngine {
         const style = this.getFieldEffectStyle(effectData.type);
         
         if (effectData.shapes && effectData.shapes.length > 0) {
-            const shapes = this.parseShapes(effectData.shapes);
+            const shapes = BinaryStateDecoder.parseShapes(effectData.shapes);
             for (const shape of shapes) {
                 if (shape.type === 'circle') {
                     graphics.circle(shape.cx, shape.cy, shape.r);

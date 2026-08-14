@@ -1,14 +1,12 @@
 package com.fullsteam;
 
 import com.fullsteam.ai.AITargetWrapper;
+import com.fullsteam.games.BinaryGameStateSerializer;
 import com.fullsteam.games.GameConfig;
-import com.fullsteam.games.GameStateSerializer;
 import com.fullsteam.games.RuleSystem;
-import com.fullsteam.games.TerrainGenerator;
 import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
-import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.Turret;
 import org.dyn4j.collision.AxisAlignedBounds;
 import org.dyn4j.dynamics.Body;
@@ -18,8 +16,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -31,7 +30,7 @@ public class SmokeVisibilityTest {
 
     private GameConfig gameConfig;
     private GameEntities gameEntities;
-    private GameStateSerializer serializer;
+    private BinaryGameStateSerializer binarySerializer;
 
     @BeforeEach
     public void setUp() {
@@ -40,40 +39,60 @@ public class SmokeVisibilityTest {
         world.setBounds(new AxisAlignedBounds(gameConfig.getWorldWidth(), gameConfig.getWorldHeight()));
         gameEntities = new GameEntities(gameConfig, world);
         RuleSystem ruleSystem = new RuleSystem("test-game", gameConfig.getRules(), gameEntities, null, msg -> {}, gameConfig.getTeamCount());
-        TeamSpawnManager teamSpawnManager = new TeamSpawnManager(gameConfig.getWorldWidth(), gameConfig.getWorldHeight(), gameConfig.getTeamCount());
-        TerrainGenerator terrainGenerator = new TerrainGenerator(world, gameConfig);
-        serializer = new GameStateSerializer(gameConfig, gameEntities, ruleSystem, teamSpawnManager, terrainGenerator);
+        binarySerializer = new BinaryGameStateSerializer(gameConfig, gameEntities, ruleSystem);
+    }
+
+    private int readPlayerCountFromBinaryState(byte[] data) throws Exception {
+        DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
+        in.readNBytes(4); // magic
+        in.readByte(); // headerFlags
+        in.readByte(); // gameStateCode
+        in.readLong(); // timestamp
+        in.readFloat(); // timeRemaining
+        in.readFloat(); // startCountdownRemaining
+        in.readByte(); // winningTeam
+        in.readShort(); // winningPlayerId
+
+        // Score style & sorting strings
+        int len1 = in.readByte() & 0xFF; in.readNBytes(len1);
+        int len2 = in.readByte() & 0xFF; in.readNBytes(len2);
+        int compCount = in.readByte() & 0xFF;
+        for (int c = 0; c < compCount; c++) {
+            int len = in.readByte() & 0xFF; in.readNBytes(len);
+        }
+
+        // Team scores
+        int teamScoreCount = in.readByte() & 0xFF;
+        for (int t = 0; t < teamScoreCount; t++) {
+            in.readByte();
+            in.readInt();
+        }
+
+        // Section 1: Players
+        return in.readShort() & 0xFFFF;
     }
 
     @Test
-    @DisplayName("Players inside smoke fields should be omitted from createGameState for other players")
-    public void testPlayerInSmokeOmittedFromGeneralState() {
+    @DisplayName("Players inside smoke fields should be omitted from binary game state for other players")
+    public void testPlayerInSmokeOmittedFromGeneralState() throws Exception {
         Player player1 = new Player(1, "Player 1", 0, 0, 1, 100);
         Player player2 = new Player(2, "Player 2", 100, 100, 2, 100);
         gameEntities.add(player1);
         gameEntities.add(player2);
 
         // Initially both players are visible
-        Map<String, Object> state = serializer.createGameState();
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> players = (List<Map<String, Object>>) state.get("players");
-        assertEquals(2, players.size(), "Both players should be visible when neither is in smoke");
+        byte[] data = binarySerializer.serializeGameState();
+        assertEquals(2, readPlayerCountFromBinaryState(data), "Both players should be visible when neither is in smoke");
 
         // Player 1 enters smoke
         player1.setVisionObscured(true);
 
-        state = serializer.createGameState();
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> playersWithSmoke = (List<Map<String, Object>>) state.get("players");
-        assertEquals(1, playersWithSmoke.size(), "Player in smoke should be omitted from general game state");
-        assertEquals(2, playersWithSmoke.get(0).get("id"), "Only Player 2 should be in general game state");
+        data = binarySerializer.serializeGameState();
+        assertEquals(1, readPlayerCountFromBinaryState(data), "Player in smoke should be omitted from general binary game state");
 
         // Blinded Player 1 should still see themselves in their own blinded state
-        Map<String, Object> blindedState = serializer.createBlindedGameState(player1, state);
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> blindedPlayers = (List<Map<String, Object>>) blindedState.get("players");
-        assertEquals(1, blindedPlayers.size(), "Blinded state should contain exactly 1 player");
-        assertEquals(1, blindedPlayers.get(0).get("id"), "Blinded state should contain the blinded player themselves");
+        byte[] blindedData = binarySerializer.serializeBlindedGameState(player1);
+        assertEquals(1, readPlayerCountFromBinaryState(blindedData), "Blinded state should contain exactly 1 player");
     }
 
     @Test

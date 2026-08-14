@@ -117,11 +117,6 @@ public class Player extends OwnedGameEntity implements HasWeapon {
         if (Boolean.TRUE.equals(input.getReload()) && !isReloading) {
             startReload();
         }
-
-        // Handle legacy right-click mapping to altFire
-        if (input.isRight()) {
-            input.setAltFire(true);
-        }
     }
 
     /**

@@ -213,11 +213,8 @@ public class GameManager {
         this.gameStateSerializer = new GameStateSerializer(
                 gameConfig,
                 gameEntities,
-                ruleSystem,
-                teamSpawnManager,
-                terrainGenerator
+                teamSpawnManager
         );
-        this.gameStateSerializer.setGameManager(this);
 
         this.binaryGameStateSerializer = new BinaryGameStateSerializer(
                 gameConfig,
@@ -1019,7 +1016,7 @@ public class GameManager {
         ruleSystem.ensureVipForTeam(assignedTeam);
 
         playerSession.setState(PlayerSessionState.PLAYING);
-        send(playerSession.getSession(), createInitialGameState(player));
+        send(playerSession.getSession(), gameStateSerializer.createInitialGameState(player));
         log.debug("Player {} ({}) spawned in game {} successfully. Total players: {}, Total sessions: {}",
                 playerSession.getPlayerId(), playerSession.getPlayerName(), gameId,
                 gameEntities.getPlayers().size(), gameEntities.getPlayerSessions().size());
@@ -1072,7 +1069,6 @@ public class GameManager {
                 input.setMoveX(0.0);
                 input.setMoveY(0.0);
                 input.setLeft(false);
-                input.setRight(false);
                 input.setAltFire(false);
                 input.setReload(false);
             }
@@ -1229,10 +1225,6 @@ public class GameManager {
                 sendBinary(session.getSession(), fullStateBinary);
             }
         }
-    }
-
-    private Map<String, Object> createInitialGameState(Player player) {
-        return gameStateSerializer.createInitialGameState(player);
     }
 
     private void processPlayerRespawns() {
