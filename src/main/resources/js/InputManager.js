@@ -234,7 +234,7 @@ class InputManager {
      * Poll gamepad state (required for consistent gamepad input)
      */
     pollGamepads() {
-        if (!this.gamepad.connected) {
+        if (!this.gamepad?.connected) {
             // Check for newly connected gamepads
             const gamepads = navigator.getGamepads();
             for (let i = 0; i < gamepads.length; i++) {

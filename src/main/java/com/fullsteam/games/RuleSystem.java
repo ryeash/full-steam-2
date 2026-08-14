@@ -30,6 +30,7 @@ public class RuleSystem {
 
     private final String gameId;
     private final long start = System.currentTimeMillis();
+    @Getter
     private final Rules rules;
     private final GameEntities gameEntities;
     private final GameEventManager gameEventManager;
@@ -620,7 +621,7 @@ public class RuleSystem {
         return m;
     }
 
-    private Map<Integer, Integer> calculateTeamScores() {
+    public Map<Integer, Integer> calculateTeamScores() {
         Map<Integer, Integer> teamScores = new HashMap<>();
 
         // Every scoring mechanism is now credited to the player who earned it, so

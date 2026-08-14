@@ -18,6 +18,7 @@ import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.Turret;
+import lombok.Setter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.Convex;
@@ -46,6 +47,7 @@ public class GameStateSerializer {
     private final RuleSystem ruleSystem;
     private final TeamSpawnManager teamSpawnManager;
     private final TerrainGenerator terrainGenerator;
+    @Setter
     private GameManager gameManager;
 
     public GameStateSerializer(GameConfig gameConfig, GameEntities gameEntities,
@@ -56,10 +58,6 @@ public class GameStateSerializer {
         this.ruleSystem = ruleSystem;
         this.teamSpawnManager = teamSpawnManager;
         this.terrainGenerator = terrainGenerator;
-    }
-
-    public void setGameManager(GameManager gameManager) {
-        this.gameManager = gameManager;
     }
 
     /**

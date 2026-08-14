@@ -704,29 +704,46 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     }
 
     /**
-     * Handle a LASER FieldEffectBeam physically intersecting an Oddball NPC body.
-     * Awards instant oddball points to the firer. PLASMA DOT scoring is handled
-     * per-tick in the GameManager beam loop via raycasting instead.
+     * Handle a FieldEffect (beam or field) physically intersecting an Oddball NPC body.
+     * Awards oddball points to the firer and logs damage hits for UI.
+     * Instant effects (LASER, EXPLOSION, FRAGMENTATION) award points once per effect instance.
+     * Continuous effects (PLASMA, FIRE, ELECTRIC, FREEZE, POISON, EARTHQUAKE) award DOT points per tick.
      */
     private void handleFieldEffectOddballCollision(FieldEffect fieldEffect, Oddball npc) {
         if (fieldEffect.getOwnerId() <= 0) {
-            return; // NPC-fired beams don't generate score
-        }
-        if (!(fieldEffect instanceof FieldEffectBeam) || fieldEffect.getType() != FieldEffectType.LASER) {
-            return; // Only LASER beams score via collision; PLASMA is handled by GameManager DOT loop
-        }
-        if (!fieldEffect.getAffectedEntities().add(npc.getId())) {
-            return; // Already scored this hit
+            return; // NPC-fired beams/field effects don't generate score
         }
 
         Player attacker = gameEntities.getPlayer(fieldEffect.getOwnerId());
-        if (attacker != null && attacker.isActive()) {
-            double damage = fieldEffect.getDamage();
-            double points = damage
-                    * npc.getPointsMultiplier()
-                    * gameManager.getGameConfig().getRules().getOddballNpcPointsPerDamage();
-            attacker.getScoring().addOddball(points);
-            gameManager.recordDamageHit(npc.getPosition().x, npc.getPosition().y, damage, fieldEffect.getOwnerId(), npc.getId(), false);
+        if (attacker == null || !attacker.isActive()) {
+            return;
+        }
+
+        double deltaTime = gameEntities.getWorld().getTimeStep().getDeltaTime();
+
+        switch (fieldEffect.getType()) {
+            case EXPLOSION, FRAGMENTATION, LASER -> {
+                if (!fieldEffect.getAffectedEntities().add(npc.getId())) {
+                    return; // Already scored this instant effect
+                }
+                double damage = fieldEffect.getDamage();
+                double points = damage
+                        * npc.getPointsMultiplier()
+                        * gameManager.getGameConfig().getRules().getOddballNpcPointsPerDamage();
+                attacker.getScoring().addOddball(points);
+                gameManager.recordDamageHit(npc.getPosition().x, npc.getPosition().y, damage, fieldEffect.getOwnerId(), npc.getId(), false);
+            }
+            case PLASMA, FIRE, ELECTRIC, FREEZE, POISON, EARTHQUAKE -> {
+                if (fieldEffect.getDamage() > 0) {
+                    double frameDamage = fieldEffect.getDamage() * deltaTime;
+                    double points = frameDamage
+                            * npc.getPointsMultiplier()
+                            * gameManager.getGameConfig().getRules().getOddballNpcPointsPerDamage();
+                    attacker.getScoring().addOddball(points);
+                    gameManager.recordDotDamageHit(npc.getPosition().x, npc.getPosition().y, frameDamage, fieldEffect.getOwnerId(), npc.getId(), false);
+                }
+            }
+            default -> { /* Non-damaging field effects don't affect Oddballs */ }
         }
     }
 

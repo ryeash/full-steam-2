@@ -5,7 +5,6 @@ class GameEngine {
         this.uiContainer = null;
         this.players = new Map();
         this.projectiles = new Map();
-        this.projectileInterpolators = new Map();
         this.obstacles = new Map();
         this.fieldEffects = new Map();
         this.utilityEntities = new Map(); // For turrets, nets, defense lasers, headquarters, power-ups
@@ -114,15 +113,9 @@ class GameEngine {
         // Set up interpolation ticker for smooth movement - store reference for cleanup
         const interpolationCallback = (ticker) => {
             const deltaTime = ticker.deltaTime;
-            const dt = deltaTime / 60.0; // Convert to seconds
-            
-            // Update all player interpolations for smooth 60+ FPS player movement
-            this.updatePlayersInterpolation(deltaTime);
 
-            // Update all projectile interpolators every frame
-            this.projectileInterpolators.forEach(interpolator => {
-                interpolator.update(deltaTime);
-            });
+            // Update motion interpolation for all dynamic entities (players, projectiles, oddball NPCs, flags)
+            this.updateAllEntityInterpolations(deltaTime);
             
             // Animate plasma effects and extend projectile trails. Both ride the
             // interpolated container position, so they must run per render frame
@@ -873,6 +866,7 @@ class GameEngine {
 
         return new Promise((resolve, reject) => {
             this.websocket = new WebSocket(wsUrl);
+            this.websocket.binaryType = 'arraybuffer';
 
             this.websocket.onopen = () => {
                 resolve();
@@ -880,8 +874,15 @@ class GameEngine {
 
             this.websocket.onmessage = (event) => {
                 try {
-                    const data = JSON.parse(event.data);
-                    this.handleServerMessage(data);
+                    let data;
+                    if (event.data instanceof ArrayBuffer) {
+                        data = BinaryStateDecoder.decode(event.data);
+                    } else {
+                        data = JSON.parse(event.data);
+                    }
+                    if (data) {
+                        this.handleServerMessage(data);
+                    }
                 } catch (error) {
                     console.error('Error parsing server message:', error);
                 }
@@ -2037,6 +2038,14 @@ class GameEngine {
         sprite.vx = playerData.vx || 0;
         sprite.vy = playerData.vy || 0;
 
+        sprite.interpolator = new EntityInterpolator(sprite, {
+            vx: playerData.vx || 0,
+            vy: playerData.vy || 0,
+            hasRotation: true,
+            snapThreshold: 150,
+            onUpdate: (s) => this.syncPlayerChildComponents(s)
+        });
+
         sprite.playerData = playerData;
         this.players.set(playerData.id, sprite);
         this.gameContainer.addChild(sprite);
@@ -2046,33 +2055,21 @@ class GameEngine {
         const sprite = this.players.get(playerData.id);
         if (!sprite) return;
 
-        const targetX = playerData.x;
-        const targetY = playerData.y;
-        const targetRot = playerData.rotation || 0;
-        const vx = playerData.vx || 0;
-        const vy = playerData.vy || 0;
-
-        // Check if player teleports, respawns, or has large position delta (>150px)
-        const currentTargetX = typeof sprite.targetX === 'number' ? sprite.targetX : sprite.x;
-        const currentTargetY = typeof sprite.targetY === 'number' ? sprite.targetY : sprite.y;
-        const dx = currentTargetX - targetX;
-        const dy = currentTargetY - targetY;
-        const distSq = dx * dx + dy * dy;
-
-        if (!playerData.active || distSq > 150 * 150) {
-            // Snap immediately for respawns/teleports
-            sprite.position.set(targetX, targetY);
-            sprite.rotation = targetRot;
-            sprite.targetX = targetX;
-            sprite.targetY = targetY;
+        if (sprite.interpolator) {
+            sprite.interpolator.updateFromServer(
+                playerData.x,
+                playerData.y,
+                playerData.vx || 0,
+                playerData.vy || 0,
+                playerData.rotation || 0
+            );
         } else {
-            sprite.targetX = targetX;
-            sprite.targetY = targetY;
+            sprite.position.set(playerData.x, playerData.y);
+            sprite.rotation = playerData.rotation || 0;
         }
 
-        sprite.targetRotation = targetRot;
-        sprite.vx = vx;
-        sprite.vy = vy;
+        sprite.vx = playerData.vx || 0;
+        sprite.vy = playerData.vy || 0;
         
         // Handle death marker logic
         const isDead = !playerData.active && playerData.respawnTime > 0;
@@ -2104,60 +2101,50 @@ class GameEngine {
             this.updatePlayerSubBars(sprite.healthBar, playerData);
         }
 
+        // Update power-up visual indicators
+        this.updatePowerUpIndicators(sprite, playerData);
+
         sprite.playerData = playerData;
     }
 
     /**
-     * Smoothly interpolate player positions and rotations every frame
+     * Advance motion interpolation for all dynamic entities (players, projectiles, oddballs, flags).
      */
-    updatePlayersInterpolation(deltaTime) {
-        if (!this.players || this.players.size === 0) return;
+    updateAllEntityInterpolations(deltaTime) {
+        if (this.players) {
+            this.players.forEach(p => p.interpolator?.update(deltaTime));
+        }
+        if (this.projectiles) {
+            this.projectiles.forEach(p => p.interpolator?.update(deltaTime));
+        }
+        if (this.oddballNpcs) {
+            this.oddballNpcs.forEach(n => n.interpolator?.update(deltaTime));
+        }
+        if (this.flags) {
+            this.flags.forEach(f => f.interpolator?.update(deltaTime));
+        }
+    }
 
-        // Convert PIXI deltaTime (at 60 FPS = 1.0) to seconds
-        const dt = (deltaTime || 1) / 60.0;
-
-        this.players.forEach(sprite => {
-            if (!sprite || !sprite.visible) return;
-
-            if (typeof sprite.targetX !== 'number') {
-                sprite.targetX = sprite.x;
-                sprite.targetY = sprite.y;
-                sprite.targetRotation = sprite.rotation;
-            }
-
-            const vx = sprite.vx || 0;
-            const vy = sprite.vy || 0;
-
-            // Predict target location slightly using velocity
-            const predX = sprite.targetX + vx * dt;
-            const predY = sprite.targetY + vy * dt;
-
-            // Smoothly lerp sprite position towards predicted target
-            const lerpFactor = Math.min(1.0, 18.0 * dt);
-            sprite.x += (predX - sprite.x) * lerpFactor;
-            sprite.y += (predY - sprite.y) * lerpFactor;
-
-            // Angle lerp for rotation
-            if (typeof sprite.targetRotation === 'number') {
-                let diff = sprite.targetRotation - sprite.rotation;
-                while (diff < -Math.PI) diff += Math.PI * 2;
-                while (diff > Math.PI) diff -= Math.PI * 2;
-                sprite.rotation += diff * lerpFactor;
-            }
-
-            // Update child component positions to match the interpolated sprite position
-            const isDead = !sprite.playerData || (!sprite.playerData.active && sprite.playerData.respawnTime > 0);
-            if (sprite.deathMarker && isDead) {
-                sprite.deathMarker.position.set(sprite.x, sprite.y);
-            }
-            if (sprite.nameLabel) {
-                sprite.nameLabel.position.set(sprite.x, sprite.y - 25);
-            }
-            if (sprite.healthBar) {
-                const yOffset = (sprite.healthBar.config && sprite.healthBar.config.yOffset) || 0;
-                sprite.healthBar.position.set(sprite.x, sprite.y - yOffset);
-            }
-        });
+    /**
+     * Sync player child components (health bar, name label, death marker, power-up container)
+     * to the interpolated player sprite position.
+     */
+    syncPlayerChildComponents(sprite) {
+        if (!sprite) return;
+        const isDead = !sprite.playerData || (!sprite.playerData.active && sprite.playerData.respawnTime > 0);
+        if (sprite.deathMarker && isDead) {
+            sprite.deathMarker.position.set(sprite.x, sprite.y);
+        }
+        if (sprite.nameLabel) {
+            sprite.nameLabel.position.set(sprite.x, sprite.y - 25);
+        }
+        if (sprite.healthBar) {
+            const yOffset = (sprite.healthBar.config && sprite.healthBar.config.yOffset) || 0;
+            sprite.healthBar.position.set(sprite.x, sprite.y - yOffset);
+        }
+        if (sprite.powerUpContainer) {
+            sprite.powerUpContainer.position.set(sprite.x, sprite.y);
+        }
     }
     
     removePlayer(playerId) {
@@ -2222,6 +2209,28 @@ class GameEngine {
             sprite.deathMarker = null;
         }
         
+        // Remove and destroy power-up container
+        if (sprite.powerUpContainer) {
+            if (sprite.powerUpContainer.parent) {
+                sprite.powerUpContainer.parent.removeChild(sprite.powerUpContainer);
+            }
+            const childrenToDestroy = [...sprite.powerUpContainer.children];
+            childrenToDestroy.forEach(child => {
+                if (child.clear && typeof child.clear === 'function') {
+                    child.clear();
+                }
+                child.destroy({ children: true, texture: false, baseTexture: false });
+            });
+            sprite.powerUpContainer.destroy({ children: true, context: true });
+            sprite.powerUpContainer = null;
+        }
+
+        // Clean up interpolator
+        if (sprite.interpolator) {
+            sprite.interpolator.destroy();
+            sprite.interpolator = null;
+        }
+
         // Clear player data reference
         sprite.playerData = null;
         
@@ -2280,9 +2289,10 @@ class GameEngine {
             return;
         }
 
-        const isAttacker = (this.myPlayerId && hit.attackerId === this.myPlayerId);
-        const isVictim = (this.myPlayerId && hit.victimId === this.myPlayerId);
-        const isSpectator = !!this.spectatorMode || !this.myPlayerId;
+        const hasMyId = (this.myPlayerId !== null && this.myPlayerId !== undefined);
+        const isAttacker = (hasMyId && hit.attackerId === this.myPlayerId);
+        const isVictim = (hasMyId && hit.victimId === this.myPlayerId);
+        const isSpectator = !!this.spectatorMode || !hasMyId;
 
         if (!isAttacker && !isVictim && !isSpectator) {
             return;
@@ -2322,15 +2332,15 @@ class GameEngine {
             fontSize: fontSize,
             fontWeight: 'bold',
             fill: fillColor,
-            stroke: 0x000000,
-            strokeThickness: strokeThickness,
-            dropShadow: true,
-            dropShadowColor: 0x000000,
-            dropShadowBlur: 2,
-            dropShadowDistance: 1
+            stroke: { color: 0x000000, width: strokeThickness },
+            dropShadow: {
+                color: 0x000000,
+                blur: 2,
+                distance: 1
+            }
         });
 
-        const textObj = new PIXI.Text(textStr, textStyle);
+        const textObj = new PIXI.Text({ text: textStr, style: textStyle });
         textObj.anchor.set(0.5, 0.5);
         textObj.scale.y = -1; // Flip Y back inside damageTextContainer
         if (initialScale > 1.0) {
@@ -2601,6 +2611,280 @@ class GameEngine {
             cooldownFill._lastTopY = null;
         }
     }
+
+    /**
+     * Update power-up visual indicators around player.
+     */
+    updatePowerUpIndicators(sprite, playerData) {
+        const activePowerUps = playerData.activePowerUps || [];
+        
+        // Create power-up container if it doesn't exist
+        if (!sprite.powerUpContainer) {
+            sprite.powerUpContainer = new PIXI.Container();
+            this.gameContainer.addChild(sprite.powerUpContainer);
+        }
+        
+        // Update position to match player
+        sprite.powerUpContainer.position.set(sprite.x, sprite.y);
+        sprite.powerUpContainer.visible = playerData.active;
+        
+        // Parse active power-ups and create/update visuals
+        if (activePowerUps.length > 0) {
+            this.updatePowerUpVisuals(sprite.powerUpContainer, activePowerUps, sprite);
+        } else {
+            // Clear all power-up effects if no active power-ups
+            const childrenToDestroy = [...sprite.powerUpContainer.children];
+            childrenToDestroy.forEach(child => {
+                if (child.clear && typeof child.clear === 'function') {
+                    child.clear();
+                }
+                child.destroy({ children: true, texture: false, baseTexture: false });
+            });
+            sprite.powerUpContainer.removeChildren();
+        }
+    }
+    
+    /**
+     * Create/update power-up visual effects based on render hints.
+     * 
+     * RenderHint Format: "effect_name:#COLOR:animation_type:show_icon:Display Name:params"
+     */
+    updatePowerUpVisuals(container, activePowerUps, sprite) {
+        const effects = activePowerUps.map(hint => {
+            const parts = hint.split(':');
+            let params = {};
+            if (parts.length > 5) {
+                try {
+                    const paramsString = parts.slice(5).join(':');
+                    params = JSON.parse(paramsString);
+                } catch (e) {
+                    console.warn('Failed to parse renderHint params:', e);
+                }
+            }
+            
+            return {
+                name: parts[0] || 'unknown',
+                color: parseInt(parts[1]?.replace('#', '') || 'FFFFFF', 16),
+                animation: parts[2] || 'pulse',
+                showIcon: parts[3] === 'true',
+                displayName: parts[4] || '',
+                params: params
+            };
+        });
+        
+        // Clear existing visuals
+        const childrenToDestroy = [...container.children];
+        childrenToDestroy.forEach(child => {
+            if (child.clear && typeof child.clear === 'function') {
+                child.clear();
+            }
+            child.destroy({ children: true, texture: false, baseTexture: false });
+        });
+        container.removeChildren();
+        
+        // Create visual effect for each active power-up
+        effects.forEach((effect, index) => {
+            const aura = new PIXI.Graphics();
+            const time = Date.now() * 0.003;
+            const params = effect.params || {};
+
+            if (effect.animation === 'sparkle' || effect.animation === 'pulse') {
+                const baseRadius = params.radius || 20;
+                const particleCount = params.particles || 8;
+                const particleDistance = params.particleDistance || 25;
+                const particleSize = params.particleSize || 2;
+                const pulseSize = baseRadius + Math.sin(time + index) * 5;
+                
+                aura.circle(0, 0, pulseSize).stroke({ width: 3, color: effect.color, alpha: 0.6 });
+                
+                for (let i = 0; i < particleCount; i++) {
+                    const angle = (i / particleCount) * Math.PI * 2 + time;
+                    const x = Math.cos(angle) * particleDistance;
+                    const y = Math.sin(angle) * particleDistance;
+                    aura.circle(x, y, particleSize).fill({ color: effect.color, alpha: 0.8 });
+                }
+            } else if (effect.animation === 'shield') {
+                const baseSize = params.size || 22;
+                const sides = params.sides || 6;
+                const size = baseSize + Math.sin(time) * 2;
+                
+                aura.moveTo(Math.cos(0) * size, Math.sin(0) * size);
+                for (let i = 1; i < sides; i++) {
+                    const angle = (i / sides) * Math.PI * 2;
+                    aura.lineTo(Math.cos(angle) * size, Math.sin(angle) * size);
+                }
+                aura.closePath();
+                aura.stroke({ width: 2, color: effect.color, alpha: 0.7 });
+            } else if (effect.animation === 'slow') {
+                const dropCount = params.drops || 6;
+                const radius = params.radius || 18;
+                const dropSize = params.dropSize || 3;
+                const dripAmount = params.dripAmount || 3;
+                
+                for (let i = 0; i < dropCount; i++) {
+                    const angle = (i / dropCount) * Math.PI * 2 + time;
+                    const x = Math.cos(angle) * radius;
+                    const y = Math.sin(angle) * radius + Math.sin(time * 2 + i) * dripAmount;
+                    aura.circle(x, y, dropSize).fill({ color: effect.color, alpha: 0.5 });
+                }
+            } else if (effect.animation === 'cloud') {
+                const baseRadius = params.radius || 22;
+                const puffCount = params.puffs || 6;
+                const wispCount = params.wisps || 8;
+                
+                for (let i = 0; i < puffCount; i++) {
+                    const angle = (i / puffCount) * Math.PI * 2 + time * 0.5;
+                    const puffDistance = baseRadius * 0.6;
+                    const x = Math.cos(angle) * puffDistance;
+                    const y = Math.sin(angle) * puffDistance;
+                    const puffSize = baseRadius * (0.5 + Math.sin(time * 2 + i) * 0.1);
+                    aura.circle(x, y, puffSize).fill({ color: effect.color, alpha: 0.25 + Math.sin(time * 3 + i) * 0.1 });
+                }
+                
+                const centralSize = baseRadius * (0.7 + Math.sin(time * 1.5) * 0.1);
+                aura.circle(0, 0, centralSize).fill({ color: effect.color, alpha: 0.3 });
+                
+                for (let i = 0; i < wispCount; i++) {
+                    const angle = (i / wispCount) * Math.PI * 2 + time * 1.5;
+                    const distance = baseRadius * 0.8;
+                    const x = Math.cos(angle) * distance;
+                    const y = Math.sin(angle) * distance;
+                    const wispSize = 3 + Math.sin(time * 4 + i) * 1;
+                    aura.circle(x, y, wispSize).fill({ color: effect.color, alpha: 0.35 + Math.sin(time * 5 + i) * 0.15 });
+                }
+            } else if (effect.animation === 'flame') {
+                const particleCount = params.count || 10;
+                const baseRadius = params.radius || 20;
+                const flameHeight = params.height || 8;
+                
+                for (let i = 0; i < particleCount; i++) {
+                    const angle = (i / particleCount) * Math.PI * 2 + time * 2;
+                    const distance = baseRadius + Math.sin(time * 3 + i) * 5;
+                    const x = Math.cos(angle) * distance;
+                    const y = Math.sin(angle) * distance - Math.abs(Math.sin(time * 4 + i)) * flameHeight;
+                    const size = 2 + Math.sin(time * 5 + i) * 1.5;
+                    const alpha = 0.4 + Math.sin(time * 6 + i) * 0.3;
+                    aura.circle(x, y, size).fill({ color: effect.color, alpha: alpha });
+                }
+                
+                const glowSize = baseRadius * (0.6 + Math.sin(time * 3) * 0.15);
+                aura.circle(0, 0, glowSize).fill({ color: effect.color, alpha: 0.2 });
+                aura.circle(0, 0, baseRadius * 0.3).fill({ color: effect.color, alpha: 0.5 + Math.sin(time * 4) * 0.2 });
+            } else if (effect.animation === 'star') {
+                const starCount = params.count || 8;
+                const orbitRadius = params.radius || 30;
+                const starSize = params.size || 3;
+                
+                const pulseSize = 25 + Math.sin(time) * 3;
+                aura.circle(0, 0, pulseSize).stroke({ width: 2, color: effect.color, alpha: 0.6 });
+                
+                for (let i = 0; i < starCount; i++) {
+                    const angle = (i / starCount) * Math.PI * 2 + time * 2;
+                    const cx = Math.cos(angle) * orbitRadius;
+                    const cy = Math.sin(angle) * orbitRadius;
+                    
+                    const starPoints = 5;
+                    const outerR = starSize;
+                    const innerR = starSize * 0.4;
+                    const pts = [];
+                    for (let j = 0; j < starPoints * 2; j++) {
+                        const starAngle = (j / (starPoints * 2)) * Math.PI * 2 - Math.PI / 2;
+                        const r = j % 2 === 0 ? outerR : innerR;
+                        pts.push(cx + Math.cos(starAngle) * r, cy + Math.sin(starAngle) * r);
+                    }
+                    aura.poly(pts).fill({ color: effect.color, alpha: 0.9 });
+                }
+                
+                const centerStarPoints = 5;
+                const centerOuterR = 8;
+                const centerInnerR = 3;
+                const centerPts = [];
+                for (let j = 0; j < centerStarPoints * 2; j++) {
+                    const starAngle = (j / (centerStarPoints * 2)) * Math.PI * 2 - Math.PI / 2 + time;
+                    const r = j % 2 === 0 ? centerOuterR : centerInnerR;
+                    centerPts.push(Math.cos(starAngle) * r, Math.sin(starAngle) * r);
+                }
+                aura.poly(centerPts).fill({ color: effect.color, alpha: 0.8 });
+            } else if (effect.animation === 'crown') {
+                const pulseSize = 25 + Math.sin(time) * 3;
+                
+                // Outer golden ring
+                aura.circle(0, 0, pulseSize).stroke({ width: 3, color: effect.color, alpha: 0.8 });
+                
+                // Inner star pattern
+                const starPts = [];
+                for (let i = 0; i < 5; i++) {
+                    const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
+                    const outerRadius = 30;
+                    const innerRadius = 15;
+                    starPts.push(Math.cos(angle) * outerRadius, Math.sin(angle) * outerRadius);
+                    starPts.push(Math.cos(angle + Math.PI / 5) * innerRadius, Math.sin(angle + Math.PI / 5) * innerRadius);
+                }
+                aura.poly(starPts).stroke({ width: 2, color: effect.color, alpha: 0.9 });
+                
+                // Rotating sparkles (small stars)
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i / 8) * Math.PI * 2 + time * 2;
+                    const distance = 35;
+                    const cx = Math.cos(angle) * distance;
+                    const cy = Math.sin(angle) * distance;
+                    
+                    const starPoints = 4;
+                    const outerR = 3;
+                    const innerR = 1.5;
+                    const pts = [];
+                    for (let j = 0; j < starPoints * 2; j++) {
+                        const starAngle = (j / (starPoints * 2)) * Math.PI * 2 - Math.PI / 2;
+                        const r = j % 2 === 0 ? outerR : innerR;
+                        pts.push(cx + Math.cos(starAngle) * r, cy + Math.sin(starAngle) * r);
+                    }
+                    aura.poly(pts).fill({ color: effect.color, alpha: 0.9 });
+                }
+            } else {
+                const pulseSize = 20 + Math.sin(time) * 4;
+                aura.circle(0, 0, pulseSize).stroke({ width: 2, color: effect.color, alpha: 0.6 });
+                aura.circle(0, 0, pulseSize * 0.7).fill({ color: effect.color, alpha: 0.3 });
+            }
+            
+            container.addChild(aura);
+            
+            // Add icon badge if requested (for player's own view)
+            if (effect.showIcon && sprite.playerData && sprite.playerData.id === this.myPlayerId) {
+                const badge = this.createPowerUpBadge(effect, index);
+                container.addChild(badge);
+            }
+        });
+    }
+
+    /**
+     * Create a small badge/icon for power-up status (shown only for local player).
+     */
+    createPowerUpBadge(effect, index) {
+        const badge = new PIXI.Container();
+        
+        // Position badges in a row above player
+        const offsetX = (index - 0.5) * 30;
+        badge.position.set(offsetX, -45);
+        
+        // Background circle
+        const bg = new PIXI.Graphics();
+        bg.circle(0, 0, 10).fill({ color: 0x000000, alpha: 0.7 });
+        bg.circle(0, 0, 10).stroke({ width: 2, color: effect.color, alpha: 1.0 });
+        badge.addChild(bg);
+        
+        // Icon letter (first letter of effect name)
+        const letter = effect.displayName.charAt(0) || '?';
+        const text = new PIXI.Text(letter, {
+            fontSize: 12,
+            fill: effect.color,
+            fontWeight: 'bold'
+        });
+        text.anchor.set(0.5);
+        text.scale.y = -1; // Flip Y-axis back so text is readable
+        badge.addChild(text);
+        
+        return badge;
+    }
     
     createProjectile(projectileData) {
         // Create main projectile container
@@ -2663,11 +2947,12 @@ class GameEngine {
         this.gameContainer.addChild(projectileContainer);
         
         // Create interpolator for smooth movement
-        const velocity = { x: projectileData.vx || 0, y: projectileData.vy || 0 };
-        
-        // Initialize interpolator with velocity
-        const interpolator = new ProjectileInterpolator(projectileContainer, velocity);
-        this.projectileInterpolators.set(projectileData.id, interpolator);
+        projectileContainer.interpolator = new EntityInterpolator(projectileContainer, {
+            vx: projectileData.vx || 0,
+            vy: projectileData.vy || 0,
+            snapThreshold: 100,
+            lerpRate: 24.0
+        });
     }
     
     /**
@@ -2852,15 +3137,14 @@ class GameEngine {
         projectileContainer.projectileData = projectileData;
         
         // Use interpolator for smooth movement
-        const interpolator = this.projectileInterpolators.get(projectileData.id);
-        if (interpolator) {
-            const velocity = { x: projectileData.vx || 0, y: projectileData.vy || 0 };
-            
-            // Update interpolator with server data
-            interpolator.updateFromServer(projectileData.x, projectileData.y, velocity.x, velocity.y);
+        if (projectileContainer.interpolator) {
+            projectileContainer.interpolator.updateFromServer(
+                projectileData.x,
+                projectileData.y,
+                projectileData.vx || 0,
+                projectileData.vy || 0
+            );
         } else {
-            // Fallback to direct position update if no interpolator
-            // This should rarely happen, but provides safety
             projectileContainer.position.set(projectileData.x, projectileData.y);
         }
     }
@@ -2874,13 +3158,6 @@ class GameEngine {
             // Remove from parent container
             this.gameContainer.removeChild(projectileContainer);
             this.projectiles.delete(projectileId);
-        }
-        
-        // Clean up interpolator properly to prevent memory leaks
-        const interpolator = this.projectileInterpolators.get(projectileId);
-        if (interpolator) {
-            interpolator.destroy();
-            this.projectileInterpolators.delete(projectileId);
         }
     }
     
@@ -2922,6 +3199,12 @@ class GameEngine {
             projectileContainer.sprite = null;
         }
         
+        // Clean up interpolator
+        if (projectileContainer.interpolator) {
+            projectileContainer.interpolator.destroy();
+            projectileContainer.interpolator = null;
+        }
+
         // Clear all references
         projectileContainer.projectileData = null;
         projectileContainer.isPlasma = null;
@@ -3191,7 +3474,7 @@ class GameEngine {
         container.zIndex = 12;
 
         const isRampage = npcData.personality === 'RAMPAGE';
-        const radius = npcData.radius;
+        const radius = npcData.radius || (isRampage ? 20 : 12);
 
         const ball = new PIXI.Graphics();
 
@@ -3235,6 +3518,13 @@ class GameEngine {
         container.ball = ball;
         container.npcData = npcData;
 
+        container.interpolator = new EntityInterpolator(container, {
+            vx: npcData.vx || 0,
+            vy: npcData.vy || 0,
+            snapThreshold: 150,
+            lerpRate: 18.0
+        });
+
         this.oddballNpcs.set(npcData.id, container);
         this.gameContainer.addChild(container);
     }
@@ -3242,13 +3532,27 @@ class GameEngine {
     updateOddballNpc(npcData) {
         const container = this.oddballNpcs.get(npcData.id);
         if (!container) return;
-        container.position.set(npcData.x, npcData.y);
+
+        if (container.interpolator) {
+            container.interpolator.updateFromServer(
+                npcData.x,
+                npcData.y,
+                npcData.vx || 0,
+                npcData.vy || 0
+            );
+        } else {
+            container.position.set(npcData.x, npcData.y);
+        }
         container.npcData = npcData;
     }
 
     removeOddballNpc(npcId) {
         const container = this.oddballNpcs.get(npcId);
         if (container) {
+            if (container.interpolator) {
+                container.interpolator.destroy();
+                container.interpolator = null;
+            }
             this.gameContainer.removeChild(container);
             container.destroy({ children: true });
             this.oddballNpcs.delete(npcId);
@@ -3261,8 +3565,19 @@ class GameEngine {
             return;
         }
 
-        // Update position (important for carried flags)
-        flagContainer.position.set(flagData.x, flagData.y);
+        if (!flagContainer.interpolator) {
+            flagContainer.interpolator = new EntityInterpolator(flagContainer, {
+                vx: flagData.vx || 0,
+                vy: flagData.vy || 0,
+                snapThreshold: 150
+            });
+        }
+        flagContainer.interpolator.updateFromServer(
+            flagData.x,
+            flagData.y,
+            flagData.vx || 0,
+            flagData.vy || 0
+        );
 
         // Update visual state based on flag state
         const state = flagData.state;
@@ -3506,7 +3821,7 @@ class GameEngine {
     getKothZoneStatusText(zoneData) {
         switch (zoneData.state) {
             case 'CONTROLLED':
-                return `TEAM ${zoneData.controllingTeam + 1}`;
+                return zoneData.controllingTeam > 0 ? `TEAM ${zoneData.controllingTeam}` : 'CONTROLLED';
             case 'CONTESTED':
                 return 'CONTESTED!';
             case 'NEUTRAL':
@@ -3790,7 +4105,7 @@ class GameEngine {
         }
         const width  = halfWidth  * 2;
         const height = halfHeight * 2;
-        const team = entityData.team || 0;
+        const team = entityData.team || entityData.ownerTeam || 0;
 
         // Get team color
         const teamColor = this.getTeamColor(team);
@@ -3911,7 +4226,7 @@ class GameEngine {
         // Only rebuild when health or team changes. The HQ is otherwise static,
         // and a rebuild allocates two PIXI.Text objects (each owns a GPU texture),
         // so redrawing every tick churned both geometry and textures.
-        const renderKey = `${entityData.health}|${entityData.team}`;
+        const renderKey = `${entityData.health}|${entityData.team || entityData.ownerTeam || 0}`;
         if (container._hqRenderKey === renderKey) return;
         container._hqRenderKey = renderKey;
 
@@ -5531,14 +5846,6 @@ class GameEngine {
         
         // Log entity management stats for monitoring
         this.logEntityManagementStats();
-        
-        // Clean up any orphaned interpolators
-        this.projectileInterpolators.forEach((interpolator, id) => {
-            if (!this.projectiles.has(id)) {
-                interpolator.destroy();
-                this.projectileInterpolators.delete(id);
-            }
-        });
 
         // Clean up any field effects with orphaned animation functions
         this.fieldEffects.forEach((effect, id) => {
@@ -5649,10 +5956,6 @@ class GameEngine {
             this.eventContainer.parentNode.removeChild(this.eventContainer);
             this.eventContainer = null;
         }
-        
-        // Clean up all interpolators
-        this.projectileInterpolators.forEach(interpolator => interpolator.destroy());
-        this.projectileInterpolators.clear();
         
         // Clean up all game objects
         this.projectiles.forEach(projectile => this.cleanupProjectileContainer(projectile));

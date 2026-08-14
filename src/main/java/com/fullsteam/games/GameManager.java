@@ -84,6 +84,7 @@ public class GameManager {
     protected final EntitySpawner entitySpawner;
     protected final SpawnPointManager spawnPointManager;
     protected final GameStateSerializer gameStateSerializer;
+    protected final BinaryGameStateSerializer binaryGameStateSerializer;
     protected final ObjectMapper objectMapper;
 
     protected long gameStartTime;
@@ -217,6 +218,13 @@ public class GameManager {
                 terrainGenerator
         );
         this.gameStateSerializer.setGameManager(this);
+
+        this.binaryGameStateSerializer = new BinaryGameStateSerializer(
+                gameConfig,
+                gameEntities,
+                ruleSystem
+        );
+        this.binaryGameStateSerializer.setGameManager(this);
 
         entitySpawner.createWorldBoundaries();
         entitySpawner.createObstacles();
@@ -427,10 +435,32 @@ public class GameManager {
         }
     }
 
+    public void sendBinary(WebSocketSession session, byte[] bytes) {
+        try {
+            if (session.isWritable() && session.isOpen()) {
+                session.sendAsync(bytes);
+            }
+        } catch (WebSocketSessionException e) {
+            if (!(e.getCause() instanceof InterruptedException)) {
+                log.error("Error sending binary message", e);
+            } else {
+                log.debug("interrupted sending binary message, likely game was shutdown", e);
+            }
+        }
+    }
+
     public void broadcast(Object message) {
         gameEntities.getPlayerSessions().values().forEach(player -> {
             if (player.getSession().isOpen()) {
                 send(player.getSession(), message);
+            }
+        });
+    }
+
+    public void broadcastBinary(byte[] bytes) {
+        gameEntities.getPlayerSessions().values().forEach(player -> {
+            if (player.getSession().isOpen()) {
+                sendBinary(player.getSession(), bytes);
             }
         });
     }
@@ -1162,36 +1192,41 @@ public class GameManager {
     }
 
     private void sendGameState() {
-        Map<String, Object> fullState = gameStateSerializer.createGameState();
-
-        boolean anyBlinded = gameEntities.getAllPlayers().stream()
+        boolean anyBlinded = gameEntities.getAllPlayers()
+                .stream()
                 .anyMatch(Player::isVisionObscured);
         boolean anyLobby = gameEntities.getPlayerSessions().values().stream()
                 .anyMatch(s -> s.getState() == PlayerSessionState.LOBBY);
 
         if (!anyBlinded && !anyLobby) {
-            broadcast(fullState);
+            byte[] fullStateBinary = binaryGameStateSerializer.serializeGameState();
+            broadcastBinary(fullStateBinary);
             return;
         }
 
-        // Per-session filtering for blinded/lobby sessions. Lazily computed so
-        // we don't materialize the stripped state when nobody's actually in
-        // LOBBY this tick.
-        Map<String, Object> lobbyState = null;
+        byte[] fullStateBinary = null;
+        byte[] lobbyStateBinary = null;
 
         for (PlayerSession session : gameEntities.getPlayerSessions().values()) {
+            if (!session.getSession().isOpen()) {
+                continue;
+            }
             if (session.getState() == PlayerSessionState.LOBBY) {
-                if (lobbyState == null) {
-                    lobbyState = gameStateSerializer.createLobbyGameState(fullState);
+                if (lobbyStateBinary == null) {
+                    lobbyStateBinary = binaryGameStateSerializer.serializeLobbyGameState();
                 }
-                send(session.getSession(), lobbyState);
+                sendBinary(session.getSession(), lobbyStateBinary);
                 continue;
             }
             Player player = gameEntities.getPlayer(session.getPlayerId());
             if (player != null && player.isVisionObscured()) {
-                send(session.getSession(), gameStateSerializer.createBlindedGameState(player, fullState));
+                byte[] blindedStateBinary = binaryGameStateSerializer.serializeBlindedGameState(player);
+                sendBinary(session.getSession(), blindedStateBinary);
             } else {
-                send(session.getSession(), fullState);
+                if (fullStateBinary == null) {
+                    fullStateBinary = binaryGameStateSerializer.serializeGameState();
+                }
+                sendBinary(session.getSession(), fullStateBinary);
             }
         }
     }
