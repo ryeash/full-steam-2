@@ -117,8 +117,6 @@ public class BinaryGameStateSerializerTest {
 
         float timeRemaining = in.readFloat();
         float startCountdownRemaining = in.readFloat();
-        int round = in.readByte();
-        int totalRounds = in.readByte();
         int winningTeam = in.readByte();
         short winningPlayerId = in.readShort();
 
@@ -178,6 +176,54 @@ public class BinaryGameStateSerializerTest {
         float respawnTime = in.readFloat();
         byte livesRemaining = in.readByte();
         assertEquals(-1, livesRemaining); // -1 = unlimited lives
+
+        // Scoring (10 shorts)
+        for (int i = 0; i < 10; i++) {
+            in.readShort();
+        }
+
+        // Active powerups
+        int powerUpCount = in.readByte() & 0xFF;
+        for (int i = 0; i < powerUpCount; i++) {
+            int pLen = in.readByte() & 0xFF;
+            in.readNBytes(pLen);
+        }
+
+        // 2. Projectiles Section
+        int projCount = in.readShort();
+        assertEquals(1, projCount);
+        int projId = in.readInt();
+        assertTrue(projId > 0);
+        float px = in.readFloat();
+        float py = in.readFloat();
+        float pvx = in.readFloat();
+        float pvy = in.readFloat();
+        float pCaliber = in.readFloat();
+        int effectMask = in.readShort() & 0xFFFF;
+
+        // 3. Field Effects Section
+        int feCount = in.readShort();
+        assertEquals(1, feCount);
+        int feId = in.readShort();
+        assertTrue(feId > 0);
+        in.readByte(); // type
+        in.readByte(); // ownerTeam
+        in.readFloat(); // x
+        in.readFloat(); // y
+        in.readFloat(); // rot
+        in.readFloat(); // radius
+        in.readFloat(); // progress
+        in.readByte(); // flags
+
+        // Binary Body Shapes
+        int fixtureCount = in.readByte() & 0xFF;
+        assertEquals(1, fixtureCount);
+        int shapeType = in.readByte() & 0xFF;
+        assertEquals(1, shapeType); // 1 = Circle
+        float cx = in.readFloat();
+        float cy = in.readFloat();
+        float r = in.readFloat();
+        assertTrue(r > 0);
     }
 
     @Test

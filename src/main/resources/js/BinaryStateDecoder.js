@@ -257,7 +257,7 @@ class BinaryStateDecoder {
             const active = (feFlags & 1) !== 0;
             const isArmed = (feFlags & 2) !== 0;
 
-            const shapes = BinaryStateDecoder.readString16(view, ptr);
+            const shapes = BinaryStateDecoder.readBodyShapes(view, ptr);
 
             state.fieldEffects.push({
                 id: id,
@@ -373,7 +373,7 @@ class BinaryStateDecoder {
             const y = view.getFloat32(ptr.offset); ptr.offset += 4;
             const health = view.getUint8(ptr.offset++) / 100.0;
             const isDestroyed = view.getUint8(ptr.offset++) !== 0;
-            const shapes = BinaryStateDecoder.readString16(view, ptr);
+            const shapes = BinaryStateDecoder.readBodyShapes(view, ptr);
 
             state.headquarters.push({
                 id: id,
@@ -468,11 +468,51 @@ class BinaryStateDecoder {
         return str;
     }
 
-    static readString16(view, ptr) {
-        const len = view.getUint16(ptr.offset); ptr.offset += 2;
-        if (len === 0) return '';
-        const str = BinaryStateDecoder.textDecoder.decode(new Uint8Array(view.buffer, view.byteOffset + ptr.offset, len));
-        ptr.offset += len;
-        return str;
+    static readBodyShapes(view, ptr) {
+        const fixtureCount = view.getUint8(ptr.offset++);
+        if (fixtureCount === 0) {
+            return [];
+        }
+        const shapes = [];
+        for (let i = 0; i < fixtureCount; i++) {
+            const shapeType = view.getUint8(ptr.offset++);
+            if (shapeType === 0) { // Polygon
+                const vertexCount = view.getUint8(ptr.offset++);
+                const points = [];
+                for (let j = 0; j < vertexCount; j++) {
+                    const vx = view.getFloat32(ptr.offset); ptr.offset += 4;
+                    const vy = view.getFloat32(ptr.offset); ptr.offset += 4;
+                    points.push([vx, vy]);
+                }
+                shapes.push({ type: 'polygon', points: points });
+            } else if (shapeType === 1) { // Circle
+                const cx = view.getFloat32(ptr.offset); ptr.offset += 4;
+                const cy = view.getFloat32(ptr.offset); ptr.offset += 4;
+                const r = view.getFloat32(ptr.offset); ptr.offset += 4;
+                shapes.push({ type: 'circle', cx: cx, cy: cy, r: r });
+            }
+        }
+        return shapes;
+    }
+
+    /**
+     * Generalized shape parser that converts string shorthand or shape data arrays into standard shape objects.
+     * @param {string|Array|null|undefined} shapesData
+     * @returns {Array<{type: string, cx?: number, cy?: number, r?: number, points?: Array<[number, number]>}>}
+     */
+    static parseShapes(shapesData) {
+        if (!shapesData) return [];
+        if (Array.isArray(shapesData)) return shapesData;
+        if (typeof shapesData !== 'string') return [];
+        return shapesData.split(';').filter(s => s.length > 0).map(fixtureStr => {
+            const parts = fixtureStr.split('/').map(v => {
+                return v.replace(/[()]/g, '').split(',').map(Number);
+            });
+            if (parts[0].length === 3) {
+                const [cx, cy, r] = parts[0];
+                return { type: 'circle', cx, cy, r };
+            }
+            return { type: 'polygon', points: parts };
+        });
     }
 }

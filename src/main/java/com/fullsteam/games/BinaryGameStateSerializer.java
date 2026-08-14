@@ -26,13 +26,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.StringJoiner;
 
 /**
  * High-efficiency packed binary serializer for outbound GameState broadcasts.
@@ -41,8 +39,6 @@ import java.util.StringJoiner;
  * Protocol FSB1 (Full Steam Binary v1).
  */
 public class BinaryGameStateSerializer {
-
-    private static final DecimalFormat DOUBLE_SHORTFORM = new DecimalFormat("#.##");
 
     private final GameConfig gameConfig;
     private final GameEntities gameEntities;
@@ -181,8 +177,7 @@ public class BinaryGameStateSerializer {
             out.writeLong(System.currentTimeMillis());
 
             // Rule System Details
-            long endTime = ruleSystem.getMatchStartTime() + (long) (ruleSystem.getRules().getTimeLimit() * 1000);
-            out.writeFloat(((Number) Math.max(0, (endTime - System.currentTimeMillis()) / 1000)).floatValue());
+            out.writeFloat(((Number) Math.max(0, (ruleSystem.getMatchEndTime() - System.currentTimeMillis()) / 1000)).floatValue());
             out.writeFloat(((Number) ruleSystem.getStartCountdownRemaining()).floatValue());
             out.writeByte(Optional.ofNullable(ruleSystem.getWinningTeam()).orElse(-1));
             out.writeShort(Optional.ofNullable(ruleSystem.getWinningPlayerId()).orElse(-1));
@@ -322,7 +317,7 @@ public class BinaryGameStateSerializer {
                 }
                 out.writeByte(feFlags);
 
-                writeString16(out, verticesShorthand(fe.getBody()));
+                writeBodyShapes(out, fe.getBody());
             }
 
             // 4. Turrets
@@ -380,7 +375,7 @@ public class BinaryGameStateSerializer {
                 out.writeFloat((float) hq.getPosition().y);
                 out.writeByte((int) Math.round(hq.healthPercent() * 100.0));
                 out.writeBoolean(!hq.isActive());
-                writeString16(out, verticesShorthand(hq.getBody()));
+                writeBodyShapes(out, hq.getBody());
             }
 
             // 9. Flags
@@ -440,40 +435,33 @@ public class BinaryGameStateSerializer {
         out.write(bytes, 0, len);
     }
 
-    private static void writeString16(DataOutputStream out, String s) throws IOException {
-        if (s == null || s.isEmpty()) {
-            out.writeShort(0);
+    private static void writeBodyShapes(DataOutputStream out, Body body) throws IOException {
+        if (body == null || body.getFixtureCount() == 0) {
+            out.writeByte(0);
             return;
         }
-        byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
-        int len = Math.min(65535, bytes.length);
-        out.writeShort(len);
-        out.write(bytes, 0, len);
-    }
-
-    private String verticesShorthand(Body body) {
-        if (body.getFixtureCount() == 0) {
-            return "";
-        }
-        StringJoiner outer = new StringJoiner(";");
-        for (int i = 0; i < body.getFixtureCount(); i++) {
+        int fixtureCount = body.getFixtureCount();
+        out.writeByte(Math.min(255, fixtureCount));
+        for (int i = 0; i < fixtureCount; i++) {
             Convex convex = body.getFixture(i).getShape();
-            StringJoiner joiner = new StringJoiner("/");
             if (convex instanceof Polygon polygon) {
+                out.writeByte(0); // 0 = Polygon
                 Vector2[] polyVertices = polygon.getVertices();
+                out.writeByte(Math.min(255, polyVertices.length));
                 for (Vector2 vertex : polyVertices) {
-                    joiner.add("(" + DOUBLE_SHORTFORM.format(vertex.x) +
-                            "," + DOUBLE_SHORTFORM.format(vertex.y) + ")");
+                    out.writeFloat((float) vertex.x);
+                    out.writeFloat((float) vertex.y);
                 }
             } else if (convex instanceof Circle circle) {
-                double radius = circle.getRadius();
+                out.writeByte(1); // 1 = Circle
                 Vector2 center = circle.getCenter();
-                joiner.add("(" + DOUBLE_SHORTFORM.format(center.x) +
-                        "," + DOUBLE_SHORTFORM.format(center.y) +
-                        "," + DOUBLE_SHORTFORM.format(radius) + ")");
+                out.writeFloat((float) center.x);
+                out.writeFloat((float) center.y);
+                out.writeFloat((float) circle.getRadius());
+            } else {
+                out.writeByte(0); // fallback empty polygon
+                out.writeByte(0);
             }
-            outer.add(joiner.toString());
         }
-        return outer.toString();
     }
 }

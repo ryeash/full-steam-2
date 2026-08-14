@@ -7,10 +7,10 @@ class GameEngine {
         this.projectiles = new Map();
         this.obstacles = new Map();
         this.fieldEffects = new Map();
-        this.utilityEntities = new Map(); // For turrets, nets, defense lasers, headquarters, power-ups
-        this.flags = new Map(); // CTF flags
-        this.oddballNpcs = new Map(); // Oddball NPC entities
-        this.kothZones = new Map(); // King of the Hill zones
+        this.utilityEntities = new Map();
+        this.flags = new Map();
+        this.oddballNpcs = new Map();
+        this.kothZones = new Map();
         this.myPlayerId = null;
         this.gameState = null;
         this.websocket = null;
@@ -3236,18 +3236,31 @@ class GameEngine {
      *   { type: 'circle',  cx, cy, r }
      *   { type: 'polygon', points: [[x,y], ...] }
      */
-    parseObstacleShapes(shapesStr) {
-        if (!shapesStr) return [];
-        return shapesStr.split(';').filter(s => s.length > 0).map(fixtureStr => {
-            const parts = fixtureStr.split('/').map(v => {
-                return v.replace(/[()]/g, '').split(',').map(Number);
-            });
-            if (parts[0].length === 3) {
-                const [cx, cy, r] = parts[0];
-                return { type: 'circle', cx, cy, r };
+    parseShapes(shapesData) {
+        return BinaryStateDecoder.parseShapes(shapesData);
+    }
+
+    areShapesEqual(a, b) {
+        if (a === b) return true;
+        if (!a || !b) return false;
+        if (typeof a === 'string' && typeof b === 'string') return a === b;
+        if (Array.isArray(a) && Array.isArray(b)) {
+            if (a.length !== b.length) return false;
+            for (let i = 0; i < a.length; i++) {
+                const sa = a[i], sb = b[i];
+                if (!sa || !sb || sa.type !== sb.type) return false;
+                if (sa.type === 'circle') {
+                    if (sa.cx !== sb.cx || sa.cy !== sb.cy || sa.r !== sb.r) return false;
+                } else if (sa.type === 'polygon') {
+                    if (!sa.points || !sb.points || sa.points.length !== sb.points.length) return false;
+                    for (let j = 0; j < sa.points.length; j++) {
+                        if (sa.points[j][0] !== sb.points[j][0] || sa.points[j][1] !== sb.points[j][1]) return false;
+                    }
+                }
             }
-            return { type: 'polygon', points: parts };
-        });
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -3260,7 +3273,7 @@ class GameEngine {
         const obstacleType = obstacleData.type || 'BOULDER';
         const color = this.getObstacleColor(obstacleType);
         const outlineColor = this.darkenColor(color);
-        const shapes = this.parseObstacleShapes(obstacleData.shapes);
+        const shapes = this.parseShapes(obstacleData.shapes);
         for (const shape of shapes) {
             if (shape.type === 'circle') {
                 graphics.circle(shape.cx, shape.cy, shape.r);
@@ -3384,7 +3397,7 @@ class GameEngine {
         effectContainer.rotation = effectData.rotation || 0;
 
         // If shapes data changed (e.g. beam length clipped by raycast or rotating), re-draw graphics
-        if (effectContainer._lastShapes !== effectData.shapes) {
+        if (!this.areShapesEqual(effectContainer._lastShapes, effectData.shapes)) {
             effectContainer._lastShapes = effectData.shapes;
             if (effectContainer.effectGraphics) {
                 this.drawEffectGraphics(effectContainer.effectGraphics, effectData);
@@ -4084,7 +4097,7 @@ class GameEngine {
     createHeadquartersGraphics(graphics, entityData) {
         // Derive dimensions from the compact shapes string; fall back to
         // sensible defaults so the renderer never breaks on missing data.
-        const shapes = this.parseObstacleShapes(entityData.shapes);
+        const shapes = this.parseShapes(entityData.shapes);
 
         // The physics body is composed of wall polygon(s) plus one circle fixture
         // per corner turret. Honor that data directly rather than synthesizing
@@ -4539,7 +4552,7 @@ class GameEngine {
         const style = this.getFieldEffectStyle(effectData.type);
         
         if (effectData.shapes && effectData.shapes.length > 0) {
-            const shapes = this.parseObstacleShapes(effectData.shapes);
+            const shapes = this.parseShapes(effectData.shapes);
             for (const shape of shapes) {
                 if (shape.type === 'circle') {
                     graphics.circle(shape.cx, shape.cy, shape.r);

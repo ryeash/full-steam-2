@@ -47,6 +47,8 @@ public class RuleSystem {
     private double startCountdownRemaining = 0.0;
     @Getter
     private long matchStartTime;
+    @Getter
+    private long matchEndTime;
 
     // Victory state
     @Getter
@@ -89,6 +91,7 @@ public class RuleSystem {
             this.gameState = GameState.PLAYING;
             this.startCountdownRemaining = 0.0;
         }
+        this.matchEndTime = rules.hasTimeLimit() ? matchStartTime + (long) (rules.getTimeLimit() * 1000) : 0;
 
         // Initialize VIP mode if enabled
         if (rules.hasVip()) {
