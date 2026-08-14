@@ -539,7 +539,8 @@ public class GameManager {
 
         int assignedTeam = assignPlayerToTeam();
         Vector2 spawnPoint = spawnPointManager.findVariedSpawnPointForTeam(assignedTeam);
-        AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithPersonality(Config.nextEntityId(), spawnPoint.x, spawnPoint.y, personalityType, assignedTeam, gameConfig.getPlayerMaxHealth());
+        String name = RandomNames.randomName();
+        AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithName(Config.nextEntityId(), name, AIPersonality.typeFromName(name), spawnPoint.x, spawnPoint.y, assignedTeam, gameConfig.getPlayerMaxHealth());
         aiPlayer.setHealth(gameConfig.getPlayerMaxHealth());
 
         // Initialize lives based on respawn mode (delegated to RuleSystem)

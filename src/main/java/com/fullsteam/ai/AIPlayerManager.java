@@ -177,25 +177,18 @@ public class AIPlayerManager {
     }
 
     /**
-     * Create an AI player with a specific personality type, team, and personality-appropriate weapons.
+     * Create an AI player with a name whose hash deterministically defines their personality and weapons.
      */
-    public static AIPlayer createAIPlayerWithPersonality(int id, double x, double y, AIPersonality.Type personalityType, int team, double maxHealth) {
-        AIPersonality personality = switch (personalityType) {
-            case aggressive -> AIPersonality.createAggressive();
-            case defensive -> AIPersonality.createDefensive();
-            case sniper -> AIPersonality.createSniper();
-            case rusher -> AIPersonality.createRusher();
-            default -> AIPersonality.createBalanced();
-        };
-
-        AIPlayer aiPlayer = new AIPlayer(id, RandomNames.randomName(), x, y, personality, team, maxHealth);
+    public static AIPlayer createAIPlayerWithName(int id, String name, AIPersonality.Type personalityType, double x, double y, int team, double maxHealth) {
+        AIPersonality personality = AIPersonality.createForType(personalityType);
+        AIPlayer aiPlayer = new AIPlayer(id, name, x, y, personality, team, maxHealth);
 
         // Assign weapons based on personality
         WeaponConfig weapon = AIWeaponSelector.selectWeaponForPersonality(personality);
         UtilityWeapon utilityWeapon = AIWeaponSelector.selectUtilityWeaponForPersonality(personality);
         aiPlayer.applyWeaponConfig(weapon, utilityWeapon);
-        log.debug("Assigned weapons to AI player {} ({}): Primary={}, Utility={}",
-                aiPlayer.getId(), aiPlayer.getPersonality().getPersonalityType(),
+        log.debug("Assigned weapons to AI player {} ({} - {}): Primary={}, Utility={}",
+                aiPlayer.getId(), name, personality.getPersonalityType(),
                 weapon.getType(), utilityWeapon.getDisplayName());
         return aiPlayer;
     }

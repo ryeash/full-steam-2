@@ -19,6 +19,24 @@ public class AIPersonality {
         balanced
     }
 
+    public static Type typeFromName(String name) {
+        if (name == null || name.isEmpty()) {
+            return Type.balanced;
+        }
+        int index = Math.floorMod(name.hashCode(), Type.values().length);
+        return Type.values()[index];
+    }
+
+    public static AIPersonality createForType(Type type) {
+        return switch (type) {
+            case aggressive -> createAggressive();
+            case defensive -> createDefensive();
+            case sniper -> createSniper();
+            case rusher -> createRusher();
+            default -> createBalanced();
+        };
+    }
+
     @Builder.Default
     private double aggressiveness = 0.5; // 0.0 = passive, 1.0 = very aggressive
 
