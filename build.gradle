@@ -81,13 +81,6 @@ test {
     ]
 }
 
-// Enable annotation processing
-tasks.withType(JavaCompile) {
-    options.compilerArgs += [
-        "-Aincremental=true"
-    ]
-}
-
 jar {
     manifest {
         attributes(

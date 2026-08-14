@@ -67,7 +67,7 @@ public class GameManager {
      */
     public static final long LOBBY_TIMEOUT_MS = 180_000L;
 
-    public static final long FRAME_RATE = 24L;
+    public static final long FRAME_RATE = 30L;
     public static final long FRAME_PERIOD = 1000L / FRAME_RATE; // ms/s / frame/s = ms/frame
 
     protected final String gameId;
