@@ -555,6 +555,8 @@ public class GameManager {
         // Add to AI manager
         aiPlayerManager.addAIPlayer(aiPlayer);
 
+        this.binaryGameStateSerializer.triggerLowFreqSync();
+
         // Ensure VIP is assigned for this team if VIP mode is enabled
         if (gameConfig.getRules().hasVip()) {
             ruleSystem.ensureVipForTeam(assignedTeam);
@@ -1025,6 +1027,8 @@ public class GameManager {
         gameEventManager.broadcastPlayerJoin(playerSession.getPlayerName(), assignedTeam);
 
         StatusEffectManager.applySpawnInvincibility(player);
+
+        this.binaryGameStateSerializer.triggerLowFreqSync();
 
         // Adjust AI players when a human player spawns
         adjustAIPlayers();

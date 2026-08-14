@@ -2115,6 +2115,9 @@ class GameEngine {
 
         // Update name label position (doesn't rotate with player)
         if (sprite.nameLabel) {
+            if (playerData.name && sprite.nameLabel.text !== playerData.name) {
+                sprite.nameLabel.text = playerData.name;
+            }
             // Use current sprite position (which may be interpolated)
             sprite.nameLabel.position.set(sprite.x, sprite.y - 25);
             // Show name label for active players or dead players with respawn timer
