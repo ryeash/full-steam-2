@@ -55,6 +55,7 @@ class BinaryStateDecoder {
         const isCountdownFlag = (headerFlags & 4) !== 0;
         const isGameOver = (headerFlags & 8) !== 0;
         const gameTimed = (headerFlags & 16) !== 0;
+        const hasLowFreq = (headerFlags & 32) !== 0;
 
         const stateCode = view.getUint8(ptr.offset++);
         const gameStateStr = stateCode === 2 ? 'COUNTDOWN' : (stateCode === 1 ? 'PLAYING' : 'WAITING');
@@ -63,25 +64,27 @@ class BinaryStateDecoder {
         const timestamp = Number(view.getBigInt64(ptr.offset));
         ptr.offset += 8;
 
-        const gameTimeRemaining = view.getFloat32(ptr.offset); ptr.offset += 4;
-        const startCountdownRemaining = view.getFloat32(ptr.offset); ptr.offset += 4;
+        let startCountdownRemaining = 0.0;
+        if (isCountdownFlag) {
+            startCountdownRemaining = view.getFloat32(ptr.offset); ptr.offset += 4;
+        }
+
         const winningTeam = view.getInt8(ptr.offset++);
         const winningPlayerId = view.getInt16(ptr.offset); ptr.offset += 2;
 
-        const scoreStyle = BinaryStateDecoder.readString8(view, ptr);
-        const sortBy = BinaryStateDecoder.readString8(view, ptr);
-        const compCount = view.getUint8(ptr.offset++);
-        const components = [];
-        for (let c = 0; c < compCount; c++) {
-            components.push(BinaryStateDecoder.readString8(view, ptr));
-        }
+        let gameTimeRemaining = undefined;
+        let teamScores = undefined;
 
-        const teamScoreCount = view.getUint8(ptr.offset++);
-        const teamScores = {};
-        for (let t = 0; t < teamScoreCount; t++) {
-            const teamId = view.getUint8(ptr.offset++);
-            const teamScore = view.getInt32(ptr.offset); ptr.offset += 4;
-            teamScores[teamId] = teamScore;
+        if (hasLowFreq) {
+            gameTimeRemaining = view.getFloat32(ptr.offset); ptr.offset += 4;
+
+            const teamScoreCount = view.getUint8(ptr.offset++);
+            teamScores = {};
+            for (let t = 0; t < teamScoreCount; t++) {
+                const teamId = view.getUint8(ptr.offset++);
+                const teamScore = view.getInt32(ptr.offset); ptr.offset += 4;
+                teamScores[teamId] = teamScore;
+            }
         }
 
         const state = {
@@ -90,18 +93,13 @@ class BinaryStateDecoder {
             gameState: gameStateStr,
             isCountdown: isCountdownFlag || stateCode === 2,
             gameTimed: gameTimed,
+            hasLowFreq: hasLowFreq,
             timeRemaining: gameTimeRemaining,
             gameTimeRemaining: gameTimeRemaining,
             startCountdownRemaining: startCountdownRemaining,
             isGameOver: isGameOver,
             winningTeam: winningTeam,
             winningPlayerId: winningPlayerId,
-            scoreStyle: scoreStyle,
-            scoringConfig: {
-                components: components,
-                scoreStyle: scoreStyle,
-                sortBy: sortBy
-            },
             teamScores: teamScores,
             visionObscured: visionObscured,
             awaitingSpawn: awaitingSpawn,
@@ -131,8 +129,6 @@ class BinaryStateDecoder {
             const respawnWaiting = (pFlags & 8) !== 0;
             const isVip = (pFlags & 16) !== 0;
 
-            const name = BinaryStateDecoder.readString8(view, ptr);
-
             const x = view.getFloat32(ptr.offset); ptr.offset += 4;
             const y = view.getFloat32(ptr.offset); ptr.offset += 4;
 
@@ -146,28 +142,51 @@ class BinaryStateDecoder {
             const maxAmmo = view.getUint8(ptr.offset++);
             const reloadPercent = view.getUint8(ptr.offset++) / 100.0;
             const utilityCooldownPercent = view.getUint8(ptr.offset++) / 100.0;
-            const weaponRange = view.getInt16(ptr.offset); ptr.offset += 2;
 
             const respawnTime = view.getFloat32(ptr.offset); ptr.offset += 4;
             const livesRemaining = view.getInt8(ptr.offset++);
 
-            // Scoring (10 shorts)
-            const kills = view.getInt16(ptr.offset); ptr.offset += 2;
-            const deaths = view.getInt16(ptr.offset); ptr.offset += 2;
-            const captures = view.getInt16(ptr.offset); ptr.offset += 2;
-            const koth = view.getInt16(ptr.offset); ptr.offset += 2;
-            const oddball = view.getInt16(ptr.offset); ptr.offset += 2;
-            const hqDamage = view.getInt16(ptr.offset); ptr.offset += 2;
-            const hqDestroyed = view.getInt16(ptr.offset); ptr.offset += 2;
-            const vipKills = view.getInt16(ptr.offset); ptr.offset += 2;
-            const bonus = view.getInt16(ptr.offset); ptr.offset += 2;
-            const total = view.getInt16(ptr.offset); ptr.offset += 2;
+            let name = undefined;
+            let weaponRange = undefined;
+            let kills = undefined, deaths = undefined, captures = undefined, koth = undefined;
+            let oddball = undefined, hqDamage = undefined, hqDestroyed = undefined;
+            let vipKills = undefined, bonus = undefined, total = undefined;
+            let activePowerUps = undefined;
+            let scoreObj = undefined;
 
-            // Active PowerUps
-            const powerUpCount = view.getUint8(ptr.offset++);
-            const activePowerUps = [];
-            for (let p = 0; p < powerUpCount; p++) {
-                activePowerUps.push(BinaryStateDecoder.readString8(view, ptr));
+            if (hasLowFreq) {
+                name = BinaryStateDecoder.readString8(view, ptr);
+                weaponRange = view.getInt16(ptr.offset); ptr.offset += 2;
+
+                kills = view.getInt16(ptr.offset); ptr.offset += 2;
+                deaths = view.getInt16(ptr.offset); ptr.offset += 2;
+                captures = view.getInt16(ptr.offset); ptr.offset += 2;
+                koth = view.getInt16(ptr.offset); ptr.offset += 2;
+                oddball = view.getInt16(ptr.offset); ptr.offset += 2;
+                hqDamage = view.getInt16(ptr.offset); ptr.offset += 2;
+                hqDestroyed = view.getInt16(ptr.offset); ptr.offset += 2;
+                vipKills = view.getInt16(ptr.offset); ptr.offset += 2;
+                bonus = view.getInt16(ptr.offset); ptr.offset += 2;
+                total = view.getInt16(ptr.offset); ptr.offset += 2;
+
+                const powerUpCount = view.getUint8(ptr.offset++);
+                activePowerUps = [];
+                for (let p = 0; p < powerUpCount; p++) {
+                    activePowerUps.push(BinaryStateDecoder.readString8(view, ptr));
+                }
+
+                scoreObj = {
+                    kills: kills,
+                    deaths: deaths,
+                    captures: captures,
+                    koth: koth,
+                    oddball: oddball,
+                    hqDamage: hqDamage,
+                    hqDestroyed: hqDestroyed,
+                    vipKills: vipKills,
+                    bonus: bonus,
+                    total: total
+                };
             }
 
             state.players.push({
@@ -195,18 +214,7 @@ class BinaryStateDecoder {
                 kills: kills,
                 deaths: deaths,
                 activePowerUps: activePowerUps,
-                score: {
-                    kills: kills,
-                    deaths: deaths,
-                    captures: captures,
-                    koth: koth,
-                    oddball: oddball,
-                    hqDamage: hqDamage,
-                    hqDestroyed: hqDestroyed,
-                    vipKills: vipKills,
-                    bonus: bonus,
-                    total: total
-                }
+                score: scoreObj
             });
         }
 
@@ -343,10 +351,6 @@ class BinaryStateDecoder {
         const zoneCount = view.getUint16(ptr.offset); ptr.offset += 2;
         for (let i = 0; i < zoneCount; i++) {
             const id = view.getInt16(ptr.offset); ptr.offset += 2;
-            const zoneNumber = view.getUint8(ptr.offset++);
-            const x = view.getFloat32(ptr.offset); ptr.offset += 4;
-            const y = view.getFloat32(ptr.offset); ptr.offset += 4;
-            const radius = view.getFloat32(ptr.offset); ptr.offset += 4;
             const controllingTeam = view.getInt8(ptr.offset++);
             const stateOrdinal = view.getUint8(ptr.offset++);
             const stateStr = BinaryStateDecoder.KOTH_ZONE_STATES[stateOrdinal] || 'NEUTRAL';
@@ -354,10 +358,6 @@ class BinaryStateDecoder {
 
             state.kothZones.push({
                 id: id,
-                zoneNumber: zoneNumber,
-                x: x,
-                y: y,
-                radius: radius,
                 controllingTeam: controllingTeam,
                 state: stateStr,
                 playerCount: playerCount
@@ -373,7 +373,6 @@ class BinaryStateDecoder {
             const y = view.getFloat32(ptr.offset); ptr.offset += 4;
             const health = view.getUint8(ptr.offset++) / 100.0;
             const isDestroyed = view.getUint8(ptr.offset++) !== 0;
-            const shapes = BinaryStateDecoder.readBodyShapes(view, ptr);
 
             state.headquarters.push({
                 id: id,
@@ -384,8 +383,7 @@ class BinaryStateDecoder {
                 y: y,
                 health: health,
                 active: !isDestroyed,
-                isDestroyed: isDestroyed,
-                shapes: shapes
+                isDestroyed: isDestroyed
             });
         }
 

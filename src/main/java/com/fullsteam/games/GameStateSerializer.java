@@ -1,7 +1,10 @@
 package com.fullsteam.games;
 
+import com.fullsteam.model.VictoryCondition;
 import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
+import com.fullsteam.physics.Headquarters;
+import com.fullsteam.physics.KothZone;
 import com.fullsteam.physics.Obstacle;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.TeamSpawnManager;
@@ -98,8 +101,20 @@ public class GameStateSerializer {
 
         if (gameConfig.getRules().hasFlags()) {
             state.put("flags", createFlagStates());
-            state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
         }
+
+        if (gameConfig.getRules().hasHeadquarters()) {
+            state.put("headquarters", createHeadquartersStates());
+        }
+
+        if (gameConfig.getRules().hasKothZones()) {
+            state.put("kothZones", createKothZoneStates());
+        }
+
+        state.put("scoreStyle", gameConfig.getRules().getScoreStyle().name());
+        state.put("sortBy", gameConfig.getRules().getVictoryCondition() == VictoryCondition.ELIMINATION ? "placement" : "score");
+        state.put("activeScoreComponents", gameConfig.getRules().getActiveScoreComponents());
+
         return state;
     }
 
@@ -132,6 +147,36 @@ public class GameStateSerializer {
             flagStates.add(flagState);
         }
         return flagStates;
+    }
+
+    private List<Map<String, Object>> createHeadquartersStates() {
+        List<Map<String, Object>> hqStates = new ArrayList<>();
+        for (Headquarters hq : gameEntities.getAllHeadquarters()) {
+            Vector2 pos = hq.getPosition();
+            Map<String, Object> hqState = new HashMap<>();
+            hqState.put("id", hq.getId());
+            hqState.put("x", pos.x);
+            hqState.put("y", pos.y);
+            hqState.put("ownerTeam", hq.getOwnerTeam());
+            hqState.put("shapes", verticesShorthand(hq.getBody()));
+            hqStates.add(hqState);
+        }
+        return hqStates;
+    }
+
+    private List<Map<String, Object>> createKothZoneStates() {
+        List<Map<String, Object>> zoneStates = new ArrayList<>();
+        for (KothZone zone : gameEntities.getAllKothZones()) {
+            Vector2 pos = zone.getPosition();
+            Map<String, Object> zState = new HashMap<>();
+            zState.put("id", zone.getId());
+            zState.put("zoneNumber", zone.getZoneNumber());
+            zState.put("x", pos.x);
+            zState.put("y", pos.y);
+            zState.put("radius", zone.getRadius());
+            zoneStates.add(zState);
+        }
+        return zoneStates;
     }
 
     private String verticesShorthand(Body body) {

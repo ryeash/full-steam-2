@@ -11,6 +11,9 @@ class GameEngine {
         this.flags = new Map();
         this.oddballNpcs = new Map();
         this.kothZones = new Map();
+        this.initialHeadquarters = new Map();
+        this.initialKothZones = new Map();
+        this.initialConfig = {};
         this.myPlayerId = null;
         this.gameState = null;
         this.websocket = null;
@@ -1126,6 +1129,23 @@ class GameEngine {
      *                       since the spectator HUD has its own full-map view.
      */
     setupWorldFromInitData(data, includeMinimap = true) {
+        if (data.headquarters) {
+            data.headquarters.forEach(hq => this.initialHeadquarters.set(hq.id, hq));
+        }
+        if (data.kothZones) {
+            data.kothZones.forEach(zone => this.initialKothZones.set(zone.id, zone));
+        }
+        if (data.scoreStyle || data.activeScoreComponents) {
+            this.initialConfig = {
+                scoreStyle: data.scoreStyle,
+                scoringConfig: {
+                    components: data.activeScoreComponents || [],
+                    scoreStyle: data.scoreStyle,
+                    sortBy: data.sortBy || 'score'
+                }
+            };
+        }
+
         if (!this._worldSetupDone) {
             this.worldBounds.width = data.worldWidth || 2000;
             this.worldBounds.height = data.worldHeight || 2000;
@@ -1379,6 +1399,23 @@ class GameEngine {
     
     handleGameState(data) {
         this.gameState = data;
+
+        if (!data.scoreStyle && this.initialConfig.scoreStyle) {
+            data.scoreStyle = this.initialConfig.scoreStyle;
+            data.scoringConfig = this.initialConfig.scoringConfig;
+        }
+
+        if (data.gameTimeRemaining !== undefined) {
+            this.lastGameTimeRemaining = data.gameTimeRemaining;
+        } else if (this.lastGameTimeRemaining !== undefined) {
+            data.gameTimeRemaining = this.lastGameTimeRemaining;
+        }
+
+        if (data.teamScores !== undefined) {
+            this.lastTeamScores = data.teamScores;
+        } else if (this.lastTeamScores !== undefined) {
+            data.teamScores = this.lastTeamScores;
+        }
         
         // Update pre-game countdown banner & loadout banner if active
         const isCountdown = data.isCountdown || data.gameState === 'COUNTDOWN';
@@ -2048,6 +2085,13 @@ class GameEngine {
     updatePlayer(playerData) {
         const sprite = this.players.get(playerData.id);
         if (!sprite) return;
+
+        if (sprite.playerData) {
+            if (playerData.name === undefined) playerData.name = sprite.playerData.name;
+            if (playerData.score === undefined) playerData.score = sprite.playerData.score;
+            if (playerData.activePowerUps === undefined) playerData.activePowerUps = sprite.playerData.activePowerUps;
+            if (playerData.weaponRange === undefined) playerData.weaponRange = sprite.playerData.weaponRange;
+        }
 
         sprite.interpolator.updateFromServer(
             playerData.x,
@@ -3597,6 +3641,16 @@ class GameEngine {
     }
     
     createKothZone(zoneData) {
+        if ((zoneData.x === undefined || zoneData.radius === undefined) && this.initialKothZones) {
+            const initZone = this.initialKothZones.get(zoneData.id);
+            if (initZone) {
+                if (zoneData.x === undefined) zoneData.x = initZone.x;
+                if (zoneData.y === undefined) zoneData.y = initZone.y;
+                if (zoneData.radius === undefined) zoneData.radius = initZone.radius;
+                if (zoneData.zoneNumber === undefined) zoneData.zoneNumber = initZone.zoneNumber;
+            }
+        }
+
         const zoneContainer = new PIXI.Container();
         
         zoneContainer.position.set(zoneData.x, zoneData.y);
@@ -3688,6 +3742,21 @@ class GameEngine {
     updateKothZone(zoneData) {
         const zoneContainer = this.kothZones.get(zoneData.id);
         if (!zoneContainer) return;
+
+        if (zoneContainer.zoneData) {
+            if (zoneData.x === undefined) zoneData.x = zoneContainer.zoneData.x;
+            if (zoneData.y === undefined) zoneData.y = zoneContainer.zoneData.y;
+            if (zoneData.radius === undefined) zoneData.radius = zoneContainer.zoneData.radius;
+            if (zoneData.zoneNumber === undefined) zoneData.zoneNumber = zoneContainer.zoneData.zoneNumber;
+        } else if (this.initialKothZones) {
+            const initZone = this.initialKothZones.get(zoneData.id);
+            if (initZone) {
+                if (zoneData.x === undefined) zoneData.x = initZone.x;
+                if (zoneData.y === undefined) zoneData.y = initZone.y;
+                if (zoneData.radius === undefined) zoneData.radius = initZone.radius;
+                if (zoneData.zoneNumber === undefined) zoneData.zoneNumber = initZone.zoneNumber;
+            }
+        }
         
         // Update position
         zoneContainer.position.set(zoneData.x, zoneData.y);
@@ -4073,9 +4142,13 @@ class GameEngine {
      * Create headquarters graphics
      */
     createHeadquartersGraphics(graphics, entityData) {
-        // Derive dimensions from the compact shapes string; fall back to
-        // sensible defaults so the renderer never breaks on missing data.
-        const shapes = BinaryStateDecoder.parseShapes(entityData.shapes);
+        // Derive dimensions from the compact shapes string or initialHQ map
+        let shapesData = entityData.shapes;
+        if ((!shapesData || (Array.isArray(shapesData) && shapesData.length === 0)) && this.initialHeadquarters) {
+            const initHq = this.initialHeadquarters.get(entityData.id);
+            if (initHq) shapesData = initHq.shapes;
+        }
+        const shapes = BinaryStateDecoder.parseShapes(shapesData);
 
         // The physics body is composed of wall polygon(s) plus one circle fixture
         // per corner turret. Honor that data directly rather than synthesizing

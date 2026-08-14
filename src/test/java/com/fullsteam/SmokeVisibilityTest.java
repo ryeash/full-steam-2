@@ -45,27 +45,27 @@ public class SmokeVisibilityTest {
     private int readPlayerCountFromBinaryState(byte[] data) throws Exception {
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
         in.readNBytes(4); // magic
-        in.readByte(); // headerFlags
+        int headerFlags = in.readByte() & 0xFF;
+        boolean isCountdown = (headerFlags & 4) != 0;
+        boolean hasLowFreq = (headerFlags & 32) != 0;
+
         in.readByte(); // gameStateCode
         in.readLong(); // timestamp
-        in.readFloat(); // timeRemaining
-        in.readFloat(); // startCountdownRemaining
+
+        if (isCountdown) {
+            in.readFloat(); // startCountdownRemaining
+        }
+
         in.readByte(); // winningTeam
         in.readShort(); // winningPlayerId
 
-        // Score style & sorting strings
-        int len1 = in.readByte() & 0xFF; in.readNBytes(len1);
-        int len2 = in.readByte() & 0xFF; in.readNBytes(len2);
-        int compCount = in.readByte() & 0xFF;
-        for (int c = 0; c < compCount; c++) {
-            int len = in.readByte() & 0xFF; in.readNBytes(len);
-        }
-
-        // Team scores
-        int teamScoreCount = in.readByte() & 0xFF;
-        for (int t = 0; t < teamScoreCount; t++) {
-            in.readByte();
-            in.readInt();
+        if (hasLowFreq) {
+            in.readFloat(); // timeRemaining
+            int teamScoreCount = in.readByte() & 0xFF;
+            for (int t = 0; t < teamScoreCount; t++) {
+                in.readByte();
+                in.readInt();
+            }
         }
 
         // Section 1: Players

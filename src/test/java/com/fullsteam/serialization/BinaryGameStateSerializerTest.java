@@ -91,9 +91,9 @@ public class BinaryGameStateSerializerTest {
     }
 
     @Test
-    @DisplayName("serializeGameState should produce valid FSB1 header and entities")
-    public void testFullGameStateSerialization() throws Exception {
-        byte[] data = binarySerializer.serializeGameState();
+    @DisplayName("serializeGameState(true) should produce valid FSB1 low-frequency payload")
+    public void testLowFrequencyGameStateSerialization() throws Exception {
+        byte[] data = binarySerializer.serializeGameState(true);
         assertNotNull(data);
         assertTrue(data.length > 18);
 
@@ -108,6 +108,7 @@ public class BinaryGameStateSerializerTest {
         int headerFlags = in.readByte() & 0xFF;
         assertFalse((headerFlags & 1) != 0); // visionObscured = false
         assertFalse((headerFlags & 2) != 0); // awaitingSpawn = false
+        assertTrue((headerFlags & 32) != 0); // hasLowFreq = true
 
         int gameStateCode = in.readByte() & 0xFF;
         assertTrue(gameStateCode >= 0);
@@ -115,21 +116,10 @@ public class BinaryGameStateSerializerTest {
         long timestamp = in.readLong();
         assertTrue(timestamp > 0);
 
-        float timeRemaining = in.readFloat();
-        float startCountdownRemaining = in.readFloat();
         int winningTeam = in.readByte();
         short winningPlayerId = in.readShort();
 
-        // Score Style & Scoring Config
-        int scoreStyleLen = in.readByte() & 0xFF;
-        in.readNBytes(scoreStyleLen); // scoreStyle
-        int sortByLen = in.readByte() & 0xFF;
-        in.readNBytes(sortByLen); // sortBy
-        int compCount = in.readByte() & 0xFF;
-        for (int c = 0; c < compCount; c++) {
-            int compLen = in.readByte() & 0xFF;
-            in.readNBytes(compLen);
-        }
+        float timeRemaining = in.readFloat();
 
         // Team Scores
         int teamScoreCount = in.readByte() & 0xFF;
@@ -151,10 +141,6 @@ public class BinaryGameStateSerializerTest {
         int pFlags = in.readByte();
         assertTrue((pFlags & 1) != 0); // active
 
-        int nameLen = in.readByte() & 0xFF;
-        byte[] nameBytes = in.readNBytes(nameLen);
-        assertEquals("TestHero", new String(nameBytes));
-
         float x = in.readFloat();
         float y = in.readFloat();
         assertEquals(100.0f, x, 0.1f);
@@ -171,11 +157,16 @@ public class BinaryGameStateSerializerTest {
         int maxAmmo = in.readByte() & 0xFF;
         int reloadPct = in.readByte() & 0xFF;
         int utilityCooldownPct = in.readByte() & 0xFF;
-        short range = in.readShort();
 
         float respawnTime = in.readFloat();
         byte livesRemaining = in.readByte();
         assertEquals(-1, livesRemaining); // -1 = unlimited lives
+
+        int nameLen = in.readByte() & 0xFF;
+        byte[] nameBytes = in.readNBytes(nameLen);
+        assertEquals("TestHero", new String(nameBytes));
+
+        short range = in.readShort();
 
         // Scoring (10 shorts)
         for (int i = 0; i < 10; i++) {
@@ -227,7 +218,23 @@ public class BinaryGameStateSerializerTest {
     }
 
     @Test
-    @DisplayName("serializeBlindedGameState should set visionObscured flag and strip other entities")
+    @DisplayName("serializeGameState(false) should produce compact high-frequency payload")
+    public void testHighFrequencyGameStateSerialization() throws Exception {
+        byte[] lowData = binarySerializer.serializeGameState(true); // reset tick counter / force flag
+        byte[] data = binarySerializer.serializeGameState(false);
+        assertNotNull(data);
+        assertTrue(data.length < lowData.length); // significantly smaller payload
+
+        DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
+
+        // Header check
+        in.readNBytes(4); // magic
+        int headerFlags = in.readByte() & 0xFF;
+        assertFalse((headerFlags & 32) != 0); // hasLowFreq = false
+    }
+
+    @Test
+    @DisplayName("serializeBlindedGameState should set visionObscured flag")
     public void testBlindedGameStateSerialization() throws Exception {
         Player p1 = gameEntities.getPlayer(1);
         assertNotNull(p1);

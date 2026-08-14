@@ -46,13 +46,29 @@ public class BinaryGameStateSerializer {
     @Setter
     private GameManager gameManager;
 
+    private long tickCount = 0;
+    private volatile boolean forceLowFreq = false;
+
     public BinaryGameStateSerializer(GameConfig gameConfig, GameEntities gameEntities, RuleSystem ruleSystem) {
         this.gameConfig = gameConfig;
         this.gameEntities = gameEntities;
         this.ruleSystem = ruleSystem;
     }
 
+    public void triggerLowFreqSync() {
+        this.forceLowFreq = true;
+    }
+
     public byte[] serializeGameState() {
+        return serializeGameState(false);
+    }
+
+    public byte[] serializeGameState(boolean forceLowFreqSync) {
+        boolean hasLowFreq = (tickCount++ % 24 == 0) || forceLowFreq || forceLowFreqSync;
+        if (hasLowFreq) {
+            this.forceLowFreq = false;
+        }
+
         List<Player> players = gameEntities.getAllPlayers().stream()
                 .filter(p -> !p.isVisionObscured())
                 .toList();
@@ -72,7 +88,8 @@ public class BinaryGameStateSerializer {
                 gameConfig.getRules().hasOddballNpcs() ? gameEntities.getAllOddballNpcs().stream().filter(Oddball::isActive).toList() : List.of(),
                 hits,
                 false, // visionObscured
-                false  // awaitingSpawn
+                false, // awaitingSpawn
+                hasLowFreq
         );
     }
 
@@ -99,7 +116,8 @@ public class BinaryGameStateSerializer {
                 List.of(), // oddballs stripped
                 playerHits,
                 true,  // visionObscured
-                false  // awaitingSpawn
+                false, // awaitingSpawn
+                true   // hasLowFreq (blinded players always get full low-freq player info)
         );
     }
 
@@ -117,7 +135,8 @@ public class BinaryGameStateSerializer {
                 List.of(), // oddballs stripped
                 List.of(), // hits stripped
                 false, // visionObscured
-                true   // awaitingSpawn
+                true,  // awaitingSpawn
+                true   // hasLowFreq
         );
     }
 
@@ -134,7 +153,8 @@ public class BinaryGameStateSerializer {
             Collection<Oddball> oddballs,
             List<DamageHit> hits,
             boolean visionObscured,
-            boolean awaitingSpawn
+            boolean awaitingSpawn,
+            boolean hasLowFreq
     ) {
         ByteArrayOutputStream baos = new ByteArrayOutputStream(1024);
         DataOutputStream out = new DataOutputStream(baos);
@@ -168,6 +188,9 @@ public class BinaryGameStateSerializer {
             if (gameTimed) {
                 headerFlags |= 16;
             }
+            if (hasLowFreq) {
+                headerFlags |= 32;
+            }
             out.writeByte(headerFlags);
 
             // Game state enum code (1 byte)
@@ -176,29 +199,26 @@ public class BinaryGameStateSerializer {
             // Timestamp (8 bytes)
             out.writeLong(System.currentTimeMillis());
 
-            // Rule System Details
-            out.writeFloat(((Number) Math.max(0, (ruleSystem.getMatchEndTime() - System.currentTimeMillis()) / 1000)).floatValue());
-            out.writeFloat(((Number) ruleSystem.getStartCountdownRemaining()).floatValue());
+            // Start countdown remaining (only present when in countdown state)
+            if (isCountdown) {
+                out.writeFloat(((Number) ruleSystem.getStartCountdownRemaining()).floatValue());
+            }
+
+            // Victory status
             out.writeByte(Optional.ofNullable(ruleSystem.getWinningTeam()).orElse(-1));
             out.writeShort(Optional.ofNullable(ruleSystem.getWinningPlayerId()).orElse(-1));
 
-            // Score Style & Scoring Config
-            writeString8(out, ruleSystem.getRules().getScoreStyle().name());
-            String sortByStr = ruleSystem.getRules().getVictoryCondition() == VictoryCondition.ELIMINATION ? "placement" : "score";
-            writeString8(out, sortByStr);
+            // Low-Frequency Header Data
+            if (hasLowFreq) {
+                out.writeFloat(((Number) Math.max(0, (ruleSystem.getMatchEndTime() - System.currentTimeMillis()) / 1000)).floatValue());
 
-            List<String> components = ruleSystem.getRules().getActiveScoreComponents();
-            out.writeByte(components.size());
-            for (String comp : components) {
-                writeString8(out, comp);
-            }
-
-            // Team Scores Map
-            Map<Integer, Integer> teamScores = ruleSystem.calculateTeamScores();
-            out.writeByte(teamScores.size());
-            for (Map.Entry<Integer, Integer> entry : teamScores.entrySet()) {
-                out.writeByte(entry.getKey());
-                out.writeInt(entry.getValue());
+                // Team Scores Map
+                Map<Integer, Integer> teamScores = ruleSystem.calculateTeamScores();
+                out.writeByte(teamScores.size());
+                for (Map.Entry<Integer, Integer> entry : teamScores.entrySet()) {
+                    out.writeByte(entry.getKey());
+                    out.writeInt(entry.getValue());
+                }
             }
 
             // 1. Players
@@ -229,8 +249,6 @@ public class BinaryGameStateSerializer {
                 }
                 out.writeByte(playerFlags);
 
-                writeString8(out, p.getPlayerName());
-
                 out.writeFloat((float) p.getPosition().x);
                 out.writeFloat((float) p.getPosition().y);
 
@@ -244,38 +262,42 @@ public class BinaryGameStateSerializer {
                 out.writeByte(p.getCurrentWeapon().getMagazineSize());
                 out.writeByte((int) Math.round(p.getReloadPercent() * 100.0));
                 out.writeByte((int) Math.round(p.getUtilityCooldownProgress() * 100.0));
-                out.writeShort((int) Math.round(p.getCurrentWeapon().getRange()));
 
                 double respawnTime = Math.max(0, ((double) p.getRespawnTime() - System.currentTimeMillis()) / 1000.0);
                 out.writeFloat((float) respawnTime);
                 out.writeByte(p.getLivesRemaining());
 
-                // Scoring (10 shorts)
-                var scoring = p.getScoring();
-                out.writeShort(scoring.getKills());
-                out.writeShort(scoring.getDeaths());
-                out.writeShort(scoring.getFlagCaptures());
-                out.writeShort((int) Math.round(scoring.getKingOfTheHillPoints()));
-                out.writeShort((int) Math.round(scoring.getOddball()));
-                out.writeShort((int) Math.round(scoring.getHeadquarterDamage()));
-                out.writeShort(scoring.getHeadquartersDestroyed());
-                out.writeShort(scoring.getVipKills());
-                out.writeShort(scoring.bonusPoints(gameConfig.getRules()));
-                out.writeShort(scoring.total(gameConfig.getRules()));
+                if (hasLowFreq) {
+                    writeString8(out, p.getPlayerName());
+                    out.writeShort((int) Math.round(p.getCurrentWeapon().getRange()));
 
-                // Active PowerUps
-                List<String> activePowerUps = new ArrayList<>();
-                if (!visionObscured) {
-                    for (AttributeModification mod : p.getAttributeModifications()) {
-                        String hint = mod.renderHint();
-                        if (hint != null && !hint.isEmpty()) {
-                            activePowerUps.add(hint);
+                    // Scoring (10 shorts)
+                    var scoring = p.getScoring();
+                    out.writeShort(scoring.getKills());
+                    out.writeShort(scoring.getDeaths());
+                    out.writeShort(scoring.getFlagCaptures());
+                    out.writeShort((int) Math.round(scoring.getKingOfTheHillPoints()));
+                    out.writeShort((int) Math.round(scoring.getOddball()));
+                    out.writeShort((int) Math.round(scoring.getHeadquarterDamage()));
+                    out.writeShort(scoring.getHeadquartersDestroyed());
+                    out.writeShort(scoring.getVipKills());
+                    out.writeShort(scoring.bonusPoints(gameConfig.getRules()));
+                    out.writeShort(scoring.total(gameConfig.getRules()));
+
+                    // Active PowerUps
+                    List<String> activePowerUps = new ArrayList<>();
+                    if (!visionObscured) {
+                        for (AttributeModification mod : p.getAttributeModifications()) {
+                            String hint = mod.renderHint();
+                            if (hint != null && !hint.isEmpty()) {
+                                activePowerUps.add(hint);
+                            }
                         }
                     }
-                }
-                out.writeByte(activePowerUps.size());
-                for (String hint : activePowerUps) {
-                    writeString8(out, hint);
+                    out.writeByte(activePowerUps.size());
+                    for (String hint : activePowerUps) {
+                        writeString8(out, hint);
+                    }
                 }
             }
 
@@ -357,10 +379,6 @@ public class BinaryGameStateSerializer {
             out.writeShort(kothZones.size());
             for (KothZone z : kothZones) {
                 out.writeShort(z.getId());
-                out.writeByte(z.getZoneNumber());
-                out.writeFloat((float) z.getPosition().x);
-                out.writeFloat((float) z.getPosition().y);
-                out.writeFloat((float) z.getRadius());
                 out.writeByte(z.getControllingTeam());
                 out.writeByte(z.getState().ordinal());
                 out.writeByte(z.getTotalPlayerCount());
@@ -375,7 +393,6 @@ public class BinaryGameStateSerializer {
                 out.writeFloat((float) hq.getPosition().y);
                 out.writeByte((int) Math.round(hq.healthPercent() * 100.0));
                 out.writeBoolean(!hq.isActive());
-                writeBodyShapes(out, hq.getBody());
             }
 
             // 9. Flags
