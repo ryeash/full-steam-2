@@ -359,6 +359,14 @@ public class Rules {
     private EntityWorldDensity blizzardDensity = EntityWorldDensity.DENSE;
 
     /**
+     * Density of dust storm smoke zones.
+     * Controls how many dust storm smoke zones spawn relative to map size.
+     */
+    @NotNull
+    @Builder.Default
+    private EntityWorldDensity dustStormDensity = EntityWorldDensity.DENSE;
+
+    /**
      * Damage per meteor impact.
      */
     @DecimalMin("1.0")
@@ -405,6 +413,14 @@ public class Rules {
     @DecimalMax("500.0")
     @Builder.Default
     private double ionStormDamage = 25.0;
+
+    /**
+     * Radius of each dust storm smoke zone.
+     */
+    @DecimalMin("10.0")
+    @DecimalMax("500.0")
+    @Builder.Default
+    private double dustStormRadius = 100.0;
 
     /**
      * Check if this game mode uses flags.

@@ -180,15 +180,18 @@ public class AIPlayerManager {
      * Create an AI player with a name whose hash deterministically defines their personality and weapons.
      */
     public static AIPlayer createAIPlayerWithName(int id, String name, AIPersonality.Type personalityType, double x, double y, int team, double maxHealth) {
-        AIPersonality personality = AIPersonality.createForType(personalityType);
+        double skillLevel = AIPersonality.generateSkillLevelForName(name);
+        AIPersonality personality = AIPersonality.createForType(personalityType, skillLevel);
         AIPlayer aiPlayer = new AIPlayer(id, name, x, y, personality, team, maxHealth);
+        // Vary decision cooldown between 0.05s (veteran) and 0.15s (rookie)
+        aiPlayer.setDecisionCooldown(0.05 + (1.0 - skillLevel) * 0.10);
 
         // Assign weapons based on personality
         WeaponConfig weapon = AIWeaponSelector.selectWeaponForPersonality(personality);
         UtilityWeapon utilityWeapon = AIWeaponSelector.selectUtilityWeaponForPersonality(personality);
         aiPlayer.applyWeaponConfig(weapon, utilityWeapon);
-        log.debug("Assigned weapons to AI player {} ({} - {}): Primary={}, Utility={}",
-                aiPlayer.getId(), name, personality.getPersonalityType(),
+        log.debug("Assigned weapons to AI player {} ({} - {}, Skill={}): Primary={}, Utility={}",
+                aiPlayer.getId(), name, personality.getPersonalityType(), String.format("%.2f", skillLevel),
                 weapon.getType(), utilityWeapon.getDisplayName());
         return aiPlayer;
     }

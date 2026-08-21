@@ -190,10 +190,22 @@ class EventSystemTest extends BaseTestClass {
     }
 
     @Test
+    void testDustStormConfiguration() {
+        Rules rules = Rules.builder()
+                .enableRandomEvents(true)
+                .dustStormDensity(EntityWorldDensity.CHOKED)
+                .dustStormRadius(120.0)
+                .build();
+
+        assertEquals(EntityWorldDensity.CHOKED, rules.getDustStormDensity());
+        assertEquals(120.0, rules.getDustStormRadius());
+    }
+
+    @Test
     void testAllEventTypesCount() {
         // Ensure we have all expected event types
         EnvironmentalEvent[] events = EnvironmentalEvent.values();
-        assertEquals(5, events.length, "Should have 5 environmental event types");
+        assertEquals(6, events.length, "Should have 6 environmental event types");
     }
 
     @Test

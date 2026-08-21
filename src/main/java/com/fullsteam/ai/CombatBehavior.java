@@ -176,29 +176,34 @@ public class CombatBehavior implements AIBehavior {
         // Check if using beam weapon (instant hit, no prediction needed)
         boolean isBeamWeapon = isBeamWeapon(aiPlayer);
 
+        double accuracy = aiPlayer.getPersonality().getAccuracy();
+        double skillLevel = aiPlayer.getPersonality().getSkillLevel();
+
         Vector2 aimPos;
         if (isBeamWeapon) {
-            // Beam weapons are instant hit - aim directly at target
+            // Beam weapons are instant hit - aim directly at target with skill spread
             aimPos = targetPos.copy();
 
-            // Add slight inaccuracy based on personality
-            double accuracy = aiPlayer.getPersonality().getAccuracy();
-            double spread = (1.0 - accuracy) * 15;
+            double spread = (1.0 - accuracy) * 40.0;
             aimPos.add((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread);
         } else {
-            // Projectile weapons - predict target movement
+            // Projectile weapons - predict target movement with skill-based lead
             Vector2 targetVelocity = target.getVelocity();
             double projectileSpeed = aiPlayer.getCurrentWeapon().getProjectileSpeed();
             double timeToTarget = distance / projectileSpeed;
 
-            // Predict target movement with some uncertainty for realism
-            aimPos = targetPos.copy().add(targetVelocity.copy().multiply(timeToTarget));
+            // Lower-skilled AI under-leads or over-leads moving targets
+            double leadFactor = 0.35 + 0.65 * skillLevel;
+            Vector2 predictedVelocity = targetVelocity.copy().multiply(leadFactor);
+            aimPos = targetPos.copy().add(predictedVelocity.multiply(timeToTarget));
 
-            // Add slight inaccuracy based on distance and personality
-            double accuracy = aiPlayer.getPersonality().getAccuracy();
-            double distanceInaccuracy = Math.max(0, distance - 200) * 0.05 * (1.0 - accuracy);
-            double randomOffsetX = (Math.random() - 0.5) * distanceInaccuracy;
-            double randomOffsetY = (Math.random() - 0.5) * distanceInaccuracy;
+            // Base inaccuracy even at point-blank range + distance scaling
+            double baseSpread = (1.0 - accuracy) * 35.0;
+            double distanceSpread = (distance / 100.0) * (1.0 - accuracy) * 12.0;
+            double totalSpread = baseSpread + distanceSpread;
+
+            double randomOffsetX = (Math.random() - 0.5) * totalSpread;
+            double randomOffsetY = (Math.random() - 0.5) * totalSpread;
 
             aimPos.add(randomOffsetX, randomOffsetY);
         }
@@ -493,17 +498,16 @@ public class CombatBehavior implements AIBehavior {
         double accuracy = aiPlayer.getCurrentWeapon().getAccuracy();
         double effectiveRange = aiPlayer.getCurrentWeapon().getRange();
 
-        // Reduce accuracy at longer ranges but be more generous
-        double rangeAccuracy = Math.max(0.3, 1.0 - (distance / (effectiveRange * 1.5)));
-        double personalityAccuracy = Math.max(0.4, aiPlayer.getPersonality().getAccuracy());
+        // Reduce accuracy at longer ranges
+        double rangeAccuracy = Math.max(0.15, 1.0 - (distance / (effectiveRange * 1.5)));
+        double personalityAccuracy = Math.max(0.15, aiPlayer.getPersonality().getAccuracy());
         double finalAccuracy = accuracy * rangeAccuracy * personalityAccuracy;
 
-        // Be more aggressive - shoot more frequently
-        double shootChance = Math.max(0.6, finalAccuracy); // At least 60% chance to shoot
+        double shootChance = Math.max(0.35, finalAccuracy);
 
-        // Always shoot if very close
+        // Shoot more reliably if close
         if (distance < 100) {
-            shootChance = 0.9;
+            shootChance = 0.75;
         }
 
         return Math.random() < shootChance;

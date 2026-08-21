@@ -782,6 +782,16 @@
                             </select>
                             <small style="color: #888; font-size: 0.8em;">Scales with map size</small>
                         </div>
+                        <div class="config-item">
+                            <label for="dustStormDensity">Dust Storm Density:</label>
+                            <select id="dustStormDensity">
+                                <option value="SPARSE">Sparse (Few Zones)</option>
+                                <option value="DENSE" selected>Dense (Normal)</option>
+                                <option value="CHOKED">Choked (Many Zones)</option>
+                                <option value="RANDOM">Random (Varies)</option>
+                            </select>
+                            <small style="color: #888; font-size: 0.8em;">Scales with map size</small>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1291,6 +1301,7 @@
                 document.getElementById('ionStormDensity').value = r.ionStormDensity || 'DENSE';
                 document.getElementById('earthquakeDensity').value = r.earthquakeDensity || 'SPARSE';
                 document.getElementById('blizzardDensity').value = r.blizzardDensity || 'DENSE';
+                document.getElementById('dustStormDensity').value = r.dustStormDensity || 'DENSE';
             }
             
             // Update field visibility
@@ -1419,7 +1430,8 @@
                 volcanicEruptionDensity: document.getElementById('volcanicEruptionDensity').value,
                 ionStormDensity: document.getElementById('ionStormDensity').value,
                 earthquakeDensity: document.getElementById('earthquakeDensity').value,
-                blizzardDensity: document.getElementById('blizzardDensity').value
+                blizzardDensity: document.getElementById('blizzardDensity').value,
+                dustStormDensity: document.getElementById('dustStormDensity').value
             }
         };
 

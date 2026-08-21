@@ -2175,9 +2175,6 @@ class GameEngine {
             const yOffset = (sprite.healthBar.config && sprite.healthBar.config.yOffset) || 0;
             sprite.healthBar.position.set(sprite.x, sprite.y - yOffset);
         }
-        if (sprite.powerUpContainer) {
-            sprite.powerUpContainer.position.set(sprite.x, sprite.y);
-        }
     }
     
     removePlayer(playerId) {
@@ -2240,22 +2237,6 @@ class GameEngine {
             }
             sprite.deathMarker.destroy({ context: true });
             sprite.deathMarker = null;
-        }
-        
-        // Remove and destroy power-up container
-        if (sprite.powerUpContainer) {
-            if (sprite.powerUpContainer.parent) {
-                sprite.powerUpContainer.parent.removeChild(sprite.powerUpContainer);
-            }
-            const childrenToDestroy = [...sprite.powerUpContainer.children];
-            childrenToDestroy.forEach(child => {
-                if (child.clear && typeof child.clear === 'function') {
-                    child.clear();
-                }
-                child.destroy({ children: true, texture: false, baseTexture: false });
-            });
-            sprite.powerUpContainer.destroy({ children: true, context: true });
-            sprite.powerUpContainer = null;
         }
 
         // Clean up interpolator
@@ -2646,277 +2627,108 @@ class GameEngine {
     }
 
     /**
-     * Update power-up visual indicators around player.
-     */
-    updatePowerUpIndicators(sprite, playerData) {
-        const activePowerUps = playerData.activePowerUps || [];
-        
-        // Create power-up container if it doesn't exist
-        if (!sprite.powerUpContainer) {
-            sprite.powerUpContainer = new PIXI.Container();
-            this.gameContainer.addChild(sprite.powerUpContainer);
-        }
-        
-        // Update position to match player
-        sprite.powerUpContainer.position.set(sprite.x, sprite.y);
-        sprite.powerUpContainer.visible = playerData.active;
-        
-        // Parse active power-ups and create/update visuals
-        if (activePowerUps.length > 0) {
-            this.updatePowerUpVisuals(sprite.powerUpContainer, activePowerUps, sprite);
-        } else {
-            // Clear all power-up effects if no active power-ups
-            const childrenToDestroy = [...sprite.powerUpContainer.children];
-            childrenToDestroy.forEach(child => {
-                if (child.clear && typeof child.clear === 'function') {
-                    child.clear();
-                }
-                child.destroy({ children: true, texture: false, baseTexture: false });
-            });
-            sprite.powerUpContainer.removeChildren();
-        }
-    }
-    
-    /**
-     * Create/update power-up visual effects based on render hints.
-     * 
+     * Map a status effect render hint to its corresponding emoji badge.
      * RenderHint Format: "effect_name:#COLOR:animation_type:show_icon:Display Name:params"
      */
-    updatePowerUpVisuals(container, activePowerUps, sprite) {
-        const effects = activePowerUps.map(hint => {
-            const parts = hint.split(':');
-            let params = {};
-            if (parts.length > 5) {
-                try {
-                    const paramsString = parts.slice(5).join(':');
-                    params = JSON.parse(paramsString);
-                } catch (e) {
-                    console.warn('Failed to parse renderHint params:', e);
-                }
-            }
-            
-            return {
-                name: parts[0] || 'unknown',
-                color: parseInt(parts[1]?.replace('#', '') || 'FFFFFF', 16),
-                animation: parts[2] || 'pulse',
-                showIcon: parts[3] === 'true',
-                displayName: parts[4] || '',
-                params: params
-            };
-        });
-        
-        // Clear existing visuals
-        const childrenToDestroy = [...container.children];
-        childrenToDestroy.forEach(child => {
-            if (child.clear && typeof child.clear === 'function') {
-                child.clear();
-            }
-            child.destroy({ children: true, texture: false, baseTexture: false });
-        });
-        container.removeChildren();
-        
-        // Create visual effect for each active power-up
-        effects.forEach((effect, index) => {
-            const aura = new PIXI.Graphics();
-            const time = Date.now() * 0.003;
-            const params = effect.params || {};
+    getStatusEffectEmoji(hint) {
+        if (!hint) return '';
 
-            if (effect.animation === 'sparkle' || effect.animation === 'pulse') {
-                const baseRadius = params.radius || 20;
-                const particleCount = params.particles || 8;
-                const particleDistance = params.particleDistance || 25;
-                const particleSize = params.particleSize || 2;
-                const pulseSize = baseRadius + Math.sin(time + index) * 5;
-                
-                aura.circle(0, 0, pulseSize).stroke({ width: 3, color: effect.color, alpha: 0.6 });
-                
-                for (let i = 0; i < particleCount; i++) {
-                    const angle = (i / particleCount) * Math.PI * 2 + time;
-                    const x = Math.cos(angle) * particleDistance;
-                    const y = Math.sin(angle) * particleDistance;
-                    aura.circle(x, y, particleSize).fill({ color: effect.color, alpha: 0.8 });
-                }
-            } else if (effect.animation === 'shield') {
-                const baseSize = params.size || 22;
-                const sides = params.sides || 6;
-                const size = baseSize + Math.sin(time) * 2;
-                
-                aura.moveTo(Math.cos(0) * size, Math.sin(0) * size);
-                for (let i = 1; i < sides; i++) {
-                    const angle = (i / sides) * Math.PI * 2;
-                    aura.lineTo(Math.cos(angle) * size, Math.sin(angle) * size);
-                }
-                aura.closePath();
-                aura.stroke({ width: 2, color: effect.color, alpha: 0.7 });
-            } else if (effect.animation === 'slow') {
-                const dropCount = params.drops || 6;
-                const radius = params.radius || 18;
-                const dropSize = params.dropSize || 3;
-                const dripAmount = params.dripAmount || 3;
-                
-                for (let i = 0; i < dropCount; i++) {
-                    const angle = (i / dropCount) * Math.PI * 2 + time;
-                    const x = Math.cos(angle) * radius;
-                    const y = Math.sin(angle) * radius + Math.sin(time * 2 + i) * dripAmount;
-                    aura.circle(x, y, dropSize).fill({ color: effect.color, alpha: 0.5 });
-                }
-            } else if (effect.animation === 'cloud') {
-                const baseRadius = params.radius || 22;
-                const puffCount = params.puffs || 6;
-                const wispCount = params.wisps || 8;
-                
-                for (let i = 0; i < puffCount; i++) {
-                    const angle = (i / puffCount) * Math.PI * 2 + time * 0.5;
-                    const puffDistance = baseRadius * 0.6;
-                    const x = Math.cos(angle) * puffDistance;
-                    const y = Math.sin(angle) * puffDistance;
-                    const puffSize = baseRadius * (0.5 + Math.sin(time * 2 + i) * 0.1);
-                    aura.circle(x, y, puffSize).fill({ color: effect.color, alpha: 0.25 + Math.sin(time * 3 + i) * 0.1 });
-                }
-                
-                const centralSize = baseRadius * (0.7 + Math.sin(time * 1.5) * 0.1);
-                aura.circle(0, 0, centralSize).fill({ color: effect.color, alpha: 0.3 });
-                
-                for (let i = 0; i < wispCount; i++) {
-                    const angle = (i / wispCount) * Math.PI * 2 + time * 1.5;
-                    const distance = baseRadius * 0.8;
-                    const x = Math.cos(angle) * distance;
-                    const y = Math.sin(angle) * distance;
-                    const wispSize = 3 + Math.sin(time * 4 + i) * 1;
-                    aura.circle(x, y, wispSize).fill({ color: effect.color, alpha: 0.35 + Math.sin(time * 5 + i) * 0.15 });
-                }
-            } else if (effect.animation === 'flame') {
-                const particleCount = params.count || 10;
-                const baseRadius = params.radius || 20;
-                const flameHeight = params.height || 8;
-                
-                for (let i = 0; i < particleCount; i++) {
-                    const angle = (i / particleCount) * Math.PI * 2 + time * 2;
-                    const distance = baseRadius + Math.sin(time * 3 + i) * 5;
-                    const x = Math.cos(angle) * distance;
-                    const y = Math.sin(angle) * distance - Math.abs(Math.sin(time * 4 + i)) * flameHeight;
-                    const size = 2 + Math.sin(time * 5 + i) * 1.5;
-                    const alpha = 0.4 + Math.sin(time * 6 + i) * 0.3;
-                    aura.circle(x, y, size).fill({ color: effect.color, alpha: alpha });
-                }
-                
-                const glowSize = baseRadius * (0.6 + Math.sin(time * 3) * 0.15);
-                aura.circle(0, 0, glowSize).fill({ color: effect.color, alpha: 0.2 });
-                aura.circle(0, 0, baseRadius * 0.3).fill({ color: effect.color, alpha: 0.5 + Math.sin(time * 4) * 0.2 });
-            } else if (effect.animation === 'star') {
-                const starCount = params.count || 8;
-                const orbitRadius = params.radius || 30;
-                const starSize = params.size || 3;
-                
-                const pulseSize = 25 + Math.sin(time) * 3;
-                aura.circle(0, 0, pulseSize).stroke({ width: 2, color: effect.color, alpha: 0.6 });
-                
-                for (let i = 0; i < starCount; i++) {
-                    const angle = (i / starCount) * Math.PI * 2 + time * 2;
-                    const cx = Math.cos(angle) * orbitRadius;
-                    const cy = Math.sin(angle) * orbitRadius;
-                    
-                    const starPoints = 5;
-                    const outerR = starSize;
-                    const innerR = starSize * 0.4;
-                    const pts = [];
-                    for (let j = 0; j < starPoints * 2; j++) {
-                        const starAngle = (j / (starPoints * 2)) * Math.PI * 2 - Math.PI / 2;
-                        const r = j % 2 === 0 ? outerR : innerR;
-                        pts.push(cx + Math.cos(starAngle) * r, cy + Math.sin(starAngle) * r);
-                    }
-                    aura.poly(pts).fill({ color: effect.color, alpha: 0.9 });
-                }
-                
-                const centerStarPoints = 5;
-                const centerOuterR = 8;
-                const centerInnerR = 3;
-                const centerPts = [];
-                for (let j = 0; j < centerStarPoints * 2; j++) {
-                    const starAngle = (j / (centerStarPoints * 2)) * Math.PI * 2 - Math.PI / 2 + time;
-                    const r = j % 2 === 0 ? centerOuterR : centerInnerR;
-                    centerPts.push(Math.cos(starAngle) * r, Math.sin(starAngle) * r);
-                }
-                aura.poly(centerPts).fill({ color: effect.color, alpha: 0.8 });
-            } else if (effect.animation === 'crown') {
-                const pulseSize = 25 + Math.sin(time) * 3;
-                
-                // Outer golden ring
-                aura.circle(0, 0, pulseSize).stroke({ width: 3, color: effect.color, alpha: 0.8 });
-                
-                // Inner star pattern
-                const starPts = [];
-                for (let i = 0; i < 5; i++) {
-                    const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
-                    const outerRadius = 30;
-                    const innerRadius = 15;
-                    starPts.push(Math.cos(angle) * outerRadius, Math.sin(angle) * outerRadius);
-                    starPts.push(Math.cos(angle + Math.PI / 5) * innerRadius, Math.sin(angle + Math.PI / 5) * innerRadius);
-                }
-                aura.poly(starPts).stroke({ width: 2, color: effect.color, alpha: 0.9 });
-                
-                // Rotating sparkles (small stars)
-                for (let i = 0; i < 8; i++) {
-                    const angle = (i / 8) * Math.PI * 2 + time * 2;
-                    const distance = 35;
-                    const cx = Math.cos(angle) * distance;
-                    const cy = Math.sin(angle) * distance;
-                    
-                    const starPoints = 4;
-                    const outerR = 3;
-                    const innerR = 1.5;
-                    const pts = [];
-                    for (let j = 0; j < starPoints * 2; j++) {
-                        const starAngle = (j / (starPoints * 2)) * Math.PI * 2 - Math.PI / 2;
-                        const r = j % 2 === 0 ? outerR : innerR;
-                        pts.push(cx + Math.cos(starAngle) * r, cy + Math.sin(starAngle) * r);
-                    }
-                    aura.poly(pts).fill({ color: effect.color, alpha: 0.9 });
-                }
-            } else {
-                const pulseSize = 20 + Math.sin(time) * 4;
-                aura.circle(0, 0, pulseSize).stroke({ width: 2, color: effect.color, alpha: 0.6 });
-                aura.circle(0, 0, pulseSize * 0.7).fill({ color: effect.color, alpha: 0.3 });
-            }
-            
-            container.addChild(aura);
-            
-            // Add icon badge if requested (for player's own view)
-            if (effect.showIcon && sprite.playerData && sprite.playerData.id === this.myPlayerId) {
-                const badge = this.createPowerUpBadge(effect, index);
-                container.addChild(badge);
-            }
-        });
+        const parts = hint.split(':');
+        const effectName = (parts[0] || '').toLowerCase();
+        const animation = (parts[2] || '').toLowerCase();
+        const displayName = (parts[4] || '').toLowerCase();
+
+        if (effectName.includes('vip') || animation === 'crown' || displayName.includes('vip')) {
+            return '👑';
+        }
+        if (effectName.includes('invincib') || displayName.includes('invincible')) {
+            return '⭐';
+        }
+        if (effectName.includes('shield') || displayName.includes('protect') || displayName.includes('shield') || animation === 'shield') {
+            return '🛡️';
+        }
+        if (effectName.includes('speed') || displayName.includes('speed')) {
+            return '⚡';
+        }
+        if (effectName.includes('heal') || displayName.includes('regen') || displayName.includes('heal')) {
+            return '💖';
+        }
+        if (effectName.includes('power') || effectName.includes('berserk') || displayName.includes('damage boost')) {
+            return '💥';
+        }
+        if (effectName.includes('ammo') || displayName.includes('ammo')) {
+            return '♾️';
+        }
+        if (effectName.includes('poison') || animation === 'cloud' || displayName.includes('poison')) {
+            return '☠️';
+        }
+        if (effectName.includes('slow') || animation === 'slow' || displayName.includes('slow')) {
+            return '🐌';
+        }
+        if (effectName.includes('fire') || animation === 'flame' || displayName.includes('burn')) {
+            return '🔥';
+        }
+
+        if (animation === 'sparkle') return '✨';
+        if (animation === 'star') return '🌟';
+
+        return '✨';
     }
 
     /**
-     * Create a small badge/icon for power-up status (shown only for local player).
+     * Update status effect emoji badges displayed under player health/reload/cooldown bars.
      */
-    createPowerUpBadge(effect, index) {
-        const badge = new PIXI.Container();
-        
-        // Position badges in a row above player
-        const offsetX = (index - 0.5) * 30;
-        badge.position.set(offsetX, -45);
-        
-        // Background circle
-        const bg = new PIXI.Graphics();
-        bg.circle(0, 0, 10).fill({ color: 0x000000, alpha: 0.7 });
-        bg.circle(0, 0, 10).stroke({ width: 2, color: effect.color, alpha: 1.0 });
-        badge.addChild(bg);
-        
-        // Icon letter (first letter of effect name)
-        const letter = effect.displayName.charAt(0) || '?';
-        const text = new PIXI.Text(letter, {
-            fontSize: 12,
-            fill: effect.color,
-            fontWeight: 'bold'
-        });
-        text.anchor.set(0.5);
-        text.scale.y = -1; // Flip Y-axis back so text is readable
-        badge.addChild(text);
-        
-        return badge;
+    updatePowerUpIndicators(sprite, playerData) {
+        const healthBarContainer = sprite.healthBar;
+        if (!healthBarContainer) return;
+
+        const activePowerUps = playerData.activePowerUps || [];
+        const emojiSet = new Set();
+
+        if (playerData.active && playerData.health > 0) {
+            for (const hint of activePowerUps) {
+                const emoji = this.getStatusEffectEmoji(hint);
+                if (emoji) {
+                    emojiSet.add(emoji);
+                }
+            }
+        }
+
+        const emojis = Array.from(emojiSet);
+
+        if (emojis.length === 0) {
+            if (healthBarContainer.statusEffectLabel) {
+                healthBarContainer.statusEffectLabel.visible = false;
+            }
+            return;
+        }
+
+        const emojiString = emojis.join(' ');
+
+        if (!healthBarContainer.statusEffectLabel) {
+            const label = new PIXI.Text(emojiString, {
+                fontSize: 12,
+                stroke: 0x000000,
+                strokeThickness: 2
+            });
+            label.anchor.set(0.5);
+            label.scale.y = -1; // Flip Y-axis back so text is readable in Y-flipped nameContainer
+            healthBarContainer.statusEffectLabel = label;
+            healthBarContainer.addChild(label);
+        } else {
+            if (healthBarContainer.statusEffectLabel.text !== emojiString) {
+                healthBarContainer.statusEffectLabel.text = emojiString;
+            }
+        }
+
+        // Determine Y position below health bar (y = 0) and active sub-bars (y = -5 or -10)
+        let activeSubBars = 0;
+        if (healthBarContainer.reloadBg && healthBarContainer.reloadBg.visible) activeSubBars++;
+        if (healthBarContainer.cooldownBg && healthBarContainer.cooldownBg.visible) activeSubBars++;
+
+        const badgeY = -7 - (activeSubBars * 5);
+        healthBarContainer.statusEffectLabel.position.set(0, badgeY);
+        healthBarContainer.statusEffectLabel.visible = true;
     }
     
     createProjectile(projectileData) {
@@ -3671,7 +3483,6 @@ class GameEngine {
         zoneContainer.addChild(cautionStripes);
         const cautionMask = new PIXI.Graphics();
         zoneContainer.cautionMask = cautionMask;
-        zoneContainer.addChild(cautionMask);
         cautionStripes.mask = cautionMask;
 
         // Create capture progress ring
@@ -3796,6 +3607,7 @@ class GameEngine {
                 stripes.visible = true;
             } else {
                 stripes.clear();
+                zoneContainer.cautionMask.clear();
                 stripes.visible = false;
             }
 
@@ -3829,15 +3641,15 @@ class GameEngine {
         g.clear();
         const stripeW = 16;          // band thickness
         const step = stripeW * 2;    // band + equal gap
-        // 45° bands: each is the strip between the lines x - y = c and = c + stripeW.
+        // 45° bands: each is a separate closed quad polygon to prevent earcut triangulation glitches.
         for (let c = -2 * radius; c < 2 * radius; c += step) {
-            g.moveTo(c - radius, -radius);
-            g.lineTo(c + stripeW - radius, -radius);
-            g.lineTo(c + stripeW + radius, radius);
-            g.lineTo(c + radius, radius);
-            g.closePath();
+            g.poly([
+                c - radius, -radius,
+                c + stripeW - radius, -radius,
+                c + stripeW + radius, radius,
+                c + radius, radius
+            ]).fill({ color: 0xFFD21A, alpha: 0.55 });
         }
-        g.fill({ color: 0xFFD21A, alpha: 0.55 });
     }
 
     getKothZoneColors(zoneData) {
@@ -3899,6 +3711,10 @@ class GameEngine {
     removeKothZone(zoneId) {
         const zoneContainer = this.kothZones.get(zoneId);
         if (zoneContainer) {
+            if (zoneContainer.cautionMask) {
+                zoneContainer.cautionMask.destroy({ context: true });
+                zoneContainer.cautionMask = null;
+            }
             zoneContainer.destroy({ children: true, context: true });
             this.gameContainer.removeChild(zoneContainer);
             this.kothZones.delete(zoneId);
@@ -6052,6 +5868,10 @@ class GameEngine {
         
         // Clean up KOTH zones
         this.kothZones.forEach(zone => {
+            if (zone.cautionMask) {
+                zone.cautionMask.destroy({ context: true });
+                zone.cautionMask = null;
+            }
             zone.destroy({ children: true, context: true });
         });
         this.kothZones.clear();

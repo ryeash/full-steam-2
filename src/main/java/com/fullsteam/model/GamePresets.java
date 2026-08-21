@@ -188,6 +188,7 @@ public class GamePresets {
                             .ionStormDensity(EntityWorldDensity.DENSE)
                             .earthquakeDensity(EntityWorldDensity.DENSE)
                             .blizzardDensity(EntityWorldDensity.DENSE)
+                            .dustStormDensity(EntityWorldDensity.CHOKED)
                             .build())
                     .build());
     public static final Preset ODDBALL = new Preset("oddball", "⭐ Oddball",
@@ -238,6 +239,7 @@ public class GamePresets {
                             .ionStormDensity(EntityWorldDensity.DENSE)
                             .earthquakeDensity(EntityWorldDensity.SPARSE)
                             .blizzardDensity(EntityWorldDensity.SPARSE)
+                            .dustStormDensity(EntityWorldDensity.DENSE)
                             .enableVip(true)
                             .obstacleDensity(EntityWorldDensity.DENSE)
                             .build())
@@ -269,6 +271,7 @@ public class GamePresets {
                             .ionStormDensity(EntityWorldDensity.SPARSE)
                             .earthquakeDensity(EntityWorldDensity.SPARSE)
                             .blizzardDensity(EntityWorldDensity.SPARSE)
+                            .dustStormDensity(EntityWorldDensity.SPARSE)
                             .obstacleDensity(EntityWorldDensity.DENSE)
                             .pointsPerFlagCapture(1)
                             .enableRandomWeapons(true)

@@ -27,24 +27,49 @@ public class AIPersonality {
         return Type.values()[index];
     }
 
+    /**
+     * Generate a deterministic skill level between 0.15 and 0.85 based on player name.
+     */
+    public static double generateSkillLevelForName(String name) {
+        if (name == null || name.isEmpty()) {
+            return 0.50;
+        }
+        int hash = Math.abs(name.hashCode() * 31 + 17);
+        double normalized = (hash % 1000) / 1000.0;
+        return 0.15 + normalized * 0.70;
+    }
+
     public static AIPersonality createForType(Type type) {
+        return createForType(type, 0.50);
+    }
+
+    public static AIPersonality createForType(Type type, double skillLevel) {
         return switch (type) {
-            case aggressive -> createAggressive();
-            case defensive -> createDefensive();
-            case sniper -> createSniper();
-            case rusher -> createRusher();
-            default -> createBalanced();
+            case aggressive -> createAggressive(skillLevel);
+            case defensive -> createDefensive(skillLevel);
+            case sniper -> createSniper(skillLevel);
+            case rusher -> createRusher(skillLevel);
+            default -> createBalanced(skillLevel);
         };
     }
+
+    public static AIPersonality createForName(String name) {
+        Type type = typeFromName(name);
+        double skillLevel = generateSkillLevelForName(name);
+        return createForType(type, skillLevel);
+    }
+
+    @Builder.Default
+    private double skillLevel = 0.50; // 0.0 = rookie/novice, 1.0 = veteran/expert
 
     @Builder.Default
     private double aggressiveness = 0.5; // 0.0 = passive, 1.0 = very aggressive
 
     @Builder.Default
-    private double accuracy = 0.7; // 0.0 = poor aim, 1.0 = perfect aim
+    private double accuracy = 0.40; // 0.0 = poor aim, 1.0 = perfect aim
 
     @Builder.Default
-    private double reactionSpeed = 0.6; // 0.0 = slow, 1.0 = instant reactions
+    private double reactionSpeed = 0.45; // 0.0 = slow, 1.0 = instant reactions
 
     @Builder.Default
     private double preferredCombatRange = 150.0; // Preferred distance for combat
@@ -74,10 +99,17 @@ public class AIPersonality {
      * Creates an aggressive, combat-focused personality.
      */
     public static AIPersonality createAggressive() {
+        return createAggressive(0.50);
+    }
+
+    public static AIPersonality createAggressive(double skillLevel) {
+        double acc = Math.min(0.85, Math.max(0.12, 0.45 * (0.35 + 0.9 * skillLevel)));
+        double react = Math.min(0.85, Math.max(0.12, 0.50 * (0.35 + 0.9 * skillLevel)));
         return AIPersonality.builder()
-                .aggressiveness(0.9)
-                .accuracy(0.8)
-                .reactionSpeed(0.8)
+                .skillLevel(skillLevel)
+                .aggressiveness(0.85)
+                .accuracy(acc)
+                .reactionSpeed(react)
                 .preferredCombatRange(120.0)
                 .strategicThinking(0.4)
                 .teamwork(0.3)
@@ -89,14 +121,18 @@ public class AIPersonality {
                 .build();
     }
 
-    /**
-     * Creates a defensive, strategic personality.
-     */
     public static AIPersonality createDefensive() {
+        return createDefensive(0.50);
+    }
+
+    public static AIPersonality createDefensive(double skillLevel) {
+        double acc = Math.min(0.85, Math.max(0.12, 0.50 * (0.35 + 0.9 * skillLevel)));
+        double react = Math.min(0.85, Math.max(0.12, 0.45 * (0.35 + 0.9 * skillLevel)));
         return AIPersonality.builder()
+                .skillLevel(skillLevel)
                 .aggressiveness(0.2)
-                .accuracy(0.9)
-                .reactionSpeed(0.7)
+                .accuracy(acc)
+                .reactionSpeed(react)
                 .preferredCombatRange(200.0)
                 .strategicThinking(0.9)
                 .teamwork(0.8)
@@ -108,14 +144,18 @@ public class AIPersonality {
                 .build();
     }
 
-    /**
-     * Creates a balanced, adaptable personality.
-     */
     public static AIPersonality createBalanced() {
+        return createBalanced(0.50);
+    }
+
+    public static AIPersonality createBalanced(double skillLevel) {
+        double acc = Math.min(0.85, Math.max(0.12, 0.40 * (0.35 + 0.9 * skillLevel)));
+        double react = Math.min(0.85, Math.max(0.12, 0.40 * (0.35 + 0.9 * skillLevel)));
         return AIPersonality.builder()
+                .skillLevel(skillLevel)
                 .aggressiveness(0.5)
-                .accuracy(0.7)
-                .reactionSpeed(0.6)
+                .accuracy(acc)
+                .reactionSpeed(react)
                 .preferredCombatRange(150.0)
                 .strategicThinking(0.6)
                 .teamwork(0.6)
@@ -127,14 +167,18 @@ public class AIPersonality {
                 .build();
     }
 
-    /**
-     * Creates a sniper-like personality focused on long-range combat.
-     */
     public static AIPersonality createSniper() {
+        return createSniper(0.50);
+    }
+
+    public static AIPersonality createSniper(double skillLevel) {
+        double acc = Math.min(0.85, Math.max(0.12, 0.55 * (0.35 + 0.9 * skillLevel)));
+        double react = Math.min(0.85, Math.max(0.12, 0.40 * (0.35 + 0.9 * skillLevel)));
         return AIPersonality.builder()
+                .skillLevel(skillLevel)
                 .aggressiveness(0.4)
-                .accuracy(0.95)
-                .reactionSpeed(0.6)
+                .accuracy(acc)
+                .reactionSpeed(react)
                 .preferredCombatRange(300.0)
                 .strategicThinking(0.8)
                 .teamwork(0.5)
@@ -146,14 +190,18 @@ public class AIPersonality {
                 .build();
     }
 
-    /**
-     * Creates a rusher personality focused on close-range, high-mobility combat.
-     */
     public static AIPersonality createRusher() {
+        return createRusher(0.50);
+    }
+
+    public static AIPersonality createRusher(double skillLevel) {
+        double acc = Math.min(0.85, Math.max(0.12, 0.30 * (0.35 + 0.9 * skillLevel)));
+        double react = Math.min(0.85, Math.max(0.12, 0.55 * (0.35 + 0.9 * skillLevel)));
         return AIPersonality.builder()
+                .skillLevel(skillLevel)
                 .aggressiveness(0.9)
-                .accuracy(0.6)
-                .reactionSpeed(0.9)
+                .accuracy(acc)
+                .reactionSpeed(react)
                 .preferredCombatRange(80.0)
                 .strategicThinking(0.3)
                 .teamwork(0.4)
@@ -171,7 +219,7 @@ public class AIPersonality {
     public String getPersonalityType() {
         if (aggressiveness > 0.8 && riskTolerance > 0.7) {
             return "Berserker";
-        } else if (accuracy > 0.9 && preferredCombatRange > 250) {
+        } else if (preferredCombatRange > 250) {
             return "Sniper";
         } else if (aggressiveness > 0.8 && mobility > 0.8) {
             return "Rusher";

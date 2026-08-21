@@ -57,7 +57,42 @@ public class AIPersonalityNameTest {
         System.out.println("\n=== Sample Name Personality Assignments ===");
         String[] samples = {"Icebox Cake", "Pudding", "Affogato", "Baklava", "Cannoli", "Cheesecake", "Churro"};
         for (String sample : samples) {
-            System.out.printf("  %-15s -> %s%n", sample, AIPersonality.typeFromName(sample));
+            double skill = AIPersonality.generateSkillLevelForName(sample);
+            AIPersonality p = AIPersonality.createForName(sample);
+            System.out.printf("  %-15s -> Type: %-10s | Archetype: %-10s | Skill: %.2f | Acc: %.2f | React: %.2f%n",
+                    sample, AIPersonality.typeFromName(sample), p.getPersonalityType(), skill, p.getAccuracy(), p.getReactionSpeed());
         }
+    }
+
+    @Test
+    @DisplayName("Verify skill level generation and variance across all names")
+    public void testSkillLevelDistributionAndVariance() {
+        var names = RandomNames.getNames();
+        assertFalse(names.isEmpty(), "Name list should not be empty");
+
+        double minSkill = 1.0;
+        double maxSkill = 0.0;
+        double sumSkill = 0.0;
+
+        for (String name : names) {
+            double skill = AIPersonality.generateSkillLevelForName(name);
+            assertTrue(skill >= 0.15 && skill <= 0.85, "Skill level must be between 0.15 and 0.85");
+            minSkill = Math.min(minSkill, skill);
+            maxSkill = Math.max(maxSkill, skill);
+            sumSkill += skill;
+
+            // Verify determinism
+            assertEquals(skill, AIPersonality.generateSkillLevelForName(name), "Skill generation must be deterministic");
+        }
+
+        double avgSkill = sumSkill / names.size();
+        System.out.printf("=== AI Skill Level Stats (%d names) ===%n", names.size());
+        System.out.printf("  Min Skill: %.2f%n", minSkill);
+        System.out.printf("  Max Skill: %.2f%n", maxSkill);
+        System.out.printf("  Avg Skill: %.2f%n", avgSkill);
+
+        assertTrue(minSkill <= 0.20, "Min skill should be low (~0.15)");
+        assertTrue(maxSkill >= 0.80, "Max skill should be high (~0.85)");
+        assertTrue(avgSkill >= 0.40 && avgSkill <= 0.60, "Average skill should be centered around ~0.50");
     }
 }

@@ -326,14 +326,16 @@ public class HeadquartersBehavior implements AIBehavior {
         Vector2 enemyVel = enemy.getVelocity();
         double distance = myPos.distance(enemyPos);
 
-        // Lead target
+        // Lead target with skill-based factor
+        double accuracy = aiPlayer.getPersonality().getAccuracy();
+        double skillLevel = aiPlayer.getPersonality().getSkillLevel();
         double projectileSpeed = aiPlayer.getCurrentWeapon().getProjectileSpeed();
         double timeToTarget = distance / projectileSpeed;
-        Vector2 predictedPos = enemyPos.copy().add(enemyVel.copy().multiply(timeToTarget));
+        double leadFactor = 0.35 + 0.65 * skillLevel;
+        Vector2 predictedPos = enemyPos.copy().add(enemyVel.copy().multiply(timeToTarget * leadFactor));
 
         // Add accuracy variation
-        double accuracy = aiPlayer.getPersonality().getAccuracy();
-        double spread = (1.0 - accuracy) * 25;
+        double spread = (1.0 - accuracy) * 40.0;
         predictedPos.add((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread);
 
         input.setWorldX(predictedPos.x);
