@@ -67,7 +67,13 @@ public final class StatusEffectManager {
      * Apply an effect to a player, replacing any existing effect with the same unique key.
      */
     private static void applyEffect(Player player, AttributeModification attributeModification) {
-        player.getAttributeModifications().removeIf(am -> am.uniqueKey().equals(attributeModification.uniqueKey()));
+        player.getAttributeModifications().removeIf(am -> {
+            if (am.uniqueKey().equals(attributeModification.uniqueKey())) {
+                am.revert(player);
+                return true;
+            }
+            return false;
+        });
         player.getAttributeModifications().add(attributeModification);
     }
 
@@ -376,16 +382,22 @@ public final class StatusEffectManager {
     }
 
     /**
-     * Riot Shield attribute modification with hitpoints.
+     * Riot Shield attribute modification with hitpoints and movement slowing effect.
      */
     public static class RiotShieldAttributeModification extends BaseAttributeModification {
         private final double maxHealth;
         private double health;
+        private final double linearDamping;
 
         public RiotShieldAttributeModification(double durationSeconds, double maxHealth) {
+            this(durationSeconds, maxHealth, Config.PLAYER_LINEAR_DAMPING * 2.0);
+        }
+
+        public RiotShieldAttributeModification(double durationSeconds, double maxHealth, double linearDamping) {
             super(System.currentTimeMillis() + (long) (durationSeconds * 1000));
             this.maxHealth = maxHealth;
             this.health = maxHealth;
+            this.linearDamping = linearDamping;
         }
 
         public double getMaxHealth() {
@@ -396,10 +408,24 @@ public final class StatusEffectManager {
             return health;
         }
 
+        public double getLinearDamping() {
+            return linearDamping;
+        }
+
         public void damageShield(double damage) {
             if (damage > 0) {
                 this.health = Math.max(0.0, this.health - damage);
             }
+        }
+
+        @Override
+        public void update(Player player, double delta) {
+            player.getBody().setLinearDamping(linearDamping);
+        }
+
+        @Override
+        public void revert(Player player) {
+            player.getBody().setLinearDamping(Config.PLAYER_LINEAR_DAMPING);
         }
 
         @Override
@@ -429,7 +455,14 @@ public final class StatusEffectManager {
      * Apply Riot Shield effect with custom max health to a player.
      */
     public static void applyRiotShield(Player player, double durationSeconds, double maxHealth) {
-        applyEffect(player, new RiotShieldAttributeModification(durationSeconds, maxHealth));
+        applyRiotShield(player, durationSeconds, maxHealth, Config.PLAYER_LINEAR_DAMPING * 2.0);
+    }
+
+    /**
+     * Apply Riot Shield effect with custom max health and linear damping slow to a player.
+     */
+    public static void applyRiotShield(Player player, double durationSeconds, double maxHealth, double linearDamping) {
+        applyEffect(player, new RiotShieldAttributeModification(durationSeconds, maxHealth, linearDamping));
     }
 }
 

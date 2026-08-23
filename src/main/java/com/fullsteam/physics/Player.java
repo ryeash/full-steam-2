@@ -201,12 +201,19 @@ public class Player extends OwnedGameEntity implements HasWeapon {
         if (rsm != null && !rsm.isExpired()) {
             rsm.damageShield(damage);
             if (rsm.isExpired()) {
+                rsm.revert(this);
                 attributeModifications.remove(rsm);
             }
             return true;
         }
         // Fallback for generic riotShield modifications
-        return attributeModifications.removeIf(am -> "riotShield".equals(am.uniqueKey()));
+        return attributeModifications.removeIf(am -> {
+            if ("riotShield".equals(am.uniqueKey())) {
+                am.revert(this);
+                return true;
+            }
+            return false;
+        });
     }
 
     public double getRiotShieldHealth() {
@@ -409,10 +416,6 @@ public class Player extends OwnedGameEntity implements HasWeapon {
             return false; // FFA mode or null player
         }
         return this.team == otherPlayer.team;
-    }
-
-    public boolean isLastDamageArmorMitigated() {
-        return lastDamageArmorMitigated;
     }
 
     /**

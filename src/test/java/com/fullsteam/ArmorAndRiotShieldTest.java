@@ -37,27 +37,27 @@ public class ArmorAndRiotShieldTest extends BaseTestClass {
     void testArmorValuesAndSpeedModifiers() {
         Player player = new Player(1, "Test", 0, 0, 1, 100);
 
-        // Test NONE armor (+10% speed)
+        // Test NONE armor
         player.applyWeaponConfig(WeaponConfig.ASSAULT_RIFLE_PRESET, UtilityWeapon.HEAL_ZONE, ArmorType.NONE);
         assertEquals(0.0, player.getArmor());
         assertEquals(0.0, player.getMaxArmor());
         assertEquals(0.0, player.armorPercent());
         double baseSpeed = Config.PLAYER_SPEED * WeaponConfig.ASSAULT_RIFLE_PRESET.buildWeapon().getHandling();
-        assertEquals(baseSpeed * 1.10, player.getMaxSpeed(), 1e-4);
+        assertEquals(baseSpeed * ArmorType.NONE.getHandlingModifier(), player.getMaxSpeed(), 1e-4);
 
-        // Test LIGHT armor (50 armor, -10% speed)
+        // Test LIGHT armor (50 armor)
         player.applyWeaponConfig(WeaponConfig.ASSAULT_RIFLE_PRESET, UtilityWeapon.HEAL_ZONE, ArmorType.LIGHT);
         assertEquals(50.0, player.getArmor());
         assertEquals(50.0, player.getMaxArmor());
         assertEquals(1.0, player.armorPercent());
-        assertEquals(baseSpeed * 0.90, player.getMaxSpeed(), 1e-4);
+        assertEquals(baseSpeed * ArmorType.LIGHT.getHandlingModifier(), player.getMaxSpeed(), 1e-4);
 
-        // Test HEAVY armor (100 armor, -25% speed)
+        // Test HEAVY armor (100 armor)
         player.applyWeaponConfig(WeaponConfig.ASSAULT_RIFLE_PRESET, UtilityWeapon.HEAL_ZONE, ArmorType.HEAVY);
         assertEquals(100.0, player.getArmor());
         assertEquals(100.0, player.getMaxArmor());
         assertEquals(1.0, player.armorPercent());
-        assertEquals(baseSpeed * 0.75, player.getMaxSpeed(), 1e-4);
+        assertEquals(baseSpeed * ArmorType.HEAVY.getHandlingModifier(), player.getMaxSpeed(), 1e-4);
     }
 
     @Test
@@ -285,5 +285,28 @@ public class ArmorAndRiotShieldTest extends BaseTestClass {
         player.damageRiotShield(100.0);
         assertFalse(player.isRiotShieldActive());
         assertEquals(0.0, player.getRiotShieldHealth());
+    }
+
+    @Test
+    void testRiotShieldSlowEffect() {
+        Player player = new Player(1, "Shield Bearer", 0, 0, 1, 100);
+        player.setActive(true);
+
+        double defaultDamping = Config.PLAYER_LINEAR_DAMPING;
+        assertEquals(defaultDamping, player.getBody().getLinearDamping(), 1e-4);
+
+        // Apply Riot Shield
+        StatusEffectManager.applyRiotShield(player, 6.0);
+        assertTrue(player.isRiotShieldActive());
+
+        // Update player to trigger attribute modifications
+        player.update(0.1);
+        double slowedDamping = Config.PLAYER_LINEAR_DAMPING * 2.0;
+        assertEquals(slowedDamping, player.getBody().getLinearDamping(), 1e-4);
+
+        // Breaking the shield should revert linear damping immediately back to default
+        player.damageRiotShield(150.0);
+        assertFalse(player.isRiotShieldActive());
+        assertEquals(defaultDamping, player.getBody().getLinearDamping(), 1e-4);
     }
 }
