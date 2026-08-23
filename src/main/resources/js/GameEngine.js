@@ -1377,6 +1377,7 @@ class GameEngine {
             type: 'readyToSpawn',
             weaponConfig: config.weaponConfig,
             utilityWeapon: config.utilityWeapon,
+            armorType: config.armorType,
             playerName: nameSelect ? nameSelect.value : undefined
         };
         this.websocket.send(JSON.stringify(message));
@@ -2033,6 +2034,11 @@ class GameEngine {
         // Create health bar above player
         const healthBarContainer = this.createPlayerHealthBar(playerData);
         sprite.healthBar = healthBarContainer;
+
+        const shieldArc = new PIXI.Graphics();
+        shieldArc.visible = false;
+        sprite.addChild(shieldArc);
+        sprite.shieldArc = shieldArc;
     
         // Create death marker (initially hidden)
         if (this.deathTexture) {
@@ -2132,6 +2138,16 @@ class GameEngine {
         
         if (sprite.healthBar) {
             this.updatePlayerSubBars(sprite.healthBar, playerData);
+        }
+
+        if (sprite.shieldArc) {
+            sprite.shieldArc.visible = playerData.isRiotShieldActive || false;
+            if (sprite.shieldArc.visible && !sprite.shieldArc._drawn) {
+                sprite.shieldArc._drawn = true;
+                sprite.shieldArc.clear();
+                sprite.shieldArc.arc(0, 0, 26, -Math.PI / 3, Math.PI / 3).stroke({ width: 4, color: 0x00E5FF, alpha: 0.9 });
+                sprite.shieldArc.arc(0, 0, 23, -Math.PI / 3, Math.PI / 3).stroke({ width: 2, color: 0x80F3FF, alpha: 0.6 });
+            }
         }
 
         // Update power-up visual indicators
@@ -2319,25 +2335,32 @@ class GameEngine {
         let strokeThickness = 3;
         let initialScale = 1.0;
 
+        const isArmor = hit.armorMitigated || false;
+
         if (isAttacker) {
             if (hit.kill) {
-                textStr = `${displayDamage} 💀`;
+                textStr = isArmor ? `${displayDamage} 🛡️💀` : `${displayDamage} 💀`;
                 fillColor = 0xFF3330; // Bright orange-red
                 fontSize = 16;
                 initialScale = 1.3;
+            } else if (isArmor) {
+                textStr = `${displayDamage} 🛡️`;
+                fillColor = 0x00E5FF; // Bright cyan for armor damage
+                fontSize = 14;
+                initialScale = 1.1;
             } else {
                 textStr = `${displayDamage}`;
                 fillColor = 0xFFFF55; // Yellow
                 fontSize = 13;
             }
         } else if (isVictim) {
-            textStr = `-${displayDamage}`;
-            fillColor = 0xFF3344; // Red for taking damage
+            textStr = isArmor ? `-${displayDamage} 🛡️` : `-${displayDamage}`;
+            fillColor = isArmor ? 0x00E5FF : 0xFF3344; // Cyan if armor absorbed, Red if health damage
             fontSize = 13;
         } else {
             // Spectator
-            textStr = `${displayDamage}`;
-            fillColor = 0xFFAA44; // Orange
+            textStr = isArmor ? `${displayDamage} 🛡️` : `${displayDamage}`;
+            fillColor = isArmor ? 0x00E5FF : 0xFFAA44; // Cyan if armor absorbed, Orange otherwise
             fontSize = 12;
         }
 
@@ -2434,12 +2457,21 @@ class GameEngine {
             healthBarContainer.position.set(sprite.x, sprite.y - yOffset);
         }
         
-        // Calculate health percentage
+        // Calculate health percentage & armor
         const healthPercent = entityData.health;
+        const armorPct = entityData.armor ?? 0;
+        
+        // Track whether this entity has armor capacity during its current life/spawn
+        if (armorPct > 0) {
+            healthBarContainer._hasArmorCapacity = true;
+        } else if (healthPercent >= 1.0) {
+            healthBarContainer._hasArmorCapacity = false;
+        }
+        const hasArmorLayout = healthBarContainer._hasArmorCapacity || false;
         
         // Determine visibility
         const isDamaged = healthPercent < 1.0;
-        healthBarContainer.visible = entityData.active && (config.showWhenFull || isDamaged);
+        healthBarContainer.visible = entityData.active && (config.showWhenFull || isDamaged || armorPct > 0 || hasArmorLayout);
         
         if (!healthBarContainer.visible) {
             return;
@@ -2453,24 +2485,62 @@ class GameEngine {
             healthColor = 0xFFC300; // Amber-yellow (mid health)
         }
 
-        // Only rebuild the fill geometry when it actually changes. Rebuilding a
-        // Graphics every frame (clear + redraw) for every entity is the PixiJS
-        // anti-pattern that churns GPU geometry; health rarely changes, so this
-        // skips the vast majority of redraws.
-        const fill = healthBarContainer.healthFill;
-        if (fill._lastHealthPercent === healthPercent && fill._lastHealthColor === healthColor) {
-            return;
-        }
-        fill._lastHealthPercent = healthPercent;
-        fill._lastHealthColor = healthColor;
+        const gap = 2;
+        const segmentWidth = Math.floor((config.width - gap) / 2);
 
-        fill.clear();
-        fill.roundRect(
-            -config.width/2, 0, 
-            config.width * healthPercent, 
-            config.height, 
-            config.cornerRadius
-        ).fill(healthColor);
+        // Health background
+        const healthBg = healthBarContainer.healthBg;
+        if (healthBg && healthBg._lastHasArmorLayout !== hasArmorLayout) {
+            healthBg._lastHasArmorLayout = hasArmorLayout;
+            healthBg.clear();
+            const bgWidth = hasArmorLayout ? segmentWidth : config.width;
+            healthBg.roundRect(-config.width / 2, 0, bgWidth, config.height, config.cornerRadius).fill(config.bgColor);
+        }
+
+        // Health fill
+        const fill = healthBarContainer.healthFill;
+        if (fill._lastHealthPercent !== healthPercent || fill._lastHealthColor !== healthColor || fill._lastHasArmorLayout !== hasArmorLayout) {
+            fill._lastHealthPercent = healthPercent;
+            fill._lastHealthColor = healthColor;
+            fill._lastHasArmorLayout = hasArmorLayout;
+            fill.clear();
+            const fillWidth = hasArmorLayout ? segmentWidth : config.width;
+            fill.roundRect(
+                -config.width / 2, 0, 
+                fillWidth * healthPercent, 
+                config.height, 
+                config.cornerRadius
+            ).fill(healthColor);
+        }
+
+        // Armor background & fill (right half when player has armor capacity)
+        const armorBg = healthBarContainer.armorBg;
+        const armorFill = healthBarContainer.armorFill;
+
+        if (armorBg && armorFill) {
+            armorBg.visible = hasArmorLayout;
+            armorFill.visible = hasArmorLayout;
+
+            if (hasArmorLayout) {
+                if (armorBg._lastHasArmorLayout !== hasArmorLayout) {
+                    armorBg._lastHasArmorLayout = hasArmorLayout;
+                    armorBg.clear();
+                    armorBg.roundRect(1, 0, segmentWidth, config.height, config.cornerRadius).fill(config.bgColor);
+                }
+                if (armorFill._lastArmorPct !== armorPct || armorFill._lastHasArmorLayout !== hasArmorLayout) {
+                    armorFill._lastArmorPct = armorPct;
+                    armorFill._lastHasArmorLayout = hasArmorLayout;
+                    armorFill.clear();
+                    if (armorPct > 0) {
+                        armorFill.roundRect(1, 0, segmentWidth * armorPct, config.height, config.cornerRadius).fill(0x00E5FF);
+                    }
+                }
+            } else {
+                armorBg._lastHasArmorLayout = false;
+                armorFill._lastArmorPct = null;
+                armorFill._lastHasArmorLayout = false;
+            }
+        }
     }
     
     /**
@@ -2531,11 +2601,19 @@ class GameEngine {
         healthBarContainer.addChild(cooldownBg);
         healthBarContainer.addChild(cooldownFill);
 
+        // Armor bar graphics
+        const armorBg = new PIXI.Graphics();
+        const armorFill = new PIXI.Graphics();
+        healthBarContainer.addChild(armorBg);
+        healthBarContainer.addChild(armorFill);
+
         healthBarContainer.subBarGeom = { w, barHeight, r };
         healthBarContainer.reloadBg = reloadBg;
         healthBarContainer.reloadFill = reloadFill;
         healthBarContainer.cooldownBg = cooldownBg;
         healthBarContainer.cooldownFill = cooldownFill;
+        healthBarContainer.armorBg = armorBg;
+        healthBarContainer.armorFill = armorFill;
     }
 
     /**

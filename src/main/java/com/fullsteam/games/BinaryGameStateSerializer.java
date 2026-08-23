@@ -247,6 +247,9 @@ public class BinaryGameStateSerializer {
                 if (gameConfig.getRules().hasVip() && StatusEffectManager.isVip(p)) {
                     playerFlags |= 16;
                 }
+                if (p.isRiotShieldActive()) {
+                    playerFlags |= 32;
+                }
                 out.writeByte(playerFlags);
 
                 out.writeFloat((float) p.getPosition().x);
@@ -258,6 +261,7 @@ public class BinaryGameStateSerializer {
                 out.writeShort((short) Math.round((p.getRotation() % (2 * Math.PI)) * 1000.0));
 
                 out.writeByte((int) Math.round(p.healthPercent() * 100.0));
+                out.writeByte((int) Math.round(p.armorPercent() * 100.0));
                 out.writeByte(p.getCurrentWeapon().getCurrentAmmo());
                 out.writeByte(p.getCurrentWeapon().getMagazineSize());
                 out.writeByte((int) Math.round(p.getReloadPercent() * 100.0));
@@ -430,6 +434,9 @@ public class BinaryGameStateSerializer {
                 int hitFlags = 0;
                 if (hit.isKill()) {
                     hitFlags |= 1;
+                }
+                if (hit.isArmorMitigated()) {
+                    hitFlags |= 2;
                 }
                 out.writeByte(hitFlags);
             }

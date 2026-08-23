@@ -246,31 +246,39 @@ public class GameEntities {
      * Record a discrete damage hit for client UI display (e.g. floating damage numbers).
      * Damage is rounded to nearest integer (or 1 if < 1).
      */
-    public void recordDamageHit(double x, double y, double damage, int attackerId, int victimId, boolean isKill) {
+    public void recordDamageHit(double x, double y, double damage, int attackerId, int victimId, boolean isKill, boolean armorMitigated) {
         if (damage <= 0.0) {
             return;
         }
         long displayDamage = Math.max(1, Math.round(damage));
         double rX = Math.round(x * 10.0) / 10.0;
         double rY = Math.round(y * 10.0) / 10.0;
-        pendingDamageHits.add(new DamageHit(rX, rY, (double) displayDamage, attackerId, victimId, isKill));
+        pendingDamageHits.add(new DamageHit(rX, rY, (double) displayDamage, attackerId, victimId, isKill, armorMitigated));
+    }
+
+    public void recordDamageHit(double x, double y, double damage, int attackerId, int victimId, boolean isKill) {
+        recordDamageHit(x, y, damage, attackerId, victimId, isKill, false);
     }
 
     /**
      * Accumulate continuous DOT damage and record a hit once accumulated damage is significant.
      */
-    public void recordDotDamageHit(double x, double y, double frameDamage, int attackerId, int victimId, boolean isKill) {
+    public void recordDotDamageHit(double x, double y, double frameDamage, int attackerId, int victimId, boolean isKill, boolean armorMitigated) {
         if (frameDamage <= 0) {
             return;
         }
         long key = (((long) attackerId) << 32) | (victimId & 0xFFFFFFFFL);
         double total = dotHitAccumulator.getOrDefault(key, 0.0) + frameDamage;
         if (total >= 4.0 || isKill) {
-            recordDamageHit(x, y, total, attackerId, victimId, isKill);
+            recordDamageHit(x, y, total, attackerId, victimId, isKill, armorMitigated);
             dotHitAccumulator.put(key, 0.0);
         } else {
             dotHitAccumulator.put(key, total);
         }
+    }
+
+    public void recordDotDamageHit(double x, double y, double frameDamage, int attackerId, int victimId, boolean isKill) {
+        recordDotDamageHit(x, y, frameDamage, attackerId, victimId, isKill, false);
     }
 
     /**

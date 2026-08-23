@@ -37,6 +37,7 @@ public class Config {
     public static final int MAX_GLOBAL_GAMES = Integer.parseInt(System.getProperty("max.global.game", "10"));
     public static final double WORLD_BOUNDARY_THICKNESS = Double.parseDouble(System.getProperty("world.boundary.thickness", "50.0"));
     public static final double SPAWN_INVINCIBILITY_DURATION = Double.parseDouble(System.getProperty("spawn.invincibilityDuration", "3.0"));
+    public static final double RIOT_SHIELD_MAX_HEALTH = Double.parseDouble(System.getProperty("riot.shield.maxHealth", "150.0"));
     public static final double GRAVITY_WELL_CONSTANT = 1600000000.0;
 
     private static final AtomicInteger ENTITY_ID = new AtomicInteger(1);

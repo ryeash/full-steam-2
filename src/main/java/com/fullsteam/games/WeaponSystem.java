@@ -7,6 +7,8 @@ import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.Weapon;
+import com.fullsteam.physics.BulletEffectProcessor;
+import com.fullsteam.physics.CollisionProcessor;
 import com.fullsteam.physics.DefenseLaser;
 import com.fullsteam.physics.Flag;
 import com.fullsteam.physics.GameEntities;
@@ -47,10 +49,12 @@ public class WeaponSystem {
 
     private final GameEntities gameEntities;
     private final World<Body> world;
+    private final BulletEffectProcessor bulletEffectProcessor;
 
     public WeaponSystem(GameEntities gameEntities, World<Body> world) {
         this.gameEntities = gameEntities;
         this.world = world;
+        this.bulletEffectProcessor = new BulletEffectProcessor(gameEntities);
     }
 
     /**
@@ -159,6 +163,10 @@ public class WeaponSystem {
                     beam.getCaliber());
             gameEntities.add(beamSegment);
         }
+        if (!vector2s.isEmpty() && !beam.getBulletEffects().isEmpty()) {
+            Vector2 endPoint = vector2s.get(vector2s.size() - 1);
+            bulletEffectProcessor.processBeamEffectHit(beam, endPoint);
+        }
     }
 
     /**
@@ -224,8 +232,7 @@ public class WeaponSystem {
         Vector2 d = beam.getDirection().copy();
         d.normalize();
         double remaining = beam.getRange();
-        boolean bouncy = beam.getBulletEffects().contains(BulletEffect.BOUNCY)
-                && !beam.getBulletEffects().contains(BulletEffect.PIERCING); // piercing wins
+        boolean bouncy = beam.getBulletEffects().contains(BulletEffect.BOUNCY);
         int maxBounces = bouncy ? MAX_BEAM_BOUNCES : 0;
 
         path.add(p.copy());
@@ -265,7 +272,7 @@ public class WeaponSystem {
     private RaycastResult<Body, ?> closestBlockingObstacle(FieldEffectBeam beam, Vector2 p, Vector2 d, double maxDistance) {
         return world.raycast(new Ray(p, d), maxDistance, new DetectFilter<>(false, true, null))
                 .stream()
-                .filter(result -> shouldEntityBlockBeam(beam, result.getBody().getUserData()))
+                .filter(result -> shouldEntityBlockBeam(beam, result.getBody().getUserData(), d))
                 .min(Comparator.comparing(result -> result.getRaycast().getDistance()))
                 .orElse(null);
     }
@@ -273,15 +280,23 @@ public class WeaponSystem {
     /**
      * Check if an entity should block a beam based on the beam's piercing behavior.
      */
-    private boolean shouldEntityBlockBeam(FieldEffectBeam beam, Object entity) {
-        // nothing stops the piercing beams
-        if (beam.getBulletEffects().contains(BulletEffect.PIERCING)) {
-            return false;
-        }
+    private boolean shouldEntityBlockBeam(FieldEffectBeam beam, Object entity, Vector2 d) {
+        boolean isArmorPiercing = beam.getBulletEffects().contains(BulletEffect.PIERCING);
         return switch (entity) {
-            case FieldEffect fieldEffect -> fieldEffect.getType() == FieldEffectType.SHIELD_BARRIER;
+            case FieldEffect fieldEffect -> {
+                if (fieldEffect.getType() == FieldEffectType.SHIELD_BARRIER) {
+                    yield !isArmorPiercing;
+                }
+                yield false;
+            }
             case Obstacle _ -> true;
-            case Player _, Projectile _, NetProjectile _, Turret _, Oddball _,
+            case Player player -> {
+                if (!isArmorPiercing && beam.canAffect(player) && CollisionProcessor.isBlockedByRiotShield(player, d)) {
+                    yield true;
+                }
+                yield false;
+            }
+            case Projectile _, NetProjectile _, Turret _, Oddball _,
                  KothZone _, DefenseLaser _, Headquarters _, Flag _ -> false;
             case null -> false;
             default -> true; // the world boundaries

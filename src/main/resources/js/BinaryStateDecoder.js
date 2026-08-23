@@ -128,6 +128,7 @@ class BinaryStateDecoder {
             const eliminated = (pFlags & 4) !== 0;
             const respawnWaiting = (pFlags & 8) !== 0;
             const isVip = (pFlags & 16) !== 0;
+            const isRiotShieldActive = (pFlags & 32) !== 0;
 
             const x = view.getFloat32(ptr.offset); ptr.offset += 4;
             const y = view.getFloat32(ptr.offset); ptr.offset += 4;
@@ -138,6 +139,7 @@ class BinaryStateDecoder {
             const rotation = view.getInt16(ptr.offset) / 1000.0; ptr.offset += 2;
 
             const health = view.getUint8(ptr.offset++) / 100.0;
+            const armor = view.getUint8(ptr.offset++) / 100.0;
             const ammo = view.getUint8(ptr.offset++);
             const maxAmmo = view.getUint8(ptr.offset++);
             const reloadPercent = view.getUint8(ptr.offset++) / 100.0;
@@ -198,12 +200,14 @@ class BinaryStateDecoder {
                 eliminated: eliminated,
                 respawnWaiting: respawnWaiting,
                 isVip: isVip,
+                isRiotShieldActive: isRiotShieldActive,
                 x: x,
                 y: y,
                 vx: vx,
                 vy: vy,
                 rotation: rotation,
                 health: health,
+                armor: armor,
                 ammo: ammo,
                 maxAmmo: maxAmmo,
                 reloadPercent: reloadPercent,
@@ -444,6 +448,7 @@ class BinaryStateDecoder {
             const victimId = view.getInt16(ptr.offset); ptr.offset += 2;
             const hitFlags = view.getUint8(ptr.offset++);
             const kill = (hitFlags & 1) !== 0;
+            const armorMitigated = (hitFlags & 2) !== 0;
 
             state.hits.push({
                 x: x,
@@ -451,7 +456,8 @@ class BinaryStateDecoder {
                 damage: damage,
                 attackerId: attackerId,
                 victimId: victimId,
-                kill: kill
+                kill: kill,
+                armorMitigated: armorMitigated
             });
         }
 

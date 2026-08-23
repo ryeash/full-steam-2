@@ -6,6 +6,7 @@ import com.fullsteam.RandomNames;
 import com.fullsteam.ai.AIPersonality;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
+import com.fullsteam.model.ArmorType;
 import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.FieldEffectCircle;
 import com.fullsteam.model.FieldEffectType;
@@ -323,20 +324,22 @@ public class GameManager {
                         request.getUtilityWeapon(), playerId);
             }
         }
+        ArmorType armorType = parseArmorType(request);
 
         // Apply chosen name only when it comes from the curated list.
         applyPlayerNameFromRequest(playerSession, request);
 
         switch (playerSession.getState()) {
             case PLAYING -> log.debug("Ignoring readyToSpawn from already-playing session {}", playerId);
-            case LOBBY -> spawnPlayerFromSession(playerSession, weaponConfig, utilityWeapon);
-            case SPECTATOR -> spawnFromSpectator(playerSession, weaponConfig, utilityWeapon);
+            case LOBBY -> spawnPlayerFromSession(playerSession, weaponConfig, utilityWeapon, armorType);
+            case SPECTATOR -> spawnFromSpectator(playerSession, weaponConfig, utilityWeapon, armorType);
         }
     }
 
     private void spawnFromSpectator(PlayerSession playerSession,
                                     WeaponConfig weaponConfig,
-                                    UtilityWeapon utilityWeapon) {
+                                    UtilityWeapon utilityWeapon,
+                                    ArmorType armorType) {
         if (ruleSystem.isGameOver()) {
             sendJoinRejected(playerSession, "GAME_ENDED");
             return;
@@ -354,7 +357,7 @@ public class GameManager {
                 return;
             }
         }
-        spawnPlayerFromSession(playerSession, weaponConfig, utilityWeapon);
+        spawnPlayerFromSession(playerSession, weaponConfig, utilityWeapon, armorType);
     }
 
     private void sendJoinRejected(PlayerSession playerSession, String reason) {
@@ -939,7 +942,8 @@ public class GameManager {
      */
     protected void spawnPlayerFromSession(PlayerSession playerSession,
                                           WeaponConfig weaponConfig,
-                                          UtilityWeapon utilityWeapon) {
+                                          UtilityWeapon utilityWeapon,
+                                          ArmorType armorType) {
         int assignedTeam = assignPlayerToTeam();
         Vector2 spawnPoint = spawnPointManager.findVariedSpawnPointForTeam(assignedTeam);
         log.debug("Player {} spawning in game {} at spawn point ({}, {}) on team {}",
@@ -950,11 +954,10 @@ public class GameManager {
         player.setHealth(gameConfig.getPlayerMaxHealth());
 
         // Apply the loadout the client chose before we add the player to the world
-        if (weaponConfig != null || utilityWeapon != null) {
-            WeaponConfig primary = weaponConfig != null ? weaponConfig : WeaponConfig.ASSAULT_RIFLE_PRESET;
-            UtilityWeapon utility = utilityWeapon != null ? utilityWeapon : UtilityWeapon.HEAL_ZONE;
-            player.applyWeaponConfig(primary, utility);
-        }
+        WeaponConfig primary = weaponConfig != null ? weaponConfig : WeaponConfig.ASSAULT_RIFLE_PRESET;
+        UtilityWeapon utility = utilityWeapon != null ? utilityWeapon : UtilityWeapon.HEAL_ZONE;
+        ArmorType armor = armorType != null ? armorType : ArmorType.NONE;
+        player.applyWeaponConfig(primary, utility, armor);
 
         // Apply spawn invincibility to give player time to get their bearings
 
@@ -1045,6 +1048,7 @@ public class GameManager {
         if (player != null) {
             WeaponConfig primaryConfig = WeaponConfig.ASSAULT_RIFLE_PRESET;
             UtilityWeapon utilityConfig = UtilityWeapon.HEAL_ZONE;
+            ArmorType armorConfig = parseArmorType(request);
             if (request.getWeaponConfig() != null) {
                 primaryConfig = request.getWeaponConfig();
             }
@@ -1056,9 +1060,20 @@ public class GameManager {
                             request.getUtilityWeapon(), playerSession.getPlayerId());
                 }
             }
-            player.applyWeaponConfig(primaryConfig, utilityConfig);
+            player.applyWeaponConfig(primaryConfig, utilityConfig, armorConfig);
             player.setPlayerName(playerSession.getPlayerName());
         }
+    }
+
+    private ArmorType parseArmorType(PlayerConfigRequest request) {
+        if (request != null && request.getArmorType() != null) {
+            try {
+                return ArmorType.valueOf(request.getArmorType().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                log.warn("Unknown armor type '{}', defaulting to NONE", request.getArmorType());
+            }
+        }
+        return ArmorType.NONE;
     }
 
     /**
@@ -1246,6 +1261,7 @@ public class GameManager {
     public void respawnPlayer(Player player) {
         player.setActive(true);
         player.setHealth(gameConfig.getPlayerMaxHealth());
+        player.resetArmor();
         player.setRespawnTime(0);
         player.getWeapon().reload();
 

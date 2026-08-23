@@ -325,6 +325,7 @@ public class RuleSystem {
         if (collapsed) {
             gameEventManager.broadcastSystemMessage("⚔️ Last one standing — respawning!");
             waiting.forEach(p -> p.setRespawnTime(1L)); // release ASAP; GameManager respawns next tick
+            all.stream().filter(Player::isActive).forEach(StatusEffectManager::applySpawnInvincibility);
         }
     }
 

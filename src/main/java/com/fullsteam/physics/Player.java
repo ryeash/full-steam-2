@@ -1,6 +1,8 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.Config;
+import com.fullsteam.games.StatusEffectManager;
+import com.fullsteam.model.ArmorType;
 import com.fullsteam.model.AttributeModification;
 import com.fullsteam.model.HasWeapon;
 import com.fullsteam.model.PlayerInput;
@@ -34,6 +36,10 @@ public class Player extends OwnedGameEntity implements HasWeapon {
     private long respawnTime = 0;
     private Vector2 respawnPoint;
     private double maxSpeed = Config.PLAYER_SPEED;
+    private ArmorType armorType = ArmorType.NONE;
+    private double armor = 0.0;
+    private double maxArmor = 0.0;
+    private boolean lastDamageArmorMitigated = false;
     private final Set<AttributeModification> attributeModifications = new ConcurrentSkipListSet<>();
 
     private boolean visionObscured = false; // Set true each tick while inside SMOKE field, reset before collision processing
@@ -144,16 +150,73 @@ public class Player extends OwnedGameEntity implements HasWeapon {
     }
 
     public void applyWeaponConfig(WeaponConfig primary, UtilityWeapon utility) {
+        applyWeaponConfig(primary, utility, this.armorType);
+    }
+
+    public void applyWeaponConfig(WeaponConfig primary, UtilityWeapon utility, ArmorType armorType) {
+        if (armorType != null) {
+            this.armorType = armorType;
+            this.maxArmor = armorType.getMaxArmor();
+            this.armor = this.maxArmor;
+        }
         if (primary != null) {
             weapon = primary.buildWeapon();
             weapon.reload();
-            // Handling scales the wielder's move speed (1.0 = baseline). Heavy
-            // weapons (incl. the MIN_DAMAGE/MAX_DAMAGE→HANDLING coupling) move you slower.
-            this.maxSpeed = Config.PLAYER_SPEED * weapon.getHandling();
         }
         if (utility != null) {
             this.utilityWeapon = utility;
         }
+        double weaponHandling = weapon != null ? weapon.getHandling() : 1.0;
+        double armorHandling = this.armorType != null ? this.armorType.getHandlingModifier() : 1.0;
+        this.maxSpeed = Config.PLAYER_SPEED * weaponHandling * armorHandling;
+    }
+
+    public void resetArmor() {
+        this.armor = this.maxArmor;
+    }
+
+    public double armorPercent() {
+        return maxArmor > 0 ? Math.max(0.0, armor / maxArmor) : 0.0;
+    }
+
+    public StatusEffectManager.RiotShieldAttributeModification getRiotShieldModification() {
+        for (AttributeModification mod : attributeModifications) {
+            if (mod instanceof StatusEffectManager.RiotShieldAttributeModification rsm && !rsm.isExpired()) {
+                return rsm;
+            }
+        }
+        return null;
+    }
+
+    public boolean isRiotShieldActive() {
+        StatusEffectManager.RiotShieldAttributeModification rsm = getRiotShieldModification();
+        if (rsm != null) {
+            return !rsm.isExpired();
+        }
+        return attributeModifications.stream().anyMatch(am -> "riotShield".equals(am.uniqueKey()) && !am.isExpired());
+    }
+
+    public boolean damageRiotShield(double damage) {
+        StatusEffectManager.RiotShieldAttributeModification rsm = getRiotShieldModification();
+        if (rsm != null && !rsm.isExpired()) {
+            rsm.damageShield(damage);
+            if (rsm.isExpired()) {
+                attributeModifications.remove(rsm);
+            }
+            return true;
+        }
+        // Fallback for generic riotShield modifications
+        return attributeModifications.removeIf(am -> "riotShield".equals(am.uniqueKey()));
+    }
+
+    public double getRiotShieldHealth() {
+        StatusEffectManager.RiotShieldAttributeModification rsm = getRiotShieldModification();
+        return rsm != null ? rsm.getHealth() : 0.0;
+    }
+
+    public double getRiotShieldMaxHealth() {
+        StatusEffectManager.RiotShieldAttributeModification rsm = getRiotShieldModification();
+        return rsm != null ? rsm.getMaxHealth() : 0.0;
     }
 
     public boolean canShoot() {
@@ -348,11 +411,15 @@ public class Player extends OwnedGameEntity implements HasWeapon {
         return this.team == otherPlayer.team;
     }
 
+    public boolean isLastDamageArmorMitigated() {
+        return lastDamageArmorMitigated;
+    }
+
     /**
-     * Override damage handling to account for damage resistance.
+     * Override damage handling to account for damage resistance and armor.
      */
-    @Override
-    public boolean takeDamage(double damage) {
+    public boolean takeDamage(double damage, boolean bypassArmor) {
+        lastDamageArmorMitigated = false;
         if (!active) {
             return false;
         }
@@ -360,7 +427,21 @@ public class Player extends OwnedGameEntity implements HasWeapon {
         for (AttributeModification attributeModification : attributeModifications) {
             modifiedDamage = attributeModification.modifyDamageReceived(modifiedDamage);
         }
+        if (!bypassArmor && modifiedDamage > 0 && armor > 0) {
+            double absorbed = Math.min(armor, modifiedDamage);
+            armor -= absorbed;
+            modifiedDamage -= absorbed;
+            lastDamageArmorMitigated = true;
+        }
+        if (modifiedDamage <= 0) {
+            return false;
+        }
         return super.takeDamage(modifiedDamage);
+    }
+
+    @Override
+    public boolean takeDamage(double damage) {
+        return takeDamage(damage, false);
     }
 
 }

@@ -153,6 +153,9 @@ public class BinaryGameStateSerializerTest {
         int healthByte = in.readByte() & 0xFF;
         assertEquals(100, healthByte); // 100% health
 
+        int armorByte = in.readByte() & 0xFF;
+        assertEquals(0, armorByte); // 0% armor
+
         int ammo = in.readByte() & 0xFF;
         int maxAmmo = in.readByte() & 0xFF;
         int reloadPct = in.readByte() & 0xFF;

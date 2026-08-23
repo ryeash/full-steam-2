@@ -3,6 +3,7 @@ package com.fullsteam.ai;
 import com.fullsteam.Config;
 import com.fullsteam.RandomNames;
 import com.fullsteam.games.GameConfig;
+import com.fullsteam.model.ArmorType;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.WeaponConfig;
@@ -186,13 +187,14 @@ public class AIPlayerManager {
         // Vary decision cooldown between 0.05s (veteran) and 0.15s (rookie)
         aiPlayer.setDecisionCooldown(0.05 + (1.0 - skillLevel) * 0.10);
 
-        // Assign weapons based on personality
+        // Assign weapons and armor based on personality
         WeaponConfig weapon = AIWeaponSelector.selectWeaponForPersonality(personality);
         UtilityWeapon utilityWeapon = AIWeaponSelector.selectUtilityWeaponForPersonality(personality);
-        aiPlayer.applyWeaponConfig(weapon, utilityWeapon);
-        log.debug("Assigned weapons to AI player {} ({} - {}, Skill={}): Primary={}, Utility={}",
+        ArmorType armorType = AIWeaponSelector.selectArmorForPersonality(personality);
+        aiPlayer.applyWeaponConfig(weapon, utilityWeapon, armorType);
+        log.debug("Assigned loadout to AI player {} ({} - {}, Skill={}): Primary={}, Utility={}, Armor={}",
                 aiPlayer.getId(), name, personality.getPersonalityType(), String.format("%.2f", skillLevel),
-                weapon.getType(), utilityWeapon.getDisplayName());
+                weapon.getType(), utilityWeapon.getDisplayName(), armorType.getDisplayName());
         return aiPlayer;
     }
 

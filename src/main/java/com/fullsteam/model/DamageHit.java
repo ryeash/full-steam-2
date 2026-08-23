@@ -20,7 +20,8 @@ public class DamageHit implements Comparable<DamageHit> {
             .thenComparing(DamageHit::getDamage)
             .thenComparing(DamageHit::getAttackerId)
             .thenComparing(DamageHit::getVictimId)
-            .thenComparing(DamageHit::isKill);
+            .thenComparing(DamageHit::isKill)
+            .thenComparing(DamageHit::isArmorMitigated);
 
     private double x;
     private double y;
@@ -28,6 +29,11 @@ public class DamageHit implements Comparable<DamageHit> {
     private int attackerId;
     private int victimId;
     private boolean kill;
+    private boolean armorMitigated;
+
+    public DamageHit(double x, double y, double damage, int attackerId, int victimId, boolean kill) {
+        this(x, y, damage, attackerId, victimId, kill, false);
+    }
 
     @Override
     public int compareTo(DamageHit o) {

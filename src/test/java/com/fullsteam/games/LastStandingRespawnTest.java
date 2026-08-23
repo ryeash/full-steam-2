@@ -92,6 +92,7 @@ class LastStandingRespawnTest extends BaseTestClass {
         ruleSystem.update(0.016);
         assertTrue(ruleSystem.shouldPlayerRespawn(p1), "Waiting player should be released once one survivor remains");
         assertTrue(ruleSystem.shouldPlayerRespawn(p2), "Waiting player should be released once one survivor remains");
+        assertTrue(StatusEffectManager.isInvincible(p3), "Surviving player should receive spawn invincibility when respawn triggers");
     }
 
     @Test

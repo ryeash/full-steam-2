@@ -105,6 +105,9 @@ public class UtilitySystem {
             case STRIKE_BEACON:
                 createStrikeBeacon(activation);
                 break;
+            case RIOT_SHIELD:
+                createRiotShield(activation);
+                break;
             default:
                 log.warn("Unknown entity-based utility weapon: {}", utility.getDisplayName());
                 break;
@@ -257,5 +260,12 @@ public class UtilitySystem {
                 0.0
         );
         gameEntities.add(beacon);
+    }
+
+    private void createRiotShield(UtilityActivation activation) {
+        Player player = gameEntities.getPlayer(activation.playerId());
+        if (player != null) {
+            StatusEffectManager.applyRiotShield(player, 6.0);
+        }
     }
 }

@@ -12,7 +12,8 @@ class WeaponCustomizer {
             effects: [],
             ordinance: 'PROJECTILE',
             varianceFormula: 'UNIFORM',
-            utility: 'HEAL_ZONE'
+            utility: 'HEAL_ZONE',
+            armor: 'NONE'
         };
 
         this._lastValid = false;
@@ -72,7 +73,7 @@ class WeaponCustomizer {
             varianceFormula: this.state.varianceFormula,
             ...mappedAttributes
         };
-        return { weaponConfig, utilityWeapon: this.state.utility };
+        return { weaponConfig, utilityWeapon: this.state.utility, armorType: this.state.armor };
     }
 
     // ===================================================================
@@ -150,6 +151,11 @@ class WeaponCustomizer {
                                 <select id="utility-select" class="loadout-select" aria-label="Utility weapon"></select>
                                 <div id="utility-detail" class="munitions-detail"></div>
                             </div>
+                            <div class="munitions-field">
+                                <label class="munitions-label" for="armor-select">Armor Vest</label>
+                                <select id="armor-select" class="loadout-select" aria-label="Armor vest"></select>
+                                <div id="armor-detail" class="munitions-detail"></div>
+                            </div>
                         </div>
                         <div class="customization-section rs-rail">
                             <h3>Resulting Stats</h3>
@@ -174,6 +180,7 @@ class WeaponCustomizer {
         this._buildOrdinanceOptions();
         this._buildVarianceOptions();
         this._buildUtilityOptions();
+        this._buildArmorOptions();
         this._buildPresetButtons();
 
         // Seed from saved config if present (state only — no DOM poking).
@@ -292,6 +299,28 @@ class WeaponCustomizer {
         });
     }
 
+    _buildArmorOptions() {
+        const select = this._q('#armor-select');
+        if (!select) return;
+        select.innerHTML = '';
+        const armorOptions = [
+            { name: 'NONE', displayName: 'No Armor (+10% Speed)', detail: '0 Armor. Grants +10% movement handling speed.' },
+            { name: 'LIGHT', displayName: 'Light Armor (-10% Speed)', detail: '50 Armor. Reduces movement handling speed by 10%.' },
+            { name: 'HEAVY', displayName: 'Heavy Armor (-25% Speed)', detail: '100 Armor. Reduces movement handling speed by 25%.' }
+        ];
+        armorOptions.forEach(opt => {
+            const el = document.createElement('option');
+            el.value = opt.name;
+            el.textContent = opt.displayName;
+            select.appendChild(el);
+        });
+        select.value = this.state.armor;
+        select.addEventListener('change', () => {
+            this.state.armor = select.value;
+            this._commit();
+        });
+    }
+
     _buildPresetButtons() {
         const categories = {
             kinetic: ['ASSAULT_RIFLE', 'HAND_CANNON', 'SNIPER_RIFLE', 'MINIGUN', 'SHOTGUN', 'TWIN_SIXES', 'CONCUSSION_CANNON'],
@@ -390,6 +419,11 @@ class WeaponCustomizer {
         if (utilNames.length && !utilNames.includes(this.state.utility)) {
             this.state.utility = utilNames[0];
         }
+
+        const armorNames = ['NONE', 'LIGHT', 'HEAVY'];
+        if (!armorNames.includes(this.state.armor)) {
+            this.state.armor = 'NONE';
+        }
     }
 
     /** Pure DOM sync: DOM ← state. Idempotent; mutates no state. */
@@ -449,6 +483,16 @@ class WeaponCustomizer {
         const utilDetail = this._q('#utility-detail');
         const u = (d.utilityWeapons || []).find(x => x.name === this.state.utility);
         if (utilDetail) utilDetail.textContent = u ? `${u.category} · ${u.cooldown}s cooldown — ${u.description}` : '';
+
+        const armorSelect = this._q('#armor-select');
+        if (armorSelect) armorSelect.value = this.state.armor;
+        const armorDetail = this._q('#armor-detail');
+        const armorInfo = {
+            'NONE': '0 Armor. Grants +10% movement handling speed.',
+            'LIGHT': '50 Armor. Reduces movement handling speed by 10%.',
+            'HEAVY': '100 Armor. Reduces movement handling speed by 25%.'
+        };
+        if (armorDetail) armorDetail.textContent = armorInfo[this.state.armor] || '';
 
         // Point tracker + validity
         this._renderPoints();
@@ -558,11 +602,13 @@ class WeaponCustomizer {
         }).join('');
 
         const d = data.derived || {};
+        const armorMult = { 'NONE': 1.10, 'LIGHT': 0.90, 'HEAVY': 0.75 }[this.state.armor] || 1.0;
+        const totalMoveSpeed = (d.moveSpeedMultiplier || 1) * armorMult;
         const derivedRows = `
             <div class="rs-row"><span class="rs-label">DPS</span><span class="rs-val">${Math.round(d.dps || 0)}</span></div>
             <div class="rs-row"><span class="rs-label">Expected Damage</span><span class="rs-val">${Math.round(d.expectedDamage || 0)}</span></div>
             <div class="rs-row"><span class="rs-label">Damage / bullet</span><span class="rs-val">${(d.damagePerBullet || 0).toFixed(1)}</span></div>
-            <div class="rs-row"><span class="rs-label">Move speed</span><span class="rs-val">${Math.round((d.moveSpeedMultiplier || 1) * 100)}%</span></div>`;
+            <div class="rs-row"><span class="rs-label">Move speed</span><span class="rs-val">${Math.round(totalMoveSpeed * 100)}%</span></div>`;
 
         const couplings = (data.couplings || []).map(c =>
             `<div class="rs-coupling ${c.delta > 0 ? 'up' : 'down'}">${c.label}: ${c.display}</div>`
@@ -590,6 +636,7 @@ class WeaponCustomizer {
                     varianceFormula: this.state.varianceFormula
                 },
                 utilityWeapon: this.state.utility,
+                armorType: this.state.armor,
                 timestamp: Date.now()
             }));
         } catch (error) {
@@ -611,6 +658,7 @@ class WeaponCustomizer {
             this.state.ordinance = config.weapon.ordinance;       // normalize coerces if stale
             if (config.weapon.varianceFormula) this.state.varianceFormula = config.weapon.varianceFormula;
             if (config.utilityWeapon) this.state.utility = config.utilityWeapon;
+            if (config.armorType) this.state.armor = config.armorType;
             return true;
         } catch (error) {
             console.error('Failed to load saved configuration:', error);

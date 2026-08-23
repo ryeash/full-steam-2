@@ -133,10 +133,11 @@ public class BulletEffectProcessor {
     }
 
     /**
-     * Check if a projectile should pierce through the target
+     * Check if a projectile should pierce through the target or obstacle.
+     * ARMOR_PIERCING pierces armor, riot shields, and shield generators on hit, but deactivates on target/obstacle impact.
      */
     public boolean shouldPierceTarget(Projectile projectile, GameEntity target) {
-        return projectile.hasBulletEffect(BulletEffect.PIERCING);
+        return false;
     }
 
     /**

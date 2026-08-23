@@ -16,7 +16,7 @@ public enum BulletEffect {
 
     // special ordinance behaviors
     BOUNCY(15, "Projectiles bounce off obstacles; beams reflect off walls", 0, 1.0, 1.0, true, true, null),
-    PIERCING(20, "Projectiles pass through enemies, hitting multiple targets", 0, 1.0, 1.0, true, true, null),
+    PIERCING(20, "Projectiles and beams bypass armor, Riot Shields, and Shield Generators to deal direct health damage", 0, 1.0, 1.0, true, true, null),
     FRAGMENTING(22, "Projectiles split into multiple smaller projectiles on impact", 20, 0.0, 0.0, false, true, null),
     HOMING(30, "Projectiles track towards nearby enemies", 0, 1.0, 1.0, false, true, null),
 

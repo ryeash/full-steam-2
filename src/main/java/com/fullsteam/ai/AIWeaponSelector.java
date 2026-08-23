@@ -1,5 +1,6 @@
 package com.fullsteam.ai;
 
+import com.fullsteam.model.ArmorType;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.WeaponConfig;
 
@@ -294,6 +295,7 @@ public class AIWeaponSelector {
                 List<UtilityWeapon> guardianUtilities = List.of(
                         UtilityWeapon.HEAL_ZONE,
                         UtilityWeapon.SHIELD_GENERATOR,
+                        UtilityWeapon.RIOT_SHIELD,
                         UtilityWeapon.TURRET_CONSTRUCTOR,
                         UtilityWeapon.MINE_LAYER,
                         UtilityWeapon.SPEED_BOOST_PAD
@@ -301,6 +303,55 @@ public class AIWeaponSelector {
                 yield guardianUtilities.get(random.nextInt(guardianUtilities.size()));
             }
             default -> selectRandomUtilityWeapon();
+        };
+    }
+
+    /**
+     * Select an armor type based on AI personality archetype.
+     * Different personalities prefer different armor loadouts.
+     *
+     * @param personality The AI personality to select for
+     * @return ArmorType suitable for the personality
+     */
+    public static ArmorType selectArmorForPersonality(AIPersonality personality) {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        double roll = random.nextDouble();
+
+        return switch (personality.getPersonalityType()) {
+            case "Guardian" -> {
+                // Guardians prefer heavy damage absorption
+                if (roll < 0.70) yield ArmorType.HEAVY;
+                else if (roll < 0.90) yield ArmorType.LIGHT;
+                else yield ArmorType.NONE;
+            }
+            case "Strategist", "Support" -> {
+                // Support/Tactical AIs balance protection and movement
+                if (roll < 0.50) yield ArmorType.LIGHT;
+                else if (roll < 0.80) yield ArmorType.HEAVY;
+                else yield ArmorType.NONE;
+            }
+            case "Rusher" -> {
+                // Rushers prioritize max speed (+10%)
+                if (roll < 0.75) yield ArmorType.NONE;
+                else yield ArmorType.LIGHT;
+            }
+            case "Sniper" -> {
+                // Snipers favor speed to reposition or light armor
+                if (roll < 0.60) yield ArmorType.NONE;
+                else yield ArmorType.LIGHT;
+            }
+            case "Berserker" -> {
+                // Berserkers split between light armor and raw speed
+                if (roll < 0.50) yield ArmorType.LIGHT;
+                else if (roll < 0.85) yield ArmorType.NONE;
+                else yield ArmorType.HEAVY;
+            }
+            default -> {
+                // Soldiers and balanced AIs choose across all armor types
+                if (roll < 0.40) yield ArmorType.LIGHT;
+                else if (roll < 0.70) yield ArmorType.NONE;
+                else yield ArmorType.HEAVY;
+            }
         };
     }
 }

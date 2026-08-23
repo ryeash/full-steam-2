@@ -306,10 +306,11 @@ public final class StatusEffectManager {
             public void update(Player player, double delta) {
                 double damage = damagePerSecond * (delta / 1000);
                 boolean killed = player.takeDamage(damage);
+                boolean armorMitigated = player.isLastDamageArmorMitigated();
                 if (killed) {
                     gameManager.killPlayer(player, effectOwner);
                 }
-                gameManager.getGameEntities().recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, effectOwner, player.getId(), killed);
+                gameManager.getGameEntities().recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, effectOwner, player.getId(), killed, armorMitigated);
             }
         });
     }
@@ -372,6 +373,63 @@ public final class StatusEffectManager {
     public static boolean isVip(Player player) {
         return player.getAttributeModifications().stream()
                 .anyMatch(am -> "vipStatus".equals(am.uniqueKey()));
+    }
+
+    /**
+     * Riot Shield attribute modification with hitpoints.
+     */
+    public static class RiotShieldAttributeModification extends BaseAttributeModification {
+        private final double maxHealth;
+        private double health;
+
+        public RiotShieldAttributeModification(double durationSeconds, double maxHealth) {
+            super(System.currentTimeMillis() + (long) (durationSeconds * 1000));
+            this.maxHealth = maxHealth;
+            this.health = maxHealth;
+        }
+
+        public double getMaxHealth() {
+            return maxHealth;
+        }
+
+        public double getHealth() {
+            return health;
+        }
+
+        public void damageShield(double damage) {
+            if (damage > 0) {
+                this.health = Math.max(0.0, this.health - damage);
+            }
+        }
+
+        @Override
+        public boolean isExpired() {
+            return health <= 0 || super.isExpired();
+        }
+
+        @Override
+        public String uniqueKey() {
+            return "riotShield";
+        }
+
+        @Override
+        public String renderHint() {
+            return "riot_shield:#00E5FF:shield:true:Riot Shield";
+        }
+    }
+
+    /**
+     * Apply Riot Shield effect to a player.
+     */
+    public static void applyRiotShield(Player player, double durationSeconds) {
+        applyRiotShield(player, durationSeconds, Config.RIOT_SHIELD_MAX_HEALTH);
+    }
+
+    /**
+     * Apply Riot Shield effect with custom max health to a player.
+     */
+    public static void applyRiotShield(Player player, double durationSeconds, double maxHealth) {
+        applyEffect(player, new RiotShieldAttributeModification(durationSeconds, maxHealth));
     }
 }
 

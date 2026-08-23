@@ -165,6 +165,19 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             return; // Can't damage self or teammates
         }
 
+        boolean isArmorPiercing = projectile.getBulletEffects().contains(BulletEffect.PIERCING);
+
+        if (!isArmorPiercing && isBlockedByRiotShield(player, projectile.getBody().getLinearVelocity())) {
+            Vector2 hitPos = projectile.getPosition();
+            bulletEffectProcessor.processEffectHit(projectile, hitPos);
+            projectile.markAsExploded();
+            projectile.setActive(false);
+            double dmg = projectile.getDamage();
+            player.damageRiotShield(dmg);
+            gameEntities.recordDamageHit(hitPos.x, hitPos.y, dmg, projectile.getOwnerId(), player.getId(), false, true);
+            return;
+        }
+
         // Process bullet effects before handling the hit
         bulletEffectProcessor.processEffectHit(projectile, player.getPosition());
 
@@ -178,20 +191,17 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         }
 
         double damage = projectile.getDamage();
-        boolean killed = player.takeDamage(damage);
+        boolean killed = player.takeDamage(damage, isArmorPiercing);
+        boolean armorMitigated = player.isLastDamageArmorMitigated();
         if (killed) {
             gameManager.killPlayer(player, projectile.getOwnerId());
         }
 
         Vector2 hitPos = projectile.getPosition();
-        gameEntities.recordDamageHit(hitPos.x, hitPos.y, damage, projectile.getOwnerId(), player.getId(), killed);
+        gameEntities.recordDamageHit(hitPos.x, hitPos.y, damage, projectile.getOwnerId(), player.getId(), killed, armorMitigated);
 
-        // Check if projectile should pierce through the target
-        boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, player);
-        // Deactivate projectile unless it pierces
-        if (!shouldPierce) {
-            projectile.setActive(false);
-        }
+        // Deactivate projectile on player hit
+        projectile.setActive(false);
     }
 
     private boolean handleProjectileObstacleCollision(Projectile projectile, Obstacle obstacle) {
@@ -226,12 +236,57 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         }
     }
 
+    public static boolean isBlockedByRiotShield(Player victim, Vector2 attackDirection) {
+        if (victim == null || !victim.isRiotShieldActive() || attackDirection == null) {
+            return false;
+        }
+        Vector2 aimDir = victim.getAimDirection().getNormalized();
+        if (aimDir.getMagnitude() == 0) {
+            return false;
+        }
+        Vector2 attackDir = attackDirection.getNormalized();
+        if (attackDir.getMagnitude() == 0) {
+            return false;
+        }
+        double dot = aimDir.dot(attackDir.copy().negate());
+        return dot >= 0.5; // cos(60 deg) = 0.5 => 120 degree cone
+    }
+
     private void handlePlayerFieldEffectCollision(Player player, FieldEffect fieldEffect) {
         if (!fieldEffect.canAffect(player)) {
             return;
         }
 
+        Vector2 attackDir;
+        if (fieldEffect instanceof FieldEffectBeam beam) {
+            attackDir = beam.getDirection();
+        } else {
+            attackDir = player.getPosition().subtract(fieldEffect.getPosition());
+            if (attackDir.getMagnitude() < 1e-4) {
+                attackDir = player.getAimDirection().copy().negate();
+            }
+        }
+
+        boolean isPiercing = fieldEffect instanceof FieldEffectBeam beam && beam.getBulletEffects().contains(BulletEffect.PIERCING);
         double deltaTime = gameEntities.getWorld().getTimeStep().getDeltaTime();
+
+        if (!isPiercing && isBlockedByRiotShield(player, attackDir)) {
+            if (fieldEffect.getType() == FieldEffectType.EXPLOSION
+                    || fieldEffect.getType() == FieldEffectType.FRAGMENTATION
+                    || fieldEffect.getType() == FieldEffectType.LASER) {
+                if (!fieldEffect.getAffectedEntities().contains(player.getId())) {
+                    fieldEffect.markAsAffected(player);
+                    double dmg = fieldEffect.getDamage();
+                    player.damageRiotShield(dmg);
+                    gameEntities.recordDamageHit(player.getPosition().x, player.getPosition().y, dmg, fieldEffect.getOwnerId(), player.getId(), false, true);
+                }
+            } else {
+                double dmg = fieldEffect.getDamage() * deltaTime;
+                player.damageRiotShield(dmg);
+                gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, dmg, fieldEffect.getOwnerId(), player.getId(), false, true);
+            }
+            return;
+        }
 
         switch (fieldEffect.getType()) {
             // Instant damage - only apply once per effect
@@ -239,57 +294,63 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
                 if (!fieldEffect.getAffectedEntities().contains(player.getId())) {
                     fieldEffect.markAsAffected(player);
                     double damage = fieldEffect.getDamage();
-                    boolean killed = player.takeDamage(damage);
+                    boolean killed = player.takeDamage(damage, isPiercing);
+                    boolean armorMitigated = player.isLastDamageArmorMitigated();
                     if (killed) {
                         gameManager.killPlayer(player, fieldEffect.getOwnerId());
                     }
-                    gameEntities.recordDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
+                    gameEntities.recordDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed, armorMitigated);
                 }
             }
             case PLASMA, FIRE -> {
                 double damage = fieldEffect.getDamage() * deltaTime;
-                boolean killed = player.takeDamage(damage);
+                boolean killed = player.takeDamage(damage, isPiercing);
+                boolean armorMitigated = player.isLastDamageArmorMitigated();
                 if (killed) {
                     gameManager.killPlayer(player, fieldEffect.getOwnerId());
                 }
-                gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
+                gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed, armorMitigated);
             }
             case ELECTRIC -> {
                 double damage = fieldEffect.getDamage() * deltaTime;
-                boolean killed = player.takeDamage(damage);
+                boolean killed = player.takeDamage(damage, isPiercing);
+                boolean armorMitigated = player.isLastDamageArmorMitigated();
                 if (killed) {
                     gameManager.killPlayer(player, fieldEffect.getOwnerId());
                 }
-                gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
+                gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed, armorMitigated);
                 StatusEffectManager.applySlowEffect(player, Config.PLAYER_LINEAR_DAMPING * 2.0, 0.5,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Electric Field"));
             }
             case FREEZE -> {
                 double damage = fieldEffect.getDamage() * deltaTime;
-                boolean killed = player.takeDamage(damage);
+                boolean killed = player.takeDamage(damage, isPiercing);
+                boolean armorMitigated = player.isLastDamageArmorMitigated();
                 if (killed) {
                     gameManager.killPlayer(player, fieldEffect.getOwnerId());
                 }
-                gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
+                gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed, armorMitigated);
                 StatusEffectManager.applySlowEffect(player, Config.PLAYER_LINEAR_DAMPING * 3.0, 1.0,
                         Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Freeze Field"));
             }
             case POISON -> {
                 double damage = fieldEffect.getDamage() * deltaTime;
-                boolean killed = player.takeDamage(damage);
+                boolean killed = player.takeDamage(damage, isPiercing);
+                boolean armorMitigated = player.isLastDamageArmorMitigated();
                 if (killed) {
                     gameManager.killPlayer(player, fieldEffect.getOwnerId());
                 }
-                gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
+                gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed, armorMitigated);
                 StatusEffectManager.applyPoison(gameManager, player, fieldEffect.getDamage() * 0.2, 1.5, fieldEffect.getOwnerId());
             }
             case EARTHQUAKE -> {
                 double damage = fieldEffect.getDamage() * deltaTime;
-                boolean killed = player.takeDamage(damage);
+                boolean killed = player.takeDamage(damage, isPiercing);
+                boolean armorMitigated = player.isLastDamageArmorMitigated();
                 if (killed) {
                     gameManager.killPlayer(player, fieldEffect.getOwnerId());
                 }
-                gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed);
+                gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed, armorMitigated);
                 // Apply slowing effect (ground shaking makes movement difficult)
                 StatusEffectManager.applySlowEffect(player, Config.PLAYER_LINEAR_DAMPING * 1.5, 0.7, "Earthquake");
             }
@@ -337,6 +398,9 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     private boolean handleProjectileFieldEffectCollision(Projectile projectile, FieldEffect fieldEffect) {
         switch (fieldEffect.getType()) {
             case SHIELD_BARRIER -> {
+                if (projectile.getBulletEffects().contains(BulletEffect.PIERCING)) {
+                    return true;
+                }
                 Vector2 projectilePos = projectile.getInitialPosition();
                 Vector2 shieldCenter = fieldEffect.getPosition();
                 if (shieldCenter.distance(projectilePos) > fieldEffect.getRadius()) {
