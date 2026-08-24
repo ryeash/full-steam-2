@@ -5,6 +5,7 @@ import com.fullsteam.model.AttributeModification;
 import com.fullsteam.model.BaseAttributeModification;
 import com.fullsteam.model.Weapon;
 import com.fullsteam.physics.Player;
+import lombok.Getter;
 
 /**
  * Manages status effects that can be applied to players during gameplay.
@@ -384,32 +385,17 @@ public final class StatusEffectManager {
     /**
      * Riot Shield attribute modification with hitpoints and movement slowing effect.
      */
+    @Getter
     public static class RiotShieldAttributeModification extends BaseAttributeModification {
         private final double maxHealth;
         private double health;
         private final double linearDamping;
-
-        public RiotShieldAttributeModification(double durationSeconds, double maxHealth) {
-            this(durationSeconds, maxHealth, Config.PLAYER_LINEAR_DAMPING * 2.0);
-        }
 
         public RiotShieldAttributeModification(double durationSeconds, double maxHealth, double linearDamping) {
             super(System.currentTimeMillis() + (long) (durationSeconds * 1000));
             this.maxHealth = maxHealth;
             this.health = maxHealth;
             this.linearDamping = linearDamping;
-        }
-
-        public double getMaxHealth() {
-            return maxHealth;
-        }
-
-        public double getHealth() {
-            return health;
-        }
-
-        public double getLinearDamping() {
-            return linearDamping;
         }
 
         public void damageShield(double damage) {
@@ -448,21 +434,11 @@ public final class StatusEffectManager {
      * Apply Riot Shield effect to a player.
      */
     public static void applyRiotShield(Player player, double durationSeconds) {
-        applyRiotShield(player, durationSeconds, Config.RIOT_SHIELD_MAX_HEALTH);
-    }
-
-    /**
-     * Apply Riot Shield effect with custom max health to a player.
-     */
-    public static void applyRiotShield(Player player, double durationSeconds, double maxHealth) {
-        applyRiotShield(player, durationSeconds, maxHealth, Config.PLAYER_LINEAR_DAMPING * 2.0);
-    }
-
-    /**
-     * Apply Riot Shield effect with custom max health and linear damping slow to a player.
-     */
-    public static void applyRiotShield(Player player, double durationSeconds, double maxHealth, double linearDamping) {
-        applyEffect(player, new RiotShieldAttributeModification(durationSeconds, maxHealth, linearDamping));
+        RiotShieldAttributeModification rs = new RiotShieldAttributeModification(
+                durationSeconds,
+                Config.RIOT_SHIELD_MAX_HEALTH,
+                Config.PLAYER_LINEAR_DAMPING * 1.8);
+        applyEffect(player, rs);
     }
 }
 
