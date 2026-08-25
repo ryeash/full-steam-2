@@ -6,9 +6,8 @@ import com.fullsteam.physics.OwnedGameEntity;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Turret;
 import lombok.Getter;
+import lombok.Setter;
 import org.dyn4j.dynamics.Body;
-import org.dyn4j.dynamics.BodyFixture;
-import org.dyn4j.geometry.Vector2;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -16,9 +15,10 @@ import java.util.Map;
 import java.util.Set;
 
 @Getter
+@Setter
 public abstract class FieldEffect extends OwnedGameEntity {
     protected final FieldEffectType type;
-    protected final double damage;
+    protected double damage;
     protected final long armingTime;
     protected final Set<Integer> affectedEntities; // Track which entities have been affected
     protected final Map<Integer, Long> lastDamageTime; // Track last damage time for each player (in milliseconds)

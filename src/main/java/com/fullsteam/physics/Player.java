@@ -4,6 +4,7 @@ import com.fullsteam.Config;
 import com.fullsteam.games.StatusEffectManager;
 import com.fullsteam.model.ArmorType;
 import com.fullsteam.model.AttributeModification;
+import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.HasWeapon;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.Scoring;
@@ -17,6 +18,8 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListSet;
 
@@ -41,6 +44,9 @@ public class Player extends OwnedGameEntity implements HasWeapon {
     private double maxArmor = 0.0;
     private boolean lastDamageArmorMitigated = false;
     private final Set<AttributeModification> attributeModifications = new ConcurrentSkipListSet<>();
+    private final List<FieldEffectBeam> activePlasmaBeams = new ArrayList<>();
+    private int activePlasmaBeamShotCount = 1;
+    private double[] activePlasmaBeamDamageRates = new double[0];
 
     private boolean visionObscured = false; // Set true each tick while inside SMOKE field, reset before collision processing
 
@@ -77,6 +83,10 @@ public class Player extends OwnedGameEntity implements HasWeapon {
 
     @Override
     public void update(double deltaTime) {
+        if (!active || health <= 0) {
+            stopPlasmaBeam();
+        }
+
         attributeModifications.removeIf(am -> {
             if (am.isExpired()) {
                 am.revert(this);
@@ -88,6 +98,7 @@ public class Player extends OwnedGameEntity implements HasWeapon {
 
         // Handle reloading
         if (isReloading) {
+            stopPlasmaBeam();
             reloadTimeRemaining -= deltaTime;
             if (reloadTimeRemaining <= 0) {
                 getCurrentWeapon().reload();
@@ -154,6 +165,7 @@ public class Player extends OwnedGameEntity implements HasWeapon {
     }
 
     public void applyWeaponConfig(WeaponConfig primary, UtilityWeapon utility, ArmorType armorType) {
+        stopPlasmaBeam();
         if (armorType != null) {
             this.armorType = armorType;
             this.maxArmor = armorType.getMaxArmor();
@@ -296,6 +308,7 @@ public class Player extends OwnedGameEntity implements HasWeapon {
     }
 
     public void startReload() {
+        stopPlasmaBeam();
         Weapon weapon = this.getCurrentWeapon();
         if (weapon.needsReload()) {
             isReloading = true;
@@ -320,6 +333,7 @@ public class Player extends OwnedGameEntity implements HasWeapon {
     }
 
     public void die() {
+        stopPlasmaBeam();
         active = false;
         scoring.addDeath();
         health = 0;
@@ -327,6 +341,22 @@ public class Player extends OwnedGameEntity implements HasWeapon {
             am.revert(this);
             return true;
         });
+    }
+
+    public boolean hasActivePlasmaBeam() {
+        return !activePlasmaBeams.isEmpty();
+    }
+
+    public void stopPlasmaBeam() {
+        if (!activePlasmaBeams.isEmpty()) {
+            for (FieldEffectBeam beam : activePlasmaBeams) {
+                beam.setActive(false);
+            }
+            activePlasmaBeams.clear();
+        }
+        activePlasmaBeamShotCount = 0;
+        activePlasmaBeamDamageRates = new double[0];
+        setLastShotTime(0);
     }
 
     public void addKill() {

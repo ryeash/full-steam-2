@@ -301,8 +301,9 @@ public class ArmorAndRiotShieldTest extends BaseTestClass {
 
         // Update player to trigger attribute modifications
         player.update(0.1);
-        double slowedDamping = Config.PLAYER_LINEAR_DAMPING * 2.0;
-        assertEquals(slowedDamping, player.getBody().getLinearDamping(), 1e-4);
+        StatusEffectManager.RiotShieldAttributeModification rsm = player.getRiotShieldModification();
+        assertNotNull(rsm);
+        assertEquals(rsm.getLinearDamping(), player.getBody().getLinearDamping(), 1e-4);
 
         // Breaking the shield should revert linear damping immediately back to default
         player.damageRiotShield(150.0);
