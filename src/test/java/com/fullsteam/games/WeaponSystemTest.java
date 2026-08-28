@@ -133,27 +133,6 @@ class WeaponSystemTest extends BaseTestClass {
     }
 
     // ============================================================================
-    // Beam Weapon Tests
-    // ============================================================================
-
-    @Test
-    @DisplayName("Should calculate beam obstacle intersection")
-    void testBeamObstacleIntersection() {
-        // Arrange
-        Vector2 beamStart = new Vector2(0, 0);
-        Vector2 beamEnd = new Vector2(100, 0);
-
-        // Act
-        Vector2 intersection = weaponSystem.findBeamObstacleIntersection(beamStart, beamEnd);
-
-        // Assert
-        assertNotNull(intersection, "Intersection point should be calculated");
-        // Note: Without obstacles, intersection should be at beam end
-        assertEquals(beamEnd.x, intersection.x, 0.1, "Intersection X should match beam end");
-        assertEquals(beamEnd.y, intersection.y, 0.1, "Intersection Y should match beam end");
-    }
-
-    // ============================================================================
     // Weapon State Tests
     // ============================================================================
 

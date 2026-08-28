@@ -17,7 +17,6 @@ import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.Turret;
 import org.dyn4j.Epsilon;
 import org.dyn4j.dynamics.Body;
-import org.dyn4j.dynamics.BodyFixture;
 import org.dyn4j.geometry.Ray;
 import org.dyn4j.geometry.Vector2;
 import org.dyn4j.world.DetectFilter;
@@ -80,44 +79,6 @@ public class BeamPathCalculator {
             p = hitPoint.copy().add(d.copy().multiply(BEAM_BOUNCE_EPSILON));
         }
         return path;
-    }
-
-    /**
-     * Find where a beam intersects with obstacles.
-     */
-    public Vector2 findBeamObstacleIntersection(Vector2 startPoint, Vector2 endPoint) {
-        Vector2 direction = endPoint.copy().subtract(startPoint);
-        double maxDistance = direction.getMagnitude();
-        direction.normalize();
-
-        Ray ray = new Ray(startPoint, direction);
-
-        List<RaycastResult<Body, BodyFixture>> results = world.raycast(
-                ray,
-                maxDistance,
-                new DetectFilter<>(false, true, null)
-        );
-
-        if (results.isEmpty()) {
-            return endPoint;
-        }
-
-        double closestDistance = maxDistance;
-        for (RaycastResult<Body, ?> result : results) {
-            Body body = result.getBody();
-            Object userData = body.getUserData();
-
-            if (userData instanceof Obstacle) {
-                double distance = result.getRaycast().getDistance();
-                if (distance < closestDistance) {
-                    closestDistance = distance;
-                }
-            }
-        }
-
-        Vector2 effectiveEnd = startPoint.copy();
-        effectiveEnd.add(direction.copy().multiply(closestDistance));
-        return effectiveEnd;
     }
 
     private RaycastResult<Body, ?> closestBlockingObstacle(FieldEffectBeam beam, Vector2 p, Vector2 d, double maxDistance) {

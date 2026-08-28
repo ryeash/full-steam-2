@@ -137,10 +137,6 @@ public class WeaponSystem {
         return beamPathCalculator.computeBeamPath(beam);
     }
 
-    public Vector2 findBeamObstacleIntersection(Vector2 startPoint, Vector2 endPoint) {
-        return beamPathCalculator.findBeamObstacleIntersection(startPoint, endPoint);
-    }
-
     public static double calculateBeamSwayOffset(double accuracy, int entityId, double timeSeconds) {
         return PlasmaBeamFiringMechanism.calculateBeamSwayOffset(accuracy, entityId, timeSeconds);
     }
