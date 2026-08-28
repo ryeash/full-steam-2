@@ -252,6 +252,13 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         return dot >= 0.5; // cos(60 deg) = 0.5 => 120 degree cone
     }
 
+    private static boolean isDamagingEffect(FieldEffectType type) {
+        return switch (type) {
+            case EXPLOSION, FRAGMENTATION, LASER, PLASMA, FIRE, ELECTRIC, FREEZE, POISON, EARTHQUAKE -> true;
+            default -> false;
+        };
+    }
+
     private void handlePlayerFieldEffectCollision(Player player, FieldEffect fieldEffect) {
         if (!fieldEffect.canAffect(player)) {
             return;
@@ -270,7 +277,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         boolean isPiercing = fieldEffect instanceof FieldEffectBeam beam && beam.getBulletEffects().contains(BulletEffect.PIERCING);
         double deltaTime = gameEntities.getWorld().getTimeStep().getDeltaTime();
 
-        if (!isPiercing && isBlockedByRiotShield(player, attackDir)) {
+        if (isDamagingEffect(fieldEffect.getType()) && !isPiercing && isBlockedByRiotShield(player, attackDir)) {
             if (fieldEffect.getType() == FieldEffectType.EXPLOSION
                     || fieldEffect.getType() == FieldEffectType.FRAGMENTATION
                     || fieldEffect.getType() == FieldEffectType.LASER) {
@@ -356,7 +363,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
             }
             case HEAL_ZONE -> {
                 double healAmount = fieldEffect.getDamage() * deltaTime;
-                player.takeDamage(-healAmount);
+                player.heal(healAmount);
             }
             case SLOW_FIELD -> {
                 String source = Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Slow Field");

@@ -457,16 +457,20 @@ public class Player extends OwnedGameEntity implements HasWeapon {
             return false;
         }
         double modifiedDamage = damage;
-        for (AttributeModification attributeModification : attributeModifications) {
-            modifiedDamage = attributeModification.modifyDamageReceived(modifiedDamage);
-        }
-        if (!bypassArmor && modifiedDamage > 0 && armor > 0) {
-            double absorbed = Math.min(armor, modifiedDamage);
-            armor -= absorbed;
-            modifiedDamage -= absorbed;
-            lastDamageArmorMitigated = true;
-        }
-        if (modifiedDamage <= 0) {
+        if (damage > 0) {
+            for (AttributeModification attributeModification : attributeModifications) {
+                modifiedDamage = attributeModification.modifyDamageReceived(modifiedDamage);
+            }
+            if (!bypassArmor && modifiedDamage > 0 && armor > 0) {
+                double absorbed = Math.min(armor, modifiedDamage);
+                armor -= absorbed;
+                modifiedDamage -= absorbed;
+                lastDamageArmorMitigated = true;
+            }
+            if (modifiedDamage <= 0) {
+                return false;
+            }
+        } else if (damage == 0) {
             return false;
         }
         return super.takeDamage(modifiedDamage);
