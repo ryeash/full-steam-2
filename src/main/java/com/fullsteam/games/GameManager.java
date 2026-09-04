@@ -32,6 +32,7 @@ import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.Turret;
 import com.fullsteam.physics.UtilityActivation;
+import com.fullsteam.physics.Zombie;
 import io.micronaut.websocket.WebSocketSession;
 import io.micronaut.websocket.exceptions.WebSocketSessionException;
 import lombok.Getter;
@@ -80,6 +81,7 @@ public class GameManager {
     protected final RuleSystem ruleSystem;
     protected final WeaponSystem weaponSystem;
     protected final UtilitySystem utilitySystem;
+    protected final ZombieManager zombieManager;
     protected final EntitySpawner entitySpawner;
     protected final SpawnPointManager spawnPointManager;
     protected final GameStateSerializer gameStateSerializer;
@@ -149,6 +151,10 @@ public class GameManager {
                 teamSpawnManager,
                 terrainGenerator
         );
+
+        this.zombieManager = gameConfig.getRules().hasZombies()
+                ? new ZombieManager(gameId, gameConfig, gameEntities, gameEventManager, terrainGenerator)
+                : null;
 
         // Initialize spawn point manager
         this.spawnPointManager = new SpawnPointManager(
@@ -814,7 +820,7 @@ public class GameManager {
                 return false;
             });
 
-            updateUtilityEntities();
+            updateUtilityEntities(deltaTime);
             updateDefenseLaserBeamEndpoints();
 
             // Reset vision flags before physics collision pass re-evaluates them
@@ -876,10 +882,10 @@ public class GameManager {
     /**
      * Update utility entities and handle their special behaviors
      */
-    private void updateUtilityEntities() {
+    private void updateUtilityEntities(double deltaTime) {
         for (Turret turret : gameEntities.getAllTurrets()) {
             if (turret.isActive()) {
-                turret.acquireTarget(gameEntities.getAllPlayers().stream().toList());
+                turret.acquireTarget(gameEntities.getAllPlayers(), gameEntities.getAllZombies());
                 weaponSystem.handleTurretFire(turret);
             }
         }
@@ -890,6 +896,10 @@ public class GameManager {
                     oddball.tickAI(Collections.unmodifiableCollection(gameEntities.getAllPlayers()));
                     weaponSystem.handleOddballFire(oddball);
                 }
+            }
+
+            if (zombieManager != null) {
+                zombieManager.update(deltaTime);
             }
         }
     }
@@ -1292,6 +1302,13 @@ public class GameManager {
             killPlayer(victim, shooter, killerIdentityOf(shooter));
             return;
         }
+        if (ownerId < 0) {
+            Zombie zombie = gameEntities.getZombie(-ownerId);
+            if (zombie != null) {
+                killPlayer(victim, null, killerIdentityOf(zombie));
+                return;
+            }
+        }
         Oddball oddball = ownerId < 0 ? gameEntities.getOddballNpc(-ownerId) : null;
         killPlayer(victim, null, killerIdentityOf(oddball));
     }
@@ -1400,6 +1417,21 @@ public class GameManager {
                 null,
                 oddball.getWeapon().getDisplayName(),
                 oddball.getId());
+    }
+
+    private static KillerIdentity killerIdentityOf(Zombie zombie) {
+        if (zombie == null) {
+            return KillerIdentity.UNKNOWN;
+        }
+        return new KillerIdentity(
+                zombie.getDisplayName(),
+                null,
+                "Melee",
+                zombie.getId());
+    }
+
+    public ZombieManager getZombieManager() {
+        return zombieManager;
     }
 
     /**

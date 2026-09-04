@@ -11,6 +11,7 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -33,7 +34,7 @@ public class Turret extends OwnedGameEntity implements HasWeapon {
 
     private final Weapon weapon;
     private long lastShotTime = 0;
-    private Player currentTarget;
+    private OwnedGameEntity currentTarget;
     private Vector2 aimDirection = new Vector2(1, 0);
 
     public Turret(int ownerId, int ownerTeam, Vector2 position, double lifespan, Weapon weapon) {
@@ -64,24 +65,39 @@ public class Turret extends OwnedGameEntity implements HasWeapon {
     }
 
     /**
-     * Find and acquire the nearest valid target from the supplied player list.
+     * Find and acquire the nearest valid target from players and zombies.
      */
-    public void acquireTarget(List<Player> players) {
+    public void acquireTarget(Collection<Player> players, Collection<Zombie> zombies) {
         if (currentTarget != null && isValidTarget(currentTarget)) {
             return;
         }
 
-        Player closestTarget = null;
+        OwnedGameEntity closestTarget = null;
         double closestDistance = Double.MAX_VALUE;
 
-        for (Player player : players) {
-            if (!isValidTarget(player)) {
-                continue;
+        if (players != null) {
+            for (Player player : players) {
+                if (!isValidTarget(player)) {
+                    continue;
+                }
+                double distance = getPosition().distance(player.getPosition());
+                if (distance <= weapon.getRange() && distance < closestDistance) {
+                    closestTarget = player;
+                    closestDistance = distance;
+                }
             }
-            double distance = getPosition().distance(player.getPosition());
-            if (distance <= weapon.getRange() && distance < closestDistance) {
-                closestTarget = player;
-                closestDistance = distance;
+        }
+
+        if (zombies != null) {
+            for (Zombie zombie : zombies) {
+                if (!isValidTarget(zombie)) {
+                    continue;
+                }
+                double distance = getPosition().distance(zombie.getPosition());
+                if (distance <= weapon.getRange() && distance < closestDistance) {
+                    closestTarget = zombie;
+                    closestDistance = distance;
+                }
             }
         }
 
@@ -98,18 +114,33 @@ public class Turret extends OwnedGameEntity implements HasWeapon {
         }
     }
 
-    private boolean isValidTarget(Player player) {
-        double distance = getPosition().distance(player.getPosition());
-        if (!player.isActive() || player.getHealth() <= 0 || distance > weapon.getRange() || player.isVisionObscured()) {
+    /**
+     * Overload for backwards compatibility.
+     */
+    public void acquireTarget(List<Player> players) {
+        acquireTarget(players, List.of());
+    }
+
+    private boolean isValidTarget(OwnedGameEntity target) {
+        if (target == null || !target.isActive() || target.getHealth() <= 0) {
             return false;
         }
-        if (player.getId() == ownerId) {
+        double distance = getPosition().distance(target.getPosition());
+        if (distance > weapon.getRange()) {
             return false;
         }
-        if (ownerTeam == 0 || player.getTeam() == 0) {
-            return true;
+        if (target instanceof Player player) {
+            if (player.isVisionObscured() || player.getId() == ownerId) {
+                return false;
+            }
+            if (ownerTeam == 0 || player.getTeam() == 0) {
+                return true;
+            }
+            return ownerTeam != player.getTeam();
+        } else if (target instanceof Zombie) {
+            return true; // Hostile to all zombies
         }
-        return ownerTeam != player.getTeam();
+        return false;
     }
 
     public boolean canFire() {

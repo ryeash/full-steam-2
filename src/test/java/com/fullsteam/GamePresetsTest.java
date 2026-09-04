@@ -27,10 +27,10 @@ public class GamePresetsTest extends BaseTestClass {
     GameController gameController;
 
     @Test
-    @DisplayName("Should contain all 12 preset game configurations")
+    @DisplayName("Should contain all 13 preset game configurations")
     public void testPresetsListCount() {
         List<GamePresets.Preset> presets = GamePresets.ALL_PRESETS;
-        assertEquals(12, presets.size(), "Should have 12 game presets");
+        assertEquals(13, presets.size(), "Should have 13 game presets");
     }
 
     @Test
@@ -63,6 +63,7 @@ public class GamePresetsTest extends BaseTestClass {
         assertTrue(GamePresets.getPreset("vip-assassination").isPresent());
         assertTrue(GamePresets.getPreset("kingpin").isPresent());
         assertTrue(GamePresets.getPreset("last-stand").isPresent());
+        assertTrue(GamePresets.getPreset("zombie-outbreak").isPresent());
         assertTrue(GamePresets.getPreset("non-existent").isEmpty());
     }
 
@@ -70,7 +71,7 @@ public class GamePresetsTest extends BaseTestClass {
     @DisplayName("GameController should expose game presets endpoint")
     public void testGameControllerPresetEndpoints() {
         List<GamePresets.Preset> presets = gameController.getGamePresets();
-        assertEquals(12, presets.size());
-        assertEquals(12, gameController.getGameConfigPresets().size());
+        assertEquals(13, presets.size());
+        assertEquals(13, gameController.getGameConfigPresets().size());
     }
 }

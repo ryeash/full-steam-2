@@ -227,6 +227,36 @@ public class Rules {
     private EntityWorldDensity obstacleDensity = EntityWorldDensity.RANDOM;
 
     /**
+     * Whether to enable zombie NPCs.
+     */
+    @NotNull
+    @JsonProperty("enableZombies")
+    @Builder.Default
+    private boolean enableZombies = false;
+
+    /**
+     * Spawn style for zombies (WAVE, CONSTANT, EBB_AND_FLOW).
+     */
+    @NotNull
+    @Builder.Default
+    private ZombieSpawnStyle zombieSpawnStyle = ZombieSpawnStyle.WAVE;
+
+    /**
+     * Intensity level for zombie spawning.
+     */
+    @NotNull
+    @Builder.Default
+    private ZombieIntensity zombieIntensity = ZombieIntensity.MEDIUM;
+
+    /**
+     * Points awarded per zombie kill (0 to 5).
+     */
+    @Min(0)
+    @Max(5)
+    @Builder.Default
+    private int zombiePointsPerKill = 1;
+
+    /**
      * Whether to add headquarters to the game. When enabled, each team gets one headquarters in their spawn zone.
      * Headquarters are destructible structures that can be shot to score points.
      */
@@ -499,6 +529,13 @@ public class Rules {
     }
 
     /**
+     * Check if this game mode uses zombies.
+     */
+    public boolean hasZombies() {
+        return enableZombies;
+    }
+
+    /**
      * The per-player score components that actually contribute to the total under
      * the current rules, in scoreboard display order. This mirrors the gating in
      * {@link Scoring#total(Rules)} ({@code baseScore} + {@code bonusPoints}) so the
@@ -531,6 +568,10 @@ public class Rules {
         if (hasHeadquarters()) {
             components.add("hqDamage");
             components.add("hqDestroyed");
+        }
+        // bonusPoints: Zombie kills count when zombies are present and yield points.
+        if (hasZombies() && zombiePointsPerKill > 0) {
+            components.add("zombieKills");
         }
         return components;
     }

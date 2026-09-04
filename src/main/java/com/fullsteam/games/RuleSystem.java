@@ -620,6 +620,7 @@ public class RuleSystem {
         m.put("hqDamage", s.getHeadquarterDamage());
         m.put("hqDestroyed", s.getHeadquartersDestroyed());
         m.put("vipKills", s.getVipKills());
+        m.put("zombieKills", s.getZombieKills());
         m.put("bonus", s.bonusPoints(rules));
         m.put("total", s.total(rules));
         return m;

@@ -296,6 +296,33 @@ public class GamePresets {
                             .waveRespawnInterval(30.0)
                             .build())
                     .build());
+    public static final Preset ZOMBIE_OUTBREAK = new Preset("zombie-outbreak", "🧟 Zombie Siege",
+            "Headquarters assault under relentless zombie attack — defend your HQ from enemy teams and the horde.",
+            GameConfig.builder()
+                    .maxPlayers(16)
+                    .teamCount(2)
+                    .worldWidth(4000)
+                    .worldHeight(1000)
+                    .playerMaxHealth(100)
+                    .aiCheckIntervalMs(10000)
+                    .enableAIFilling(true)
+                    .rules(Rules.builder()
+                            .scoreStyle(ScoreStyle.TOTAL)
+                            .victoryCondition(VictoryCondition.SCORE_LIMIT)
+                            .scoreLimit(1000)
+                            .respawnMode(RespawnMode.WAVE)
+                            .waveRespawnInterval(20.0)
+                            .addHeadquarters(true)
+                            .headquartersMaxHealth(5000.0)
+                            .headquartersPointsPerDamage(0.01)
+                            .headquartersDestructionBonus(1000)
+                            .headquartersDestructionEndsGame(true)
+                            .enableZombies(true)
+                            .zombieSpawnStyle(ZombieSpawnStyle.EBB_AND_FLOW)
+                            .zombieIntensity(ZombieIntensity.HIGH)
+                            .zombiePointsPerKill(1)
+                            .build())
+                    .build());
 
     public static final List<Preset> ALL_PRESETS = List.of(
             TEAM_BATTLE,
@@ -309,7 +336,8 @@ public class GamePresets {
             ODDBALL,
             KINGPIN,
             VIP_ASSASSINATION,
-            LAST_STAND);
+            LAST_STAND,
+            ZOMBIE_OUTBREAK);
 
     public static Optional<Preset> getPreset(String id) {
         if (id == null) {

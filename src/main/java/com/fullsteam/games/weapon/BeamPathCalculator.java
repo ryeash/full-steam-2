@@ -15,6 +15,7 @@ import com.fullsteam.physics.Oddball;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.Turret;
+import com.fullsteam.physics.Zombie;
 import org.dyn4j.Epsilon;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Ray;
@@ -101,7 +102,7 @@ public class BeamPathCalculator {
             case Obstacle _ -> true;
             case Player player ->
                     !isArmorPiercing && beam.canAffect(player) && CollisionProcessor.isBlockedByRiotShield(player, d);
-            case Projectile _, NetProjectile _, Turret _, Oddball _,
+            case Projectile _, NetProjectile _, Turret _, Oddball _, Zombie _,
                  KothZone _, DefenseLaser _, Headquarters _, Flag _ -> false;
             case null -> false;
             default -> true;

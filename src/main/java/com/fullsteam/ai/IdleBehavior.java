@@ -182,40 +182,11 @@ public class IdleBehavior implements AIBehavior {
         AITargetWrapper nearest = null;
         double nearestDistance = 400; // Only consider enemies within 400 units
 
-        // Check all enemy players
-        for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() == aiPlayer.getId() || !player.isActive() || player.isVisionObscured()) {
-                continue;
-            }
-
-            // Skip teammates - only target enemies
-            if (aiPlayer.isTeammate(player)) {
-                continue;
-            }
-
-            double distance = playerPos.distance(player.getPosition());
+        for (AITargetWrapper target : collectEnemyTargets(aiPlayer, gameEntities)) {
+            double distance = playerPos.distance(target.getPosition());
             if (distance < nearestDistance) {
                 nearestDistance = distance;
-                nearest = AITargetWrapper.fromPlayer(player);
-            }
-        }
-
-        // Check all enemy turrets
-        for (Turret turret : gameEntities.getAllTurrets()) {
-            if (!turret.isActive()) {
-                continue;
-            }
-
-            // Skip friendly turrets - only target enemies
-            AITargetWrapper turretWrapper = AITargetWrapper.fromTurret(turret);
-            if (turretWrapper.isTeammateOf(aiPlayer)) {
-                continue;
-            }
-
-            double distance = playerPos.distance(turret.getPosition());
-            if (distance < nearestDistance) {
-                nearestDistance = distance;
-                nearest = turretWrapper;
+                nearest = target;
             }
         }
 

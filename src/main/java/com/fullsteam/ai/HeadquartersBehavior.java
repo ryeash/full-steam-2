@@ -4,7 +4,7 @@ import com.fullsteam.model.PlayerInput;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Headquarters;
 import com.fullsteam.physics.Player;
-import com.fullsteam.physics.Turret;
+import com.fullsteam.physics.Zombie;
 import org.dyn4j.geometry.Vector2;
 
 /**
@@ -366,9 +366,7 @@ public class HeadquartersBehavior implements AIBehavior {
             // Score based on threat level
             double score = 0;
 
-            double targetWeaponRange = target.getEntity() instanceof Player p
-                    ? p.getWeapon().getRange()
-                    : ((Turret) target.getEntity()).getWeapon().getRange();
+            double targetWeaponRange = target.getAttackRange();
 
             // Closer to HQ = higher threat
             if (distanceToHQ < targetWeaponRange) {
@@ -498,6 +496,17 @@ public class HeadquartersBehavior implements AIBehavior {
 
             double distance = hqPos.distance(player.getPosition());
             if (distance < player.getWeapon().getRange()) {
+                return true;
+            }
+        }
+
+        for (Zombie zombie : gameEntities.getAllZombies()) {
+            if (!zombie.isActive()) {
+                continue;
+            }
+
+            double distance = hqPos.distance(zombie.getPosition());
+            if (distance < zombie.getLungeDistance() + 100.0) {
                 return true;
             }
         }

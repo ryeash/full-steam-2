@@ -20,7 +20,11 @@ class BinaryStateDecoder {
 
     static KOTH_ZONE_STATES = ['NEUTRAL', 'CONTROLLED', 'CONTESTED'];
 
+    static NPC_CATEGORIES = ['ODDBALL', 'ZOMBIE'];
+
     static ODDBALL_PERSONALITIES = ['RAMPAGE', 'SEEKER'];
+
+    static ZOMBIE_TYPES = ['WALKER', 'RUNNER', 'TANK', 'LUNGER', 'STALKER'];
 
     static textDecoder = new TextDecoder('utf-8');
 
@@ -112,7 +116,9 @@ class BinaryStateDecoder {
             kothZones: [],
             headquarters: [],
             flags: [],
+            npcs: [],
             oddballNpcs: [],
+            zombies: [],
             hits: []
         };
 
@@ -412,30 +418,54 @@ class BinaryStateDecoder {
             });
         }
 
-        // 12. Section 10: Oddball NPCs
-        const oddballCount = view.getUint16(ptr.offset); ptr.offset += 2;
-        for (let i = 0; i < oddballCount; i++) {
+        // 12. Section 10: NPCs (Unified: Oddballs + Zombies)
+        const npcCount = view.getUint16(ptr.offset); ptr.offset += 2;
+        for (let i = 0; i < npcCount; i++) {
             const id = view.getInt16(ptr.offset); ptr.offset += 2;
-            const personalityOrdinal = view.getUint8(ptr.offset++);
-            const personalityStr = BinaryStateDecoder.ODDBALL_PERSONALITIES[personalityOrdinal] || 'RAMPAGE';
+            const categoryOrdinal = view.getUint8(ptr.offset++);
+            const categoryStr = BinaryStateDecoder.NPC_CATEGORIES[categoryOrdinal] || 'ODDBALL';
+            const subTypeOrdinal = view.getUint8(ptr.offset++);
             const x = view.getFloat32(ptr.offset); ptr.offset += 4;
             const y = view.getFloat32(ptr.offset); ptr.offset += 4;
             const vx = view.getFloat32(ptr.offset); ptr.offset += 4;
             const vy = view.getFloat32(ptr.offset); ptr.offset += 4;
             const radius = view.getFloat32(ptr.offset); ptr.offset += 4;
+            const rotation = view.getFloat32(ptr.offset); ptr.offset += 4;
             const health = view.getUint8(ptr.offset++) / 100.0;
+            const flags = view.getUint8(ptr.offset++);
+            const isLunging = (flags & 1) !== 0;
 
-            state.oddballNpcs.push({
+            let subTypeStr;
+            if (categoryStr === 'ZOMBIE') {
+                subTypeStr = BinaryStateDecoder.ZOMBIE_TYPES[subTypeOrdinal] || 'WALKER';
+            } else {
+                subTypeStr = BinaryStateDecoder.ODDBALL_PERSONALITIES[subTypeOrdinal] || 'RAMPAGE';
+            }
+
+            const npcData = {
                 id: id,
-                type: 'ODDBALL',
-                personality: personalityStr,
+                category: categoryStr,
+                type: subTypeStr,
+                subType: subTypeStr,
+                personality: subTypeStr,
                 x: x,
                 y: y,
                 vx: vx,
                 vy: vy,
                 radius: radius,
-                health: health
-            });
+                rotation: rotation,
+                health: health,
+                flags: flags,
+                isLunging: isLunging
+            };
+
+            state.npcs.push(npcData);
+
+            if (categoryStr === 'ODDBALL') {
+                state.oddballNpcs.push(npcData);
+            } else if (categoryStr === 'ZOMBIE') {
+                state.zombies.push(npcData);
+            }
         }
 
         // 13. Section 11: Hits

@@ -580,6 +580,37 @@
                 </div>
 
                 <div class="config-section">
+                    <h3>🧟 Zombie Horde</h3>
+                    <div class="config-item">
+                        <label for="enableZombies">Enable Zombies:</label>
+                        <input type="checkbox" id="enableZombies">
+                        <small style="color: #888; font-size: 0.8em;">Spawn hostile NPC zombies that chase and melee entities!</small>
+                    </div>
+                    <div class="config-item">
+                        <label for="zombieSpawnStyle">Spawn Style:</label>
+                        <select id="zombieSpawnStyle">
+                            <option value="WAVE">Wave (Periodic Horde Waves)</option>
+                            <option value="CONSTANT">Constant (Steady Pressure)</option>
+                            <option value="EBB_AND_FLOW">Ebb &amp; Flow (Paced Calms &amp; Surges)</option>
+                        </select>
+                    </div>
+                    <div class="config-item">
+                        <label for="zombieIntensity">Intensity:</label>
+                        <select id="zombieIntensity">
+                            <option value="LOW">Low (Few zombies)</option>
+                            <option value="MEDIUM" selected>Medium (Standard)</option>
+                            <option value="HIGH">High (Large hordes)</option>
+                            <option value="NIGHTMARE">Nightmare (Overwhelming Swarm)</option>
+                        </select>
+                    </div>
+                    <div class="config-item">
+                        <label for="zombiePointsPerKill">Points Per Kill (0-5):</label>
+                        <input type="number" id="zombiePointsPerKill" min="0" max="5" value="1">
+                        <small style="color: #888; font-size: 0.8em;">Bonus points awarded to the killer for each zombie destroyed</small>
+                    </div>
+                </div>
+
+                <div class="config-section">
                     <h3>👑 VIP Mode</h3>
                     <div class="config-item">
                         <label for="enableVip">Enable VIP:</label>
@@ -1109,6 +1140,9 @@
         if (rules.addHeadquarters) {
             tags.push({ text: `🏛️ HQ Assault`, highlight: true });
         }
+        if (rules.enableZombies) {
+            tags.push({ text: `🧟 Zombies (${rules.zombieSpawnStyle || 'WAVE'})`, highlight: true });
+        }
         
         // Special features
         if (rules.enableRandomWeapons) {
@@ -1284,6 +1318,10 @@
                 document.getElementById('rampageBallCount').value = r.rampageBallCount ?? 1;
                 document.getElementById('seekerBallCount').value = r.seekerBallCount ?? 2;
                 document.getElementById('oddballNpcPointsPerDamage').value = r.oddballNpcPointsPerDamage ?? 0.1;
+                document.getElementById('enableZombies').checked = r.enableZombies ?? false;
+                document.getElementById('zombieSpawnStyle').value = r.zombieSpawnStyle || 'WAVE';
+                document.getElementById('zombieIntensity').value = r.zombieIntensity || 'MEDIUM';
+                document.getElementById('zombiePointsPerKill').value = r.zombiePointsPerKill ?? 1;
                 document.getElementById('enableVip').checked = r.enableVip ?? false;
                 document.getElementById('enableRandomWeapons').checked = r.enableRandomWeapons ?? false;
                 document.getElementById('randomWeaponInterval').value = r.randomWeaponInterval ?? 30;
@@ -1414,6 +1452,10 @@
                 rampageBallCount: parseInt(document.getElementById('rampageBallCount').value),
                 seekerBallCount: parseInt(document.getElementById('seekerBallCount').value),
                 oddballNpcPointsPerDamage: parseFloat(document.getElementById('oddballNpcPointsPerDamage').value),
+                enableZombies: document.getElementById('enableZombies').checked,
+                zombieSpawnStyle: document.getElementById('zombieSpawnStyle').value,
+                zombieIntensity: document.getElementById('zombieIntensity').value,
+                zombiePointsPerKill: parseInt(document.getElementById('zombiePointsPerKill').value),
                 enableVip: document.getElementById('enableVip').checked,
                 enableRandomWeapons: document.getElementById('enableRandomWeapons').checked,
                 randomWeaponInterval: parseFloat(document.getElementById('randomWeaponInterval').value),

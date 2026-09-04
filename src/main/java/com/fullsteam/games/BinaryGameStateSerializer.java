@@ -15,6 +15,7 @@ import com.fullsteam.physics.Oddball;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.Turret;
+import com.fullsteam.physics.Zombie;
 import lombok.Setter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Circle;
@@ -86,6 +87,7 @@ public class BinaryGameStateSerializer {
                 gameConfig.getRules().hasHeadquarters() ? gameEntities.getAllHeadquarters() : List.of(),
                 gameConfig.getRules().hasFlags() ? gameEntities.getAllFlags() : List.of(),
                 gameConfig.getRules().hasOddballNpcs() ? gameEntities.getAllOddballNpcs().stream().filter(Oddball::isActive).toList() : List.of(),
+                gameConfig.getRules().hasZombies() ? gameEntities.getAllZombies().stream().filter(Zombie::isActive).toList() : List.of(),
                 hits,
                 false, // visionObscured
                 false, // awaitingSpawn
@@ -114,6 +116,7 @@ public class BinaryGameStateSerializer {
                 List.of(), // hq stripped
                 List.of(), // flags stripped
                 List.of(), // oddballs stripped
+                List.of(), // zombies stripped
                 playerHits,
                 true,  // visionObscured
                 false, // awaitingSpawn
@@ -133,6 +136,7 @@ public class BinaryGameStateSerializer {
                 gameConfig.getRules().hasHeadquarters() ? gameEntities.getAllHeadquarters() : List.of(),
                 gameConfig.getRules().hasFlags() ? gameEntities.getAllFlags() : List.of(),
                 List.of(), // oddballs stripped
+                List.of(), // zombies stripped
                 List.of(), // hits stripped
                 false, // visionObscured
                 true,  // awaitingSpawn
@@ -151,6 +155,7 @@ public class BinaryGameStateSerializer {
             Collection<Headquarters> hqs,
             Collection<Flag> flags,
             Collection<Oddball> oddballs,
+            Collection<Zombie> zombies,
             List<DamageHit> hits,
             boolean visionObscured,
             boolean awaitingSpawn,
@@ -410,17 +415,38 @@ public class BinaryGameStateSerializer {
                 out.writeBoolean(f.isAtHome());
             }
 
-            // 10. Oddball NPCs
-            out.writeShort(oddballs.size());
+            // 10. NPCs (Unified: Oddballs + Zombies)
+            int totalNpcCount = oddballs.size() + zombies.size();
+            out.writeShort(totalNpcCount);
+
+            // 10a. Oddball NPCs (category = 0)
             for (Oddball ob : oddballs) {
                 out.writeShort(ob.getId());
+                out.writeByte(0); // category: 0 = ODDBALL
                 out.writeByte(ob.getPersonality().ordinal());
                 out.writeFloat((float) ob.getPosition().x);
                 out.writeFloat((float) ob.getPosition().y);
                 out.writeFloat((float) ob.getVelocity().x);
                 out.writeFloat((float) ob.getVelocity().y);
                 out.writeFloat((float) ob.getRadius());
+                out.writeFloat((float) ob.getRotation());
                 out.writeByte((int) Math.round(ob.healthPercent() * 100.0));
+                out.writeByte(0); // flags
+            }
+
+            // 10b. Zombies (category = 1)
+            for (Zombie z : zombies) {
+                out.writeShort(z.getId());
+                out.writeByte(1); // category: 1 = ZOMBIE
+                out.writeByte(z.getType().ordinal());
+                out.writeFloat((float) z.getPosition().x);
+                out.writeFloat((float) z.getPosition().y);
+                out.writeFloat((float) z.getVelocity().x);
+                out.writeFloat((float) z.getVelocity().y);
+                out.writeFloat((float) z.getRadius());
+                out.writeFloat((float) z.getRotation());
+                out.writeByte((int) Math.round(z.healthPercent() * 100.0));
+                out.writeByte(z.isLunging() ? 1 : 0); // bit 0 = isLunging
             }
 
             // 11. Hits

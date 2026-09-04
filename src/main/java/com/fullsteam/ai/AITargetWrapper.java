@@ -3,6 +3,7 @@ package com.fullsteam.ai;
 import com.fullsteam.physics.OwnedGameEntity;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Turret;
+import com.fullsteam.physics.Zombie;
 import lombok.Getter;
 import org.dyn4j.geometry.Vector2;
 
@@ -16,7 +17,7 @@ public class AITargetWrapper {
     private final TargetType type;
 
     public enum TargetType {
-        PLAYER, TURRET
+        PLAYER, TURRET, ZOMBIE
     }
 
     private AITargetWrapper(OwnedGameEntity entity, TargetType type) {
@@ -36,6 +37,13 @@ public class AITargetWrapper {
      */
     public static AITargetWrapper fromTurret(Turret turret) {
         return new AITargetWrapper(turret, TargetType.TURRET);
+    }
+
+    /**
+     * Create a wrapper for a zombie
+     */
+    public static AITargetWrapper fromZombie(Zombie zombie) {
+        return new AITargetWrapper(zombie, TargetType.ZOMBIE);
     }
 
     // Delegate methods to the wrapped entity
@@ -73,6 +81,8 @@ public class AITargetWrapper {
             return player.getTeam();
         } else if (entity instanceof Turret turret) {
             return turret.getOwnerTeam();
+        } else if (entity instanceof Zombie zombie) {
+            return zombie.getOwnerTeam();
         }
         return 0; // Default to FFA
     }
@@ -97,6 +107,8 @@ public class AITargetWrapper {
     public Vector2 getVelocity() {
         if (entity instanceof Player player) {
             return player.getVelocity();
+        } else if (entity instanceof Zombie zombie) {
+            return zombie.getVelocity();
         }
         return new Vector2(0, 0); // Turrets and others don't move
     }
@@ -105,7 +117,23 @@ public class AITargetWrapper {
         return switch (type) {
             case PLAYER -> 1.0; // Players are highest priority
             case TURRET -> 0.8; // Turrets are important but lower priority
+            case ZOMBIE -> 0.9; // Zombies are immediate threats
         };
+    }
+
+    /**
+     * Estimated weapon or attack threat range for this target.
+     * Players and turrets return their weapon range; zombies return their lunger distance.
+     */
+    public double getAttackRange() {
+        if (entity instanceof Player player) {
+            return player.getWeapon() != null ? player.getWeapon().getRange() : 200.0;
+        } else if (entity instanceof Turret turret) {
+            return turret.getWeapon() != null ? turret.getWeapon().getRange() : 200.0;
+        } else if (entity instanceof Zombie zombie) {
+            return zombie.getLungeDistance();
+        }
+        return 100.0;
     }
 
     /**
@@ -114,6 +142,9 @@ public class AITargetWrapper {
      * In team mode, targets on the same team are teammates.
      */
     public boolean isTeammateOf(AIPlayer aiPlayer) {
+        if (type == TargetType.ZOMBIE) {
+            return false; // Zombies are enemies to everyone
+        }
         return this.entity.isFriendy(aiPlayer);
     }
 
@@ -129,5 +160,12 @@ public class AITargetWrapper {
      */
     public boolean isTurret() {
         return type == TargetType.TURRET;
+    }
+
+    /**
+     * Check if this wrapper represents a zombie
+     */
+    public boolean isZombie() {
+        return type == TargetType.ZOMBIE;
     }
 }

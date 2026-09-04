@@ -5,6 +5,7 @@ import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffectCircle;
 import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.Ordinance;
+import com.fullsteam.model.Rules;
 import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
@@ -251,6 +252,104 @@ public class BinaryGameStateSerializerTest {
         in.readNBytes(4); // magic
         int headerFlags = in.readByte() & 0xFF;
         assertTrue((headerFlags & 1) != 0); // visionObscured = true
+    }
+
+    @Test
+    @DisplayName("Unified NPCs section should serialize both Oddballs and Zombies with category tags")
+    public void testUnifiedNpcSerialization() throws Exception {
+        Rules rules = Rules.builder()
+                .enableOddballNpcs(true)
+                .enableZombies(true)
+                .build();
+        GameConfig config = GameConfig.builder()
+                .rules(rules)
+                .maxPlayers(10)
+                .teamCount(2)
+                .worldWidth(2000)
+                .worldHeight(2000)
+                .build();
+
+        World<Body> world = new World<>();
+        GameEntities entities = new GameEntities(config, world);
+        RuleSystem rulesSys = new RuleSystem("test-unified-npcs", rules, entities, null, msg -> {}, 2);
+        BinaryGameStateSerializer serializer = new BinaryGameStateSerializer(config, entities, rulesSys);
+
+        com.fullsteam.physics.Oddball oddball = new com.fullsteam.physics.Oddball(com.fullsteam.physics.Oddball.Personality.RAMPAGE, 10.0, 20.0);
+        oddball.setActive(true);
+        entities.add(oddball);
+
+        com.fullsteam.physics.Zombie zombie = new com.fullsteam.physics.Zombie(50, com.fullsteam.model.ZombieType.TANK, com.fullsteam.model.ZombieAttackPattern.NEAREST_PLAYER, 30.0, 40.0);
+        zombie.setActive(true);
+        zombie.setLunging(true);
+        entities.add(zombie);
+
+        byte[] data = serializer.serializeGameState(true);
+        assertNotNull(data);
+        DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
+
+        // Skip header
+        in.readNBytes(4); // FSB1
+        in.readByte(); // flags
+        in.readByte(); // gameStateCode
+        in.readLong(); // timestamp
+        in.readByte(); // winningTeam
+        in.readShort(); // winningPlayerId
+        in.readFloat(); // timeRemaining
+        int teamScoreCount = in.readByte() & 0xFF;
+        for (int t = 0; t < teamScoreCount; t++) {
+            in.readByte();
+            in.readInt();
+        }
+
+        // Section 1: Players (0)
+        assertEquals(0, in.readShort());
+        // Section 2: Projectiles (0)
+        assertEquals(0, in.readShort());
+        // Section 3: Field Effects (0)
+        assertEquals(0, in.readShort());
+        // Section 4: Turrets (0)
+        assertEquals(0, in.readShort());
+        // Section 5: Nets (0)
+        assertEquals(0, in.readShort());
+        // Section 6: Defense Lasers (0)
+        assertEquals(0, in.readShort());
+        // Section 7: KOTH (0)
+        assertEquals(0, in.readShort());
+        // Section 8: Headquarters (0)
+        assertEquals(0, in.readShort());
+        // Section 9: Flags (0)
+        assertEquals(0, in.readShort());
+
+        // Section 10: Unified NPCs (2 NPCs: 1 Oddball + 1 Zombie)
+        int npcCount = in.readShort();
+        assertEquals(2, npcCount);
+
+        // NPC 1: Oddball
+        short obId = in.readShort();
+        assertEquals(oddball.getId(), obId);
+        int obCategory = in.readByte() & 0xFF;
+        assertEquals(0, obCategory); // 0 = ODDBALL
+        int obPersonality = in.readByte() & 0xFF;
+        assertEquals(com.fullsteam.physics.Oddball.Personality.RAMPAGE.ordinal(), obPersonality);
+        in.readFloat(); in.readFloat(); in.readFloat(); in.readFloat(); in.readFloat(); in.readFloat();
+        in.readByte(); // healthPercent
+        int obFlags = in.readByte() & 0xFF;
+        assertEquals(0, obFlags);
+
+        // NPC 2: Zombie
+        short zId = in.readShort();
+        assertEquals(50, zId);
+        int zCategory = in.readByte() & 0xFF;
+        assertEquals(1, zCategory); // 1 = ZOMBIE
+        int zType = in.readByte() & 0xFF;
+        assertEquals(com.fullsteam.model.ZombieType.TANK.ordinal(), zType);
+        in.readFloat(); in.readFloat(); in.readFloat(); in.readFloat(); in.readFloat(); in.readFloat();
+        in.readByte(); // healthPercent
+        int zFlags = in.readByte() & 0xFF;
+        assertEquals(1, zFlags & 1); // isLunging = true
+
+        // Section 11: Hits (0)
+        assertEquals(0, in.readShort());
     }
 
     @Test

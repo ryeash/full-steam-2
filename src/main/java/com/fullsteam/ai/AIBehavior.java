@@ -4,6 +4,7 @@ import com.fullsteam.model.PlayerInput;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Turret;
+import com.fullsteam.physics.Zombie;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -120,6 +121,13 @@ public interface AIBehavior {
             if (!wrapper.isTeammateOf(aiPlayer)) {
                 targets.add(wrapper);
             }
+        }
+
+        for (Zombie zombie : gameEntities.getAllZombies()) {
+            if (!zombie.isActive() || zombie.getHealth() <= 0) {
+                continue;
+            }
+            targets.add(AITargetWrapper.fromZombie(zombie));
         }
 
         return targets;

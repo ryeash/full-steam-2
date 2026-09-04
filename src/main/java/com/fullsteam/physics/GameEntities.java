@@ -52,6 +52,7 @@ public class GameEntities {
     private final Map<Integer, Oddball> oddballNpcs = new ConcurrentSkipListMap<>();
     private final Map<Integer, KothZone> kothZones = new ConcurrentSkipListMap<>();
     private final Map<Integer, Headquarters> headquarters = new ConcurrentSkipListMap<>();
+    private final Map<Integer, Zombie> zombies = new ConcurrentSkipListMap<>();
 
     private final Set<DamageHit> pendingDamageHits = new ConcurrentSkipListSet<>();
     private final Map<Long, Double> dotHitAccumulator = new ConcurrentSkipListMap<>();
@@ -89,6 +90,7 @@ public class GameEntities {
                 case Oddball npc -> oddballNpcs.put(npc.getId(), npc);
                 case KothZone kothZone -> kothZones.put(kothZone.getId(), kothZone);
                 case Headquarters hq -> headquarters.put(hq.getId(), hq);
+                case Zombie zombie -> zombies.put(zombie.getId(), zombie);
                 default -> throw new IllegalArgumentException("Unknown GameEntity type: " + gameEntity);
             }
             addPostUpdateHook(() -> {
@@ -130,7 +132,7 @@ public class GameEntities {
     }
 
     public void removeInactiveEntities() {
-        Stream.of(obstacles, fieldEffects, turrets, netProjectiles, defenseLasers)
+        Stream.of(obstacles, fieldEffects, turrets, netProjectiles, defenseLasers, zombies)
                 .forEach(map ->
                         map.entrySet().removeIf(entry -> {
                             GameEntity o = entry.getValue();
@@ -143,7 +145,7 @@ public class GameEntities {
     }
 
     public void updateAll(double deltaTime) {
-        Stream.of(players, projectiles, fieldEffects, turrets, defenseLasers, netProjectiles, kothZones, headquarters, oddballNpcs)
+        Stream.of(players, projectiles, fieldEffects, turrets, defenseLasers, netProjectiles, kothZones, headquarters, oddballNpcs, zombies)
                 .flatMap(m -> m.values().stream())
                 .forEach(e -> e.update(deltaTime));
     }
@@ -158,6 +160,10 @@ public class GameEntities {
 
     public Collection<Turret> getAllTurrets() {
         return turrets.values();
+    }
+
+    public Turret getTurret(int id) {
+        return turrets.get(id);
     }
 
     public Collection<DefenseLaser> getAllDefenseLasers() {
@@ -216,6 +222,18 @@ public class GameEntities {
 
     public Collection<Headquarters> getAllHeadquarters() {
         return headquarters.values();
+    }
+
+    public Collection<Zombie> getAllZombies() {
+        return zombies.values();
+    }
+
+    public Zombie getZombie(int id) {
+        return zombies.get(id);
+    }
+
+    public void removeZombie(int id) {
+        zombies.remove(id);
     }
 
     public Headquarters getTeamHeadquarters(int teamNumber) {

@@ -11,6 +11,7 @@ import com.fullsteam.model.FieldEffectType;
 import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.Rules;
 import com.fullsteam.model.ScoreStyle;
+import com.fullsteam.physics.Zombie;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.dynamics.BodyFixture;
@@ -78,7 +79,7 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         return true;
     }
 
-    private boolean handleEntityCollision(GameEntity entity1, GameEntity entity2) {
+    public boolean handleEntityCollision(GameEntity entity1, GameEntity entity2) {
         Collision c = new Collision(entity1, entity2);
 
         if (c.rectify(Projectile.class, Projectile.class)
@@ -144,6 +145,27 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         } else if (c.rectify(Projectile.class, Oddball.class)
                 instanceof TypedCollision<Projectile, Oddball>(Projectile a, Oddball b)) {
             return handleProjectileOddballCollision(a, b);
+
+        } else if (c.rectify(Player.class, Zombie.class)
+                instanceof TypedCollision<Player, Zombie>(Player a, Zombie b)) {
+            return handlePlayerZombieCollision(a, b);
+
+        } else if (c.rectify(Zombie.class, Headquarters.class)
+                instanceof TypedCollision<Zombie, Headquarters>(Zombie a, Headquarters b)) {
+            return handleZombieHeadquartersCollision(a, b);
+
+        } else if (c.rectify(Zombie.class, Turret.class)
+                instanceof TypedCollision<Zombie, Turret>(Zombie a, Turret b)) {
+            return handleZombieTurretCollision(a, b);
+
+        } else if (c.rectify(Projectile.class, Zombie.class)
+                instanceof TypedCollision<Projectile, Zombie>(Projectile a, Zombie b)) {
+            return handleProjectileZombieCollision(a, b);
+
+        } else if (c.rectify(FieldEffect.class, Zombie.class)
+                instanceof TypedCollision<FieldEffect, Zombie>(FieldEffect a, Zombie b)) {
+            handleFieldEffectZombieCollision(a, b);
+            return true;
         }
         return true;
     }
@@ -867,6 +889,172 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
     private boolean canProjectileDamageHeadquarters(Projectile projectile, Headquarters hq) {
         // Can't damage own team's headquarters
         return projectile.getOwnerTeam() != hq.getOwnerTeam();
+    }
+
+    /**
+     * Handle player collision with a zombie (melee damage).
+     */
+    private boolean handlePlayerZombieCollision(Player player, Zombie zombie) {
+        if (!player.isActive() || player.getHealth() <= 0 || !zombie.isActive() || zombie.getHealth() <= 0) {
+            return true;
+        }
+
+        if (zombie.canMeleeAttack()) {
+            Vector2 attackDir = player.getPosition().subtract(zombie.getPosition());
+            if (attackDir.getMagnitude() < 1e-4) {
+                attackDir = player.getAimDirection().copy().negate();
+            }
+
+            double meleeDamage = zombie.getMeleeDamage();
+
+            if (isBlockedByRiotShield(player, attackDir)) {
+                player.damageRiotShield(meleeDamage);
+                gameEntities.recordDamageHit(player.getPosition().x, player.getPosition().y, meleeDamage, -zombie.getId(), player.getId(), false, true);
+            } else {
+                boolean killed = player.takeDamage(meleeDamage);
+                boolean armorMitigated = player.isLastDamageArmorMitigated();
+                if (killed) {
+                    gameManager.killPlayer(player, -zombie.getId());
+                }
+                gameEntities.recordDamageHit(player.getPosition().x, player.getPosition().y, meleeDamage, -zombie.getId(), player.getId(), killed, armorMitigated);
+            }
+            zombie.recordMeleeAttack();
+        }
+        return true;
+    }
+
+    /**
+     * Handle zombie collision with headquarters (melee damage to structure).
+     */
+    private boolean handleZombieHeadquartersCollision(Zombie zombie, Headquarters hq) {
+        if (!zombie.isActive() || zombie.getHealth() <= 0 || !hq.isActive() || hq.getHealth() <= 0) {
+            return true;
+        }
+
+        if (zombie.canMeleeAttack()) {
+            double meleeDamage = zombie.getMeleeDamage();
+            boolean destroyed = hq.takeDamage(meleeDamage);
+            gameEntities.recordDamageHit(hq.getPosition().x, hq.getPosition().y, meleeDamage, -zombie.getId(), hq.getId(), destroyed);
+            if (destroyed) {
+                gameManager.handleHeadquartersDamage(hq, null, meleeDamage, true);
+            }
+            zombie.recordMeleeAttack();
+        }
+        return true;
+    }
+
+    /**
+     * Handle zombie collision with turret (melee damage to turret).
+     */
+    private boolean handleZombieTurretCollision(Zombie zombie, Turret turret) {
+        if (!zombie.isActive() || zombie.getHealth() <= 0 || !turret.isActive() || turret.getHealth() <= 0) {
+            return true;
+        }
+
+        if (zombie.canMeleeAttack()) {
+            double meleeDamage = zombie.getMeleeDamage();
+            boolean destroyed = turret.takeDamage(meleeDamage);
+            gameEntities.recordDamageHit(turret.getPosition().x, turret.getPosition().y, meleeDamage, -zombie.getId(), turret.getId(), destroyed);
+            if (destroyed) {
+                createTurretDestructionExplosion(turret);
+            }
+            zombie.recordMeleeAttack();
+        }
+        return true;
+    }
+
+    /**
+     * Handle projectile hitting a zombie.
+     */
+    private boolean handleProjectileZombieCollision(Projectile projectile, Zombie zombie) {
+        if (!zombie.isActive() || zombie.getHealth() <= 0) {
+            return true;
+        }
+
+        if (!projectile.getAffectedObstacles().add(zombie.getId())) {
+            boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, zombie);
+            return !shouldPierce;
+        }
+
+        Vector2 hitPosition = projectile.getPosition();
+        bulletEffectProcessor.processEffectHit(projectile, hitPosition);
+
+        double knockback = projectile.getKnockback();
+        if (knockback > 0) {
+            Vector2 dir = projectile.getBody().getLinearVelocity().getNormalized();
+            zombie.getBody().applyImpulse(dir.multiply(knockback));
+        }
+
+        double damage = projectile.getDamage();
+        boolean killed = zombie.takeDamage(damage);
+        int attackerId = projectile.getOwnerId();
+        Player attacker = gameEntities.getPlayer(attackerId);
+
+        if (killed && attacker != null && attacker.isActive()) {
+            attacker.getScoring().addZombieKill();
+        }
+
+        gameEntities.recordDamageHit(hitPosition.x, hitPosition.y, damage, attackerId, zombie.getId(), killed);
+
+        boolean shouldPierce = bulletEffectProcessor.shouldPierceTarget(projectile, zombie);
+        if (!shouldPierce) {
+            projectile.setActive(false);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Handle FieldEffect intersecting a zombie.
+     */
+    private void handleFieldEffectZombieCollision(FieldEffect fieldEffect, Zombie zombie) {
+        if (!fieldEffect.isArmed() || !zombie.isActive() || zombie.getHealth() <= 0) {
+            return;
+        }
+
+        double deltaTime = gameEntities.getWorld().getTimeStep().getDeltaTime();
+        int attackerId = fieldEffect.getOwnerId();
+        Player attacker = gameEntities.getPlayer(attackerId);
+
+        switch (fieldEffect.getType()) {
+            case EXPLOSION, FRAGMENTATION, LASER -> {
+                if (fieldEffect.getAffectedEntities().add(zombie.getId())) {
+                    double damage = fieldEffect.getDamage();
+                    boolean killed = zombie.takeDamage(damage);
+                    if (killed && attacker != null && attacker.isActive()) {
+                        attacker.getScoring().addZombieKill();
+                    }
+                    gameEntities.recordDamageHit(zombie.getPosition().x, zombie.getPosition().y, damage, attackerId, zombie.getId(), killed);
+                }
+            }
+            case PLASMA, FIRE, POISON, EARTHQUAKE -> {
+                if (fieldEffect.getDamage() > 0) {
+                    double damage = fieldEffect.getDamage() * deltaTime;
+                    boolean killed = zombie.takeDamage(damage);
+                    if (killed && attacker != null && attacker.isActive()) {
+                        attacker.getScoring().addZombieKill();
+                    }
+                    gameEntities.recordDotDamageHit(zombie.getPosition().x, zombie.getPosition().y, damage, attackerId, zombie.getId(), killed);
+                }
+            }
+            case ELECTRIC, FREEZE -> {
+                if (fieldEffect.getDamage() > 0) {
+                    double damage = fieldEffect.getDamage() * deltaTime;
+                    boolean killed = zombie.takeDamage(damage);
+                    if (killed && attacker != null && attacker.isActive()) {
+                        attacker.getScoring().addZombieKill();
+                    }
+                    gameEntities.recordDotDamageHit(zombie.getPosition().x, zombie.getPosition().y, damage, attackerId, zombie.getId(), killed);
+                    Vector2 vel = zombie.getVelocity();
+                    zombie.getBody().applyForce(vel.multiply(-Config.PLAYER_LINEAR_DAMPING * 1.5));
+                }
+            }
+            case SLOW_FIELD -> {
+                Vector2 vel = zombie.getVelocity();
+                zombie.getBody().applyForce(vel.multiply(-Config.PLAYER_LINEAR_DAMPING * 3.0));
+            }
+            default -> {}
+        }
     }
 
     /**

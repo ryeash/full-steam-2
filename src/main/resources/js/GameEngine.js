@@ -10,6 +10,7 @@ class GameEngine {
         this.utilityEntities = new Map();
         this.flags = new Map();
         this.oddballNpcs = new Map();
+        this.zombies = new Map();
         this.kothZones = new Map();
         this.initialHeadquarters = new Map();
         this.initialKothZones = new Map();
@@ -1565,20 +1566,73 @@ class GameEngine {
             }
         }
         
-        // Handle Oddball NPCs
-        if (data.oddballNpcs) {
-            const currentNpcIds = new Set();
-            data.oddballNpcs.forEach(npcData => {
-                currentNpcIds.add(npcData.id);
-                if (this.oddballNpcs.has(npcData.id)) {
-                    this.updateOddballNpc(npcData);
+        // Handle NPCs (Unified list: Oddballs + Zombies)
+        if (data.npcs) {
+            const currentOddballIds = new Set();
+            const currentZombieIds = new Set();
+
+            data.npcs.forEach(npcData => {
+                if (npcData.category === 'ZOMBIE') {
+                    currentZombieIds.add(npcData.id);
+                    if (this.zombies.has(npcData.id)) {
+                        this.updateZombie(npcData);
+                    } else {
+                        this.createZombie(npcData);
+                    }
                 } else {
-                    this.createOddballNpc(npcData);
+                    currentOddballIds.add(npcData.id);
+                    if (this.oddballNpcs.has(npcData.id)) {
+                        this.updateOddballNpc(npcData);
+                    } else {
+                        this.createOddballNpc(npcData);
+                    }
                 }
             });
+
             for (let [npcId] of this.oddballNpcs) {
-                if (!currentNpcIds.has(npcId)) {
+                if (!currentOddballIds.has(npcId)) {
                     this.removeOddballNpc(npcId);
+                }
+            }
+            for (let [zombieId] of this.zombies) {
+                if (!currentZombieIds.has(zombieId)) {
+                    this.removeZombie(zombieId);
+                }
+            }
+        } else {
+            // Handle Oddball NPCs (legacy array fallback)
+            if (data.oddballNpcs) {
+                const currentNpcIds = new Set();
+                data.oddballNpcs.forEach(npcData => {
+                    currentNpcIds.add(npcData.id);
+                    if (this.oddballNpcs.has(npcData.id)) {
+                        this.updateOddballNpc(npcData);
+                    } else {
+                        this.createOddballNpc(npcData);
+                    }
+                });
+                for (let [npcId] of this.oddballNpcs) {
+                    if (!currentNpcIds.has(npcId)) {
+                        this.removeOddballNpc(npcId);
+                    }
+                }
+            }
+
+            // Handle Zombies (legacy array fallback)
+            if (data.zombies) {
+                const currentZombieIds = new Set();
+                data.zombies.forEach(zombieData => {
+                    currentZombieIds.add(zombieData.id);
+                    if (this.zombies.has(zombieData.id)) {
+                        this.updateZombie(zombieData);
+                    } else {
+                        this.createZombie(zombieData);
+                    }
+                });
+                for (let [zombieId] of this.zombies) {
+                    if (!currentZombieIds.has(zombieId)) {
+                        this.removeZombie(zombieId);
+                    }
                 }
             }
         }
@@ -2168,6 +2222,14 @@ class GameEngine {
         }
         if (this.oddballNpcs) {
             this.oddballNpcs.forEach(n => n.interpolator?.update(deltaTime));
+        }
+        if (this.zombies) {
+            this.zombies.forEach(z => {
+                z.interpolator?.update(deltaTime);
+                if (z.healthBar) {
+                    z.healthBar.position.set(z.x, z.y - (z.zombieRadius + 10));
+                }
+            });
         }
         if (this.flags) {
             this.flags.forEach(f => f.interpolator?.update(deltaTime));
@@ -3487,6 +3549,157 @@ class GameEngine {
             this.gameContainer.removeChild(container);
             container.destroy({ children: true });
             this.oddballNpcs.delete(npcId);
+        }
+    }
+
+    createZombie(zombieData) {
+        const container = new PIXI.Container();
+        container.position.set(zombieData.x, zombieData.y);
+        container.rotation = zombieData.rotation || 0;
+        container.zIndex = 11;
+
+        const radius = zombieData.radius || 15;
+        container.zombieRadius = radius;
+
+        const type = zombieData.type || 'WALKER';
+        const gfx = new PIXI.Graphics();
+
+        // Type-specific colors and shapes
+        let bodyColor = 0x3a5a20; // classic walker
+        let strokeColor = 0x1f3410;
+        let eyeColor = 0xdd2222;
+
+        if (type === 'RUNNER') {
+            bodyColor = 0x5a8c22;
+            strokeColor = 0x2c4a10;
+            eyeColor = 0xff4400;
+        } else if (type === 'TANK') {
+            bodyColor = 0x243818;
+            strokeColor = 0x475b37;
+            eyeColor = 0xcc1111;
+        } else if (type === 'LUNGER') {
+            bodyColor = 0x2e6b27;
+            strokeColor = 0x164012;
+            eyeColor = 0xff1133;
+        } else if (type === 'STALKER') {
+            bodyColor = 0x1a2b16;
+            strokeColor = 0x0e170c;
+            eyeColor = 0xee3355;
+        }
+
+        // Lunge aura (drawn behind body, visible when lunging)
+        const lungeAura = new PIXI.Graphics();
+        lungeAura.circle(0, 0, radius + 8).fill({ color: 0xFF2200, alpha: 0.35 });
+        lungeAura.circle(0, 0, radius + 12).stroke({ width: 2, color: 0xFF6600, alpha: 0.6 });
+        lungeAura.visible = !!zombieData.isLunging;
+        container.addChild(lungeAura);
+        container.lungeAura = lungeAura;
+
+        // Reaching zombie arms / claws extending forward along x-axis (facing direction)
+        const armLength = type === 'LUNGER' ? radius * 1.3 : radius * 0.9;
+        const armThickness = type === 'TANK' ? 6 : 3.5;
+
+        // Left arm
+        gfx.moveTo(radius * 0.2, -radius * 0.55).lineTo(armLength, -radius * 0.45);
+        gfx.stroke({ width: armThickness, color: bodyColor, cap: 'round' });
+        // Left hand/claws
+        gfx.circle(armLength, -radius * 0.45, type === 'TANK' ? 4 : 2.5).fill(0x881111);
+
+        // Right arm
+        gfx.moveTo(radius * 0.2, radius * 0.55).lineTo(armLength, radius * 0.45);
+        gfx.stroke({ width: armThickness, color: bodyColor, cap: 'round' });
+        // Right hand/claws
+        gfx.circle(armLength, radius * 0.45, type === 'TANK' ? 4 : 2.5).fill(0x881111);
+
+        // Main body torso / head
+        gfx.circle(0, 0, radius).fill(bodyColor);
+        gfx.circle(0, 0, radius).stroke({ width: type === 'TANK' ? 3.5 : 2, color: strokeColor });
+
+        // Tank armor plates or stalker markings
+        if (type === 'TANK') {
+            gfx.arc(0, 0, radius - 3, -Math.PI * 0.7, Math.PI * 0.7);
+            gfx.stroke({ width: 3, color: 0x61784c });
+        } else if (type === 'RUNNER') {
+            // Speed streaks
+            gfx.moveTo(-radius * 0.6, 0).lineTo(radius * 0.4, 0);
+            gfx.stroke({ width: 2, color: 0x84cc16, alpha: 0.7 });
+        }
+
+        // Glowing predatory eyes
+        const eyeX = radius * 0.45;
+        const eyeY = radius * 0.35;
+        gfx.circle(eyeX, -eyeY, 2).fill(eyeColor);
+        gfx.circle(eyeX, eyeY, 2).fill(eyeColor);
+
+        container.addChild(gfx);
+        container.zombieGfx = gfx;
+        container.zombieData = zombieData;
+
+        // Health bar
+        const healthBarConfig = {
+            width: Math.max(28, radius * 2),
+            height: 4,
+            yOffset: radius + 10,
+            bgColor: 0x222222,
+            fillColor: 0x22C55E,
+            cornerRadius: 2,
+            showWhenFull: false,
+            dynamicColor: true
+        };
+        const healthBar = this.createHealthBar(zombieData, healthBarConfig);
+        container.healthBar = healthBar;
+
+        container.interpolator = new EntityInterpolator(container, {
+            vx: zombieData.vx || 0,
+            vy: zombieData.vy || 0,
+            snapThreshold: 150,
+            lerpRate: 18.0
+        });
+
+        this.zombies.set(zombieData.id, container);
+        this.gameContainer.addChild(container);
+    }
+
+    updateZombie(zombieData) {
+        const container = this.zombies.get(zombieData.id);
+        if (!container) return;
+
+        container.interpolator.updateFromServer(
+            zombieData.x,
+            zombieData.y,
+            zombieData.vx || 0,
+            zombieData.vy || 0
+        );
+
+        container.rotation = zombieData.rotation || 0;
+        container.zombieData = zombieData;
+
+        if (container.lungeAura) {
+            container.lungeAura.visible = !!zombieData.isLunging;
+        }
+
+        if (container.healthBar) {
+            this.updateHealthBar(container.healthBar, zombieData, container, container.healthBar.config);
+        }
+    }
+
+    removeZombie(zombieId) {
+        const container = this.zombies.get(zombieId);
+        if (container) {
+            if (container.interpolator) {
+                container.interpolator.destroy();
+                container.interpolator = null;
+            }
+            if (container.healthBar) {
+                if (container.healthBar.parent) {
+                    container.healthBar.parent.removeChild(container.healthBar);
+                }
+                container.healthBar.destroy({ children: true, context: true });
+                container.healthBar = null;
+            }
+            this.gameContainer.removeChild(container);
+            container.destroy({ children: true });
+            this.zombies.delete(zombieId);
         }
     }
 
@@ -5277,6 +5490,7 @@ class GameEngine {
         vipKills:    { label: '🎯 VIP',  read: bd => bd.vipKills ?? 0 },
         hqDamage:    { label: '🏰 Dmg',  read: bd => Math.round(bd.hqDamage ?? 0) },
         hqDestroyed: { label: '💥 HQ',   read: bd => bd.hqDestroyed ?? 0 },
+        zombieKills: { label: '🧟 Kills', color: '#76BA1B', read: bd => bd.zombieKills ?? 0 },
     };
 
     /**
@@ -5539,6 +5753,19 @@ class GameEngine {
             const r = isRampage ? 3.0 : 2.0;
             dots.circle(x, y, r).fill(color);
             dots.circle(x, y, r).stroke({ width: 1, color: 0xFFFFFF, alpha: 0.6 });
+        });
+
+        // Draw zombies on minimap
+        this.zombies.forEach(container => {
+            const data = container.zombieData;
+            if (!data) return;
+            const x = (data.x + this.worldBounds.width / 2) * scale + offsetX;
+            const y = (-data.y + this.worldBounds.height / 2) * scale + offsetY;
+            const isTank = data.type === 'TANK';
+            const r = isTank ? 3.5 : 2.0;
+            const color = data.isLunging ? 0xFF3333 : 0x22C55E;
+            dots.circle(x, y, r).fill(color);
+            dots.circle(x, y, r).stroke({ width: 1, color: 0x000000, alpha: 0.6 });
         });
     }
     
@@ -5943,6 +6170,28 @@ class GameEngine {
             flag.destroy({ children: true, context: true });
         });
         this.flags.clear();
+
+        // Clean up oddball NPCs
+        if (this.oddballNpcs) {
+            this.oddballNpcs.forEach(container => {
+                if (container.interpolator) container.interpolator.destroy();
+                container.destroy({ children: true });
+            });
+            this.oddballNpcs.clear();
+        }
+
+        // Clean up zombies
+        if (this.zombies) {
+            this.zombies.forEach(container => {
+                if (container.interpolator) container.interpolator.destroy();
+                if (container.healthBar) {
+                    if (container.healthBar.parent) container.healthBar.parent.removeChild(container.healthBar);
+                    container.healthBar.destroy({ children: true, context: true });
+                }
+                container.destroy({ children: true });
+            });
+            this.zombies.clear();
+        }
         
         // Clean up KOTH zones
         this.kothZones.forEach(zone => {

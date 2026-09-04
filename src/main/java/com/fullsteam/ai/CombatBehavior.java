@@ -6,6 +6,7 @@ import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Turret;
+import com.fullsteam.physics.Zombie;
 import org.dyn4j.geometry.Vector2;
 
 import java.util.ArrayList;
@@ -365,7 +366,7 @@ public class CombatBehavior implements AIBehavior {
     private AITargetWrapper findOrMaintainTarget(AIPlayer aiPlayer, GameEntities gameEntities) {
         // First, try to maintain current target if valid
         if (targetId != -1) {
-            AITargetWrapper currentTarget = findTargetById(gameEntities, targetId, targetIsPlayer);
+            AITargetWrapper currentTarget = findTargetById(gameEntities, targetId);
             if (currentTarget != null && currentTarget.isVisible() && !currentTarget.isTeammateOf(aiPlayer)) {
                 double distance = aiPlayer.getPosition().distance(currentTarget.getPosition());
                 if (distance <= 800) { // Increased persistence range
@@ -388,28 +389,7 @@ public class CombatBehavior implements AIBehavior {
         AITargetWrapper bestTarget = null;
         double bestScore = 0;
 
-        // Create list of all potential targets (players and turrets)
-        List<AITargetWrapper> allTargets = new ArrayList<>();
-
-        // Add all enemy players
-        for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() != aiPlayer.getId() && player.isActive() && !player.isVisionObscured()) {
-                AITargetWrapper wrapper = AITargetWrapper.fromPlayer(player);
-                if (!wrapper.isTeammateOf(aiPlayer)) {
-                    allTargets.add(wrapper);
-                }
-            }
-        }
-
-        // Add all enemy turrets
-        for (Turret turret : gameEntities.getAllTurrets()) {
-            if (turret.isActive()) {
-                AITargetWrapper wrapper = AITargetWrapper.fromTurret(turret);
-                if (!wrapper.isTeammateOf(aiPlayer)) {
-                    allTargets.add(wrapper);
-                }
-            }
-        }
+        List<AITargetWrapper> allTargets = collectEnemyTargets(aiPlayer, gameEntities);
 
         for (AITargetWrapper target : allTargets) {
             double distance = playerPos.distance(target.getPosition());
@@ -454,19 +434,18 @@ public class CombatBehavior implements AIBehavior {
         return bestTarget;
     }
 
-    private AITargetWrapper findTargetById(GameEntities gameEntities, int targetId, boolean isPlayer) {
-        if (isPlayer) {
-            for (Player player : gameEntities.getAllPlayers()) {
-                if (player.getId() == targetId) {
-                    return AITargetWrapper.fromPlayer(player);
-                }
-            }
-        } else {
-            for (Turret turret : gameEntities.getAllTurrets()) {
-                if (turret.getId() == targetId) {
-                    return AITargetWrapper.fromTurret(turret);
-                }
-            }
+    private AITargetWrapper findTargetById(GameEntities gameEntities, int targetId) {
+        Player player = gameEntities.getPlayer(targetId);
+        if (player != null && player.isActive()) {
+            return AITargetWrapper.fromPlayer(player);
+        }
+        Turret turret = gameEntities.getTurret(targetId);
+        if (turret != null && turret.isActive()) {
+            return AITargetWrapper.fromTurret(turret);
+        }
+        Zombie zombie = gameEntities.getZombie(targetId);
+        if (zombie != null && zombie.isActive()) {
+            return AITargetWrapper.fromZombie(zombie);
         }
         return null;
     }
