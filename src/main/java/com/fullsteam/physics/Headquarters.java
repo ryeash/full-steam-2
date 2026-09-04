@@ -16,7 +16,7 @@ import org.dyn4j.geometry.Vector2;
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class Headquarters extends OwnedGameEntity {
+public class Headquarters extends OwnedGameEntity implements Damageable {
     private static final double HQ_WIDTH = Config.PLAYER_RADIUS * 4;
     private static final double HQ_HEIGHT = Config.PLAYER_RADIUS * 3;
     private static final double HQ_TURRET_RADIUS = Config.PLAYER_RADIUS * .75;

@@ -32,7 +32,6 @@ class HeadquartersTest extends BaseTestClass {
                 .headquartersMaxHealth(1000.0)
                 .headquartersPointsPerDamage(0.1) // 1 point per 10 damage
                 .headquartersDestructionBonus(100)
-                .headquartersDestructionEndsGame(true)
                 .build();
 
         GameConfig gameConfig = GameConfig.builder()

@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentSkipListSet;
 
 @Getter
 @Setter
-public class Player extends OwnedGameEntity implements HasWeapon {
+public class Player extends OwnedGameEntity implements HasWeapon, Damageable {
     private String playerName;
     private int team; // 0 = no team (FFA), 1+ = team number
     private Weapon weapon;

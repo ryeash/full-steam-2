@@ -57,7 +57,7 @@ public class Rules {
      */
     @NotNull
     @Builder.Default
-    private VictoryCondition victoryCondition = VictoryCondition.ENDLESS;
+    private VictoryCondition victoryCondition = VictoryCondition.SCORE_LIMIT;
 
     /**
      * Score limit for SCORE_LIMIT victory condition.
@@ -292,13 +292,6 @@ public class Rules {
     private int headquartersDestructionBonus = 100;
 
     /**
-     * Whether destroying headquarters ends the game.
-     */
-    @NotNull
-    @Builder.Default
-    private boolean headquartersDestructionEndsGame = true;
-
-    /**
      * Whether to enable random events during gameplay.
      */
     @NotNull
@@ -505,9 +498,10 @@ public class Rules {
 
     /**
      * Check if this game has a time limit.
+     * All games are capped by time to prevent indefinite resource consumption.
      */
     public boolean hasTimeLimit() {
-        return victoryCondition == VictoryCondition.TIME_LIMIT && timeLimit > 0;
+        return timeLimit > 0;
     }
 
     /**

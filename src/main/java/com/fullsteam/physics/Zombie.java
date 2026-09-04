@@ -21,7 +21,7 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 @Getter
 @Setter
-public class Zombie extends OwnedGameEntity {
+public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker {
 
     private final ZombieType type;
     private ZombieAttackPattern attackPattern;

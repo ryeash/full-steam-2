@@ -3,6 +3,7 @@ package com.fullsteam.games;
 import com.fullsteam.BaseTestClass;
 import com.fullsteam.model.Rules;
 import com.fullsteam.model.ScoreStyle;
+import com.fullsteam.model.VictoryCondition;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Headquarters;
 import com.fullsteam.physics.Player;
@@ -45,8 +46,8 @@ public class HeadquartersScoringTest extends BaseTestClass {
                 .headquartersMaxHealth(1000.0)
                 .headquartersPointsPerDamage(0.1)  // 1 point per 10 damage
                 .headquartersDestructionBonus(100)
-                .headquartersDestructionEndsGame(false) // Don't end game for testing
                 .scoreStyle(ScoreStyle.TOTAL) // Include all score sources
+                .scoreLimit(500) // High score limit so single HQ destruction (200 pts) doesn't end match
                 .build();
 
         testConfig = GameConfig.builder()
@@ -114,15 +115,17 @@ public class HeadquartersScoringTest extends BaseTestClass {
     }
 
     @Test
-    @DisplayName("Game ends when HQ destroyed with end-game setting")
-    void testGameEndsOnHQDestruction() {
-        // Create new config with game-ending enabled
+    @DisplayName("Game ends when HQ destruction score reaches score limit")
+    void testGameEndsWhenHQDestructionReachesScoreLimit() {
+        // Create new config with score limit reached on HQ destruction
         Rules rulesWithEnd = Rules.builder()
                 .addHeadquarters(true)
                 .headquartersMaxHealth(1000.0)
                 .headquartersPointsPerDamage(0.1)
                 .headquartersDestructionBonus(100)
-                .headquartersDestructionEndsGame(true) // Enable game ending
+                .scoreStyle(ScoreStyle.TOTAL)
+                .victoryCondition(VictoryCondition.SCORE_LIMIT)
+                .scoreLimit(200)
                 .build();
 
         GameConfig configWithEnd = GameConfig.builder()
@@ -147,29 +150,31 @@ public class HeadquartersScoringTest extends BaseTestClass {
         RuleSystem rs = gmEnd.getRuleSystem();
         assertFalse(rs.isGameOver());
 
-        // Destroy HQ
+        // Destroy HQ (100 pts damage + 100 pts destruction bonus = 200 pts)
         boolean destroyed = hq1.takeDamage(1000.0);
         assertTrue(destroyed);
         gmEnd.handleHeadquartersDamage(hq1, p2, 1000.0, true);
+        rs.update(0.1);
 
-        // Game should now be over
+        // Game should now be over via score limit
         assertTrue(rs.isGameOver());
         assertEquals(2, rs.getWinningTeam()); // Team 2 wins
         assertNotNull(rs.getVictoryMessage());
-        assertTrue(rs.getVictoryMessage().contains("Headquarters Destroyed"));
+        assertTrue(rs.getVictoryMessage().contains("Team 2 wins"));
     }
 
     @Test
-    @DisplayName("Game continues when HQ destroyed with end-game disabled")
-    void testGameContinuesOnHQDestruction() {
+    @DisplayName("Game continues when HQ destroyed if score limit not reached")
+    void testGameContinuesWhenScoreLimitNotReached() {
         RuleSystem ruleSystem = gameManager.getRuleSystem();
 
         assertFalse(ruleSystem.isGameOver());
 
-        // Destroy HQ (game ending is disabled in setup)
+        // Destroy HQ
         boolean destroyed = team1HQ.takeDamage(1000.0);
         assertTrue(destroyed);
         gameManager.handleHeadquartersDamage(team1HQ, team2Player, 1000.0, true);
+        ruleSystem.update(0.1);
 
         // Game should continue
         assertFalse(ruleSystem.isGameOver());
@@ -255,7 +260,6 @@ public class HeadquartersScoringTest extends BaseTestClass {
                 .headquartersMaxHealth(1000.0)
                 .headquartersPointsPerDamage(0.0)  // No points for damage
                 .headquartersDestructionBonus(100) // Only destruction bonus
-                .headquartersDestructionEndsGame(false)
                 .build();
 
         GameConfig configNoPoints = GameConfig.builder()

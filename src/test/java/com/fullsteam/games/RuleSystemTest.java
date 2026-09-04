@@ -231,6 +231,93 @@ class RuleSystemTest extends BaseTestClass {
     }
 
     @Test
+    @DisplayName("Should cap score limit game by time limit when score limit is not reached")
+    void testScoreLimitCappedByTimeLimit() throws InterruptedException {
+        // Arrange: SCORE_LIMIT mode with scoreLimit=100 and timeLimit=1.0s
+        GameConfig config = GameConfig.builder()
+                .rules(Rules.builder()
+                        .victoryCondition(VictoryCondition.SCORE_LIMIT)
+                        .scoreLimit(100)
+                        .timeLimit(1.0)
+                        .build())
+                .teamCount(2)
+                .playerMaxHealth(100.0)
+                .build();
+
+        RuleSystem scoreLimitTimeCappedRuleSystem = new RuleSystem(
+                "test-game",
+                config.getRules(),
+                gameEntities,
+                gameEventManager,
+                broadcaster,
+                config.getTeamCount()
+        );
+
+        Player player1 = createTestPlayer(1, 1);
+        Player player2 = createTestPlayer(2, 2);
+        player1.setKills(10); // Far below scoreLimit (100)
+        player2.setKills(5);
+        gameEntities.add(player1);
+        gameEntities.add(player2);
+
+        // Before time limit expires
+        scoreLimitTimeCappedRuleSystem.update(0.1);
+        assertFalse(scoreLimitTimeCappedRuleSystem.isGameOver(), "Game should not be over before time limit");
+
+        // Act - Wait for time limit to expire
+        Thread.sleep(1200);
+        scoreLimitTimeCappedRuleSystem.update(1.2);
+
+        // Assert - Game ends due to time cap and player 1's team wins with higher score
+        assertTrue(scoreLimitTimeCappedRuleSystem.isGameOver(), "Game should be ended by time cap");
+        assertEquals(1, scoreLimitTimeCappedRuleSystem.getWinningTeam(), "Team 1 should win with highest score on time expiration");
+    }
+
+    @Test
+    @DisplayName("Should cap elimination game by time limit when multiple teams remain")
+    void testEliminationCappedByTimeLimit() throws InterruptedException {
+        // Arrange: ELIMINATION mode with timeLimit=1.0s
+        GameConfig config = GameConfig.builder()
+                .rules(Rules.builder()
+                        .victoryCondition(VictoryCondition.ELIMINATION)
+                        .respawnMode(RespawnMode.LIMITED)
+                        .maxLives(3)
+                        .timeLimit(1.0)
+                        .build())
+                .teamCount(2)
+                .playerMaxHealth(100.0)
+                .build();
+
+        RuleSystem elimTimeCappedRuleSystem = new RuleSystem(
+                "test-game",
+                config.getRules(),
+                gameEntities,
+                gameEventManager,
+                broadcaster,
+                config.getTeamCount()
+        );
+
+        Player player1 = createTestPlayer(1, 1);
+        Player player2 = createTestPlayer(2, 2);
+        player1.setKills(7);
+        player2.setKills(2);
+        gameEntities.add(player1);
+        gameEntities.add(player2);
+
+        // Both teams still alive
+        elimTimeCappedRuleSystem.update(0.1);
+        assertFalse(elimTimeCappedRuleSystem.isGameOver(), "Game should not be over while both teams have lives");
+
+        // Act - Wait for time limit to expire
+        Thread.sleep(1200);
+        elimTimeCappedRuleSystem.update(1.2);
+
+        // Assert - Game ends due to time cap
+        assertTrue(elimTimeCappedRuleSystem.isGameOver(), "Game should be ended by time cap");
+        assertEquals(1, elimTimeCappedRuleSystem.getWinningTeam(), "Team 1 should win with highest score on time expiration");
+    }
+
+    @Test
     @DisplayName("Should handle limited lives correctly")
     void testLimitedLives() {
         // Arrange

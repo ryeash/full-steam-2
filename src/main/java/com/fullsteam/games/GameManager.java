@@ -153,7 +153,7 @@ public class GameManager {
         );
 
         this.zombieManager = gameConfig.getRules().hasZombies()
-                ? new ZombieManager(gameId, gameConfig, gameEntities, gameEventManager, terrainGenerator)
+                ? new ZombieManager(gameId, gameConfig, gameEntities, gameEventManager, terrainGenerator, teamSpawnManager)
                 : null;
 
         // Initialize spawn point manager
@@ -1460,14 +1460,6 @@ public class GameManager {
             // Broadcast HQ destruction event
             if (attacker != null) {
                 gameEventManager.broadcastHeadquartersDestroyed(hq.getOwnerTeam(), attacker.getTeam());
-            }
-
-            // Check if this ends the game
-            if (rules.isHeadquartersDestructionEndsGame()) {
-                int winningTeam = attacker != null ? attacker.getTeam() : -1;
-                if (winningTeam > 0) {
-                    ruleSystem.declareVictory(winningTeam, -1, "Headquarters Destroyed");
-                }
             }
         }
     }

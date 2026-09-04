@@ -21,7 +21,8 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(4px);
             z-index: 1000;
             justify-content: center;
             align-items: center;
@@ -32,26 +33,98 @@
         }
         
         .modal-content {
-            background: rgba(0, 0, 0, 0.95);
+            background: rgba(8, 14, 18, 0.98);
             border: 2px solid #5fc4b8;
             border-radius: 12px;
             max-width: 1200px;
             width: 95%;
             max-height: 90vh;
             overflow-y: auto;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(95, 196, 184, 0.2);
+        }
+
+        /* Specialized Rule Tree Layout for Custom Game Modal */
+        .modal-content.rule-modal-content {
+            max-width: 1100px;
+            width: 95vw;
+            height: 88vh;
+            max-height: 860px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 0;
         }
         
         .modal-header {
-            padding: 20px;
+            padding: 14px 20px;
             border-bottom: 2px solid #5fc4b8;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            background: rgba(10, 20, 25, 0.98);
+            flex-shrink: 0;
         }
         
         .modal-header h2 {
             margin: 0;
             color: #5fc4b8;
+            font-size: 1.35em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .header-title-area {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .header-actions-area {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .preset-select-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85em;
+            color: #aaa;
+        }
+
+        .preset-select-wrapper select {
+            background: rgba(95, 196, 184, 0.12);
+            border: 1px solid rgba(95, 196, 184, 0.4);
+            color: #fff;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .preset-select-wrapper select:focus {
+            border-color: #5fc4b8;
+            box-shadow: 0 0 8px rgba(95, 196, 184, 0.3);
+        }
+
+        .btn-reset-defaults {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #bbb;
+            padding: 5px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.2s ease;
+        }
+
+        .btn-reset-defaults:hover {
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+            border-color: rgba(255, 255, 255, 0.4);
         }
         
         .modal-close {
@@ -62,75 +135,425 @@
             cursor: pointer;
             line-height: 1;
             padding: 0;
-            width: 40px;
-            height: 40px;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            transition: color 0.2s, background 0.2s;
         }
         
         .modal-close:hover {
             color: #ff4444;
+            background: rgba(255, 68, 68, 0.1);
         }
-        
-        .modal-body {
-            padding: 20px;
+
+        /* Rule Search Bar */
+        .rule-search-bar {
+            padding: 8px 18px;
+            background: rgba(0, 0, 0, 0.45);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
         }
-        
-        .config-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
+
+        .search-icon {
+            font-size: 0.95em;
+            opacity: 0.7;
         }
-        
-        .config-section {
+
+        .rule-search-bar input {
+            flex: 1;
             background: rgba(255, 255, 255, 0.05);
-            border: 1px solid #444;
-            border-radius: 8px;
-            padding: 15px;
+            border: 1px solid rgba(95, 196, 184, 0.25);
+            border-radius: 6px;
+            padding: 7px 12px;
+            color: #fff;
+            font-size: 0.88em;
+            outline: none;
+            transition: all 0.2s ease;
         }
-        
-        .config-section h3 {
-            margin: 0 0 15px 0;
+
+        .rule-search-bar input:focus {
+            border-color: #5fc4b8;
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 10px rgba(95, 196, 184, 0.2);
+        }
+
+        .clear-search-btn {
+            background: transparent;
+            border: none;
+            color: #aaa;
+            font-size: 1.2em;
+            cursor: pointer;
+            padding: 0 6px;
+        }
+
+        .clear-search-btn:hover {
+            color: #fff;
+        }
+
+        /* Split Modal Body */
+        .split-modal-body {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        /* Left Pane: Rule Tree Sidebar */
+        .rule-tree-sidebar {
+            width: 290px;
+            background: rgba(6, 12, 16, 0.95);
+            border-right: 1px solid rgba(95, 196, 184, 0.2);
+            overflow-y: auto;
+            padding: 12px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+
+        .tree-group {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .tree-group-header {
+            font-size: 0.72em;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #78909c;
+            padding: 4px 8px 6px 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tree-node {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 7px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            font-size: 0.88em;
+            color: #cfd8dc;
+            transition: all 0.18s ease;
+            user-select: none;
+        }
+
+        .tree-node:hover {
+            background: rgba(95, 196, 184, 0.1);
+            color: #fff;
+            border-color: rgba(95, 196, 184, 0.25);
+        }
+
+        .tree-node.active {
+            background: rgba(95, 196, 184, 0.2);
             color: #5fc4b8;
-            font-size: 1.1em;
+            border-color: #5fc4b8;
+            font-weight: 600;
+            box-shadow: 0 0 10px rgba(95, 196, 184, 0.15);
         }
-        
-        .config-item {
-            margin-bottom: 15px;
+
+        .tree-node.hidden-by-filter {
+            display: none !important;
         }
-        
-        .config-item:last-child {
+
+        .tree-node-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .tree-pill {
+            font-size: 0.72em;
+            padding: 2px 7px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.08);
+            color: #90a4ae;
+            font-weight: 500;
+            font-family: monospace;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .tree-pill.on {
+            background: rgba(95, 196, 184, 0.22);
+            color: #5fc4b8;
+            border: 1px solid rgba(95, 196, 184, 0.4);
+        }
+
+        .tree-pill.off {
+            background: rgba(255, 255, 255, 0.04);
+            color: #546e7a;
+        }
+
+        /* Right Pane: Rule Inspector Container */
+        .rule-inspector-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 24px;
+            background: rgba(4, 8, 12, 0.65);
+        }
+
+        .inspector-panel {
+            display: none;
+        }
+
+        .inspector-panel.active {
+            display: block;
+            animation: panelFadeIn 0.2s ease;
+        }
+
+        @keyframes panelFadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .panel-banner {
+            margin-bottom: 16px;
+            border-bottom: 1px solid rgba(95, 196, 184, 0.2);
+            padding-bottom: 10px;
+        }
+
+        .panel-banner h3 {
+            margin: 0 0 4px 0;
+            color: #5fc4b8;
+            font-size: 1.25em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-banner p {
+            margin: 0;
+            color: #90a4ae;
+            font-size: 0.85em;
+        }
+
+        .form-card {
+            background: rgba(255, 255, 255, 0.035);
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 14px;
+        }
+
+        .form-card.master-toggle-card {
+            background: rgba(95, 196, 184, 0.06);
+            border-color: rgba(95, 196, 184, 0.28);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .master-toggle-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .master-toggle-title {
+            font-weight: 600;
+            font-size: 1em;
+            color: #e0f2f1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .master-toggle-desc {
+            font-size: 0.82em;
+            color: #90a4ae;
+        }
+
+        .form-grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+
+        .form-grid-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 14px;
+        }
+
+        .form-field {
+            margin-bottom: 12px;
+        }
+
+        .form-field:last-child {
             margin-bottom: 0;
         }
-        
-        .config-item label {
-            display: block;
-            color: #ccc;
+
+        .form-field label {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            color: #cfd8dc;
+            font-size: 0.88em;
             margin-bottom: 5px;
-            font-size: 0.9em;
         }
-        
-        .config-item input,
-        .config-item select {
+
+        .form-field input[type="number"],
+        .form-field input[type="text"],
+        .form-field select {
             width: 100%;
             padding: 8px 12px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid #444;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.18);
             border-radius: 6px;
             color: #fff;
-            font-size: 1em;
+            font-size: 0.95em;
+            box-sizing: border-box;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
-        
-        .config-item input:focus,
-        .config-item select:focus {
+
+        .form-field input:focus,
+        .form-field select:focus {
             outline: none;
             border-color: #5fc4b8;
+            box-shadow: 0 0 8px rgba(95, 196, 184, 0.25);
         }
-        
+
+        .form-field small {
+            display: block;
+            color: #78909c;
+            font-size: 0.78em;
+            margin-top: 4px;
+        }
+
+        .sub-config-box {
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            animation: panelFadeIn 0.2s ease;
+        }
+
+        /* Toggle Switch */
+        .toggle-switch-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.15);
+            transition: .2s ease;
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .2s ease;
+            border-radius: 50%;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background-color: #5fc4b8;
+            border-color: #5fc4b8;
+        }
+
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+            background-color: #000;
+        }
+
+        /* Live Summary Bar */
+        .rule-summary-bar {
+            padding: 8px 18px;
+            background: rgba(6, 12, 16, 0.95);
+            border-top: 1px solid rgba(95, 196, 184, 0.25);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            overflow-x: auto;
+            flex-shrink: 0;
+        }
+
+        .summary-title {
+            font-size: 0.72em;
+            font-weight: 700;
+            color: #5fc4b8;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-right: 4px;
+            white-space: nowrap;
+        }
+
+        .summary-tags-list {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            overflow-x: auto;
+        }
+
+        .summary-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 8px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #eceff1;
+            font-size: 0.76em;
+            white-space: nowrap;
+        }
+
+        .summary-tag.highlight {
+            background: rgba(95, 196, 184, 0.18);
+            border-color: rgba(95, 196, 184, 0.4);
+            color: #5fc4b8;
+        }
+
+        /* Modal Footer */
         .modal-footer {
-            padding: 20px;
-            border-top: 2px solid #444;
+            padding: 12px 20px;
+            background: rgba(10, 20, 25, 0.98);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
             display: flex;
             gap: 10px;
             justify-content: flex-end;
+            flex-shrink: 0;
         }
         
         .modal-button {
@@ -410,6 +833,32 @@
             margin-right: 6px;
             white-space: nowrap;
         }
+
+        @media (max-width: 820px) {
+            .modal-content.rule-modal-content {
+                width: 98vw;
+                height: 94vh;
+                max-height: none;
+            }
+            .split-modal-body {
+                flex-direction: column;
+            }
+            .rule-tree-sidebar {
+                width: 100%;
+                max-height: 170px;
+                border-right: none;
+                border-bottom: 1px solid rgba(95, 196, 184, 0.2);
+            }
+            .form-grid-2, .form-grid-3 {
+                grid-template-columns: 1fr;
+            }
+            .header-actions-area {
+                gap: 6px;
+            }
+            .preset-select-wrapper label {
+                display: none;
+            }
+        }
     </style>
 </head>
 <body>
@@ -446,390 +895,635 @@
     </ul>
 </div>
 
-<!-- Custom Game Configuration Modal -->
+<!-- Custom Game Configuration Modal (Split-Pane Rule Tree Layout) -->
 <div id="custom-game-modal" class="modal hidden">
-    <div class="modal-content">
+    <div class="modal-content rule-modal-content">
+        <!-- Modal Header -->
         <div class="modal-header">
-            <h2>⚙️ Custom Game Configuration</h2>
-            <button class="modal-close" onclick="closeCustomGameModal()">&times;</button>
+            <div class="header-title-area">
+                <h2>⚙️ Custom Game Configuration</h2>
+            </div>
+            <div class="header-actions-area">
+                <div class="preset-select-wrapper">
+                    <label for="presetBaseSelect">Load Preset:</label>
+                    <select id="presetBaseSelect" onchange="loadPresetIntoCustomForm(this.value)">
+                        <option value="">-- Choose Base Preset --</option>
+                    </select>
+                </div>
+                <button type="button" class="btn-reset-defaults" onclick="resetCustomGameToDefaults()"
+                        title="Reset all settings to default">↺ Reset
+                </button>
+                <button class="modal-close" onclick="closeCustomGameModal()" title="Close">&times;</button>
+            </div>
         </div>
-        <div class="modal-body">
-            <div class="config-grid">
-                <div class="config-section">
-                    <h3>🎮 Game Settings</h3>
-                    <div class="config-item">
-                        <label for="maxPlayers">Max Players:</label>
-                        <input type="number" id="maxPlayers" min="2" max="50" value="10">
+
+        <!-- Rule Search Bar -->
+        <div class="rule-search-bar">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="ruleSearchInput"
+                   placeholder="Filter rules, modes & settings (e.g. 'zombies', 'time', 'lives', 'ctf')..."
+                   oninput="filterRulesTree(this.value)">
+            <button type="button" id="clearSearchBtn" class="clear-search-btn" onclick="clearRuleSearch()"
+                    style="display:none">&times;
+            </button>
+        </div>
+
+        <!-- Split Body -->
+        <div class="split-modal-body">
+            <!-- Left Pane: Rule Tree Sidebar -->
+            <nav class="rule-tree-sidebar" id="ruleTreeSidebar">
+                <!-- Group 1: Core Match -->
+                <div class="tree-group">
+                    <div class="tree-group-header">🎮 Core Match</div>
+                    <div class="tree-node active" data-panel="panel-players-teams"
+                         onclick="selectRuleTreeNode('panel-players-teams')">
+                        <div class="tree-node-title">👥 Players &amp; Teams</div>
+                        <span class="tree-pill" id="badge-players-teams">10p • 2T</span>
                     </div>
-                    <div class="config-item">
-                        <label for="teamCount">Team Mode:</label>
-                        <select id="teamCount">
-                            <option value="0">Free For All</option>
-                            <option value="2" selected>2 Teams</option>
-                            <option value="3">3 Teams</option>
-                            <option value="4">4 Teams</option>
-                        </select>
+                    <div class="tree-node" data-panel="panel-victory-timers"
+                         onclick="selectRuleTreeNode('panel-victory-timers')">
+                        <div class="tree-node-title">🏆 Victory &amp; Timers</div>
+                        <span class="tree-pill" id="badge-victory-timers">Score • 10m</span>
                     </div>
-                    <div class="config-item">
-                        <label for="scoreStyle">Score Style:</label>
-                        <select id="scoreStyle">
-                            <option value="TOTAL_KILLS">Total Kills (Deathmatch)</option>
-                            <option value="OBJECTIVE">Objectives Only (CTF/KOTH/etc.)</option>
-                            <option value="TOTAL">Total (Kills + Objectives)</option>
-                        </select>
-                    </div>
-                    <div class="config-item">
-                        <label for="enableAIFilling">🤖 Fill with AI Players:</label>
-                        <input type="checkbox" id="enableAIFilling" checked>
-                        <span class="checkbox-label">Automatically fill empty slots with AI players</span>
+                    <div class="tree-node" data-panel="panel-respawn-rules"
+                         onclick="selectRuleTreeNode('panel-respawn-rules')">
+                        <div class="tree-node-title">🔄 Respawn Rules</div>
+                        <span class="tree-pill" id="badge-respawn-rules">Delayed 5s</span>
                     </div>
                 </div>
 
-                <div class="config-section">
-                    <h3>🗺️ World Settings</h3>
-                    <div class="config-item">
-                        <label for="worldWidth">World Width:</label>
-                        <input type="number" id="worldWidth" min="800" max="7000" step="100" value="2000">
+                <!-- Group 2: World & Hazards -->
+                <div class="tree-group">
+                    <div class="tree-group-header">🗺️ World &amp; Hazards</div>
+                    <div class="tree-node" data-panel="panel-map-terrain"
+                         onclick="selectRuleTreeNode('panel-map-terrain')">
+                        <div class="tree-node-title">📐 Map &amp; Health</div>
+                        <span class="tree-pill" id="badge-map-terrain">2000×2000</span>
                     </div>
-                    <div class="config-item">
-                        <label for="worldHeight">World Height:</label>
-                        <input type="number" id="worldHeight" min="800" max="7000" step="100" value="2000">
-                    </div>
-                    <div class="config-item">
-                        <label for="obstacleDensity">Obstacle Density:</label>
-                        <select id="obstacleDensity">
-                            <option value="RANDOM">Random (Varies Each Game)</option>
-                            <option value="SPARSE">Sparse (Open Battlefield)</option>
-                            <option value="DENSE">Dense (Balanced Cover)</option>
-                            <option value="CHOKED">Choked (Heavy Cover)</option>
-                        </select>
-                    </div>
-                    <div class="config-item">
-                        <label for="enableRandomEvents">
-                            <input type="checkbox" id="enableRandomEvents" style="width: auto; margin-right: 5px;"
-                                   onchange="updateEventFields()">
-                            Enable Random Events
-                        </label>
-                        <small style="color: #888; font-size: 0.8em;">Dynamic hazards during gameplay</small>
+                    <div class="tree-node" data-panel="panel-dynamic-events"
+                         onclick="selectRuleTreeNode('panel-dynamic-events')">
+                        <div class="tree-node-title">🌋 Dynamic Events</div>
+                        <span class="tree-pill off" id="badge-dynamic-events">OFF</span>
                     </div>
                 </div>
 
-                <div class="config-section">
-                    <h3>⚔️ Player Settings</h3>
-                    <div class="config-item">
-                        <label for="playerMaxHealth">Max Health:</label>
-                        <input type="number" id="playerMaxHealth" min="10" max="1000" step="10" value="100">
+                <!-- Group 3: Match Objectives -->
+                <div class="tree-group">
+                    <div class="tree-group-header">🎯 Objectives &amp; Modes</div>
+                    <div class="tree-node" data-panel="panel-mode-ctf" onclick="selectRuleTreeNode('panel-mode-ctf')">
+                        <div class="tree-node-title">🚩 Capture the Flag</div>
+                        <span class="tree-pill off" id="badge-mode-ctf">OFF</span>
+                    </div>
+                    <div class="tree-node" data-panel="panel-mode-koth" onclick="selectRuleTreeNode('panel-mode-koth')">
+                        <div class="tree-node-title">👑 King of the Hill</div>
+                        <span class="tree-pill off" id="badge-mode-koth">OFF</span>
+                    </div>
+                    <div class="tree-node" data-panel="panel-mode-hq" onclick="selectRuleTreeNode('panel-mode-hq')">
+                        <div class="tree-node-title">🏛️ Headquarters</div>
+                        <span class="tree-pill off" id="badge-mode-hq">OFF</span>
+                    </div>
+                    <div class="tree-node" data-panel="panel-mode-vip" onclick="selectRuleTreeNode('panel-mode-vip')">
+                        <div class="tree-node-title">👑 VIP Target Mode</div>
+                        <span class="tree-pill off" id="badge-mode-vip">OFF</span>
                     </div>
                 </div>
 
-                <div class="config-section">
-                    <h3>🚩 Capture the Flag</h3>
-                    <div class="config-item">
-                        <label for="flagsPerTeam">Flags Per Team:</label>
-                        <input type="number" id="flagsPerTeam" min="0" max="3" value="0">
-                        <small style="color: #888; font-size: 0.8em;">0 = disabled, 1-3 = CTF mode</small>
+                <!-- Group 4: NPCs & Modifiers -->
+                <div class="tree-group">
+                    <div class="tree-group-header">👾 NPCs &amp; Chaos</div>
+                    <div class="tree-node" data-panel="panel-modifier-zombies"
+                         onclick="selectRuleTreeNode('panel-modifier-zombies')">
+                        <div class="tree-node-title">🧟 Zombie Horde</div>
+                        <span class="tree-pill off" id="badge-modifier-zombies">OFF</span>
                     </div>
-                    <div class="config-item">
-                        <label for="pointsPerFlagCapture">Points Per Capture:</label>
-                        <input type="number" id="pointsPerFlagCapture" min="1" max="1000" value="1">
-                        <small style="color: #888; font-size: 0.8em;">Score awarded per flag capture (Objective / Total
-                            scoring)</small>
+                    <div class="tree-node" data-panel="panel-modifier-oddball"
+                         onclick="selectRuleTreeNode('panel-modifier-oddball')">
+                        <div class="tree-node-title">⭐ Oddball NPCs</div>
+                        <span class="tree-pill off" id="badge-modifier-oddball">OFF</span>
                     </div>
-                </div>
-
-                <div class="config-section">
-                    <h3>👑 King of the Hill</h3>
-                    <div class="config-item">
-                        <label for="kothZones">Number of Zones:</label>
-                        <input type="number" id="kothZones" min="0" max="4" value="0">
-                        <small style="color: #888; font-size: 0.8em;">0 = disabled, 1-4 = KOTH zones</small>
-                    </div>
-                    <div class="config-item">
-                        <label for="kothPointsPerSecond">Points Per Second:</label>
-                        <input type="number" id="kothPointsPerSecond" min="0.1" max="100" step="0.5" value="1.0">
-                        <small style="color: #888; font-size: 0.8em;">Points awarded for controlling a zone</small>
+                    <div class="tree-node" data-panel="panel-modifier-weapons"
+                         onclick="selectRuleTreeNode('panel-modifier-weapons')">
+                        <div class="tree-node-title">🔀 Random Weapons</div>
+                        <span class="tree-pill off" id="badge-modifier-weapons">OFF</span>
                     </div>
                 </div>
+            </nav>
 
-                <div class="config-section">
-                    <h3>⭐ Oddball</h3>
-                    <div class="config-item">
-                        <label for="enableOddballNpcs">NPC Oddball Mode:</label>
-                        <input type="checkbox" id="enableOddballNpcs">
-                        <small style="color: #888; font-size: 0.8em;">Invincible NPCs bounce around shooting at players
-                            — hit them to score!</small>
+            <!-- Right Pane: Rule Inspector Container -->
+            <div class="rule-inspector-container" id="ruleInspectorContainer">
+                <!-- Panel 1: Players & Teams -->
+                <div class="inspector-panel active" id="panel-players-teams"
+                     data-tags="players teams bots ai score style">
+                    <div class="panel-banner">
+                        <h3>👥 Players &amp; Team Settings</h3>
+                        <p>Configure player capacities, team alignments, scoring calculation mode, and bot filling.</p>
                     </div>
-                    <div class="config-item">
-                        <label for="rampageBallCount">Rampage Balls:</label>
-                        <input type="number" id="rampageBallCount" min="0" max="5" value="1">
-                        <small style="color: #888; font-size: 0.8em;">Slow, heavy, high-DPS — primary target (2× points
-                            per hit)</small>
+                    <div class="form-card">
+                        <div class="form-grid-2">
+                            <div class="form-field">
+                                <label for="maxPlayers">Max Players (2 - 50):</label>
+                                <input type="number" id="maxPlayers" min="2" max="50" value="10">
+                                <small>Maximum human + bot capacity for this match</small>
+                            </div>
+                            <div class="form-field">
+                                <label for="teamCount">Team Mode:</label>
+                                <select id="teamCount">
+                                    <option value="0">Free For All (No Teams)</option>
+                                    <option value="2" selected>2 Teams</option>
+                                    <option value="3">3 Teams</option>
+                                    <option value="4">4 Teams</option>
+                                </select>
+                                <small>Number of competing factions</small>
+                            </div>
+                        </div>
+                        <div class="form-field" style="margin-top: 10px;">
+                            <label for="scoreStyle">Score Style (How Total Score is Computed):</label>
+                            <select id="scoreStyle">
+                                <option value="TOTAL_KILLS">Total Kills (Pure Deathmatch)</option>
+                                <option value="OBJECTIVE">Objectives Only (CTF, KOTH, HQ, VIP)</option>
+                                <option value="TOTAL">Total (Kills + Objectives Combined)</option>
+                            </select>
+                            <small>Determines what contributes to the match leaderboard and victory score</small>
+                        </div>
                     </div>
-                    <div class="config-item">
-                        <label for="seekerBallCount">Seeker Balls:</label>
-                        <input type="number" id="seekerBallCount" min="0" max="10" value="2">
-                        <small style="color: #888; font-size: 0.8em;">Fast, light, harassing — secondary target (1×
-                            points)</small>
-                    </div>
-                    <div class="config-item">
-                        <label for="oddballNpcPointsPerDamage">Points Per Damage:</label>
-                        <input type="number" id="oddballNpcPointsPerDamage" min="0.01" max="10" step="0.01" value="0.1">
-                        <small style="color: #888; font-size: 0.8em;">Score per 1 unit of damage dealt (0.1 = 1 pt per
-                            10 dmg)</small>
-                    </div>
-                </div>
-
-                <div class="config-section">
-                    <h3>🧟 Zombie Horde</h3>
-                    <div class="config-item">
-                        <label for="enableZombies">Enable Zombies:</label>
-                        <input type="checkbox" id="enableZombies">
-                        <small style="color: #888; font-size: 0.8em;">Spawn hostile NPC zombies that chase and melee entities!</small>
-                    </div>
-                    <div class="config-item">
-                        <label for="zombieSpawnStyle">Spawn Style:</label>
-                        <select id="zombieSpawnStyle">
-                            <option value="WAVE">Wave (Periodic Horde Waves)</option>
-                            <option value="CONSTANT">Constant (Steady Pressure)</option>
-                            <option value="EBB_AND_FLOW">Ebb &amp; Flow (Paced Calms &amp; Surges)</option>
-                        </select>
-                    </div>
-                    <div class="config-item">
-                        <label for="zombieIntensity">Intensity:</label>
-                        <select id="zombieIntensity">
-                            <option value="LOW">Low (Few zombies)</option>
-                            <option value="MEDIUM" selected>Medium (Standard)</option>
-                            <option value="HIGH">High (Large hordes)</option>
-                            <option value="NIGHTMARE">Nightmare (Overwhelming Swarm)</option>
-                        </select>
-                    </div>
-                    <div class="config-item">
-                        <label for="zombiePointsPerKill">Points Per Kill (0-5):</label>
-                        <input type="number" id="zombiePointsPerKill" min="0" max="5" value="1">
-                        <small style="color: #888; font-size: 0.8em;">Bonus points awarded to the killer for each zombie destroyed</small>
-                    </div>
-                </div>
-
-                <div class="config-section">
-                    <h3>👑 VIP Mode</h3>
-                    <div class="config-item">
-                        <label for="enableVip">Enable VIP:</label>
-                        <input type="checkbox" id="enableVip">
-                        <small style="color: #888; font-size: 0.8em;">One player per team is the VIP — only VIP kills
-                            score!</small>
-                    </div>
-                    <div class="config-item">
-                        <small style="color: #ff9500; font-size: 0.8em;">⚠️ Best with team mode and OBJECTIVE
-                            scoring</small>
-                    </div>
-                </div>
-
-                <div class="config-section">
-                    <h3>🔀 Random Weapons</h3>
-                    <div class="config-item">
-                        <label for="enableRandomWeapons">Enable Random Weapons:</label>
-                        <input type="checkbox" id="enableRandomWeapons">
-                        <small style="color: #888; font-size: 0.8em;">All players get new random weapons at regular
-                            intervals</small>
-                    </div>
-                    <div class="config-item">
-                        <label for="randomWeaponInterval">Weapon Change Interval (seconds):</label>
-                        <input type="number" id="randomWeaponInterval" min="5" max="300" step="5" value="30">
-                        <small style="color: #888; font-size: 0.8em;">How often weapons change (30s default)</small>
-                    </div>
-                    <div class="config-item">
-                        <small style="color: #ff9500; font-size: 0.8em;">⚠️ Creates chaotic, unpredictable
-                            gameplay!</small>
-                    </div>
-                </div>
-
-                <div class="config-section">
-                    <h3>🏛️ Headquarters</h3>
-                    <div class="config-item">
-                        <label for="addHeadquarters">Enable Headquarters:</label>
-                        <input type="checkbox" id="addHeadquarters">
-                        <small style="color: #888; font-size: 0.8em;">Each team gets a destructible base in their spawn
-                            zone</small>
-                    </div>
-                    <div class="config-item">
-                        <label for="headquartersMaxHealth">Max Health:</label>
-                        <input type="number" id="headquartersMaxHealth" min="100" max="100000" step="100" value="1000">
-                        <small style="color: #888; font-size: 0.8em;">Health of each headquarters structure</small>
-                    </div>
-                    <div class="config-item">
-                        <label for="headquartersPointsPerDamage">Points Per Damage:</label>
-                        <input type="number" id="headquartersPointsPerDamage" min="0.01" max="10" step="0.05"
-                               value="0.1">
-                        <small style="color: #888; font-size: 0.8em;">Points awarded per damage dealt (0.1 = 1 point per
-                            10 damage)</small>
-                    </div>
-                    <div class="config-item">
-                        <label for="headquartersDestructionBonus">Destruction Bonus:</label>
-                        <input type="number" id="headquartersDestructionBonus" min="0" max="10000" step="10"
-                               value="100">
-                        <small style="color: #888; font-size: 0.8em;">Bonus points for destroying enemy HQ</small>
-                    </div>
-                    <div class="config-item">
-                        <label for="headquartersDestructionEndsGame">
-                            <input type="checkbox" id="headquartersDestructionEndsGame" checked
-                                   style="width: auto; margin-right: 5px;">
-                            HQ Destruction Ends Game
-                        </label>
-                        <small style="color: #888; font-size: 0.8em;">Game ends immediately when a headquarters is
-                            destroyed</small>
-                    </div>
-                </div>
-
-                <div class="config-section">
-                    <h3>🏆 Victory Conditions</h3>
-                    <div class="config-item">
-                        <label for="victoryCondition">Win Condition:</label>
-                        <select id="victoryCondition" onchange="updateVictoryFields()">
-                            <option value="ENDLESS">Endless (No Win Condition)</option>
-                            <option value="SCORE_LIMIT">Score Limit (First to X)</option>
-                            <option value="TIME_LIMIT">Time Limit (Most at Time)</option>
-                        </select>
-                    </div>
-                    <div class="config-item" id="scoreLimitField" style="display: none;">
-                        <label for="scoreLimit">Score Limit:</label>
-                        <input type="number" id="scoreLimit" min="1" max="10000" value="50">
-                        <small style="color: #888; font-size: 0.8em;">First to reach this score wins</small>
-                    </div>
-                    <div class="config-item" id="timeLimitField" style="display: none;">
-                        <label for="timeLimit">Time Limit (seconds):</label>
-                        <input type="number" id="timeLimit" min="1" max="7200" step="60" value="600">
-                        <small style="color: #888; font-size: 0.8em;">Game duration (10 min default)</small>
-                    </div>
-                    <div class="config-item" id="suddenDeathField" style="display: none;">
-                        <label for="suddenDeath">
-                            <input type="checkbox" id="suddenDeath" style="width: auto; margin-right: 5px;">
-                            Enable Sudden Death (Next score wins on tie)
+                    <div class="form-card master-toggle-card">
+                        <div class="master-toggle-info">
+                            <span class="master-toggle-title">🤖 AI Player Auto-Fill</span>
+                            <span class="master-toggle-desc">Automatically spawn bots into empty player slots during the match</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="enableAIFilling" checked>
+                            <span class="toggle-slider"></span>
                         </label>
                     </div>
-                    <div class="config-item">
-                        <label for="lockGameAfterSeconds">Lock Game After (seconds):</label>
-                        <input type="number" id="lockGameAfterSeconds" min="0" max="3600" step="10" value="0">
-                        <small style="color: #888; font-size: 0.8em;">Prevent new players from joining after this time
-                            (0 = never lock, useful for Battle Royale)</small>
+                </div>
+
+                <!-- Panel 2: Victory & Timers -->
+                <div class="inspector-panel" id="panel-victory-timers"
+                     data-tags="victory win score limit time sudden death countdown lock">
+                    <div class="panel-banner">
+                        <h3>🏆 Victory Conditions &amp; Match Timers</h3>
+                        <p>Define how the match is won, score thresholds, sudden death, and time capping.</p>
                     </div>
-                    <div class="config-item">
-                        <label for="gameStartCountdown">Game Start Countdown (seconds):</label>
-                        <input type="number" id="gameStartCountdown" min="0" max="300" step="5" value="0">
-                        <small style="color: #888; font-size: 0.8em;">Prep/config window before game action begins (0 =
-                            start immediately)</small>
+                    <div class="form-card">
+                        <div class="form-field">
+                            <label for="victoryCondition">Primary Win Condition:</label>
+                            <select id="victoryCondition" onchange="updateVictoryFields()">
+                                <option value="SCORE_LIMIT">Score Limit (First to reach score wins, time capped)
+                                </option>
+                                <option value="TIME_LIMIT">Time Limit (Highest score when time expires wins)</option>
+                                <option value="ELIMINATION">Elimination (Last team/player standing wins, time capped)
+                                </option>
+                            </select>
+                            <small>All game modes are safely capped by the match time limit</small>
+                        </div>
+                        <div class="form-field" id="scoreLimitField">
+                            <label for="scoreLimit">Score Limit (1 - 10000):</label>
+                            <input type="number" id="scoreLimit" min="1" max="10000" value="50">
+                            <small>First team or player to reach this score wins the match</small>
+                        </div>
+                        <div class="form-field" id="timeLimitField">
+                            <label for="timeLimit">Time Limit / Match Cap (seconds):</label>
+                            <input type="number" id="timeLimit" min="1" max="7200" step="60" value="600">
+                            <small>Maximum match duration (600s = 10 minutes)</small>
+                        </div>
+                    </div>
+                    <div class="form-card master-toggle-card" id="suddenDeathField">
+                        <div class="master-toggle-info">
+                            <span class="master-toggle-title">⚠️ Sudden Death on Tie</span>
+                            <span class="master-toggle-desc">When time expires with equal top scores, next score wins immediately</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="suddenDeath">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-card">
+                        <div class="form-grid-2">
+                            <div class="form-field">
+                                <label for="gameStartCountdown">Game Start Countdown (seconds):</label>
+                                <input type="number" id="gameStartCountdown" min="0" max="300" step="5" value="0">
+                                <small>Prep/ready-up window before action starts (0 = instant)</small>
+                            </div>
+                            <div class="form-field">
+                                <label for="lockGameAfterSeconds">Lock Game After (seconds):</label>
+                                <input type="number" id="lockGameAfterSeconds" min="0" max="3600" step="10" value="0">
+                                <small>Prevent late joins after this duration (0 = open join)</small>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="config-section">
-                    <h3>🔄 Respawn Rules</h3>
-                    <div class="config-item">
-                        <label for="respawnMode">Respawn Mode:</label>
-                        <select id="respawnMode" onchange="updateRespawnFields()">
-                            <option value="DELAYED">Delayed (Respawn after a set delay)</option>
-                            <option value="WAVE">Wave (Team respawns together)</option>
-                            <option value="LIMITED">Limited (X lives per player)</option>
-                            <option value="LAST_STANDING">Last Standing (Respawn when one is left)</option>
-                        </select>
+                <!-- Panel 3: Respawn Rules -->
+                <div class="inspector-panel" id="panel-respawn-rules"
+                     data-tags="respawn mode delay lives wave limited last standing">
+                    <div class="panel-banner">
+                        <h3>🔄 Player Respawn Rules</h3>
+                        <p>Configure respawn mechanics, delays, wave intervals, or limited stock lives.</p>
                     </div>
-                    <div class="config-item" id="respawnDelayField">
-                        <label for="respawnDelay">Respawn Delay (seconds):</label>
-                        <input type="number" id="respawnDelay" min="0" max="60" step="1" value="5">
-                        <small style="color: #888; font-size: 0.8em;">Time before respawn</small>
-                    </div>
-                    <div class="config-item" id="waveIntervalField" style="display: none;">
-                        <label for="waveRespawnInterval">Wave Interval (seconds):</label>
-                        <input type="number" id="waveRespawnInterval" min="1" max="300" step="10" value="30">
-                        <small style="color: #888; font-size: 0.8em;">Time between wave respawns</small>
-                    </div>
-                    <div class="config-item" id="maxLivesField" style="display: none;">
-                        <label for="maxLives">Max Lives Per Player:</label>
-                        <input type="number" id="maxLives" min="1" max="100" value="3">
-                        <small style="color: #888; font-size: 0.8em;">Lives before elimination</small>
+                    <div class="form-card">
+                        <div class="form-field">
+                            <label for="respawnMode">Respawn Mode:</label>
+                            <select id="respawnMode" onchange="updateRespawnFields()">
+                                <option value="DELAYED">Delayed (Individual timer after death)</option>
+                                <option value="WAVE">Wave (All dead teammates respawn in synchronized waves)</option>
+                                <option value="LIMITED">Limited (Fixed stock of lives per player)</option>
+                                <option value="LAST_STANDING">Last Standing (Dead players respawn when 1 survivor
+                                    remains)
+                                </option>
+                            </select>
+                            <small>How eliminated players return to combat</small>
+                        </div>
+                        <div class="form-field" id="respawnDelayField">
+                            <label for="respawnDelay">Respawn Delay (seconds):</label>
+                            <input type="number" id="respawnDelay" min="0" max="60" step="1" value="5">
+                            <small>Time before a player can respawn</small>
+                        </div>
+                        <div class="form-field" id="waveIntervalField" style="display: none;">
+                            <label for="waveRespawnInterval">Wave Interval (seconds):</label>
+                            <input type="number" id="waveRespawnInterval" min="1" max="300" step="10" value="30">
+                            <small>Time interval between team respawn waves</small>
+                        </div>
+                        <div class="form-field" id="maxLivesField" style="display: none;">
+                            <label for="maxLives">Max Lives Per Player (Stock):</label>
+                            <input type="number" id="maxLives" min="1" max="100" value="3">
+                            <small>Number of lives before permanent elimination</small>
+                        </div>
                     </div>
                 </div>
 
-                <div class="config-section">
-                    <h3>🌋 Event Configuration</h3>
-                    <small style="color: #888; font-size: 0.9em; display: block; margin-bottom: 10px;">Configure event
-                        timing and density (enable in World Settings)</small>
-                    <div id="eventConfigFields" style="display: none;">
-                        <div class="config-item">
-                            <label for="randomEventInterval">Event Interval (seconds):</label>
-                            <input type="number" id="randomEventInterval" min="5" max="600" step="10" value="40">
-                            <small style="color: #888; font-size: 0.8em;">Average time between events</small>
+                <!-- Panel 4: Map & Health -->
+                <div class="inspector-panel" id="panel-map-terrain"
+                     data-tags="map world width height size obstacles cover health">
+                    <div class="panel-banner">
+                        <h3>📐 Map Dimensions, Obstacles &amp; Player Stats</h3>
+                        <p>Configure battlefield dimensions, procedural cover density, and base player health.</p>
+                    </div>
+                    <div class="form-card">
+                        <div class="form-grid-2">
+                            <div class="form-field">
+                                <label for="worldWidth">World Width (units):</label>
+                                <input type="number" id="worldWidth" min="800" max="7000" step="100" value="2000">
+                                <small>Horizontal battlefield bounds (800 - 7000)</small>
+                            </div>
+                            <div class="form-field">
+                                <label for="worldHeight">World Height (units):</label>
+                                <input type="number" id="worldHeight" min="800" max="7000" step="100" value="2000">
+                                <small>Vertical battlefield bounds (800 - 7000)</small>
+                            </div>
                         </div>
-                        <div class="config-item">
-                            <label for="eventWarningDuration">Warning Duration (seconds):</label>
-                            <input type="number" id="eventWarningDuration" min="0" max="30" step="0.5" value="3">
-                            <small style="color: #888; font-size: 0.8em;">Warning time before event activates</small>
+                        <div class="form-grid-2" style="margin-top: 10px;">
+                            <div class="form-field">
+                                <label for="obstacleDensity">Obstacle Density:</label>
+                                <select id="obstacleDensity">
+                                    <option value="RANDOM">Random (Procedural cover)</option>
+                                    <option value="SPARSE">Sparse (Open arena)</option>
+                                    <option value="DENSE">Dense (Balanced cover &amp; corridors)</option>
+                                    <option value="CHOKED">Choked (Heavy maze cover)</option>
+                                </select>
+                                <small>Density of indestructible walls and cover</small>
+                            </div>
+                            <div class="form-field">
+                                <label for="playerMaxHealth">Player Max Health:</label>
+                                <input type="number" id="playerMaxHealth" min="10" max="1000" step="10" value="100">
+                                <small>Base starting hitpoints (100 is standard)</small>
+                            </div>
                         </div>
-                        <div class="config-item">
-                            <label for="meteorShowerDensity">Meteor Shower Density:</label>
-                            <select id="meteorShowerDensity">
-                                <option value="SPARSE">Sparse (Few Meteors)</option>
-                                <option value="DENSE" selected>Dense (Normal)</option>
-                                <option value="CHOKED">Choked (Many Meteors)</option>
-                                <option value="RANDOM">Random (Varies)</option>
-                            </select>
-                            <small style="color: #888; font-size: 0.8em;">Scales with map size</small>
+                    </div>
+                </div>
+
+                <!-- Panel 5: Dynamic Events -->
+                <div class="inspector-panel" id="panel-dynamic-events"
+                     data-tags="events hazards meteors volcanoes ion storm earthquakes blizzards dust">
+                    <div class="panel-banner">
+                        <h3>🌋 Dynamic Environmental Hazards</h3>
+                        <p>Enable procedural global hazards like meteor showers, volcanic eruptions, ion storms, and
+                            blizzards.</p>
+                    </div>
+                    <div class="form-card master-toggle-card">
+                        <div class="master-toggle-info">
+                            <span class="master-toggle-title">🌋 Enable Random Events &amp; Hazards</span>
+                            <span class="master-toggle-desc">Triggers periodic dynamic battlefield hazards and environmental events</span>
                         </div>
-                        <div class="config-item">
-                            <label for="volcanicEruptionDensity">Volcanic Eruption Density:</label>
-                            <select id="volcanicEruptionDensity">
-                                <option value="SPARSE">Sparse (Few Zones)</option>
-                                <option value="DENSE" selected>Dense (Normal)</option>
-                                <option value="CHOKED">Choked (Many Zones)</option>
-                                <option value="RANDOM">Random (Varies)</option>
-                            </select>
-                            <small style="color: #888; font-size: 0.8em;">Scales with map size</small>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="enableRandomEvents" onchange="updateEventFields()">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="eventConfigFields" class="form-card" style="display: none;">
+                        <div class="form-grid-2">
+                            <div class="form-field">
+                                <label for="randomEventInterval">Event Interval (seconds):</label>
+                                <input type="number" id="randomEventInterval" min="5" max="600" step="10" value="40">
+                                <small>Average duration between random events</small>
+                            </div>
+                            <div class="form-field">
+                                <label for="eventWarningDuration">Warning Duration (seconds):</label>
+                                <input type="number" id="eventWarningDuration" min="0" max="30" step="0.5" value="3">
+                                <small>Pre-warning telegraph before hazard strikes</small>
+                            </div>
                         </div>
-                        <div class="config-item">
-                            <label for="ionStormDensity">Ion Storm Density:</label>
-                            <select id="ionStormDensity">
-                                <option value="SPARSE">Sparse (Few Zones)</option>
-                                <option value="DENSE" selected>Dense (Normal)</option>
-                                <option value="CHOKED">Choked (Many Zones)</option>
-                                <option value="RANDOM">Random (Varies)</option>
-                            </select>
-                            <small style="color: #888; font-size: 0.8em;">Scales with map size</small>
+                        <div class="sub-config-box">
+                            <h4 style="margin: 0 0 10px 0; color: #5fc4b8; font-size: 0.9em;">Per-Event Density
+                                Scaling</h4>
+                            <div class="form-grid-3">
+                                <div class="form-field">
+                                    <label for="meteorShowerDensity">☄️ Meteors:</label>
+                                    <select id="meteorShowerDensity">
+                                        <option value="SPARSE">Sparse</option>
+                                        <option value="DENSE" selected>Dense</option>
+                                        <option value="CHOKED">Choked</option>
+                                        <option value="RANDOM">Random</option>
+                                    </select>
+                                </div>
+                                <div class="form-field">
+                                    <label for="volcanicEruptionDensity">🌋 Volcanoes:</label>
+                                    <select id="volcanicEruptionDensity">
+                                        <option value="SPARSE">Sparse</option>
+                                        <option value="DENSE" selected>Dense</option>
+                                        <option value="CHOKED">Choked</option>
+                                        <option value="RANDOM">Random</option>
+                                    </select>
+                                </div>
+                                <div class="form-field">
+                                    <label for="ionStormDensity">⚡ Ion Storms:</label>
+                                    <select id="ionStormDensity">
+                                        <option value="SPARSE">Sparse</option>
+                                        <option value="DENSE" selected>Dense</option>
+                                        <option value="CHOKED">Choked</option>
+                                        <option value="RANDOM">Random</option>
+                                    </select>
+                                </div>
+                                <div class="form-field">
+                                    <label for="earthquakeDensity">💥 Earthquakes:</label>
+                                    <select id="earthquakeDensity">
+                                        <option value="SPARSE" selected>Sparse</option>
+                                        <option value="DENSE">Dense</option>
+                                        <option value="CHOKED">Choked</option>
+                                        <option value="RANDOM">Random</option>
+                                    </select>
+                                </div>
+                                <div class="form-field">
+                                    <label for="blizzardDensity">❄️ Blizzards:</label>
+                                    <select id="blizzardDensity">
+                                        <option value="SPARSE">Sparse</option>
+                                        <option value="DENSE" selected>Dense</option>
+                                        <option value="CHOKED">Choked</option>
+                                        <option value="RANDOM">Random</option>
+                                    </select>
+                                </div>
+                                <div class="form-field">
+                                    <label for="dustStormDensity">🌪️ Dust Storms:</label>
+                                    <select id="dustStormDensity">
+                                        <option value="SPARSE">Sparse</option>
+                                        <option value="DENSE" selected>Dense</option>
+                                        <option value="CHOKED">Choked</option>
+                                        <option value="RANDOM">Random</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
-                        <div class="config-item">
-                            <label for="earthquakeDensity">Earthquake Density:</label>
-                            <select id="earthquakeDensity">
-                                <option value="SPARSE" selected>Sparse (Few Quakes)</option>
-                                <option value="DENSE">Dense (Normal)</option>
-                                <option value="CHOKED">Choked (Many Quakes)</option>
-                                <option value="RANDOM">Random (Varies)</option>
-                            </select>
-                            <small style="color: #888; font-size: 0.8em;">Scales with map size</small>
+                    </div>
+                </div>
+
+                <!-- Panel 6: Capture the Flag -->
+                <div class="inspector-panel" id="panel-mode-ctf" data-tags="ctf capture flag flags team objective">
+                    <div class="panel-banner">
+                        <h3>🚩 Capture the Flag (CTF)</h3>
+                        <p>Teams must capture enemy flags and return them to their home base to score.</p>
+                    </div>
+                    <div class="form-card">
+                        <div class="form-grid-2">
+                            <div class="form-field">
+                                <label for="flagsPerTeam">Flags Per Team (0 = Disabled, 1 - 3):</label>
+                                <input type="number" id="flagsPerTeam" min="0" max="3" value="0">
+                                <small>Set to 1, 2, or 3 flags per team to enable CTF mode</small>
+                            </div>
+                            <div class="form-field">
+                                <label for="pointsPerFlagCapture">Points Per Capture:</label>
+                                <input type="number" id="pointsPerFlagCapture" min="1" max="1000" value="1">
+                                <small>Score awarded when a flag is successfully captured</small>
+                            </div>
                         </div>
-                        <div class="config-item">
-                            <label for="blizzardDensity">Blizzard Density:</label>
-                            <select id="blizzardDensity">
-                                <option value="SPARSE">Sparse (Few Zones)</option>
-                                <option value="DENSE" selected>Dense (Normal)</option>
-                                <option value="CHOKED">Choked (Many Zones)</option>
-                                <option value="RANDOM">Random (Varies)</option>
-                            </select>
-                            <small style="color: #888; font-size: 0.8em;">Scales with map size</small>
+                    </div>
+                </div>
+
+                <!-- Panel 7: King of the Hill -->
+                <div class="inspector-panel" id="panel-mode-koth"
+                     data-tags="koth king hill zone zones territory objective">
+                    <div class="panel-banner">
+                        <h3>👑 King of the Hill (KOTH)</h3>
+                        <p>Contest and hold circular zones positioned symmetrically across the map to earn continuous
+                            score.</p>
+                    </div>
+                    <div class="form-card">
+                        <div class="form-grid-2">
+                            <div class="form-field">
+                                <label for="kothZones">Number of Zones (0 = Disabled, 1 - 4):</label>
+                                <input type="number" id="kothZones" min="0" max="4" value="0">
+                                <small>Set 1 to 4 zones to enable King of the Hill</small>
+                            </div>
+                            <div class="form-field">
+                                <label for="kothPointsPerSecond">Points Per Second:</label>
+                                <input type="number" id="kothPointsPerSecond" min="0.1" max="100" step="0.5"
+                                       value="1.0">
+                                <small>Rate of points awarded per controlled zone</small>
+                            </div>
                         </div>
-                        <div class="config-item">
-                            <label for="dustStormDensity">Dust Storm Density:</label>
-                            <select id="dustStormDensity">
-                                <option value="SPARSE">Sparse (Few Zones)</option>
-                                <option value="DENSE" selected>Dense (Normal)</option>
-                                <option value="CHOKED">Choked (Many Zones)</option>
-                                <option value="RANDOM">Random (Varies)</option>
-                            </select>
-                            <small style="color: #888; font-size: 0.8em;">Scales with map size</small>
+                    </div>
+                </div>
+
+                <!-- Panel 8: Headquarters -->
+                <div class="inspector-panel" id="panel-mode-hq"
+                     data-tags="headquarters hq base destructible assault objective">
+                    <div class="panel-banner">
+                        <h3>🏛️ Headquarters Assault</h3>
+                        <p>Each team receives a high-durability destructible base in their spawn zone that yields points
+                            upon damage and destruction.</p>
+                    </div>
+                    <div class="form-card master-toggle-card">
+                        <div class="master-toggle-info">
+                            <span class="master-toggle-title">🏛️ Enable Team Headquarters</span>
+                            <span class="master-toggle-desc">Spawns destructible headquarters structures for each team</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="addHeadquarters">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="hqConfigFields" class="form-card">
+                        <div class="form-grid-3">
+                            <div class="form-field">
+                                <label for="headquartersMaxHealth">HQ Max Health:</label>
+                                <input type="number" id="headquartersMaxHealth" min="100" max="100000" step="100"
+                                       value="1000">
+                                <small>Health of each HQ structure</small>
+                            </div>
+                            <div class="form-field">
+                                <label for="headquartersPointsPerDamage">Points Per Damage:</label>
+                                <input type="number" id="headquartersPointsPerDamage" min="0.01" max="10" step="0.05"
+                                       value="0.1">
+                                <small>0.1 = 1 point per 10 damage dealt</small>
+                            </div>
+                            <div class="form-field">
+                                <label for="headquartersDestructionBonus">Destruction Bonus:</label>
+                                <input type="number" id="headquartersDestructionBonus" min="0" max="10000" step="10"
+                                       value="100">
+                                <small>Bonus points for destroying enemy HQ</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel 9: VIP Mode -->
+                <div class="inspector-panel" id="panel-mode-vip" data-tags="vip target protect assassinate objective">
+                    <div class="panel-banner">
+                        <h3>👑 VIP Target Mode</h3>
+                        <p>One player on each team is designated the VIP. Only eliminating the enemy VIP awards
+                            score!</p>
+                    </div>
+                    <div class="form-card master-toggle-card">
+                        <div class="master-toggle-info">
+                            <span class="master-toggle-title">👑 Enable VIP Mode</span>
+                            <span class="master-toggle-desc">Designates a VIP on each team; killing the VIP scores points</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="enableVip">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-card" style="border-left: 3px solid #ff9500;">
+                        <small style="color: #ff9500; font-size: 0.85em;">💡 <strong>Tip:</strong> VIP Mode is most
+                            rewarding when paired with Team Mode (2-4 teams) and <code>OBJECTIVE</code> scoring.</small>
+                    </div>
+                </div>
+
+                <!-- Panel 10: Zombie Horde -->
+                <div class="inspector-panel" id="panel-modifier-zombies"
+                     data-tags="zombies horde swarm npcs infected outbreak">
+                    <div class="panel-banner">
+                        <h3>🧟 Zombie Horde Swarm</h3>
+                        <p>Spawn hostile NPC zombies that breach from outer perimeter flanks furthest from team bases in
+                            cohesive hordes.</p>
+                    </div>
+                    <div class="form-card master-toggle-card">
+                        <div class="master-toggle-info">
+                            <span class="master-toggle-title">🧟 Enable Zombie Horde NPCs</span>
+                            <span class="master-toggle-desc">Hostile melee zombies hunt all players, bases, and turrets</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="enableZombies">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="zombieConfigFields" class="form-card">
+                        <div class="form-grid-3">
+                            <div class="form-field">
+                                <label for="zombieSpawnStyle">Spawn Style:</label>
+                                <select id="zombieSpawnStyle">
+                                    <option value="WAVE">Wave (Periodic Horde Waves)</option>
+                                    <option value="CONSTANT">Constant (Steady Pressure)</option>
+                                    <option value="EBB_AND_FLOW">Ebb &amp; Flow (Paced Surges)</option>
+                                </select>
+                                <small>Pacing of perimeter horde spawns</small>
+                            </div>
+                            <div class="form-field">
+                                <label for="zombieIntensity">Intensity:</label>
+                                <select id="zombieIntensity">
+                                    <option value="LOW">Low (Few zombies)</option>
+                                    <option value="MEDIUM" selected>Medium (Balanced)</option>
+                                    <option value="HIGH">High (Large hordes)</option>
+                                    <option value="NIGHTMARE">Nightmare (Swarm)</option>
+                                </select>
+                                <small>Max zombie population cap</small>
+                            </div>
+                            <div class="form-field">
+                                <label for="zombiePointsPerKill">Points Per Kill (0 - 5):</label>
+                                <input type="number" id="zombiePointsPerKill" min="0" max="5" value="1">
+                                <small>Bonus score for killing a zombie</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel 11: Oddball NPCs -->
+                <div class="inspector-panel" id="panel-modifier-oddball"
+                     data-tags="oddball rampage seeker balls bounce npcs target">
+                    <div class="panel-banner">
+                        <h3>⭐ Oddball NPCs (Target Practice)</h3>
+                        <p>Invincible weaponized floating orbs bounce across the arena, providing bonus points when hit
+                            by weapon fire.</p>
+                    </div>
+                    <div class="form-card master-toggle-card">
+                        <div class="master-toggle-info">
+                            <span class="master-toggle-title">⭐ Enable Oddball NPCs</span>
+                            <span class="master-toggle-desc">Invincible floating balls shoot and bounce around — hit them to score!</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="enableOddballNpcs">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="oddballConfigFields" class="form-card">
+                        <div class="form-grid-3">
+                            <div class="form-field">
+                                <label for="rampageBallCount">Rampage Balls (0 - 5):</label>
+                                <input type="number" id="rampageBallCount" min="0" max="5" value="1">
+                                <small>Slow, heavy, high-DPS (2× points)</small>
+                            </div>
+                            <div class="form-field">
+                                <label for="seekerBallCount">Seeker Balls (0 - 10):</label>
+                                <input type="number" id="seekerBallCount" min="0" max="10" value="2">
+                                <small>Fast, light, harassing (1× points)</small>
+                            </div>
+                            <div class="form-field">
+                                <label for="oddballNpcPointsPerDamage">Points Per Damage:</label>
+                                <input type="number" id="oddballNpcPointsPerDamage" min="0.01" max="10" step="0.01"
+                                       value="0.1">
+                                <small>Score awarded per unit of damage dealt</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel 12: Weapon Chaos -->
+                <div class="inspector-panel" id="panel-modifier-weapons"
+                     data-tags="weapons random gun rotation chaos interval">
+                    <div class="panel-banner">
+                        <h3>🔀 Random Weapon Rotation</h3>
+                        <p>Forces all players to receive synchronized random weapon loadouts on an active timer.</p>
+                    </div>
+                    <div class="form-card master-toggle-card">
+                        <div class="master-toggle-info">
+                            <span class="master-toggle-title">🔀 Enable Random Weapons</span>
+                            <span class="master-toggle-desc">Periodically assigns new randomized weapons to all active players</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="enableRandomWeapons">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="randomWeaponConfigFields" class="form-card">
+                        <div class="form-field">
+                            <label for="randomWeaponInterval">Weapon Change Interval (seconds):</label>
+                            <input type="number" id="randomWeaponInterval" min="5" max="300" step="5" value="30">
+                            <small>How often weapons rotate (30s default)</small>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+
+        <!-- Live Summary Bar -->
+        <div class="rule-summary-bar">
+            <span class="summary-title">Summary:</span>
+            <div class="summary-tags-list" id="customSummaryTagsList"></div>
+        </div>
+
+        <!-- Modal Footer -->
         <div class="modal-footer">
-            <button class="modal-button cancel" onclick="closeCustomGameModal()">Cancel</button>
-            <button class="modal-button create" onclick="createCustomGame()">🚀 Create Game</button>
+            <button type="button" class="modal-button cancel" onclick="closeCustomGameModal()">Cancel</button>
+            <button type="button" class="modal-button create" onclick="createCustomGame()">🚀 Create Game</button>
         </div>
     </div>
 </div>
@@ -917,6 +1611,7 @@
     let lastUpdateTime = Date.now();
     let gamePresets = [];
     let gamePresetsMap = {};
+    let cachedDefaultConfig = null;
 
     async function fetchGamePresets() {
         try {
@@ -928,10 +1623,23 @@
                     gamePresetsMap[preset.id] = preset.config;
                 });
                 renderPresetButtons();
+                populatePresetDropdown();
             }
         } catch (error) {
             console.error('Error fetching game presets:', error);
         }
+    }
+
+    function populatePresetDropdown() {
+        const select = document.getElementById('presetBaseSelect');
+        if (!select) return;
+        select.innerHTML = '<option value="">-- Choose Base Preset --</option>';
+        gamePresets.forEach(preset => {
+            const opt = document.createElement('option');
+            opt.value = preset.id;
+            opt.textContent = preset.label;
+            select.appendChild(opt);
+        });
     }
 
     function renderPresetButtons() {
@@ -1192,7 +1900,7 @@
         gearBtn.className = 'preset-btn-customize';
         gearBtn.textContent = '⚙';
         gearBtn.title = `Customize ${label.replace(/^\S+\s/, '')} rules`;
-        gearBtn.onclick = () => openCustomGameModal(getPresetConfig(presetType));
+        gearBtn.onclick = () => openCustomGameModal(getPresetConfig(presetType), presetType);
 
         group.appendChild(mainBtn);
         group.appendChild(gearBtn);
@@ -1274,83 +1982,280 @@
         }
     });
 
-    // Custom Game Modal Functions
-    async function openCustomGameModal(overrideConfig) {
-        try {
-            // Fetch default configuration from server
-            const response = await fetch('/api/game-config/default');
-            const defaultConfig = await response.json();
-
-            // Merge preset override if provided (gear-icon path)
-            const cfg = overrideConfig ? Object.assign({}, defaultConfig, overrideConfig, {
-                rules: Object.assign({}, defaultConfig.rules, overrideConfig.rules)
-            }) : defaultConfig;
-            
-            // Populate form with values
-            document.getElementById('maxPlayers').value = cfg.maxPlayers;
-            document.getElementById('teamCount').value = cfg.teamCount;
-            document.getElementById('worldWidth').value = cfg.worldWidth;
-            document.getElementById('worldHeight').value = cfg.worldHeight;
-            document.getElementById('playerMaxHealth').value = cfg.playerMaxHealth;
-            document.getElementById('enableAIFilling').checked = cfg.enableAIFilling;
-            
-            // Populate rules fields from merged config
-            const r = cfg.rules || {};
-            if (r) {
-                document.getElementById('flagsPerTeam').value = r.flagsPerTeam ?? 0;
-                document.getElementById('pointsPerFlagCapture').value = r.pointsPerFlagCapture ?? 1;
-                document.getElementById('scoreStyle').value = r.scoreStyle || 'TOTAL_KILLS';
-                document.getElementById('victoryCondition').value = r.victoryCondition || 'ENDLESS';
-                document.getElementById('scoreLimit').value = r.scoreLimit ?? 50;
-                document.getElementById('timeLimit').value = r.timeLimit ?? 600;
-                document.getElementById('suddenDeath').checked = r.suddenDeath ?? false;
-                document.getElementById('lockGameAfterSeconds').value = r.lockGameAfterSeconds ?? 0;
-                document.getElementById('gameStartCountdown').value = r.gameStartCountdown ?? 0;
-                // Coerce the retired ELIMINATION mode to its equivalent (LIMITED, 1 life).
-                document.getElementById('respawnMode').value =
-                    (r.respawnMode === 'ELIMINATION' ? 'LIMITED' : r.respawnMode) || 'DELAYED';
-                document.getElementById('respawnDelay').value = r.respawnDelay ?? 5;
-                document.getElementById('waveRespawnInterval').value = r.waveRespawnInterval ?? 30;
-                document.getElementById('maxLives').value = r.maxLives ?? 3;
-                document.getElementById('kothZones').value = r.kothZones ?? 0;
-                document.getElementById('kothPointsPerSecond').value = r.kothPointsPerSecond ?? 1.0;
-                document.getElementById('enableOddballNpcs').checked = r.enableOddballNpcs ?? false;
-                document.getElementById('rampageBallCount').value = r.rampageBallCount ?? 1;
-                document.getElementById('seekerBallCount').value = r.seekerBallCount ?? 2;
-                document.getElementById('oddballNpcPointsPerDamage').value = r.oddballNpcPointsPerDamage ?? 0.1;
-                document.getElementById('enableZombies').checked = r.enableZombies ?? false;
-                document.getElementById('zombieSpawnStyle').value = r.zombieSpawnStyle || 'WAVE';
-                document.getElementById('zombieIntensity').value = r.zombieIntensity || 'MEDIUM';
-                document.getElementById('zombiePointsPerKill').value = r.zombiePointsPerKill ?? 1;
-                document.getElementById('enableVip').checked = r.enableVip ?? false;
-                document.getElementById('enableRandomWeapons').checked = r.enableRandomWeapons ?? false;
-                document.getElementById('randomWeaponInterval').value = r.randomWeaponInterval ?? 30;
-                document.getElementById('obstacleDensity').value = r.obstacleDensity || 'RANDOM';
-                document.getElementById('addHeadquarters').checked = r.addHeadquarters ?? false;
-                document.getElementById('headquartersMaxHealth').value = r.headquartersMaxHealth ?? 1000;
-                document.getElementById('headquartersPointsPerDamage').value = r.headquartersPointsPerDamage ?? 0.1;
-                document.getElementById('headquartersDestructionBonus').value = r.headquartersDestructionBonus ?? 100;
-                document.getElementById('headquartersDestructionEndsGame').checked = r.headquartersDestructionEndsGame ?? true;
-                document.getElementById('enableRandomEvents').checked = r.enableRandomEvents ?? false;
-                document.getElementById('randomEventInterval').value = r.randomEventInterval ?? 40;
-                document.getElementById('eventWarningDuration').value = r.eventWarningDuration ?? 3;
-                document.getElementById('meteorShowerDensity').value = r.meteorShowerDensity || 'DENSE';
-                document.getElementById('volcanicEruptionDensity').value = r.volcanicEruptionDensity || 'DENSE';
-                document.getElementById('ionStormDensity').value = r.ionStormDensity || 'DENSE';
-                document.getElementById('earthquakeDensity').value = r.earthquakeDensity || 'SPARSE';
-                document.getElementById('blizzardDensity').value = r.blizzardDensity || 'DENSE';
-                document.getElementById('dustStormDensity').value = r.dustStormDensity || 'DENSE';
+    // Custom Game Modal & Rule Tree Controller Functions
+    function selectRuleTreeNode(panelId) {
+        document.querySelectorAll('#ruleTreeSidebar .tree-node').forEach(node => {
+            if (node.getAttribute('data-panel') === panelId) {
+                node.classList.add('active');
+            } else {
+                node.classList.remove('active');
             }
-            
-            // Update field visibility
-            updateVictoryFields();
-            updateRespawnFields();
-            updateEventFields();
-            
-            // Show modal
+        });
+
+        document.querySelectorAll('#ruleInspectorContainer .inspector-panel').forEach(panel => {
+            if (panel.id === panelId) {
+                panel.classList.add('active');
+            } else {
+                panel.classList.remove('active');
+            }
+        });
+
+        const inspector = document.getElementById('ruleInspectorContainer');
+        if (inspector) inspector.scrollTop = 0;
+    }
+
+    function filterRulesTree(query) {
+        const q = (query || '').trim().toLowerCase();
+        const clearBtn = document.getElementById('clearSearchBtn');
+        if (clearBtn) clearBtn.style.display = q ? 'block' : 'none';
+
+        const treeNodes = document.querySelectorAll('#ruleTreeSidebar .tree-node');
+        let firstVisiblePanel = null;
+
+        treeNodes.forEach(node => {
+            const panelId = node.getAttribute('data-panel');
+            const panel = document.getElementById(panelId);
+            const nodeText = (node.textContent || '').toLowerCase();
+            const panelTags = panel ? (panel.getAttribute('data-tags') || '').toLowerCase() : '';
+            const panelText = panel ? (panel.textContent || '').toLowerCase() : '';
+
+            const isMatch = !q || nodeText.includes(q) || panelTags.includes(q) || panelText.includes(q);
+            if (isMatch) {
+                node.classList.remove('hidden-by-filter');
+                if (!firstVisiblePanel) firstVisiblePanel = panelId;
+            } else {
+                node.classList.add('hidden-by-filter');
+            }
+        });
+
+        const activeNode = document.querySelector('#ruleTreeSidebar .tree-node.active:not(.hidden-by-filter)');
+        if (!activeNode && firstVisiblePanel) {
+            selectRuleTreeNode(firstVisiblePanel);
+        }
+    }
+
+    function clearRuleSearch() {
+        const input = document.getElementById('ruleSearchInput');
+        if (input) {
+            input.value = '';
+            filterRulesTree('');
+        }
+    }
+
+    function syncRuleTreeBadges() {
+        const maxPlayers = parseInt(document.getElementById('maxPlayers').value) || 10;
+        const teamCount = parseInt(document.getElementById('teamCount').value) || 0;
+        const victoryCondition = document.getElementById('victoryCondition').value;
+        const scoreLimit = parseInt(document.getElementById('scoreLimit').value) || 50;
+        const timeLimit = parseFloat(document.getElementById('timeLimit').value) || 600;
+        const respawnMode = document.getElementById('respawnMode').value;
+        const respawnDelay = parseFloat(document.getElementById('respawnDelay').value) || 5;
+
+        const worldWidth = parseFloat(document.getElementById('worldWidth').value) || 2000;
+        const worldHeight = parseFloat(document.getElementById('worldHeight').value) || 2000;
+
+        const enableEvents = document.getElementById('enableRandomEvents').checked;
+        const flagsPerTeam = parseInt(document.getElementById('flagsPerTeam').value) || 0;
+        const kothZones = parseInt(document.getElementById('kothZones').value) || 0;
+        const addHq = document.getElementById('addHeadquarters').checked;
+        const enableVip = document.getElementById('enableVip').checked;
+        const enableZombies = document.getElementById('enableZombies').checked;
+        const zombieSpawnStyle = document.getElementById('zombieSpawnStyle').value || 'WAVE';
+        const zombieIntensity = document.getElementById('zombieIntensity').value || 'MEDIUM';
+        const enableOddball = document.getElementById('enableOddballNpcs').checked;
+        const rampageBallCount = parseInt(document.getElementById('rampageBallCount').value) || 1;
+        const seekerBallCount = parseInt(document.getElementById('seekerBallCount').value) || 2;
+        const enableRandomWeapons = document.getElementById('enableRandomWeapons').checked;
+        const randomWeaponInterval = parseFloat(document.getElementById('randomWeaponInterval').value) || 30;
+
+        const setBadge = (id, text, isOn) => {
+            const badge = document.getElementById(id);
+            if (!badge) return;
+            badge.textContent = text;
+            badge.className = 'tree-pill ' + (isOn === true ? 'on' : (isOn === false ? 'off' : ''));
+        };
+
+        setBadge('badge-players-teams', `${maxPlayers}p • ${teamCount === 0 ? 'FFA' : teamCount + 'T'}`);
+
+        let vcText = 'Score ' + scoreLimit;
+        if (victoryCondition === 'TIME_LIMIT') vcText = 'Time';
+        else if (victoryCondition === 'ELIMINATION') vcText = 'Elim';
+        const timeMin = Math.round(timeLimit / 60);
+        setBadge('badge-victory-timers', `${vcText} • ${timeMin}m`);
+
+        let respawnText = respawnMode === 'DELAYED' ? `Delayed ${respawnDelay}s` :
+                          respawnMode === 'WAVE' ? 'Wave' :
+                          respawnMode === 'LIMITED' ? 'Limited' : 'Last Stand';
+        setBadge('badge-respawn-rules', respawnText);
+
+        setBadge('badge-map-terrain', `${worldWidth}×${worldHeight}`);
+        setBadge('badge-dynamic-events', enableEvents ? 'ON' : 'OFF', enableEvents);
+        setBadge('badge-mode-ctf', flagsPerTeam > 0 ? `${flagsPerTeam} Flag` : 'OFF', flagsPerTeam > 0);
+        setBadge('badge-mode-koth', kothZones > 0 ? `${kothZones} Zones` : 'OFF', kothZones > 0);
+        setBadge('badge-mode-hq', addHq ? 'ON' : 'OFF', addHq);
+        setBadge('badge-mode-vip', enableVip ? 'ON' : 'OFF', enableVip);
+        setBadge('badge-modifier-zombies', enableZombies ? `${zombieSpawnStyle}` : 'OFF', enableZombies);
+        setBadge('badge-modifier-oddball', enableOddball ? `${rampageBallCount}R+${seekerBallCount}S` : 'OFF', enableOddball);
+        setBadge('badge-modifier-weapons', enableRandomWeapons ? `${randomWeaponInterval}s` : 'OFF', enableRandomWeapons);
+
+        const hqBox = document.getElementById('hqConfigFields');
+        if (hqBox) hqBox.style.display = addHq ? 'block' : 'none';
+
+        const zombieBox = document.getElementById('zombieConfigFields');
+        if (zombieBox) zombieBox.style.display = enableZombies ? 'block' : 'none';
+
+        const oddballBox = document.getElementById('oddballConfigFields');
+        if (oddballBox) oddballBox.style.display = enableOddball ? 'block' : 'none';
+
+        const weaponsBox = document.getElementById('randomWeaponConfigFields');
+        if (weaponsBox) weaponsBox.style.display = enableRandomWeapons ? 'block' : 'none';
+
+        updateVictoryFields();
+        updateRespawnFields();
+        updateEventFields();
+
+        updateCustomSummaryTags({
+            maxPlayers, teamCount, victoryCondition, scoreLimit, timeLimit, respawnMode,
+            worldWidth, worldHeight, enableEvents, flagsPerTeam, kothZones, addHq, enableVip,
+            enableZombies, zombieSpawnStyle, enableOddball, enableRandomWeapons
+        });
+    }
+
+    function updateCustomSummaryTags(data) {
+        const container = document.getElementById('customSummaryTagsList');
+        if (!container) return;
+
+        const tags = [];
+        tags.push({ text: `🗺️ ${data.worldWidth}×${data.worldHeight}` });
+        tags.push({ text: data.teamCount === 0 ? `💥 FFA (${data.maxPlayers}p)` : `👥 ${data.teamCount} Teams (${data.maxPlayers}p)` });
+
+        if (data.victoryCondition === 'SCORE_LIMIT') {
+            tags.push({ text: `🏆 First to ${data.scoreLimit}`, highlight: true });
+        } else if (data.victoryCondition === 'ELIMINATION') {
+            tags.push({ text: `🎯 Elimination`, highlight: true });
+        } else {
+            tags.push({ text: `⏱️ ${Math.round(data.timeLimit/60)}m Match`, highlight: true });
+        }
+        tags.push({ text: `⏳ ${Math.round(data.timeLimit/60)}m Time Cap` });
+
+        if (data.flagsPerTeam > 0) tags.push({ text: `🚩 CTF (${data.flagsPerTeam})`, highlight: true });
+        if (data.kothZones > 0) tags.push({ text: `👑 KOTH (${data.kothZones})`, highlight: true });
+        if (data.addHq) tags.push({ text: `🏛️ HQ Assault`, highlight: true });
+        if (data.enableVip) tags.push({ text: `👑 VIP`, highlight: true });
+        if (data.enableZombies) tags.push({ text: `🧟 Zombies (${data.zombieSpawnStyle})`, highlight: true });
+        if (data.enableOddball) tags.push({ text: `⭐ Oddball NPCs`, highlight: true });
+        if (data.enableRandomWeapons) tags.push({ text: `🔀 Random Weapons`, highlight: true });
+        if (data.enableEvents) tags.push({ text: `🌋 Hazards` });
+
+        container.innerHTML = tags.map(t => 
+            `<span class="summary-tag ${t.highlight ? 'highlight' : ''}">${t.text}</span>`
+        ).join('');
+    }
+
+    function populateCustomGameForm(cfg) {
+        if (!cfg) return;
+        document.getElementById('maxPlayers').value = cfg.maxPlayers ?? 10;
+        document.getElementById('teamCount').value = cfg.teamCount ?? 2;
+        document.getElementById('worldWidth').value = cfg.worldWidth ?? 2000;
+        document.getElementById('worldHeight').value = cfg.worldHeight ?? 2000;
+        document.getElementById('playerMaxHealth').value = cfg.playerMaxHealth ?? 100;
+        document.getElementById('enableAIFilling').checked = cfg.enableAIFilling ?? true;
+
+        const r = cfg.rules || {};
+        document.getElementById('flagsPerTeam').value = r.flagsPerTeam ?? 0;
+        document.getElementById('pointsPerFlagCapture').value = r.pointsPerFlagCapture ?? 1;
+        document.getElementById('scoreStyle').value = r.scoreStyle || 'TOTAL_KILLS';
+        document.getElementById('victoryCondition').value = r.victoryCondition || 'SCORE_LIMIT';
+        document.getElementById('scoreLimit').value = r.scoreLimit ?? 50;
+        document.getElementById('timeLimit').value = r.timeLimit ?? 600;
+        document.getElementById('suddenDeath').checked = r.suddenDeath ?? false;
+        document.getElementById('lockGameAfterSeconds').value = r.lockGameAfterSeconds ?? 0;
+        document.getElementById('gameStartCountdown').value = r.gameStartCountdown ?? 0;
+        document.getElementById('respawnMode').value = (r.respawnMode === 'ELIMINATION' ? 'LIMITED' : r.respawnMode) || 'DELAYED';
+        document.getElementById('respawnDelay').value = r.respawnDelay ?? 5;
+        document.getElementById('waveRespawnInterval').value = r.waveRespawnInterval ?? 30;
+        document.getElementById('maxLives').value = r.maxLives ?? 3;
+        document.getElementById('kothZones').value = r.kothZones ?? 0;
+        document.getElementById('kothPointsPerSecond').value = r.kothPointsPerSecond ?? 1.0;
+        document.getElementById('enableOddballNpcs').checked = r.enableOddballNpcs ?? false;
+        document.getElementById('rampageBallCount').value = r.rampageBallCount ?? 1;
+        document.getElementById('seekerBallCount').value = r.seekerBallCount ?? 2;
+        document.getElementById('oddballNpcPointsPerDamage').value = r.oddballNpcPointsPerDamage ?? 0.1;
+        document.getElementById('enableZombies').checked = r.enableZombies ?? false;
+        document.getElementById('zombieSpawnStyle').value = r.zombieSpawnStyle || 'WAVE';
+        document.getElementById('zombieIntensity').value = r.zombieIntensity || 'MEDIUM';
+        document.getElementById('zombiePointsPerKill').value = r.zombiePointsPerKill ?? 1;
+        document.getElementById('enableVip').checked = r.enableVip ?? false;
+        document.getElementById('enableRandomWeapons').checked = r.enableRandomWeapons ?? false;
+        document.getElementById('randomWeaponInterval').value = r.randomWeaponInterval ?? 30;
+        document.getElementById('obstacleDensity').value = r.obstacleDensity || 'RANDOM';
+        document.getElementById('addHeadquarters').checked = r.addHeadquarters ?? false;
+        document.getElementById('headquartersMaxHealth').value = r.headquartersMaxHealth ?? 1000;
+        document.getElementById('headquartersPointsPerDamage').value = r.headquartersPointsPerDamage ?? 0.1;
+        document.getElementById('headquartersDestructionBonus').value = r.headquartersDestructionBonus ?? 100;
+        document.getElementById('enableRandomEvents').checked = r.enableRandomEvents ?? false;
+        document.getElementById('randomEventInterval').value = r.randomEventInterval ?? 40;
+        document.getElementById('eventWarningDuration').value = r.eventWarningDuration ?? 3;
+        document.getElementById('meteorShowerDensity').value = r.meteorShowerDensity || 'DENSE';
+        document.getElementById('volcanicEruptionDensity').value = r.volcanicEruptionDensity || 'DENSE';
+        document.getElementById('ionStormDensity').value = r.ionStormDensity || 'DENSE';
+        document.getElementById('earthquakeDensity').value = r.earthquakeDensity || 'SPARSE';
+        document.getElementById('blizzardDensity').value = r.blizzardDensity || 'DENSE';
+        document.getElementById('dustStormDensity').value = r.dustStormDensity || 'DENSE';
+
+        syncRuleTreeBadges();
+    }
+
+    function loadPresetIntoCustomForm(presetId) {
+        if (!presetId) return;
+        const cfg = getPresetConfig(presetId);
+        if (cfg) {
+            populateCustomGameForm(cfg);
+        }
+    }
+
+    async function resetCustomGameToDefaults() {
+        if (cachedDefaultConfig) {
+            populateCustomGameForm(cachedDefaultConfig);
+            const select = document.getElementById('presetBaseSelect');
+            if (select) select.value = '';
+        } else {
+            try {
+                const response = await fetch('/api/game-config/default');
+                cachedDefaultConfig = await response.json();
+                populateCustomGameForm(cachedDefaultConfig);
+                const select = document.getElementById('presetBaseSelect');
+                if (select) select.value = '';
+            } catch (e) {
+                console.error('Failed to reset config to default:', e);
+            }
+        }
+    }
+
+    async function openCustomGameModal(overrideConfig, presetId) {
+        try {
+            if (!cachedDefaultConfig) {
+                const response = await fetch('/api/game-config/default');
+                cachedDefaultConfig = await response.json();
+            }
+
+            const cfg = overrideConfig ? Object.assign({}, cachedDefaultConfig, overrideConfig, {
+                rules: Object.assign({}, cachedDefaultConfig.rules, overrideConfig.rules)
+            }) : cachedDefaultConfig;
+
+            populateCustomGameForm(cfg);
+
+            const presetSelect = document.getElementById('presetBaseSelect');
+            if (presetSelect) {
+                presetSelect.value = presetId || '';
+            }
+
+            clearRuleSearch();
+            selectRuleTreeNode('panel-players-teams');
+
             document.getElementById('custom-game-modal').classList.remove('hidden');
         } catch (error) {
-            console.error('Error loading default config:', error);
+            console.error('Error opening custom game modal:', error);
             alert('Failed to load configuration. Please try again.');
         }
     }
@@ -1360,54 +2265,39 @@
         const scoreLimitField = document.getElementById('scoreLimitField');
         const timeLimitField = document.getElementById('timeLimitField');
         const suddenDeathField = document.getElementById('suddenDeathField');
-        
-        // Hide all fields by default
-        scoreLimitField.style.display = 'none';
-        timeLimitField.style.display = 'none';
-        suddenDeathField.style.display = 'none';
-        
-        // Show relevant fields based on selection
-        switch (victoryCondition) {
-            case 'SCORE_LIMIT':
-                scoreLimitField.style.display = 'block';
-                break;
-            case 'TIME_LIMIT':
-                timeLimitField.style.display = 'block';
-                suddenDeathField.style.display = 'block';
-                break;
-        }
+
+        if (timeLimitField) timeLimitField.style.display = 'block';
+        if (suddenDeathField) suddenDeathField.style.display = 'flex';
+        if (scoreLimitField) scoreLimitField.style.display = (victoryCondition === 'SCORE_LIMIT') ? 'block' : 'none';
     }
-    
+
     function updateEventFields() {
         const enableEvents = document.getElementById('enableRandomEvents').checked;
         const eventConfigFields = document.getElementById('eventConfigFields');
-        eventConfigFields.style.display = enableEvents ? 'block' : 'none';
+        if (eventConfigFields) eventConfigFields.style.display = enableEvents ? 'block' : 'none';
     }
-    
+
     function updateRespawnFields() {
         const respawnMode = document.getElementById('respawnMode').value;
         const respawnDelayField = document.getElementById('respawnDelayField');
         const waveIntervalField = document.getElementById('waveIntervalField');
         const maxLivesField = document.getElementById('maxLivesField');
-        
-        // Hide all fields by default
-        respawnDelayField.style.display = 'none';
-        waveIntervalField.style.display = 'none';
-        maxLivesField.style.display = 'none';
-        
-        // Show relevant fields based on selection
+
+        if (respawnDelayField) respawnDelayField.style.display = 'none';
+        if (waveIntervalField) waveIntervalField.style.display = 'none';
+        if (maxLivesField) maxLivesField.style.display = 'none';
+
         switch (respawnMode) {
             case 'DELAYED':
-                respawnDelayField.style.display = 'block';
+                if (respawnDelayField) respawnDelayField.style.display = 'block';
                 break;
             case 'WAVE':
-                waveIntervalField.style.display = 'block';
+                if (waveIntervalField) waveIntervalField.style.display = 'block';
                 break;
             case 'LIMITED':
-                respawnDelayField.style.display = 'block';
-                maxLivesField.style.display = 'block';
+                if (respawnDelayField) respawnDelayField.style.display = 'block';
+                if (maxLivesField) maxLivesField.style.display = 'block';
                 break;
-            // LAST_STANDING has no extra fields (unlimited lives, event-driven respawn)
         }
     }
     
@@ -1464,7 +2354,6 @@
                 headquartersMaxHealth: parseFloat(document.getElementById('headquartersMaxHealth').value),
                 headquartersPointsPerDamage: parseFloat(document.getElementById('headquartersPointsPerDamage').value),
                 headquartersDestructionBonus: parseInt(document.getElementById('headquartersDestructionBonus').value),
-                headquartersDestructionEndsGame: document.getElementById('headquartersDestructionEndsGame').checked,
                 enableRandomEvents: document.getElementById('enableRandomEvents').checked,
                 randomEventInterval: parseFloat(document.getElementById('randomEventInterval').value),
                 eventWarningDuration: parseFloat(document.getElementById('eventWarningDuration').value),
@@ -1539,6 +2428,11 @@
 
     document.getElementById('custom-game-modal').addEventListener('change', function(e) {
         if (e.target.type === 'number') clampInput(e.target);
+        syncRuleTreeBadges();
+    });
+
+    document.getElementById('custom-game-modal').addEventListener('input', function(e) {
+        syncRuleTreeBadges();
     });
 
     document.getElementById('custom-game-modal').addEventListener('blur', function(e) {

@@ -157,7 +157,6 @@ public class GamePresets {
                             .headquartersMaxHealth(5000.0)
                             .headquartersPointsPerDamage(0.01)
                             .headquartersDestructionBonus(1000)
-                            .headquartersDestructionEndsGame(true)
                             .build())
                     .build());
     public static final Preset CHAOS_MODE = new Preset("chaos-mode", "🌋 Chaos Mode",
@@ -299,10 +298,10 @@ public class GamePresets {
     public static final Preset ZOMBIE_OUTBREAK = new Preset("zombie-outbreak", "🧟 Zombie Siege",
             "Headquarters assault under relentless zombie attack — defend your HQ from enemy teams and the horde.",
             GameConfig.builder()
-                    .maxPlayers(16)
-                    .teamCount(2)
+                    .maxPlayers(20)
+                    .teamCount(4)
                     .worldWidth(4000)
-                    .worldHeight(1000)
+                    .worldHeight(4000)
                     .playerMaxHealth(100)
                     .aiCheckIntervalMs(10000)
                     .enableAIFilling(true)
@@ -310,13 +309,12 @@ public class GamePresets {
                             .scoreStyle(ScoreStyle.TOTAL)
                             .victoryCondition(VictoryCondition.SCORE_LIMIT)
                             .scoreLimit(1000)
-                            .respawnMode(RespawnMode.WAVE)
-                            .waveRespawnInterval(20.0)
+                            .respawnMode(RespawnMode.DELAYED)
+                            .respawnDelay(5)
                             .addHeadquarters(true)
                             .headquartersMaxHealth(5000.0)
                             .headquartersPointsPerDamage(0.01)
                             .headquartersDestructionBonus(1000)
-                            .headquartersDestructionEndsGame(true)
                             .enableZombies(true)
                             .zombieSpawnStyle(ZombieSpawnStyle.EBB_AND_FLOW)
                             .zombieIntensity(ZombieIntensity.HIGH)

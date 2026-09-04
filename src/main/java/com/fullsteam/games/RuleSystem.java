@@ -377,20 +377,26 @@ public class RuleSystem {
         }
 
         VictoryCondition condition = rules.getVictoryCondition();
-        if (condition == null || condition == VictoryCondition.ENDLESS) {
+        if (condition == null) {
             return;
         }
 
+        // Layer 1: Check primary victory conditions (SCORE_LIMIT or ELIMINATION)
         switch (condition) {
-            case SCORE_LIMIT:
-                checkScoreLimitVictory();
-                break;
-            case TIME_LIMIT:
-                checkTimeLimitVictory();
-                break;
-            case ELIMINATION:
-                checkEliminationVictory();
-                break;
+            case SCORE_LIMIT -> checkScoreLimitVictory();
+            case ELIMINATION -> checkEliminationVictory();
+            case TIME_LIMIT -> {
+            }
+        }
+
+        // If primary condition triggered victory, return immediately
+        if (gameOver) {
+            return;
+        }
+
+        // Layer 2: Every game is capped by time limit
+        if (rules.hasTimeLimit()) {
+            checkTimeLimitVictory();
         }
     }
 

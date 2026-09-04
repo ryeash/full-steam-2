@@ -34,7 +34,6 @@ class HeadquartersCollisionTest extends BaseTestClass {
                 .headquartersMaxHealth(1000.0)
                 .headquartersPointsPerDamage(0.1)
                 .headquartersDestructionBonus(100)
-                .headquartersDestructionEndsGame(false) // Don't end game for testing
                 .build();
 
         GameConfig gameConfig = GameConfig.builder()

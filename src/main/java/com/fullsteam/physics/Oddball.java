@@ -23,7 +23,7 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 @Getter
 @Setter
-public class Oddball extends GameEntity implements HasWeapon {
+public class Oddball extends GameEntity implements HasWeapon, Damageable {
 
     public enum Personality {
         RAMPAGE,  // Slow, heavy, high DPS — primary scoring target

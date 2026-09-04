@@ -2039,8 +2039,7 @@ class GameEngine {
         const names = {
             'SCORE_LIMIT': 'Score Limit',
             'TIME_LIMIT': 'Time Limit',
-            'ELIMINATION': 'Elimination',
-            'ENDLESS': 'Endless'
+            'ELIMINATION': 'Elimination'
         };
         return names[condition] || condition;
     }

@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Stock Rules (from Rules.java @Builder.Default):
  * - flagsPerTeam = 0 (no flags)
  * - scoreStyle = ScoreStyle.TOTAL_KILLS
- * - victoryCondition = VictoryCondition.ENDLESS
+ * - victoryCondition = VictoryCondition.SCORE_LIMIT
  * - scoreLimit = 50
  * - timeLimit = 600.0 (10 minutes)
  * - suddenDeath = false
@@ -85,10 +85,10 @@ class StockRuleSystemTest extends BaseTestClass {
     // ============================================================================
 
     @Test
-    @DisplayName("Should use stock victory condition (ENDLESS)")
+    @DisplayName("Should use stock victory condition (SCORE_LIMIT)")
     void testStockVictoryCondition() {
-        assertEquals(VictoryCondition.ENDLESS, stockRules.getVictoryCondition(),
-                "Stock victory condition should be ENDLESS");
+        assertEquals(VictoryCondition.SCORE_LIMIT, stockRules.getVictoryCondition(),
+                "Stock victory condition should be SCORE_LIMIT");
     }
 
     @Test
@@ -232,21 +232,25 @@ class StockRuleSystemTest extends BaseTestClass {
     }
 
     @Test
-    @DisplayName("Should not have time limit with stock ENDLESS victory condition")
-    void testStockNoTimeLimit() {
-        assertFalse(stockRules.hasTimeLimit(),
-                "Stock rules should not have time limit with ENDLESS victory");
-        assertEquals(VictoryCondition.ENDLESS, stockRules.getVictoryCondition(),
-                "Stock victory condition should be ENDLESS");
+    @DisplayName("Should have time limit with stock configuration")
+    void testStockHasTimeLimit() {
+        assertTrue(stockRules.hasTimeLimit(),
+                "Stock rules should have time limit");
+        assertEquals(VictoryCondition.SCORE_LIMIT, stockRules.getVictoryCondition(),
+                "Stock victory condition should be SCORE_LIMIT");
+        assertEquals(600.0, stockRules.getTimeLimit(),
+                "Stock time limit should be 600.0 seconds");
     }
 
     @Test
-    @DisplayName("Should not have score limit with stock ENDLESS victory condition")
-    void testStockNoScoreLimit() {
-        assertFalse(stockRules.hasScoreLimit(),
-                "Stock rules should not have score limit with ENDLESS victory");
-        assertEquals(VictoryCondition.ENDLESS, stockRules.getVictoryCondition(),
-                "Stock victory condition should be ENDLESS");
+    @DisplayName("Should have score limit with stock SCORE_LIMIT victory condition")
+    void testStockHasScoreLimit() {
+        assertTrue(stockRules.hasScoreLimit(),
+                "Stock rules should have score limit with SCORE_LIMIT victory");
+        assertEquals(VictoryCondition.SCORE_LIMIT, stockRules.getVictoryCondition(),
+                "Stock victory condition should be SCORE_LIMIT");
+        assertEquals(50, stockRules.getScoreLimit(),
+                "Stock score limit should be 50");
     }
 
     @Test
@@ -260,7 +264,7 @@ class StockRuleSystemTest extends BaseTestClass {
         // All should have identical stock values
         assertEquals(rules1.getVictoryCondition(), rules2.getVictoryCondition());
         assertEquals(rules2.getVictoryCondition(), rules3.getVictoryCondition());
-        assertEquals(VictoryCondition.ENDLESS, rules1.getVictoryCondition());
+        assertEquals(VictoryCondition.SCORE_LIMIT, rules1.getVictoryCondition());
 
         assertEquals(rules1.getScoreStyle(), rules2.getScoreStyle());
         assertEquals(rules2.getScoreStyle(), rules3.getScoreStyle());

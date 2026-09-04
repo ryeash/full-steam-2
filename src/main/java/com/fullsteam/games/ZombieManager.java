@@ -5,10 +5,11 @@ import com.fullsteam.model.GameEvent;
 import com.fullsteam.model.Rules;
 import com.fullsteam.model.ZombieAttackPattern;
 import com.fullsteam.model.ZombieIntensity;
-import com.fullsteam.model.ZombieSpawnStyle;
 import com.fullsteam.model.ZombieType;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
+import com.fullsteam.physics.TeamSpawnArea;
+import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.Zombie;
 import lombok.Getter;
 import org.dyn4j.geometry.Vector2;
@@ -19,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -33,6 +35,7 @@ public class ZombieManager {
     private final GameEntities gameEntities;
     private final GameEventManager gameEventManager;
     private final TerrainGenerator terrainGenerator;
+    private final TeamSpawnManager teamSpawnManager;
 
     @Getter
     private int waveNumber = 0;
@@ -55,15 +58,27 @@ public class ZombieManager {
                          GameConfig gameConfig,
                          GameEntities gameEntities,
                          GameEventManager gameEventManager,
-                         TerrainGenerator terrainGenerator) {
+                         TerrainGenerator terrainGenerator,
+                         TeamSpawnManager teamSpawnManager) {
         this.gameId = gameId;
         this.gameConfig = gameConfig;
         this.gameEntities = gameEntities;
         this.gameEventManager = gameEventManager;
         this.terrainGenerator = terrainGenerator;
+        this.teamSpawnManager = teamSpawnManager != null
+                ? teamSpawnManager
+                : new TeamSpawnManager(gameConfig.getWorldWidth(), gameConfig.getWorldHeight(), gameConfig.getTeamCount());
 
         // Schedule initial wave immediately on match start
         this.nextWaveTime = 0L;
+    }
+
+    public ZombieManager(String gameId,
+                         GameConfig gameConfig,
+                         GameEntities gameEntities,
+                         GameEventManager gameEventManager,
+                         TerrainGenerator terrainGenerator) {
+        this(gameId, gameConfig, gameEntities, gameEventManager, terrainGenerator, null);
     }
 
     /**
@@ -199,8 +214,83 @@ public class ZombieManager {
     }
 
     /**
+     * Calculates the dynamic zombie spawn locations based on team count and world dimensions.
+     * The number of spawn locations equals the team count for team modes (k >= 2), positioned
+     * along the map perimeter on the angular bisectors between adjacent team spawn zones
+     * to maximize distance from all team bases. For FFA (teamCount < 2), defaults to 4 cardinal perimeter flanks.
+     */
+    public List<Vector2> calculateSpawnLocations() {
+        double width = gameConfig.getWorldWidth();
+        double height = gameConfig.getWorldHeight();
+        double halfW = width / 2.0;
+        double halfH = height / 2.0;
+        double inset = 45.0; // Inset from outer map boundary walls
+
+        double boxW = halfW - inset;
+        double boxH = halfH - inset;
+
+        if (teamSpawnManager != null && teamSpawnManager.isTeamSpawningEnabled()) {
+            Map<Integer, TeamSpawnArea> teamAreas = teamSpawnManager.getTeamAreas();
+            if (!teamAreas.isEmpty()) {
+                // Collect and sort team area centers by angle around the map center
+                List<Double> teamAngles = new ArrayList<>();
+                for (TeamSpawnArea area : teamAreas.values()) {
+                    Vector2 center = area.getCenter();
+                    double angle = Math.atan2(center.y, center.x);
+                    if (angle < 0) {
+                        angle += 2.0 * Math.PI;
+                    }
+                    teamAngles.add(angle);
+                }
+                Collections.sort(teamAngles);
+
+                int k = teamAngles.size();
+                List<Vector2> spawnLocations = new ArrayList<>(k);
+                for (int i = 0; i < k; i++) {
+                    double a1 = teamAngles.get(i);
+                    double a2 = teamAngles.get((i + 1) % k);
+                    if (a2 <= a1) {
+                        a2 += 2.0 * Math.PI;
+                    }
+                    double bisectorAngle = (a1 + a2) / 2.0;
+
+                    Vector2 perimeterPoint = projectAngleToBox(bisectorAngle, boxW, boxH);
+                    spawnLocations.add(perimeterPoint);
+                }
+                return spawnLocations;
+            }
+        }
+
+        // FFA fallback: 4 cardinal perimeter points (Top, Right, Bottom, Left)
+        return List.of(
+                new Vector2(0, boxH),
+                new Vector2(boxW, 0),
+                new Vector2(0, -boxH),
+                new Vector2(-boxW, 0)
+        );
+    }
+
+    private static Vector2 projectAngleToBox(double angle, double boxW, double boxH) {
+        double cos = Math.cos(angle);
+        double sin = Math.sin(angle);
+
+        double tx = (Math.abs(cos) > 1e-6) ? (cos > 0 ? boxW / cos : -boxW / cos) : Double.MAX_VALUE;
+        double ty = (Math.abs(sin) > 1e-6) ? (sin > 0 ? boxH / sin : -boxH / sin) : Double.MAX_VALUE;
+
+        double t = Math.min(tx, ty);
+        return new Vector2(t * cos, t * sin);
+    }
+
+    /**
+     * Gets the number of dynamic spawn locations (equal to teamCount for team modes, or 4 for FFA).
+     */
+    public int getSpawnLocationCount() {
+        return calculateSpawnLocations().size();
+    }
+
+    /**
      * Spawns totalCount zombies partitioned into horde groups between minGroupSize and maxGroupSize,
-     * deterministically dispersing groups across distinct perimeter flanks.
+     * deterministically dispersing groups across distinct dynamic spawn locations (furthest from team spawn zones).
      */
     public void spawnZombiesInHordes(int totalCount, int minGroupSize, int maxGroupSize) {
         if (totalCount <= 0) return;
@@ -222,34 +312,35 @@ public class ZombieManager {
             remaining -= groupSize;
         }
 
-        // Multi-corner dispersion: shuffle all 4 map corners (0: Top-Left, 1: Top-Right, 2: Bottom-Left, 3: Bottom-Right)
-        // so multi-group waves attack simultaneously from different map corners.
-        List<Integer> availableCorners = new ArrayList<>(List.of(0, 1, 2, 3));
-        Collections.shuffle(availableCorners, ThreadLocalRandom.current());
+        int numLocations = getSpawnLocationCount();
+        List<Integer> availableLocations = new ArrayList<>();
+        for (int i = 0; i < numLocations; i++) {
+            availableLocations.add(i);
+        }
+        Collections.shuffle(availableLocations, ThreadLocalRandom.current());
 
         for (int i = 0; i < groupSizes.size(); i++) {
-            if (i > 0 && i % availableCorners.size() == 0) {
-                Collections.shuffle(availableCorners, ThreadLocalRandom.current());
+            if (i > 0 && i % availableLocations.size() == 0) {
+                Collections.shuffle(availableLocations, ThreadLocalRandom.current());
             }
-            int corner = availableCorners.get(i % availableCorners.size());
-            spawnZombieGroup(groupSizes.get(i), corner);
+            int locationIndex = availableLocations.get(i % availableLocations.size());
+            spawnZombieGroup(groupSizes.get(i), locationIndex);
         }
         log.debug("Spawned {} zombies across {} horde groups for game {}", totalCount, groupSizes.size(), gameId);
     }
 
     /**
-     * Spawns a cluster / horde pack of zombies breaching together near a map corner.
+     * Spawns a cluster / horde pack of zombies breaching together near a random dynamic spawn location.
      */
     public void spawnZombieGroup(int groupSize) {
-        int randomCorner = ThreadLocalRandom.current().nextInt(4);
-        spawnZombieGroup(groupSize, randomCorner);
+        int randomLocation = ThreadLocalRandom.current().nextInt(getSpawnLocationCount());
+        spawnZombieGroup(groupSize, randomLocation);
     }
 
     /**
-     * Spawns a cluster / horde pack of zombies breaching together in a specific map corner
-     * (0: Top-Left, 1: Top-Right, 2: Bottom-Left, 3: Bottom-Right).
+     * Spawns a cluster / horde pack of zombies breaching together at a specific spawn location index.
      */
-    public void spawnZombieGroup(int groupSize, int cornerIndex) {
+    public void spawnZombieGroup(int groupSize, int locationIndex) {
         if (groupSize <= 0) return;
 
         double width = gameConfig.getWorldWidth();
@@ -257,8 +348,8 @@ public class ZombieManager {
         double halfW = width / 2.0;
         double halfH = height / 2.0;
 
-        // 1. Pick a primary cluster center in the designated map corner
-        Vector2 clusterCenter = findValidSpawnPosition(35.0, cornerIndex);
+        // 1. Pick a primary cluster center at the designated dynamic spawn location
+        Vector2 clusterCenter = findValidSpawnPosition(35.0, locationIndex);
 
         // Pack behavior: 65% chance the pack shares an attack focus
         boolean packSharesTarget = ThreadLocalRandom.current().nextDouble() < 0.65;
@@ -281,7 +372,7 @@ public class ZombieManager {
     }
 
     /**
-     * Finds a candidate position clustered near the cluster center within the corner zone.
+     * Finds a candidate position clustered near the cluster center within the spawn zone.
      */
     private Vector2 findGroupMemberPosition(Vector2 clusterCenter,
                                             double halfW,
@@ -294,22 +385,13 @@ public class ZombieManager {
             double cx = clusterCenter.x + offsetX;
             double cy = clusterCenter.y + offsetY;
 
-            // Clamp strictly within inner corner perimeter
+            // Clamp strictly within inner map perimeter
             double clampedX = Math.max(-halfW + 35.0, Math.min(halfW - 35.0, cx));
             double clampedY = Math.max(-halfH + 35.0, Math.min(halfH - 35.0, cy));
             Vector2 candidate = new Vector2(clampedX, clampedY);
 
-            // Verify corner proximity constraint (must stay within corner zone)
-            double distTL = candidate.distance(new Vector2(-halfW, halfH));
-            double distTR = candidate.distance(new Vector2(halfW, halfH));
-            double distBL = candidate.distance(new Vector2(-halfW, -halfH));
-            double distBR = candidate.distance(new Vector2(halfW, -halfH));
-            double minCornerDist = Math.min(Math.min(distTL, distTR), Math.min(distBL, distBR));
-
-            if (minCornerDist <= 170.0) {
-                if (terrainGenerator == null || terrainGenerator.isPositionClear(candidate, clearRadius)) {
-                    return candidate;
-                }
+            if (terrainGenerator == null || terrainGenerator.isPositionClear(candidate, clearRadius)) {
+                return candidate;
             }
         }
         return clusterCenter.copy();
@@ -325,29 +407,33 @@ public class ZombieManager {
     }
 
     /**
-     * Find a valid clear spawn position along map corners,
-     * avoiding immediate player proximity. All zombies spawn strictly at or near map corners.
+     * Find a valid clear spawn position along map perimeter flanks,
+     * avoiding immediate player proximity.
      */
     private Vector2 findValidSpawnPosition(double clearRadius) {
         return findValidSpawnPosition(clearRadius, null);
     }
 
     /**
-     * Find a valid clear spawn position in a specific corner (0: Top-Left, 1: Top-Right, 2: Bottom-Left, 3: Bottom-Right),
-     * or any corner if targetCorner is null.
+     * Find a valid clear spawn position at a specific dynamic spawn location index,
+     * or any location if targetLocationIndex is null.
      */
-    private Vector2 findValidSpawnPosition(double clearRadius, Integer targetCorner) {
+    private Vector2 findValidSpawnPosition(double clearRadius, Integer targetLocationIndex) {
         double width = gameConfig.getWorldWidth();
         double height = gameConfig.getWorldHeight();
         double halfW = width / 2.0;
         double halfH = height / 2.0;
 
+        List<Vector2> spawnLocations = calculateSpawnLocations();
+        int numLocations = spawnLocations.size();
+
         Collection<Player> players = gameEntities.getAllPlayers();
 
-        // 1. Primary attempts: strictly on designated corner zone + clear of terrain + clear of players
+        // 1. Primary attempts: strictly on designated spawn location + clear of terrain + clear of players
         for (int attempt = 0; attempt < 50; attempt++) {
-            int corner = (targetCorner != null) ? targetCorner : ThreadLocalRandom.current().nextInt(4);
-            Vector2 candidate = generateCornerCandidate(halfW, halfH, corner);
+            int locIndex = (targetLocationIndex != null) ? (targetLocationIndex % numLocations) : ThreadLocalRandom.current().nextInt(numLocations);
+            Vector2 anchor = spawnLocations.get(locIndex);
+            Vector2 candidate = generateCandidateNearLocation(anchor, halfW, halfH);
 
             if (terrainGenerator != null && !terrainGenerator.isPositionClear(candidate, clearRadius)) {
                 continue;
@@ -366,45 +452,30 @@ public class ZombieManager {
             }
         }
 
-        // 2. Secondary attempts: strictly on designated corner zone + clear of terrain (relaxing player proximity)
+        // 2. Secondary attempts: strictly on designated spawn location + clear of terrain (relaxing player proximity)
         for (int attempt = 0; attempt < 25; attempt++) {
-            int corner = (targetCorner != null) ? targetCorner : ThreadLocalRandom.current().nextInt(4);
-            Vector2 candidate = generateCornerCandidate(halfW, halfH, corner);
+            int locIndex = (targetLocationIndex != null) ? (targetLocationIndex % numLocations) : ThreadLocalRandom.current().nextInt(numLocations);
+            Vector2 anchor = spawnLocations.get(locIndex);
+            Vector2 candidate = generateCandidateNearLocation(anchor, halfW, halfH);
             if (terrainGenerator == null || terrainGenerator.isPositionClear(candidate, clearRadius)) {
                 return candidate;
             }
         }
 
-        // 3. Fallback: pick a point on designated corner perimeter
-        int fallbackCorner = (targetCorner != null) ? targetCorner : ThreadLocalRandom.current().nextInt(4);
-        return generateCornerCandidate(halfW, halfH, fallbackCorner);
+        // 3. Fallback: pick the anchor point directly
+        int fallbackIndex = (targetLocationIndex != null) ? (targetLocationIndex % numLocations) : ThreadLocalRandom.current().nextInt(numLocations);
+        return spawnLocations.get(fallbackIndex).copy();
     }
 
-    private static Vector2 generateCornerCandidate(double halfW, double halfH, int cornerIndex) {
-        // Distance inset from the outer corner walls (between 35 and 90 units inside)
-        double xInset = 35.0 + ThreadLocalRandom.current().nextDouble() * 55.0;
-        double yInset = 35.0 + ThreadLocalRandom.current().nextDouble() * 55.0;
+    private static Vector2 generateCandidateNearLocation(Vector2 anchor, double halfW, double halfH) {
+        // Spread candidates along perimeter around anchor point (up to +/- 45 units)
+        double jitterX = (ThreadLocalRandom.current().nextDouble() * 2.0 - 1.0) * 45.0;
+        double jitterY = (ThreadLocalRandom.current().nextDouble() * 2.0 - 1.0) * 45.0;
+        double minInset = 35.0;
 
-        double x, y;
-        switch (cornerIndex % 4) {
-            case 0 -> { // Top-Left corner
-                x = -halfW + xInset;
-                y = halfH - yInset;
-            }
-            case 1 -> { // Top-Right corner
-                x = halfW - xInset;
-                y = halfH - yInset;
-            }
-            case 2 -> { // Bottom-Left corner
-                x = -halfW + xInset;
-                y = -halfH + yInset;
-            }
-            default -> { // Bottom-Right corner
-                x = halfW - xInset;
-                y = -halfH + yInset;
-            }
-        }
-        return new Vector2(x, y);
+        double clampedX = Math.max(-halfW + minInset, Math.min(halfW - minInset, anchor.x + jitterX));
+        double clampedY = Math.max(-halfH + minInset, Math.min(halfH - minInset, anchor.y + jitterY));
+        return new Vector2(clampedX, clampedY);
     }
 
     public int getActiveZombieCount() {

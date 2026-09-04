@@ -29,7 +29,7 @@ import java.util.List;
  */
 @Getter
 @Setter
-public class Turret extends OwnedGameEntity implements HasWeapon {
+public class Turret extends OwnedGameEntity implements HasWeapon, Damageable {
     public static final double TURRET_FIRE_RATE_PENALTY = 2;
 
     private final Weapon weapon;

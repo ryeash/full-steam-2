@@ -5,7 +5,7 @@ package com.fullsteam.model;
  */
 public enum VictoryCondition {
     /**
-     * First team/player to reach the score limit wins.
+     * First team/player to reach the score limit wins (with time limit cap).
      */
     SCORE_LIMIT,
 
@@ -15,13 +15,8 @@ public enum VictoryCondition {
     TIME_LIMIT,
 
     /**
-     * Last team/player standing wins (no respawns). Pair with {@link RespawnMode#LIMITED}.
+     * Last team/player standing wins (no respawns, with time limit cap). Pair with {@link RespawnMode#LIMITED}.
      */
-    ELIMINATION,
-
-    /**
-     * No victory condition - game continues indefinitely until manually ended.
-     */
-    ENDLESS
+    ELIMINATION
 }
 
