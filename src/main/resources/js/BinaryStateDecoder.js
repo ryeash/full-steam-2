@@ -529,6 +529,8 @@ class BinaryStateDecoder {
         return shapes;
     }
 
+    static _shapesCache = new Map();
+
     /**
      * Generalized shape parser that converts string shorthand or shape data arrays into standard shape objects.
      * @param {string|Array|null|undefined} shapesData
@@ -538,7 +540,11 @@ class BinaryStateDecoder {
         if (!shapesData) return [];
         if (Array.isArray(shapesData)) return shapesData;
         if (typeof shapesData !== 'string') return [];
-        return shapesData.split(';').filter(s => s.length > 0).map(fixtureStr => {
+
+        let cached = BinaryStateDecoder._shapesCache.get(shapesData);
+        if (cached) return cached;
+
+        cached = shapesData.split(';').filter(s => s.length > 0).map(fixtureStr => {
             const parts = fixtureStr.split('/').map(v => {
                 return v.replace(/[()]/g, '').split(',').map(Number);
             });
@@ -548,5 +554,10 @@ class BinaryStateDecoder {
             }
             return { type: 'polygon', points: parts };
         });
+
+        if (BinaryStateDecoder._shapesCache.size < 500) {
+            BinaryStateDecoder._shapesCache.set(shapesData, cached);
+        }
+        return cached;
     }
 }

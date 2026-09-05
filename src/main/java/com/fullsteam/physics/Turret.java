@@ -68,35 +68,42 @@ public class Turret extends OwnedGameEntity implements HasWeapon, Damageable {
      * Find and acquire the nearest valid target from players and zombies.
      */
     public void acquireTarget(Collection<Player> players, Collection<Zombie> zombies) {
+        if (!active) {
+            return;
+        }
+
+        Vector2 turretPos = getPosition();
+        double maxRangeSq = weapon.getRange() * weapon.getRange();
+
         if (currentTarget != null && isValidTarget(currentTarget)) {
             return;
         }
 
         OwnedGameEntity closestTarget = null;
-        double closestDistance = Double.MAX_VALUE;
+        double closestDistSq = maxRangeSq;
 
         if (players != null) {
             for (Player player : players) {
-                if (!isValidTarget(player)) {
+                if (!isTargetable(player)) {
                     continue;
                 }
-                double distance = getPosition().distance(player.getPosition());
-                if (distance <= weapon.getRange() && distance < closestDistance) {
+                double distSq = turretPos.distanceSquared(player.getPosition());
+                if (distSq <= closestDistSq) {
+                    closestDistSq = distSq;
                     closestTarget = player;
-                    closestDistance = distance;
                 }
             }
         }
 
         if (zombies != null) {
             for (Zombie zombie : zombies) {
-                if (!isValidTarget(zombie)) {
+                if (!isTargetable(zombie)) {
                     continue;
                 }
-                double distance = getPosition().distance(zombie.getPosition());
-                if (distance <= weapon.getRange() && distance < closestDistance) {
+                double distSq = turretPos.distanceSquared(zombie.getPosition());
+                if (distSq <= closestDistSq) {
+                    closestDistSq = distSq;
                     closestTarget = zombie;
-                    closestDistance = distance;
                 }
             }
         }
@@ -104,12 +111,14 @@ public class Turret extends OwnedGameEntity implements HasWeapon, Damageable {
         currentTarget = closestTarget;
 
         if (currentTarget != null) {
-            Vector2 turretPos = getPosition();
             Vector2 targetPos = currentTarget.getPosition();
-            aimDirection = new Vector2(targetPos.x - turretPos.x, targetPos.y - turretPos.y);
-            if (aimDirection.getMagnitude() > 0) {
-                aimDirection.normalize();
-                setRotation(Math.atan2(aimDirection.y, aimDirection.x));
+            double dx = targetPos.x - turretPos.x;
+            double dy = targetPos.y - turretPos.y;
+            double magSq = dx * dx + dy * dy;
+            if (magSq > 0.0001) {
+                double invMag = 1.0 / Math.sqrt(magSq);
+                aimDirection = new Vector2(dx * invMag, dy * invMag);
+                setRotation(Math.atan2(dy, dx));
             }
         }
     }
@@ -121,12 +130,8 @@ public class Turret extends OwnedGameEntity implements HasWeapon, Damageable {
         acquireTarget(players, List.of());
     }
 
-    private boolean isValidTarget(OwnedGameEntity target) {
+    private boolean isTargetable(OwnedGameEntity target) {
         if (target == null || !target.isActive() || target.getHealth() <= 0) {
-            return false;
-        }
-        double distance = getPosition().distance(target.getPosition());
-        if (distance > weapon.getRange()) {
             return false;
         }
         if (target instanceof Player player) {
@@ -143,6 +148,13 @@ public class Turret extends OwnedGameEntity implements HasWeapon, Damageable {
         return false;
     }
 
+    private boolean isValidTarget(OwnedGameEntity target) {
+        if (!isTargetable(target)) {
+            return false;
+        }
+        return getPosition().distanceSquared(target.getPosition()) <= (weapon.getRange() * weapon.getRange());
+    }
+
     public boolean canFire() {
         if (!active || currentTarget == null) {
             return false;
@@ -150,5 +162,14 @@ public class Turret extends OwnedGameEntity implements HasWeapon, Damageable {
         long now = System.currentTimeMillis();
         double fireInterval = 1000.0 / (weapon.getFireRate() / TURRET_FIRE_RATE_PENALTY);
         return (now - lastShotTime) >= fireInterval;
+    }
+
+    private transient com.fullsteam.ai.AITargetWrapper targetWrapper;
+
+    public com.fullsteam.ai.AITargetWrapper getTargetWrapper() {
+        if (targetWrapper == null) {
+            targetWrapper = com.fullsteam.ai.AITargetWrapper.createDirect(this, com.fullsteam.ai.AITargetWrapper.TargetType.TURRET);
+        }
+        return targetWrapper;
     }
 }

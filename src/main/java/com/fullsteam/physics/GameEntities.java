@@ -3,7 +3,6 @@ package com.fullsteam.physics;
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.model.DamageHit;
 import com.fullsteam.model.FieldEffect;
-import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.PlayerSession;
 import lombok.Getter;
@@ -25,7 +24,6 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * GameEntities is a centralized container for all game entity collections.
@@ -131,23 +129,57 @@ public class GameEntities {
         return obstacles.values();
     }
 
+    private <T extends GameEntity> void removeExpiredFromMap(Map<?, T> map) {
+        map.entrySet().removeIf(entry -> {
+            GameEntity o = entry.getValue();
+            if (o.isExpired()) {
+                world.removeBody(o.getBody());
+                return true;
+            }
+            return false;
+        });
+    }
+
     public void removeInactiveEntities() {
-        Stream.of(obstacles, fieldEffects, turrets, netProjectiles, defenseLasers, zombies)
-                .forEach(map ->
-                        map.entrySet().removeIf(entry -> {
-                            GameEntity o = entry.getValue();
-                            if (o.isExpired()) {
-                                world.removeBody(o.getBody());
-                                return true;
-                            }
-                            return false;
-                        }));
+        removeExpiredFromMap(obstacles);
+        removeExpiredFromMap(fieldEffects);
+        removeExpiredFromMap(turrets);
+        removeExpiredFromMap(netProjectiles);
+        removeExpiredFromMap(defenseLasers);
+        removeExpiredFromMap(zombies);
     }
 
     public void updateAll(double deltaTime) {
-        Stream.of(players, projectiles, fieldEffects, turrets, defenseLasers, netProjectiles, kothZones, headquarters, oddballNpcs, zombies)
-                .flatMap(m -> m.values().stream())
-                .forEach(e -> e.update(deltaTime));
+        for (Player p : players.values()) {
+            p.update(deltaTime);
+        }
+        for (Projectile proj : projectiles.values()) {
+            proj.update(deltaTime);
+        }
+        for (FieldEffect fe : fieldEffects.values()) {
+            fe.update(deltaTime);
+        }
+        for (Turret t : turrets.values()) {
+            t.update(deltaTime);
+        }
+        for (DefenseLaser l : defenseLasers.values()) {
+            l.update(deltaTime);
+        }
+        for (NetProjectile n : netProjectiles.values()) {
+            n.update(deltaTime);
+        }
+        for (KothZone z : kothZones.values()) {
+            z.update(deltaTime);
+        }
+        for (Headquarters h : headquarters.values()) {
+            h.update(deltaTime);
+        }
+        for (Oddball o : oddballNpcs.values()) {
+            o.update(deltaTime);
+        }
+        for (Zombie z : zombies.values()) {
+            z.update(deltaTime);
+        }
     }
 
     public PlayerSession removePlayerSession(int playerId) {
@@ -172,13 +204,6 @@ public class GameEntities {
 
     public Collection<NetProjectile> getAllNetProjectiles() {
         return netProjectiles.values();
-    }
-
-    public Collection<FieldEffectBeam> getAllBeamEffects() {
-        return fieldEffects.values().stream()
-                .filter(fe -> fe instanceof FieldEffectBeam)
-                .map(fe -> (FieldEffectBeam) fe)
-                .toList();
     }
 
     public Flag getFlag(int flagId) {
@@ -232,15 +257,13 @@ public class GameEntities {
         return zombies.get(id);
     }
 
-    public void removeZombie(int id) {
-        zombies.remove(id);
-    }
-
     public Headquarters getTeamHeadquarters(int teamNumber) {
-        return headquarters.values().stream()
-                .filter(hq -> hq.getOwnerTeam() == teamNumber)
-                .findFirst()
-                .orElse(null);
+        for (Headquarters hq : headquarters.values()) {
+            if (hq.getOwnerTeam() == teamNumber) {
+                return hq;
+            }
+        }
+        return null;
     }
 
     public void setTeamVip(int teamNumber, int playerId) {

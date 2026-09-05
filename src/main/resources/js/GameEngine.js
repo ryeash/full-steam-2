@@ -1463,20 +1463,22 @@ class GameEngine {
             this.updateGameTimer(data);
         }
         
+        const epoch = (this._frameEpoch = (this._frameEpoch || 0) + 1);
+        
         if (data.players) {
-            const currentPlayerIds = new Set();
-            
             data.players.forEach(playerData => {
-                currentPlayerIds.add(playerData.id);
-                if (this.players.has(playerData.id)) {
+                let player = this.players.get(playerData.id);
+                if (player) {
                     this.updatePlayer(playerData);
                 } else {
                     this.createPlayer(playerData);
+                    player = this.players.get(playerData.id);
                 }
+                if (player) player._lastSeenEpoch = epoch;
             });
             
             for (let [playerId, player] of this.players) {
-                if (!currentPlayerIds.has(playerId)) {
+                if (player._lastSeenEpoch !== epoch) {
                     this.removePlayer(playerId);
                 }
             }
@@ -1488,40 +1490,42 @@ class GameEngine {
         // Projectiles: cleanup runs unconditionally so an absent field (server
         // omits the key when the list is empty) clears any stale sprites.
         {
-            const currentProjectileIds = new Set();
             if (data.projectiles) {
                 data.projectiles.forEach(projectileData => {
-                    currentProjectileIds.add(projectileData.id);
-                    if (this.projectiles.has(projectileData.id)) {
+                    let proj = this.projectiles.get(projectileData.id);
+                    if (proj) {
                         this.updateProjectile(projectileData);
                     } else {
                         this.createProjectile(projectileData);
+                        proj = this.projectiles.get(projectileData.id);
                     }
+                    if (proj) proj._lastSeenEpoch = epoch;
                 });
             }
-            for (let [projectileId] of this.projectiles) {
-                if (!currentProjectileIds.has(projectileId)) {
+            for (let [projectileId, proj] of this.projectiles) {
+                if (proj._lastSeenEpoch !== epoch) {
                     this.removeProjectile(projectileId);
                 }
             }
         }
 
         // Obstacles are static — delivered once in the init payload and never
-        // re-sent in recurring gameState messages.  We still handle the field
+        // re-sent in recurring gameState messages. We still handle the field
         // if it appears (e.g. future reconnect flows) but never rely on its
         // absence to remove obstacles that were set up during initialisation.
         if (data.obstacles) {
-            const currentObstacleIds = new Set();
             data.obstacles.forEach(obstacleData => {
-                currentObstacleIds.add(obstacleData.id);
-                if (this.obstacles.has(obstacleData.id)) {
+                let obs = this.obstacles.get(obstacleData.id);
+                if (obs) {
                     this.updateObstacle(obstacleData);
                 } else {
                     this.createObstacle(obstacleData);
+                    obs = this.obstacles.get(obstacleData.id);
                 }
+                if (obs) obs._lastSeenEpoch = epoch;
             });
-            for (let [obstacleId] of this.obstacles) {
-                if (!currentObstacleIds.has(obstacleId)) {
+            for (let [obstacleId, obs] of this.obstacles) {
+                if (obs._lastSeenEpoch !== epoch) {
                     this.removeObstacle(obstacleId);
                 }
             }
@@ -1529,19 +1533,20 @@ class GameEngine {
 
         // Field effects: same absent-means-empty pattern as projectiles
         {
-            const currentFieldEffectIds = new Set();
             if (data.fieldEffects) {
                 data.fieldEffects.forEach(effectData => {
-                    currentFieldEffectIds.add(effectData.id);
-                    if (this.fieldEffects.has(effectData.id)) {
+                    let fe = this.fieldEffects.get(effectData.id);
+                    if (fe) {
                         this.updateFieldEffect(effectData);
                     } else {
                         this.createFieldEffect(effectData);
+                        fe = this.fieldEffects.get(effectData.id);
                     }
+                    if (fe) fe._lastSeenEpoch = epoch;
                 });
             }
-            for (let [effectId] of this.fieldEffects) {
-                if (!currentFieldEffectIds.has(effectId)) {
+            for (let [effectId, fe] of this.fieldEffects) {
+                if (fe._lastSeenEpoch !== epoch) {
                     this.removeFieldEffect(effectId);
                 }
             }
@@ -1549,18 +1554,19 @@ class GameEngine {
 
         // Handle flags (CTF mode)
         if (data.flags) {
-            const currentFlagIds = new Set();
             data.flags.forEach(flagData => {
-                currentFlagIds.add(flagData.id);
-                if (this.flags.has(flagData.id)) {
+                let flag = this.flags.get(flagData.id);
+                if (flag) {
                     this.updateFlag(flagData);
                 } else {
                     this.createFlag(flagData);
+                    flag = this.flags.get(flagData.id);
                 }
+                if (flag) flag._lastSeenEpoch = epoch;
             });
             
             for (let [flagId, flag] of this.flags) {
-                if (!currentFlagIds.has(flagId)) {
+                if (flag._lastSeenEpoch !== epoch) {
                     this.removeFlag(flagId);
                 }
             }
@@ -1568,51 +1574,53 @@ class GameEngine {
         
         // Handle NPCs (Unified list: Oddballs + Zombies)
         if (data.npcs) {
-            const currentOddballIds = new Set();
-            const currentZombieIds = new Set();
-
             data.npcs.forEach(npcData => {
                 if (npcData.category === 'ZOMBIE') {
-                    currentZombieIds.add(npcData.id);
-                    if (this.zombies.has(npcData.id)) {
+                    let z = this.zombies.get(npcData.id);
+                    if (z) {
                         this.updateZombie(npcData);
                     } else {
                         this.createZombie(npcData);
+                        z = this.zombies.get(npcData.id);
                     }
+                    if (z) z._lastSeenEpoch = epoch;
                 } else {
-                    currentOddballIds.add(npcData.id);
-                    if (this.oddballNpcs.has(npcData.id)) {
+                    let ob = this.oddballNpcs.get(npcData.id);
+                    if (ob) {
                         this.updateOddballNpc(npcData);
                     } else {
                         this.createOddballNpc(npcData);
+                        ob = this.oddballNpcs.get(npcData.id);
                     }
+                    if (ob) ob._lastSeenEpoch = epoch;
                 }
             });
 
-            for (let [npcId] of this.oddballNpcs) {
-                if (!currentOddballIds.has(npcId)) {
+            for (let [npcId, ob] of this.oddballNpcs) {
+                if (ob._lastSeenEpoch !== epoch) {
                     this.removeOddballNpc(npcId);
                 }
             }
-            for (let [zombieId] of this.zombies) {
-                if (!currentZombieIds.has(zombieId)) {
+            for (let [zombieId, z] of this.zombies) {
+                if (z._lastSeenEpoch !== epoch) {
                     this.removeZombie(zombieId);
                 }
             }
         } else {
             // Handle Oddball NPCs (legacy array fallback)
             if (data.oddballNpcs) {
-                const currentNpcIds = new Set();
                 data.oddballNpcs.forEach(npcData => {
-                    currentNpcIds.add(npcData.id);
-                    if (this.oddballNpcs.has(npcData.id)) {
+                    let ob = this.oddballNpcs.get(npcData.id);
+                    if (ob) {
                         this.updateOddballNpc(npcData);
                     } else {
                         this.createOddballNpc(npcData);
+                        ob = this.oddballNpcs.get(npcData.id);
                     }
+                    if (ob) ob._lastSeenEpoch = epoch;
                 });
-                for (let [npcId] of this.oddballNpcs) {
-                    if (!currentNpcIds.has(npcId)) {
+                for (let [npcId, ob] of this.oddballNpcs) {
+                    if (ob._lastSeenEpoch !== epoch) {
                         this.removeOddballNpc(npcId);
                     }
                 }
@@ -1620,17 +1628,18 @@ class GameEngine {
 
             // Handle Zombies (legacy array fallback)
             if (data.zombies) {
-                const currentZombieIds = new Set();
                 data.zombies.forEach(zombieData => {
-                    currentZombieIds.add(zombieData.id);
-                    if (this.zombies.has(zombieData.id)) {
+                    let z = this.zombies.get(zombieData.id);
+                    if (z) {
                         this.updateZombie(zombieData);
                     } else {
                         this.createZombie(zombieData);
+                        z = this.zombies.get(zombieData.id);
                     }
+                    if (z) z._lastSeenEpoch = epoch;
                 });
-                for (let [zombieId] of this.zombies) {
-                    if (!currentZombieIds.has(zombieId)) {
+                for (let [zombieId, z] of this.zombies) {
+                    if (z._lastSeenEpoch !== epoch) {
                         this.removeZombie(zombieId);
                     }
                 }
@@ -1639,25 +1648,26 @@ class GameEngine {
 
         // Handle KOTH zones
         if (data.kothZones) {
-            const currentZoneIds = new Set();
             data.kothZones.forEach(zoneData => {
-                currentZoneIds.add(zoneData.id);
-                if (this.kothZones.has(zoneData.id)) {
+                let zone = this.kothZones.get(zoneData.id);
+                if (zone) {
                     this.updateKothZone(zoneData);
                 } else {
                     this.createKothZone(zoneData);
+                    zone = this.kothZones.get(zoneData.id);
                 }
+                if (zone) zone._lastSeenEpoch = epoch;
             });
             
             for (let [zoneId, zone] of this.kothZones) {
-                if (!currentZoneIds.has(zoneId)) {
+                if (zone._lastSeenEpoch !== epoch) {
                     this.removeKothZone(zoneId);
                 }
             }
         }
         
         // Handle utility entities (turrets, nets, defense lasers, headquarters, power-ups)
-        this.handleUtilityEntities(data);
+        this.handleUtilityEntities(data, epoch);
         
         this.updateUI(data);
     }
@@ -1665,60 +1675,64 @@ class GameEngine {
     /**
      * Handle all utility entities from server data
      */
-    handleUtilityEntities(data) {
-        const currentEntityIds = new Set();
+    handleUtilityEntities(data, epoch) {
+        epoch = epoch || this._frameEpoch || 0;
         
         // Handle turrets
         if (data.turrets) {
             data.turrets.forEach(turretData => {
-                currentEntityIds.add(turretData.id);
                 if (this.utilityEntities.has(turretData.id)) {
                     this.updateUtilityEntity(turretData);
                 } else {
                     this.createUtilityEntity(turretData);
                 }
+                const e = this.utilityEntities.get(turretData.id);
+                if (e) e._lastSeenEpoch = epoch;
             });
         }
         
         // Handle nets
         if (data.nets) {
             data.nets.forEach(netData => {
-                currentEntityIds.add(netData.id);
                 if (this.utilityEntities.has(netData.id)) {
                     this.updateUtilityEntity(netData);
                 } else {
                     this.createUtilityEntity(netData);
                 }
+                const e = this.utilityEntities.get(netData.id);
+                if (e) e._lastSeenEpoch = epoch;
             });
         }
         
         // Handle defense lasers
         if (data.defenseLasers) {
             data.defenseLasers.forEach(laserData => {
-                currentEntityIds.add(laserData.id);
                 if (this.utilityEntities.has(laserData.id)) {
                     this.updateUtilityEntity(laserData);
                 } else {
                     this.createUtilityEntity(laserData);
                 }
+                const e = this.utilityEntities.get(laserData.id);
+                if (e) e._lastSeenEpoch = epoch;
             });
         }
         
         // Handle headquarters
         if (data.headquarters) {
             data.headquarters.forEach(hqData => {
-                currentEntityIds.add(hqData.id);
                 if (this.utilityEntities.has(hqData.id)) {
                     this.updateUtilityEntity(hqData);
                 } else {
                     this.createUtilityEntity(hqData);
                 }
+                const e = this.utilityEntities.get(hqData.id);
+                if (e) e._lastSeenEpoch = epoch;
             });
         }
         
         // Remove entities that no longer exist
         for (let [entityId, entity] of this.utilityEntities) {
-            if (!currentEntityIds.has(entityId)) {
+            if (entity._lastSeenEpoch !== epoch) {
                 this.removeUtilityEntity(entityId);
             }
         }
@@ -2373,6 +2387,47 @@ class GameEngine {
     }
     
     /**
+     * Shared damage text styles to eliminate per-hit TextStyle allocations
+     */
+    static DAMAGE_STYLES = {
+        attackerKill: new PIXI.TextStyle({
+            fontFamily: 'Arial, sans-serif', fontSize: 16, fontWeight: 'bold',
+            fill: 0xFF3330, stroke: { color: 0x000000, width: 3 },
+            dropShadow: { color: 0x000000, blur: 2, distance: 1 }
+        }),
+        attackerArmor: new PIXI.TextStyle({
+            fontFamily: 'Arial, sans-serif', fontSize: 14, fontWeight: 'bold',
+            fill: 0x00E5FF, stroke: { color: 0x000000, width: 3 },
+            dropShadow: { color: 0x000000, blur: 2, distance: 1 }
+        }),
+        attackerNormal: new PIXI.TextStyle({
+            fontFamily: 'Arial, sans-serif', fontSize: 13, fontWeight: 'bold',
+            fill: 0xFFFF55, stroke: { color: 0x000000, width: 3 },
+            dropShadow: { color: 0x000000, blur: 2, distance: 1 }
+        }),
+        victimArmor: new PIXI.TextStyle({
+            fontFamily: 'Arial, sans-serif', fontSize: 13, fontWeight: 'bold',
+            fill: 0x00E5FF, stroke: { color: 0x000000, width: 3 },
+            dropShadow: { color: 0x000000, blur: 2, distance: 1 }
+        }),
+        victimHealth: new PIXI.TextStyle({
+            fontFamily: 'Arial, sans-serif', fontSize: 13, fontWeight: 'bold',
+            fill: 0xFF3344, stroke: { color: 0x000000, width: 3 },
+            dropShadow: { color: 0x000000, blur: 2, distance: 1 }
+        }),
+        spectatorArmor: new PIXI.TextStyle({
+            fontFamily: 'Arial, sans-serif', fontSize: 12, fontWeight: 'bold',
+            fill: 0x00E5FF, stroke: { color: 0x000000, width: 3 },
+            dropShadow: { color: 0x000000, blur: 2, distance: 1 }
+        }),
+        spectatorNormal: new PIXI.TextStyle({
+            fontFamily: 'Arial, sans-serif', fontSize: 12, fontWeight: 'bold',
+            fill: 0xFFAA44, stroke: { color: 0x000000, width: 3 },
+            dropShadow: { color: 0x000000, blur: 2, distance: 1 }
+        })
+    };
+
+    /**
      * Create floating damage number at hit position in world space
      */
     createFloatingDamageNumber(hit) {
@@ -2391,9 +2446,7 @@ class GameEngine {
 
         const displayDamage = Math.max(1, Math.round(hit.damage));
         let textStr = '';
-        let fillColor = 0xFFFF55; // Default bright yellow
-        let fontSize = 13;
-        let strokeThickness = 3;
+        let targetStyle = GameEngine.DAMAGE_STYLES.attackerNormal;
         let initialScale = 1.0;
 
         const isArmor = hit.armorMitigated || false;
@@ -2401,49 +2454,39 @@ class GameEngine {
         if (isAttacker) {
             if (hit.kill) {
                 textStr = isArmor ? `${displayDamage} 🛡️💀` : `${displayDamage} 💀`;
-                fillColor = 0xFF3330; // Bright orange-red
-                fontSize = 16;
+                targetStyle = GameEngine.DAMAGE_STYLES.attackerKill;
                 initialScale = 1.3;
             } else if (isArmor) {
                 textStr = `${displayDamage} 🛡️`;
-                fillColor = 0x00E5FF; // Bright cyan for armor damage
-                fontSize = 14;
+                targetStyle = GameEngine.DAMAGE_STYLES.attackerArmor;
                 initialScale = 1.1;
             } else {
                 textStr = `${displayDamage}`;
-                fillColor = 0xFFFF55; // Yellow
-                fontSize = 13;
+                targetStyle = GameEngine.DAMAGE_STYLES.attackerNormal;
             }
         } else if (isVictim) {
             textStr = isArmor ? `-${displayDamage} 🛡️` : `-${displayDamage}`;
-            fillColor = isArmor ? 0x00E5FF : 0xFF3344; // Cyan if armor absorbed, Red if health damage
-            fontSize = 13;
+            targetStyle = isArmor ? GameEngine.DAMAGE_STYLES.victimArmor : GameEngine.DAMAGE_STYLES.victimHealth;
         } else {
             // Spectator
             textStr = isArmor ? `${displayDamage} 🛡️` : `${displayDamage}`;
-            fillColor = isArmor ? 0x00E5FF : 0xFFAA44; // Cyan if armor absorbed, Orange otherwise
-            fontSize = 12;
+            targetStyle = isArmor ? GameEngine.DAMAGE_STYLES.spectatorArmor : GameEngine.DAMAGE_STYLES.spectatorNormal;
         }
 
-        const textStyle = new PIXI.TextStyle({
-            fontFamily: 'Arial, sans-serif',
-            fontSize: fontSize,
-            fontWeight: 'bold',
-            fill: fillColor,
-            stroke: { color: 0x000000, width: strokeThickness },
-            dropShadow: {
-                color: 0x000000,
-                blur: 2,
-                distance: 1
-            }
-        });
-
-        const textObj = new PIXI.Text({ text: textStr, style: textStyle });
-        textObj.anchor.set(0.5, 0.5);
-        textObj.scale.y = -1; // Flip Y back inside damageTextContainer
-        if (initialScale > 1.0) {
-            textObj.scale.set(initialScale, -initialScale);
+        this.damageTextPool = this.damageTextPool || [];
+        let textObj;
+        if (this.damageTextPool.length > 0) {
+            textObj = this.damageTextPool.pop();
+            textObj.text = textStr;
+            textObj.style = targetStyle;
+            textObj.alpha = 1.0;
+            textObj.visible = true;
+        } else {
+            textObj = new PIXI.Text({ text: textStr, style: targetStyle });
+            textObj.anchor.set(0.5, 0.5);
         }
+
+        textObj.scale.set(initialScale, -initialScale); // Flip Y back inside damageTextContainer
 
         const startX = hit.x + (Math.random() * 12 - 6);
         const startY = hit.y + (Math.random() * 12 - 6);
@@ -2461,7 +2504,9 @@ class GameEngine {
         };
 
         if (this.damageTextContainer) {
-            this.damageTextContainer.addChild(textObj);
+            if (textObj.parent !== this.damageTextContainer) {
+                this.damageTextContainer.addChild(textObj);
+            }
             this.floatingDamageTexts.push(floatingObj);
         }
     }
@@ -2480,10 +2525,16 @@ class GameEngine {
             const progress = item.life / item.maxLife;
 
             if (progress >= 1.0) {
-                if (this.damageTextContainer) {
-                    this.damageTextContainer.removeChild(item.pixiText);
+                item.pixiText.visible = false;
+                this.damageTextPool = this.damageTextPool || [];
+                if (this.damageTextPool.length < 60) {
+                    this.damageTextPool.push(item.pixiText);
+                } else {
+                    if (this.damageTextContainer) {
+                        this.damageTextContainer.removeChild(item.pixiText);
+                    }
+                    item.pixiText.destroy({ context: true });
                 }
-                item.pixiText.destroy({ context: true });
                 this.floatingDamageTexts.splice(i, 1);
                 continue;
             }
@@ -3026,36 +3077,53 @@ class GameEngine {
 
     updateProjectileTrail(projectileContainer) {
         const trail = projectileContainer.trail;
-        const points = projectileContainer.trailPoints;
-        if (!trail || !points) {
+        if (!trail) {
             return;
         }
 
-        // Record the projectile's current world position (its container lives in
-        // gameContainer space, driven by the interpolator). We keep a short
-        // rolling history and drop the oldest sample once we exceed the cap.
         const cx = projectileContainer.position.x;
         const cy = projectileContainer.position.y;
-        points.push({ x: cx, y: cy });
-        const maxLen = projectileContainer.maxTrailLength || 8;
-        if (points.length > maxLen) {
-            points.splice(0, points.length - maxLen);
+
+        // Initialize flat coordinate ring buffer on demand
+        if (!projectileContainer.trailCoords) {
+            projectileContainer.trailMaxLen = projectileContainer.maxTrailLength || 8;
+            projectileContainer.trailCoords = new Float32Array(projectileContainer.trailMaxLen * 2);
+            projectileContainer.trailHead = 0;
+            projectileContainer.trailCount = 0;
+        }
+
+        const maxLen = projectileContainer.trailMaxLen;
+        const coords = projectileContainer.trailCoords;
+        let head = projectileContainer.trailHead;
+        let count = projectileContainer.trailCount;
+
+        coords[head * 2] = cx;
+        coords[head * 2 + 1] = cy;
+        head = (head + 1) % maxLen;
+        projectileContainer.trailHead = head;
+        if (count < maxLen) {
+            count++;
+            projectileContainer.trailCount = count;
         }
 
         trail.clear();
-        if (points.length < 2) return;
+        if (count < 2) return;
 
         // The trail Graphics is a CHILD of the moving container, so draw each
-        // recorded world point relative to the container's current position —
-        // that anchors the trail in world space behind the projectile. Taper
-        // width + alpha from oldest (thin/faint) to newest (full) so it fades
-        // out into the distance.
-        // Large-caliber rounds get a bright inner core near the head (exhaust look).
+        // recorded world point relative to the container's current position.
+        const startIndex = (head - count + maxLen) % maxLen;
         const bigBore = (projectileContainer.projectileData?.caliber || 1) >= 1.7;
-        for (let i = 1; i < points.length; i++) {
-            const progress = i / (points.length - 1); // 0 = oldest segment, 1 = newest
-            const ax = points[i - 1].x - cx, ay = points[i - 1].y - cy;
-            const bx = points[i].x - cx, by = points[i].y - cy;
+
+        for (let i = 1; i < count; i++) {
+            const prevIdx = ((startIndex + i - 1) % maxLen) * 2;
+            const currIdx = ((startIndex + i) % maxLen) * 2;
+            const progress = i / (count - 1); // 0 = oldest segment, 1 = newest
+
+            const ax = coords[prevIdx] - cx;
+            const ay = coords[prevIdx + 1] - cy;
+            const bx = coords[currIdx] - cx;
+            const by = coords[currIdx + 1] - cy;
+
             const width = trail.trailWidth * (0.2 + 0.8 * progress);
             const alpha = trail.trailAlpha * progress;
 
@@ -6208,6 +6276,12 @@ class GameEngine {
                 if (item.pixiText) item.pixiText.destroy({ context: true });
             });
             this.floatingDamageTexts = [];
+        }
+        if (this.damageTextPool) {
+            this.damageTextPool.forEach(item => {
+                item.destroy({ context: true });
+            });
+            this.damageTextPool = [];
         }
         this.damageTextContainer = null;
 

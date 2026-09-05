@@ -481,4 +481,13 @@ public class Player extends OwnedGameEntity implements HasWeapon, Damageable {
         return takeDamage(damage, false);
     }
 
+    private transient com.fullsteam.ai.AITargetWrapper targetWrapper;
+
+    public com.fullsteam.ai.AITargetWrapper getTargetWrapper() {
+        if (targetWrapper == null) {
+            targetWrapper = com.fullsteam.ai.AITargetWrapper.createDirect(this, com.fullsteam.ai.AITargetWrapper.TargetType.PLAYER);
+        }
+        return targetWrapper;
+    }
+
 }

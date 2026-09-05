@@ -2,6 +2,7 @@ package com.fullsteam.games;
 
 import com.fullsteam.model.Rules;
 import io.micronaut.core.annotation.Introspected;
+import io.micronaut.validation.annotation.NotInList;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;

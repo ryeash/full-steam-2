@@ -180,6 +180,17 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
         this.lastMeleeAttackTime = System.currentTimeMillis();
     }
 
+    private OwnedGameEntity currentTargetEntity;
+    private Vector2 staticTargetPosition;
+    private transient com.fullsteam.ai.AITargetWrapper targetWrapper;
+
+    public com.fullsteam.ai.AITargetWrapper getTargetWrapper() {
+        if (targetWrapper == null) {
+            targetWrapper = com.fullsteam.ai.AITargetWrapper.createDirect(this, com.fullsteam.ai.AITargetWrapper.TargetType.ZOMBIE);
+        }
+        return targetWrapper;
+    }
+
     /**
      * AI tick: targeting, pathing, lunge detection, and force-based movement.
      */
@@ -189,7 +200,24 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
         }
 
         retargetTimer -= deltaTime;
-        Vector2 targetPosition = evaluateTargetPosition(gameEntities);
+        boolean targetValid = currentTargetEntity != null && currentTargetEntity.isActive() && currentTargetEntity.getHealth() > 0;
+
+        if (attackPattern == ZombieAttackPattern.OBSESSED_PLAYER) {
+            if (!targetValid) {
+                targetEntityId = null;
+                acquireTarget(gameEntities);
+            }
+        } else if (!targetValid || retargetTimer <= 0) {
+            acquireTarget(gameEntities);
+            retargetTimer = 0.25 + ThreadLocalRandom.current().nextDouble() * 0.15;
+        }
+
+        Vector2 targetPosition = null;
+        if (currentTargetEntity != null && currentTargetEntity.isActive() && currentTargetEntity.getHealth() > 0) {
+            targetPosition = currentTargetEntity.getPosition();
+        } else if (staticTargetPosition != null) {
+            targetPosition = staticTargetPosition;
+        }
 
         Vector2 myPos = getPosition();
 
@@ -227,80 +255,84 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
         }
     }
 
-    private Vector2 evaluateTargetPosition(GameEntities gameEntities) {
+    private void acquireTarget(GameEntities gameEntities) {
         Collection<Player> players = gameEntities.getAllPlayers();
         Collection<Headquarters> hqs = gameEntities.getAllHeadquarters();
         Collection<Turret> turrets = gameEntities.getAllTurrets();
+
+        currentTargetEntity = null;
+        staticTargetPosition = null;
 
         // 1. If obsessed with a specific player/entity, keep tracking it until dead
         if (attackPattern == ZombieAttackPattern.OBSESSED_PLAYER && targetEntityId != null) {
             Player obsessedPlayer = gameEntities.getPlayer(targetEntityId);
             if (obsessedPlayer != null && obsessedPlayer.isActive() && obsessedPlayer.getHealth() > 0) {
-                return obsessedPlayer.getPosition();
+                currentTargetEntity = obsessedPlayer;
+                return;
             } else {
-                targetEntityId = null; // Obsession ended, acquire new target
+                targetEntityId = null;
             }
         }
 
         // 2. Select target based on attack pattern
-        return switch (attackPattern) {
+        switch (attackPattern) {
             case HEADQUARTERS -> {
                 Headquarters hq = findNearestHeadquarters(hqs);
                 if (hq != null) {
-                    yield hq.getPosition();
+                    currentTargetEntity = hq;
+                } else {
+                    currentTargetEntity = findNearestPlayer(players);
                 }
-                yield findNearestPlayerPosition(players);
             }
             case TURRET -> {
                 Turret turret = findNearestTurret(turrets);
                 if (turret != null) {
-                    yield turret.getPosition();
+                    currentTargetEntity = turret;
+                } else {
+                    currentTargetEntity = findNearestPlayer(players);
                 }
-                yield findNearestPlayerPosition(players);
             }
             case LOWEST_HEALTH -> {
                 Player lowest = findLowestHealthPlayer(players);
                 if (lowest != null) {
-                    yield lowest.getPosition();
+                    currentTargetEntity = lowest;
+                } else {
+                    currentTargetEntity = findNearestPlayer(players);
                 }
-                yield findNearestPlayerPosition(players);
             }
             case SWARM_CLUSTER -> {
                 Vector2 cluster = findClusterCenter(players, hqs);
                 if (cluster != null) {
-                    yield cluster;
+                    staticTargetPosition = cluster;
+                } else {
+                    currentTargetEntity = findNearestPlayer(players);
                 }
-                yield findNearestPlayerPosition(players);
             }
             case OBSESSED_PLAYER -> {
                 Player nearest = findNearestPlayer(players);
                 if (nearest != null) {
                     this.targetEntityId = nearest.getId();
-                    yield nearest.getPosition();
+                    this.currentTargetEntity = nearest;
                 }
-                yield null;
             }
-            case NEAREST_PLAYER -> findNearestPlayerPosition(players);
-        };
-    }
-
-    private Vector2 findNearestPlayerPosition(Collection<Player> players) {
-        Player p = findNearestPlayer(players);
-        return p != null ? p.getPosition() : null;
+            case NEAREST_PLAYER -> {
+                currentTargetEntity = findNearestPlayer(players);
+            }
+        }
     }
 
     private Player findNearestPlayer(Collection<Player> players) {
         Player nearest = null;
-        double minDist = Double.MAX_VALUE;
+        double minDistSq = Double.MAX_VALUE;
         Vector2 myPos = getPosition();
 
         for (Player p : players) {
             if (!p.isActive() || p.getHealth() <= 0) {
                 continue;
             }
-            double dist = myPos.distance(p.getPosition());
-            if (dist < minDist) {
-                minDist = dist;
+            double distSq = myPos.distanceSquared(p.getPosition());
+            if (distSq < minDistSq) {
+                minDistSq = distSq;
                 nearest = p;
             }
         }
@@ -309,16 +341,16 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
 
     private Headquarters findNearestHeadquarters(Collection<Headquarters> hqs) {
         Headquarters nearest = null;
-        double minDist = Double.MAX_VALUE;
+        double minDistSq = Double.MAX_VALUE;
         Vector2 myPos = getPosition();
 
         for (Headquarters hq : hqs) {
             if (!hq.isActive() || hq.getHealth() <= 0) {
                 continue;
             }
-            double dist = myPos.distance(hq.getPosition());
-            if (dist < minDist) {
-                minDist = dist;
+            double distSq = myPos.distanceSquared(hq.getPosition());
+            if (distSq < minDistSq) {
+                minDistSq = distSq;
                 nearest = hq;
             }
         }
@@ -327,16 +359,16 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
 
     private Turret findNearestTurret(Collection<Turret> turrets) {
         Turret nearest = null;
-        double minDist = Double.MAX_VALUE;
+        double minDistSq = Double.MAX_VALUE;
         Vector2 myPos = getPosition();
 
         for (Turret t : turrets) {
             if (!t.isActive() || t.getHealth() <= 0) {
                 continue;
             }
-            double dist = myPos.distance(t.getPosition());
-            if (dist < minDist) {
-                minDist = dist;
+            double distSq = myPos.distanceSquared(t.getPosition());
+            if (distSq < minDistSq) {
+                minDistSq = distSq;
                 nearest = t;
             }
         }

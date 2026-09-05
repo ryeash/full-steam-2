@@ -129,4 +129,53 @@ class LastStandingRespawnTest extends BaseTestClass {
         assertTrue(ruleSystem.shouldPlayerRespawn(t2b), "Waiting players released when one team stands");
         assertFalse(ruleSystem.shouldPlayerRespawn(t1b), "Surviving player is not a respawn candidate");
     }
+
+    @Test
+    @DisplayName("FFA mutual kill: when all players die simultaneously, everyone is released")
+    void testMutualKillReleasesAllWaitingPlayersInFfa() {
+        RuleSystem ruleSystem = newRuleSystem(0);
+        Player p1 = spawnPlayer(1, 0);
+        Player p2 = spawnPlayer(2, 0);
+
+        // Both players die in the same engagement
+        kill(ruleSystem, p1);
+        kill(ruleSystem, p2);
+
+        ruleSystem.update(0.016);
+        assertTrue(ruleSystem.shouldPlayerRespawn(p1), "Player 1 released after mutual elimination");
+        assertTrue(ruleSystem.shouldPlayerRespawn(p2), "Player 2 released after mutual elimination");
+    }
+
+    @Test
+    @DisplayName("Multiple sequential rounds: players can duel, collapse, respawn, and duel again")
+    void testMultipleSequentialSkirmishRounds() {
+        RuleSystem ruleSystem = newRuleSystem(0);
+        Player p1 = spawnPlayer(1, 0);
+        Player p2 = spawnPlayer(2, 0);
+        Player p3 = spawnPlayer(3, 0);
+
+        // --- Round 1 ---
+        kill(ruleSystem, p1);
+        kill(ruleSystem, p2);
+        ruleSystem.update(0.016);
+        assertTrue(ruleSystem.shouldPlayerRespawn(p1));
+        assertTrue(ruleSystem.shouldPlayerRespawn(p2));
+
+        // Simulate respawn (as GameManager.respawnPlayer does)
+        p1.setActive(true);
+        p1.setRespawnTime(0);
+        p2.setActive(true);
+        p2.setRespawnTime(0);
+
+        // --- Round 2 ---
+        // p3 and p2 die this round, p1 survives
+        kill(ruleSystem, p3);
+        assertFalse(ruleSystem.shouldPlayerRespawn(p3), "p3 parked while p1 and p2 fight");
+
+        kill(ruleSystem, p2);
+        ruleSystem.update(0.016);
+        assertTrue(ruleSystem.shouldPlayerRespawn(p3), "p3 released when p1 is last standing");
+        assertTrue(ruleSystem.shouldPlayerRespawn(p2), "p2 released when p1 is last standing");
+        assertFalse(ruleSystem.shouldPlayerRespawn(p1), "Survivor p1 does not respawn");
+    }
 }

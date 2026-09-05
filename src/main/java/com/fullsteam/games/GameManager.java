@@ -1163,11 +1163,20 @@ public class GameManager {
     }
 
     private void sendGameState() {
-        boolean anyBlinded = gameEntities.getAllPlayers()
-                .stream()
-                .anyMatch(Player::isVisionObscured);
-        boolean anyLobby = gameEntities.getPlayerSessions().values().stream()
-                .anyMatch(s -> s.getState() == PlayerSessionState.LOBBY);
+        boolean anyBlinded = false;
+        for (Player p : gameEntities.getAllPlayers()) {
+            if (p.isVisionObscured()) {
+                anyBlinded = true;
+                break;
+            }
+        }
+        boolean anyLobby = false;
+        for (PlayerSession s : gameEntities.getPlayerSessions().values()) {
+            if (s.getState() == PlayerSessionState.LOBBY) {
+                anyLobby = true;
+                break;
+            }
+        }
 
         if (!anyBlinded && !anyLobby) {
             byte[] fullStateBinary = binaryGameStateSerializer.serializeGameState();
