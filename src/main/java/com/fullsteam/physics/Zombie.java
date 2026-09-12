@@ -1,6 +1,11 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.Config;
+import com.fullsteam.model.FieldEffectCircle;
+import com.fullsteam.model.FieldEffectType;
+import com.fullsteam.model.HasWeapon;
+import com.fullsteam.model.Weapon;
+import com.fullsteam.model.WeaponConfig;
 import com.fullsteam.model.ZombieAttackPattern;
 import com.fullsteam.model.ZombieType;
 import lombok.Getter;
@@ -21,10 +26,21 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 @Getter
 @Setter
-public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker {
+public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker, HasWeapon {
+
+    public static final double BOOMER_WARNING_RADIUS = 110.0;
+    public static final double BOOMER_WARNING_DURATION_SECONDS = 1.5;
+    public static final double BOOMER_POISON_BASE_RADIUS = 55.0; // expands to 110.0 via FieldEffectType.POISON.maxRadius
+    public static final double BOOMER_POISON_DAMAGE = 45.0;
+    public static final double BOOMER_POISON_DURATION_SECONDS = 4.0;
+    public static final double ZOMBIE_FIRE_RATE_PENALTY = 1.15;
 
     private final ZombieType type;
     private ZombieAttackPattern attackPattern;
+
+    private final Weapon weapon;
+    private long lastShotTime = 0L;
+    private boolean deathHandled = false;
 
     private double baseSpeed;
     private double maxSpeed;
@@ -67,6 +83,12 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
         this.meleeDamage = type.getDefaultMeleeDamage() * dmgVar;
         this.meleeCooldownSeconds = type.getMeleeCooldownSeconds();
 
+        if (this.type == ZombieType.SPITTER) {
+            this.weapon = WeaponConfig.SPITTER_SPIT_PRESET.buildWeapon();
+        } else {
+            this.weapon = null;
+        }
+
         this.retargetTimer = ThreadLocalRandom.current().nextDouble() * 2.0;
     }
 
@@ -81,16 +103,20 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
 
     public static ZombieType selectRandomZombieType() {
         int roll = ThreadLocalRandom.current().nextInt(100);
-        if (roll < 45) {
-            return ZombieType.WALKER; // 45%
+        if (roll < 35) {
+            return ZombieType.WALKER; // 35%
+        } else if (roll < 55) {
+            return ZombieType.RUNNER; // 20%
         } else if (roll < 70) {
-            return ZombieType.RUNNER; // 25%
-        } else if (roll < 85) {
             return ZombieType.LUNGER; // 15%
-        } else if (roll < 95) {
+        } else if (roll < 80) {
             return ZombieType.TANK;   // 10%
+        } else if (roll < 90) {
+            return ZombieType.BOOMER; // 10%
+        } else if (roll < 97) {
+            return ZombieType.SPITTER;// 7%
         } else {
-            return ZombieType.STALKER; // 5%
+            return ZombieType.STALKER;// 3%
         }
     }
 
@@ -121,7 +147,58 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
             case TANK -> "Tank Zombie";
             case LUNGER -> "Lunger Zombie";
             case STALKER -> "Stalker Zombie";
+            case BOOMER -> "Boomer Zombie";
+            case SPITTER -> "Spitter Zombie";
         };
+    }
+
+    public void onDeath(GameEntities gameEntities) {
+        if (deathHandled) {
+            return;
+        }
+        deathHandled = true;
+
+        if (type == ZombieType.BOOMER) {
+            triggerBoomerExplosion(gameEntities);
+        }
+    }
+
+    private void triggerBoomerExplosion(GameEntities gameEntities) {
+        if (gameEntities == null) {
+            return;
+        }
+        Vector2 pos = getPosition().copy();
+        int ownerId = -getId();
+        int ownerTeam = getOwnerTeam();
+
+        long armingTime = System.currentTimeMillis() + (long) (BOOMER_WARNING_DURATION_SECONDS * 1000);
+
+        // 1. Telegraph: Warning zone indicating it is about to explode
+        gameEntities.add(new FieldEffectCircle(
+                ownerId,
+                FieldEffectType.WARNING_ZONE,
+                pos.copy(),
+                BOOMER_WARNING_RADIUS,
+                BOOMER_WARNING_RADIUS,
+                0.0,
+                BOOMER_WARNING_DURATION_SECONDS,
+                0,
+                ownerTeam
+        ));
+
+        // 2. Delayed poison explosion effect where the arm time matches the warning zone time
+        double poisonMaxRadius = FieldEffectType.POISON.maxRadius(BOOMER_POISON_BASE_RADIUS);
+        gameEntities.add(new FieldEffectCircle(
+                ownerId,
+                FieldEffectType.POISON,
+                pos.copy(),
+                BOOMER_POISON_BASE_RADIUS,
+                poisonMaxRadius,
+                BOOMER_POISON_DAMAGE,
+                BOOMER_POISON_DURATION_SECONDS,
+                armingTime,
+                ownerTeam
+        ));
     }
 
     @Override
@@ -180,6 +257,16 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
         this.lastMeleeAttackTime = System.currentTimeMillis();
     }
 
+    public boolean canFire() {
+        if (!active || health <= 0 || weapon == null) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        double effectiveFireRate = Math.max(0.1, weapon.getFireRate()) / ZOMBIE_FIRE_RATE_PENALTY;
+        double fireInterval = 1000.0 / effectiveFireRate;
+        return (now - lastShotTime) >= (long) fireInterval;
+    }
+
     private OwnedGameEntity currentTargetEntity;
     private Vector2 staticTargetPosition;
     private transient com.fullsteam.ai.AITargetWrapper targetWrapper;
@@ -225,21 +312,41 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
             Vector2 delta = targetPosition.copy().subtract(myPos);
             double distance = delta.getMagnitude();
 
-            // Check if within lunger distance threshold for speed surge
-            this.isLunging = distance <= lungeDistance;
+            if (type == ZombieType.SPITTER) {
+                // Spitter behavior: keep distance between 350 and 600 units while aiming at target
+                this.isLunging = false;
+                Vector2 targetDir = delta.getNormalized();
+                setAimDirection(targetDir);
 
-            if (distance > 5.0) {
-                Vector2 moveDir = delta.getNormalized();
+                double preferredMin = 350.0;
+                double preferredMax = 600.0;
 
-                // Add slight wandering jitter to avoid perfect linear stacking
-                double jitter = Math.sin(System.currentTimeMillis() / 300.0 + id) * 0.2;
-                Vector2 perp = new Vector2(-moveDir.y, moveDir.x);
-                moveDir.add(perp.multiply(jitter)).normalize();
-
-                setAimDirection(moveDir);
-                processMovement(moveDir);
+                if (distance > preferredMax) {
+                    processMovement(targetDir);
+                } else if (distance < preferredMin) {
+                    processMovement(targetDir.copy().negate());
+                } else {
+                    double strafeSign = (id % 2 == 0) ? 1.0 : -1.0;
+                    Vector2 strafeDir = new Vector2(-targetDir.y * strafeSign, targetDir.x * strafeSign);
+                    processMovement(strafeDir.multiply(0.4));
+                }
             } else {
-                processMovement(new Vector2(0, 0));
+                // Check if within lunger distance threshold for speed surge
+                this.isLunging = distance <= lungeDistance;
+
+                if (distance > 5.0) {
+                    Vector2 moveDir = delta.getNormalized();
+
+                    // Add slight wandering jitter to avoid perfect linear stacking
+                    double jitter = Math.sin(System.currentTimeMillis() / 300.0 + id) * 0.2;
+                    Vector2 perp = new Vector2(-moveDir.y, moveDir.x);
+                    moveDir.add(perp.multiply(jitter)).normalize();
+
+                    setAimDirection(moveDir);
+                    processMovement(moveDir);
+                } else {
+                    processMovement(new Vector2(0, 0));
+                }
             }
         } else {
             // No target found; wander

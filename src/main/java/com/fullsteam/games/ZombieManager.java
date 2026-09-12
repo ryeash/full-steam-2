@@ -12,6 +12,7 @@ import com.fullsteam.physics.TeamSpawnArea;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.Zombie;
 import lombok.Getter;
+import lombok.Setter;
 import org.dyn4j.geometry.Vector2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +37,10 @@ public class ZombieManager {
     private final GameEventManager gameEventManager;
     private final TerrainGenerator terrainGenerator;
     private final TeamSpawnManager teamSpawnManager;
+
+    @Getter
+    @Setter
+    private WeaponSystem weaponSystem;
 
     @Getter
     private int waveNumber = 0;
@@ -77,8 +82,19 @@ public class ZombieManager {
                          GameConfig gameConfig,
                          GameEntities gameEntities,
                          GameEventManager gameEventManager,
+                         TerrainGenerator terrainGenerator,
+                         TeamSpawnManager teamSpawnManager,
+                         WeaponSystem weaponSystem) {
+        this(gameId, gameConfig, gameEntities, gameEventManager, terrainGenerator, teamSpawnManager);
+        this.weaponSystem = weaponSystem;
+    }
+
+    public ZombieManager(String gameId,
+                         GameConfig gameConfig,
+                         GameEntities gameEntities,
+                         GameEventManager gameEventManager,
                          TerrainGenerator terrainGenerator) {
-        this(gameId, gameConfig, gameEntities, gameEventManager, terrainGenerator, null);
+        this(gameId, gameConfig, gameEntities, gameEventManager, terrainGenerator, null, null);
     }
 
     /**
@@ -97,10 +113,15 @@ public class ZombieManager {
             case EBB_AND_FLOW -> updateEbbAndFlowSpawning(rules, deltaTime);
         }
 
-        // 2. AI coordination
+        // 2. AI coordination, firing, and death handling
         for (Zombie zombie : gameEntities.getAllZombies()) {
             if (zombie.isActive()) {
                 zombie.tickAI(gameEntities, deltaTime);
+                if (weaponSystem != null && zombie.getWeapon() != null) {
+                    weaponSystem.handleZombieFire(zombie);
+                }
+            } else if (!zombie.isDeathHandled()) {
+                zombie.onDeath(gameEntities);
             }
         }
     }

@@ -51,6 +51,7 @@ public class GameEntities {
     private final Map<Integer, KothZone> kothZones = new ConcurrentSkipListMap<>();
     private final Map<Integer, Headquarters> headquarters = new ConcurrentSkipListMap<>();
     private final Map<Integer, Zombie> zombies = new ConcurrentSkipListMap<>();
+    private final Map<Integer, Zombie> recentZombies = new ConcurrentSkipListMap<>();
 
     private final Set<DamageHit> pendingDamageHits = new ConcurrentSkipListSet<>();
     private final Map<Long, Double> dotHitAccumulator = new ConcurrentSkipListMap<>();
@@ -133,6 +134,12 @@ public class GameEntities {
         map.entrySet().removeIf(entry -> {
             GameEntity o = entry.getValue();
             if (o.isExpired()) {
+                if (o instanceof Zombie z) {
+                    recentZombies.put(z.getId(), z);
+                    if (recentZombies.size() > 100) {
+                        recentZombies.entrySet().removeIf(e -> System.currentTimeMillis() - e.getValue().getLastUpdateTime() > 30000L);
+                    }
+                }
                 world.removeBody(o.getBody());
                 return true;
             }
@@ -254,7 +261,8 @@ public class GameEntities {
     }
 
     public Zombie getZombie(int id) {
-        return zombies.get(id);
+        Zombie z = zombies.get(id);
+        return z != null ? z : recentZombies.get(id);
     }
 
     public Headquarters getTeamHeadquarters(int teamNumber) {

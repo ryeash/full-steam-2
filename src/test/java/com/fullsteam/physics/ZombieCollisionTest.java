@@ -182,4 +182,85 @@ public class ZombieCollisionTest extends BaseTestClass {
 
         assertTrue(zombie.getHealth() < initialHealth, "Damage field effect should harm zombie");
     }
+
+    @Test
+    @DisplayName("Boomer killed by player projectile triggers warning zone and delayed poison explosion")
+    public void testBoomerKilledByProjectileTriggersExplosion() {
+        Zombie boomer = new Zombie(20, ZombieType.BOOMER, ZombieAttackPattern.NEAREST_PLAYER, 100.0, 100.0);
+        gameEntities.add(boomer);
+
+        int initialZombieKills = player.getScoring().getZombieKills();
+
+        // Lethal projectile from player
+        Projectile lethalShot = new Projectile(
+                player.getId(),
+                new Vector2(100.0, 100.0),
+                new Vector2(1.0, 0.0),
+                boomer.getMaxHealth() + 50.0,
+                500.0,
+                player.getTeam(),
+                0.0,
+                Set.of(),
+                Ordinance.PROJECTILE,
+                1.0,
+                0.0
+        );
+        gameEntities.add(lethalShot);
+
+        collisionProcessor.handleEntityCollision(lethalShot, boomer);
+
+        assertFalse(boomer.isActive(), "Boomer should be dead");
+        assertEquals(initialZombieKills + 1, player.getScoring().getZombieKills(), "Player should receive zombie kill credit");
+
+        // Verify warning zone and delayed poison explosion were spawned
+        boolean hasWarningZone = gameEntities.getAllFieldEffects().stream()
+                .anyMatch(fe -> fe.getType() == FieldEffectType.WARNING_ZONE);
+        boolean hasPoisonExplosion = gameEntities.getAllFieldEffects().stream()
+                .anyMatch(fe -> fe.getType() == FieldEffectType.POISON && fe.getArmingTime() > 0);
+
+        assertTrue(hasWarningZone, "Boomer death should spawn WARNING_ZONE");
+        assertTrue(hasPoisonExplosion, "Boomer death should spawn delayed POISON explosion");
+    }
+
+    @Test
+    @DisplayName("Spitter fires poison projectile that passes through friendly zombies and damages player")
+    public void testSpitterFiringAndZombiePassthrough() {
+        Zombie spitter = new Zombie(21, ZombieType.SPITTER, ZombieAttackPattern.NEAREST_PLAYER, 0.0, 0.0);
+        Zombie walker = new Zombie(22, ZombieType.WALKER, ZombieAttackPattern.NEAREST_PLAYER, 50.0, 0.0);
+        gameEntities.add(spitter);
+        gameEntities.add(walker);
+
+        // Player at (200, 0)
+        player.setPosition(200.0, 0.0);
+
+        // Target acquisition
+        spitter.tickAI(gameEntities, 0.05);
+        assertEquals(player, spitter.getCurrentTargetEntity());
+
+        // Fire weapon through WeaponSystem
+        gameManager.getWeaponSystem().handleZombieFire(spitter);
+
+        // Verify projectile was created
+        var projectiles = gameEntities.getProjectiles().values();
+        assertEquals(1, projectiles.size(), "Spitter should have fired a projectile");
+
+        // Immediate second fire attempt should be blocked by cooldown
+        gameManager.getWeaponSystem().handleZombieFire(spitter);
+        assertEquals(1, projectiles.size(), "Spitter cannot fire again immediately during cooldown");
+
+        Projectile spit = projectiles.iterator().next();
+        assertEquals(-spitter.getId(), spit.getOwnerId());
+        assertTrue(spit.getBulletEffects().contains(BulletEffect.POISON), "Spit projectile must have POISON effect");
+
+        // Check collision between zombie projectile and another zombie: should pass through
+        double walkerHealthBefore = walker.getHealth();
+        boolean walkerHitResolved = collisionProcessor.handleEntityCollision(spit, walker);
+        assertFalse(walkerHitResolved, "Zombie projectile must pass through friendly zombies");
+        assertEquals(walkerHealthBefore, walker.getHealth(), 0.001, "Walker should not take damage from friendly spit");
+
+        // Now collide with enemy player: should deal damage
+        double playerHealthBefore = player.getHealth();
+        collisionProcessor.handleEntityCollision(spit, player);
+        assertTrue(player.getHealth() < playerHealthBefore, "Player must take damage from Spitter spit");
+    }
 }

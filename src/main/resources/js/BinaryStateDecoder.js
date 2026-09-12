@@ -24,7 +24,7 @@ class BinaryStateDecoder {
 
     static ODDBALL_PERSONALITIES = ['RAMPAGE', 'SEEKER'];
 
-    static ZOMBIE_TYPES = ['WALKER', 'RUNNER', 'TANK', 'LUNGER', 'STALKER'];
+    static ZOMBIE_TYPES = ['WALKER', 'RUNNER', 'TANK', 'LUNGER', 'STALKER', 'BOOMER', 'SPITTER'];
 
     static textDecoder = new TextDecoder('utf-8');
 

@@ -153,7 +153,7 @@ public class GameManager {
         );
 
         this.zombieManager = gameConfig.getRules().hasZombies()
-                ? new ZombieManager(gameId, gameConfig, gameEntities, gameEventManager, terrainGenerator, teamSpawnManager)
+                ? new ZombieManager(gameId, gameConfig, gameEntities, gameEventManager, terrainGenerator, teamSpawnManager, weaponSystem)
                 : null;
 
         // Initialize spawn point manager
@@ -1432,10 +1432,15 @@ public class GameManager {
         if (zombie == null) {
             return KillerIdentity.UNKNOWN;
         }
+        String weaponName = switch (zombie.getType()) {
+            case BOOMER -> "Poison Explosion";
+            case SPITTER -> "Poison Spit";
+            default -> "Melee";
+        };
         return new KillerIdentity(
                 zombie.getDisplayName(),
                 null,
-                "Melee",
+                weaponName,
                 zombie.getId());
     }
 

@@ -94,6 +94,9 @@ public class ProjectileImpactHandler {
             }
         } else if (victim instanceof Zombie zombie) {
             killed = zombie.takeDamage(damage);
+            if (killed) {
+                zombie.onDeath(gameEntities);
+            }
             Player attacker = gameEntities.getPlayer(projectile.getOwnerId());
             if (killed && attacker != null && attacker.isActive()) {
                 attacker.getScoring().addZombieKill();
@@ -166,6 +169,9 @@ public class ProjectileImpactHandler {
         } else if (victim instanceof Headquarters hq) {
             return projectile.getOwnerTeam() != hq.getOwnerTeam();
         } else if (victim instanceof Zombie) {
+            if (projectile.getOwnerId() < 0) {
+                return false; // Zombie projectiles pass through and do not damage other zombies
+            }
             return true; // Zombies are hostile to all
         } else if (victim instanceof Oddball) {
             return projectile.getOwnerId() > 0; // Player-fired shots score on Oddballs

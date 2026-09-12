@@ -317,7 +317,7 @@ public class GamePresets {
                     .enableAIFilling(true)
                     .rules(Rules.builder()
                             .timeLimit(600)
-                            .scoreStyle(ScoreStyle.TOTAL)
+                            .scoreStyle(ScoreStyle.OBJECTIVE)
                             .victoryCondition(VictoryCondition.SCORE_LIMIT)
                             .scoreLimit(1000)
                             .respawnMode(RespawnMode.DELAYED)

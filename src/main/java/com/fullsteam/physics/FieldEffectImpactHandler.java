@@ -293,6 +293,9 @@ public class FieldEffectImpactHandler {
                 if (fieldEffect.getAffectedEntities().add(zombie.getId())) {
                     double damage = fieldEffect.getDamage();
                     boolean killed = zombie.takeDamage(damage);
+                    if (killed) {
+                        zombie.onDeath(gameEntities);
+                    }
                     if (killed && attacker != null && attacker.isActive()) {
                         attacker.getScoring().addZombieKill();
                     }
@@ -303,6 +306,9 @@ public class FieldEffectImpactHandler {
                 if (fieldEffect.getDamage() > 0) {
                     double damage = fieldEffect.getDamage() * deltaTime;
                     boolean killed = zombie.takeDamage(damage);
+                    if (killed) {
+                        zombie.onDeath(gameEntities);
+                    }
                     if (killed && attacker != null && attacker.isActive()) {
                         attacker.getScoring().addZombieKill();
                     }
@@ -313,6 +319,9 @@ public class FieldEffectImpactHandler {
                 if (fieldEffect.getDamage() > 0) {
                     double damage = fieldEffect.getDamage() * deltaTime;
                     boolean killed = zombie.takeDamage(damage);
+                    if (killed) {
+                        zombie.onDeath(gameEntities);
+                    }
                     if (killed && attacker != null && attacker.isActive()) {
                         attacker.getScoring().addZombieKill();
                     }

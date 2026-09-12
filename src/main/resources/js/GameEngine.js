@@ -3652,6 +3652,14 @@ class GameEngine {
             bodyColor = 0x1a2b16;
             strokeColor = 0x0e170c;
             eyeColor = 0xee3355;
+        } else if (type === 'BOOMER') {
+            bodyColor = 0x687828;
+            strokeColor = 0x3d4710;
+            eyeColor = 0xaaff22;
+        } else if (type === 'SPITTER') {
+            bodyColor = 0x245942;
+            strokeColor = 0x113324;
+            eyeColor = 0x22ff99;
         }
 
         // Lunge aura (drawn behind body, visible when lunging)
@@ -3663,8 +3671,8 @@ class GameEngine {
         container.lungeAura = lungeAura;
 
         // Reaching zombie arms / claws extending forward along x-axis (facing direction)
-        const armLength = type === 'LUNGER' ? radius * 1.3 : radius * 0.9;
-        const armThickness = type === 'TANK' ? 6 : 3.5;
+        const armLength = type === 'LUNGER' ? radius * 1.3 : (type === 'SPITTER' ? radius * 0.7 : radius * 0.9);
+        const armThickness = type === 'TANK' ? 6 : (type === 'BOOMER' ? 5 : 3.5);
 
         // Left arm
         gfx.moveTo(radius * 0.2, -radius * 0.55).lineTo(armLength, -radius * 0.45);
@@ -3690,6 +3698,21 @@ class GameEngine {
             // Speed streaks
             gfx.moveTo(-radius * 0.6, 0).lineTo(radius * 0.4, 0);
             gfx.stroke({ width: 2, color: 0x84cc16, alpha: 0.7 });
+        } else if (type === 'BOOMER') {
+            // Bile boils / toxic pustules on bloated body
+            gfx.circle(-radius * 0.35, -radius * 0.35, radius * 0.3).fill(0x8cb828);
+            gfx.circle(-radius * 0.35, -radius * 0.35, radius * 0.3).stroke({ width: 1.5, color: 0x4a6312 });
+            gfx.circle(-radius * 0.4, radius * 0.3, radius * 0.25).fill(0x9ecf2d);
+            gfx.circle(-radius * 0.4, radius * 0.3, radius * 0.25).stroke({ width: 1.5, color: 0x4a6312 });
+            gfx.circle(0, -radius * 0.45, radius * 0.22).fill(0xbbef3a);
+        } else if (type === 'SPITTER') {
+            // Elongated venom maw / spitting nozzle extending forward
+            gfx.moveTo(radius * 0.4, -radius * 0.25).lineTo(radius * 1.25, 0).lineTo(radius * 0.4, radius * 0.25);
+            gfx.fill(0x1a4532);
+            gfx.stroke({ width: 2, color: 0x38e88c });
+            // Corrosive acid gland spots
+            gfx.circle(-radius * 0.3, -radius * 0.3, 2.5).fill(0x44ffaa);
+            gfx.circle(-radius * 0.3, radius * 0.3, 2.5).fill(0x44ffaa);
         }
 
         // Glowing predatory eyes
@@ -5828,8 +5851,8 @@ class GameEngine {
             if (!data) return;
             const x = (data.x + this.worldBounds.width / 2) * scale + offsetX;
             const y = (-data.y + this.worldBounds.height / 2) * scale + offsetY;
-            const isTank = data.type === 'TANK';
-            const r = isTank ? 3.5 : 2.0;
+            const isLarge = data.type === 'TANK' || data.type === 'BOOMER';
+            const r = isLarge ? 3.5 : 2.0;
             const color = data.isLunging ? 0xFF3333 : 0x22C55E;
             dots.circle(x, y, r).fill(color);
             dots.circle(x, y, r).stroke({ width: 1, color: 0x000000, alpha: 0.6 });

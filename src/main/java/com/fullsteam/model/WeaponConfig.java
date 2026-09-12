@@ -597,6 +597,27 @@ public class WeaponConfig {
             Ordinance.PROJECTILE  // total: 100 pts
     );
 
+    // Spitter Spit: Long range, high caliber, slow moving, poison projectile
+    public static final WeaponConfig SPITTER_SPIT_PRESET = new WeaponConfig(
+            "Poison Spit",
+            12,
+            18,
+            DamageVarianceFormula.UNIFORM,
+            0,      // fire rate (lowered to slow down spitter cadence)
+            24,     // long range
+            0,      // baseline accuracy
+            10,     // magazine
+            0,      // reload
+            1,      // slow moving projectile speed
+            0,      // single shot
+            -5,     // negative damping
+            0,      // handling
+            18,     // high caliber
+            0,      // knockback
+            Set.of(BulletEffect.POISON),
+            Ordinance.PROJECTILE  // total: 100 pts
+    );
+
     public int getAttributePoints() {
         return minDamage + maxDamage + fireRate + range + accuracy + magazineSize + reloadTime + projectileSpeed + bulletsPerShot + linearDamping + handling + caliber + knockback;
     }

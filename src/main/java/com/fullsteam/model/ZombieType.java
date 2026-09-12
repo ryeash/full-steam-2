@@ -10,7 +10,9 @@ public enum ZombieType {
     RUNNER(50.0, 190.0, 13.0, 160.0, 1.6, 15.0, 0.5),
     TANK(200.0, 80.0, 22.0, 100.0, 1.3, 35.0, 0.9),
     LUNGER(65.0, 135.0, 14.0, 220.0, 2.2, 22.0, 0.6),
-    STALKER(85.0, 145.0, 15.0, 150.0, 1.7, 24.0, 0.5);
+    STALKER(85.0, 145.0, 15.0, 150.0, 1.7, 24.0, 0.5),
+    BOOMER(110.0, 95.0, 19.0, 110.0, 1.3, 15.0, 0.7),
+    SPITTER(70.0, 110.0, 15.0, 80.0, 1.2, 12.0, 0.8);
 
     private final double defaultHealth;
     private final double defaultSpeed;

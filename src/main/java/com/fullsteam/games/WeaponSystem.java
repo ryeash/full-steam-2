@@ -13,8 +13,10 @@ import com.fullsteam.physics.BulletEffectProcessor;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.GameEntity;
 import com.fullsteam.physics.Oddball;
+import com.fullsteam.physics.OwnedGameEntity;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Turret;
+import com.fullsteam.physics.Zombie;
 import org.dyn4j.Epsilon;
 import org.dyn4j.dynamics.Body;
 import org.dyn4j.geometry.Vector2;
@@ -110,6 +112,42 @@ public class WeaponSystem {
             return;
         }
         List<GameEntity> ordinance = fireWeapon(-oddball.getId(), 0, oddball.getWeapon(), myPos, dir.getNormalized());
+        handleOrdinanceFiring(ordinance);
+    }
+
+    public void handleZombieFire(Zombie zombie) {
+        if (zombie == null || !zombie.canFire()) {
+            return;
+        }
+
+        OwnedGameEntity target = zombie.getCurrentTargetEntity();
+        if (target == null || !target.isActive() || target.getHealth() <= 0) {
+            return;
+        }
+
+        Vector2 myPos = zombie.getPosition();
+        Vector2 targetPos = target.getPosition();
+        double dist = myPos.distance(targetPos);
+        if (dist > zombie.getWeapon().getRange()) {
+            return;
+        }
+
+        zombie.setLastShotTime(System.currentTimeMillis());
+
+        Vector2 targetVel = (target instanceof GameEntity ge) ? ge.getVelocity() : new Vector2(0, 0);
+        Vector2 dir = predictInterceptDirection(myPos, targetPos, targetVel, zombie.getWeapon().getProjectileSpeed());
+        if (dir.getMagnitude() == 0) {
+            dir = targetPos.subtract(myPos);
+        }
+        if (dir.getMagnitude() == 0) {
+            return;
+        }
+
+        Vector2 fireDir = dir.getNormalized();
+        zombie.setAimDirection(fireDir);
+
+        Vector2 spawnPos = myPos.copy().add(fireDir.copy().multiply(zombie.getRadius() + 2.0));
+        List<GameEntity> ordinance = fireWeapon(-zombie.getId(), zombie.getOwnerTeam(), zombie.getWeapon(), spawnPos, fireDir);
         handleOrdinanceFiring(ordinance);
     }
 

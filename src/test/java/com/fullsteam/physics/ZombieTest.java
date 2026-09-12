@@ -1,6 +1,11 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.games.GameConfig;
+import com.fullsteam.model.BulletEffect;
+import com.fullsteam.model.FieldEffect;
+import com.fullsteam.model.FieldEffectCircle;
+import com.fullsteam.model.FieldEffectType;
+import com.fullsteam.model.Weapon;
 import com.fullsteam.model.ZombieAttackPattern;
 import com.fullsteam.model.ZombieType;
 import org.dyn4j.dynamics.Body;
@@ -196,5 +201,134 @@ public class ZombieTest {
         zombie.takeDamage(initialHealth);
         assertTrue(zombie.getHealth() <= 0.0, "Health should be depleted");
         assertFalse(zombie.isActive(), "Zombie should become inactive when health is depleted");
+    }
+
+    @Test
+    @DisplayName("Boomer zombie initializes with high health, bloated radius, and correct display name")
+    public void testBoomerInitialization() {
+        Zombie boomer = new Zombie(50, ZombieType.BOOMER, ZombieAttackPattern.NEAREST_PLAYER, 10.0, 20.0);
+        assertEquals(ZombieType.BOOMER, boomer.getType());
+        assertEquals("Boomer Zombie", boomer.getDisplayName());
+        assertEquals(ZombieType.BOOMER.getRadius(), boomer.getRadius(), 0.001);
+        assertEquals(ZombieType.BOOMER.getDefaultHealth(), boomer.getMaxHealth(), 0.001);
+        assertNull(boomer.getWeapon(), "Boomers are melee attackers and carry no projectile weapon");
+    }
+
+    @Test
+    @DisplayName("Boomer death triggers 2 field effects: warning zone and delayed poison explosion")
+    public void testBoomerDeathTriggersWarningZoneAndDelayedPoisonExplosion() {
+        World<Body> world = new World<>();
+        GameConfig config = GameConfig.builder().worldWidth(1000).worldHeight(1000).build();
+        GameEntities entities = new GameEntities(config, world);
+
+        Zombie boomer = new Zombie(51, ZombieType.BOOMER, ZombieAttackPattern.NEAREST_PLAYER, 100.0, 150.0);
+        entities.add(boomer);
+
+        long beforeDeath = System.currentTimeMillis();
+        boomer.onDeath(entities);
+
+        var fieldEffects = entities.getAllFieldEffects();
+        assertEquals(2, fieldEffects.size(), "Boomer death must trigger exactly 2 field effects");
+
+        FieldEffect warningZone = null;
+        FieldEffect poisonExplosion = null;
+        for (FieldEffect fe : fieldEffects) {
+            if (fe.getType() == FieldEffectType.WARNING_ZONE) {
+                warningZone = fe;
+            } else if (fe.getType() == FieldEffectType.POISON) {
+                poisonExplosion = fe;
+            }
+        }
+
+        assertNotNull(warningZone, "Must produce a WARNING_ZONE field effect");
+        assertNotNull(poisonExplosion, "Must produce a POISON field effect");
+
+        // Verify warning zone properties
+        assertTrue(warningZone instanceof FieldEffectCircle);
+        FieldEffectCircle wzCircle = (FieldEffectCircle) warningZone;
+        assertEquals(100.0, wzCircle.getPosition().x, 0.001);
+        assertEquals(150.0, wzCircle.getPosition().y, 0.001);
+        assertEquals(Zombie.BOOMER_WARNING_RADIUS, wzCircle.getRadius(), 0.001);
+        assertEquals(0.0, warningZone.getDamage(), 0.001);
+        assertTrue(warningZone.isArmed(), "Warning zone should be armed/active immediately");
+
+        // Verify poison explosion properties
+        assertTrue(poisonExplosion instanceof FieldEffectCircle);
+        FieldEffectCircle poisonCircle = (FieldEffectCircle) poisonExplosion;
+        assertEquals(100.0, poisonCircle.getPosition().x, 0.001);
+        assertEquals(150.0, poisonCircle.getPosition().y, 0.001);
+        assertEquals(Zombie.BOOMER_POISON_BASE_RADIUS, poisonCircle.getInitialRadius(), 0.001);
+        assertEquals(Zombie.BOOMER_POISON_BASE_RADIUS * 2.0, poisonCircle.getMaxRadius(), 0.001);
+        assertEquals(Zombie.BOOMER_POISON_DAMAGE, poisonExplosion.getDamage(), 0.001);
+
+        // Arming time must match warning zone time (1.5s in future)
+        long expectedMinArmTime = beforeDeath + (long) (Zombie.BOOMER_WARNING_DURATION_SECONDS * 1000);
+        assertTrue(poisonExplosion.getArmingTime() >= expectedMinArmTime, "Poison explosion arming time must match warning duration");
+        assertFalse(poisonExplosion.isArmed(), "Poison explosion should be inert until warning zone expires");
+
+        // Subsequent onDeath calls must be idempotent
+        boomer.onDeath(entities);
+        assertEquals(2, entities.getAllFieldEffects().size(), "onDeath must be idempotent and not spawn duplicate effects");
+    }
+
+    @Test
+    @DisplayName("Spitter zombie initializes with long range, high caliber, slow moving, poison weapon")
+    public void testSpitterInitializationAndWeaponStats() {
+        Zombie spitter = new Zombie(60, ZombieType.SPITTER, ZombieAttackPattern.NEAREST_PLAYER, 0.0, 0.0);
+        assertEquals(ZombieType.SPITTER, spitter.getType());
+        assertEquals("Spitter Zombie", spitter.getDisplayName());
+        assertNotNull(spitter.getWeapon(), "Spitter must be initialized with a projectile weapon");
+
+        Weapon weapon = spitter.getWeapon();
+        assertTrue(weapon.getBulletEffects().contains(BulletEffect.POISON), "Spitter weapon must have POISON effect");
+        assertTrue(weapon.getRange() >= 900.0, "Spitter weapon must have long range (>= 900 units)");
+        assertTrue(weapon.getCaliber() >= 1.5, "Spitter weapon must have high caliber (>= 1.5 multiplier)");
+        assertTrue(weapon.getProjectileSpeed() <= 400.0, "Spitter weapon must have slow moving projectile (<= 400 speed)");
+        assertTrue(weapon.getFireRate() <= 0.6, "Spitter weapon should have a slow base fire rate (<= 0.6 shots/sec)");
+        assertTrue(spitter.canFire(), "Spitter should be able to fire initially");
+    }
+
+    @Test
+    @DisplayName("Spitter fire cooldown prevents rapid fire spam")
+    public void testSpitterFireCooldown() {
+        Zombie spitter = new Zombie(65, ZombieType.SPITTER, ZombieAttackPattern.NEAREST_PLAYER, 0.0, 0.0);
+        assertTrue(spitter.canFire(), "Initially can fire");
+
+        spitter.setLastShotTime(System.currentTimeMillis());
+        assertFalse(spitter.canFire(), "Cannot fire immediately after shooting");
+
+        // After 500ms, still cannot fire (slowed cadence)
+        spitter.setLastShotTime(System.currentTimeMillis() - 500L);
+        assertFalse(spitter.canFire(), "Cannot fire after only 500ms");
+
+        // After 2500ms, cooldown has elapsed and can fire again
+        spitter.setLastShotTime(System.currentTimeMillis() - 2500L);
+        assertTrue(spitter.canFire(), "Can fire after ~2.3s cooldown has elapsed");
+    }
+
+    @Test
+    @DisplayName("Spitter kiting AI maintains combat distance without lunging")
+    public void testSpitterKitingBehavior() {
+        World<Body> world = new World<>();
+        GameConfig config = GameConfig.builder().worldWidth(2000).worldHeight(2000).build();
+        GameEntities entities = new GameEntities(config, world);
+
+        Zombie spitter = new Zombie(61, ZombieType.SPITTER, ZombieAttackPattern.NEAREST_PLAYER, 0.0, 0.0);
+        entities.add(spitter);
+
+        // Case 1: Target far away (> 600) -> Spitter moves forward to close distance
+        Player farPlayer = new Player(101, "Far", 800.0, 0.0, 1, 100.0);
+        farPlayer.setActive(true);
+        entities.add(farPlayer);
+
+        spitter.tickAI(entities, 0.05);
+        assertFalse(spitter.isLunging(), "Spitter should never lunge");
+        assertTrue(spitter.getAimDirection().x > 0.9, "Spitter should aim at target");
+
+        // Case 2: Target too close (< 350) -> Spitter backs away
+        farPlayer.setPosition(200.0, 0.0);
+        spitter.tickAI(entities, 0.05);
+        assertFalse(spitter.isLunging(), "Spitter should never lunge");
+        assertTrue(spitter.getAimDirection().x > 0.9, "Spitter should still face/aim at target while retreating");
     }
 }
