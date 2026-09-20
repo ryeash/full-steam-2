@@ -31,4 +31,4 @@ ENV JAVA_MAX_RAM_PCT=75.0
 # Run via `sh -c exec` so the shell expands the env vars while `exec` makes java
 # replace the shell as PID 1 (keeps SIGTERM working for clean shutdown).
 # NOTE: exec form (JSON array) does NOT expand env vars — hence the sh -c.
-ENTRYPOINT ["sh", "-c", "exec java -XX:+UseZGC -XX:+UseCompressedOops -XX:+UseCompressedClassPointers -XX:+UseStringDeduplication -XX:MaxRAMPercentage=${JAVA_MAX_RAM_PCT:-75.0} ${JAVA_MAX_MEM:+-Xmx}${JAVA_MAX_MEM} -jar /app/application.jar"]
+ENTRYPOINT ["sh", "-c", "exec java -XX:+UseZGC -XX:MaxRAMPercentage=${JAVA_MAX_RAM_PCT:-75.0} ${JAVA_MAX_MEM:+-Xmx}${JAVA_MAX_MEM} -jar /app/application.jar"]

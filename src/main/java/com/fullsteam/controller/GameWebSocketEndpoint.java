@@ -123,7 +123,12 @@ public class GameWebSocketEndpoint {
 
             switch (type) {
                 case "ping":
-                    game.send(session, Map.of("type", "pong"));
+                    long clientTimestamp = rootNode.path("timestamp").asLong(0);
+                    if (clientTimestamp > 0) {
+                        game.send(session, Map.of("type", "pong", "timestamp", clientTimestamp));
+                    } else {
+                        game.send(session, Map.of("type", "pong"));
+                    }
                     break;
                 case "configChange":
                     // Spectators can't change config

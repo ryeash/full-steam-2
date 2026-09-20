@@ -78,8 +78,9 @@ class EntityInterpolator {
             return;
         }
 
-        // Convert PIXI deltaTime to seconds (60 FPS baseline)
-        const dt = (deltaTime || 1) / 60.0;
+        // Convert PIXI deltaTime to seconds (60 FPS baseline), clamped to avoid
+        // huge extrapolation leaps during frame drops, tab switching, or GC pauses.
+        const dt = Math.min(0.05, Math.max(0.001, (deltaTime || 1) / 60.0));
 
         // Velocity prediction
         const predX = this.targetX + this.vx * dt;

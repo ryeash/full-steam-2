@@ -11,7 +11,7 @@ micronaut:
       websocket:
         compression: false # no need to compress because we byte pack
       child-options:
-        tcp-no-delay: true
+        tcp-nodelay: true
         so-keepalive: true
   executors:
     scheduled:

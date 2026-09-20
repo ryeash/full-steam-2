@@ -16,7 +16,8 @@ class InputManager {
         };
         this.mouse = {
             x: 0, y: 0, worldX: 0, worldY: 0,
-            left: false, right: false
+            left: false, right: false,
+            hasPosition: false
         };
         
         // Gamepad support
@@ -146,7 +147,11 @@ class InputManager {
     handleMouseMove(e) {
         this.mouse.x = e.clientX;
         this.mouse.y = e.clientY;
+        this.mouse.hasPosition = true;
         this.updateMouseWorldCoordinates();
+        if (window.gameEngine && window.gameEngine.updateLocalPlayerAim) {
+            window.gameEngine.updateLocalPlayerAim();
+        }
     }
     
     /**
@@ -422,6 +427,10 @@ class InputManager {
         const aimY = myPlayer.y + (dy / len) * aimRange;
         this.mouse.worldX = aimX;
         this.mouse.worldY = aimY;
+        this.mouse.hasPosition = true;
+        if (window.gameEngine && window.gameEngine.updateLocalPlayerAim) {
+            window.gameEngine.updateLocalPlayerAim();
+        }
         // Keep screen coords aligned so any screen-space aim UI matches.
         if (gameEngine.gameContainer) {
             const screenPos = gameEngine.gameContainer.toGlobal(new PIXI.Point(aimX, aimY));
@@ -455,6 +464,10 @@ class InputManager {
                 this.mouse.y = screenPos.y;
                 this.mouse.worldX = aimX;
                 this.mouse.worldY = aimY;
+                this.mouse.hasPosition = true;
+                if (window.gameEngine && window.gameEngine.updateLocalPlayerAim) {
+                    window.gameEngine.updateLocalPlayerAim();
+                }
             }
         } else {
             // When right stick is neutral, aim forward relative to player
@@ -472,6 +485,10 @@ class InputManager {
                 this.mouse.y = screenPos.y;
                 this.mouse.worldX = aimX;
                 this.mouse.worldY = aimY;
+                this.mouse.hasPosition = true;
+                if (window.gameEngine && window.gameEngine.updateLocalPlayerAim) {
+                    window.gameEngine.updateLocalPlayerAim();
+                }
             }
         }
     }

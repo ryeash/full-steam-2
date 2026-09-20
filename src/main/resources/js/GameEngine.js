@@ -64,6 +64,7 @@ class GameEngine {
             this.setupUI();
             this.createConsolidatedHUD();
             this.createGameTimer();
+            this.createPingDisplay();
             
             this.updateLoadingProgress(60, "Loading assets...");
             await this.loadAssets();
@@ -181,6 +182,7 @@ class GameEngine {
         this.eventHandlers.resize = () => {
             this.handleResize();
             this.updateGameTimerPosition();
+            this.updatePingPosition();
         };
         window.addEventListener('resize', this.eventHandlers.resize);
 
@@ -280,6 +282,138 @@ class GameEngine {
             (this.app.screen.width / 2) - 200, // Center horizontally (wider now)
             10 // Top of screen with padding
         );
+    }
+
+    /**
+     * Create floating ping badge in top right corner.
+     */
+    createPingDisplay() {
+        this.pingContainer = new PIXI.Container();
+        this.pingContainer.zIndex = 200;
+
+        const bg = new PIXI.Graphics();
+        bg.roundRect(0, 0, 92, 26, 6).fill({ color: 0x000000, alpha: 0.65 });
+        bg.roundRect(0, 0, 92, 26, 6).stroke({ width: 1.5, color: 0x444444, alpha: 0.8 });
+        this.pingContainer.addChild(bg);
+        this.pingBg = bg;
+
+        const dot = new PIXI.Graphics();
+        dot.circle(12, 13, 4).fill({ color: 0x00ff88 });
+        this.pingContainer.addChild(dot);
+        this.pingDot = dot;
+
+        const label = new PIXI.Text('-- ms', {
+            fontSize: 11,
+            fill: 0x00ff88,
+            fontWeight: 'bold'
+        });
+        label.anchor.set(0, 0.5);
+        label.position.set(22, 13);
+        this.pingContainer.addChild(label);
+        this.pingLabel = label;
+
+        this.uiContainer.addChild(this.pingContainer);
+        this.updatePingPosition();
+    }
+
+    /**
+     * Keep ping display aligned to top-right of canvas viewport.
+     */
+    updatePingPosition() {
+        if (!this.pingContainer || !this.app || !this.app.screen) return;
+        this.pingContainer.position.set(
+            this.app.screen.width - 105,
+            10
+        );
+    }
+
+    /**
+     * Start periodic ping polling.
+     */
+    startPingMonitor() {
+        this.stopPingMonitor();
+        this.sendPing();
+        this.pingInterval = setInterval(() => {
+            this.sendPing();
+        }, 1000);
+    }
+
+    /**
+     * Stop periodic ping polling.
+     */
+    stopPingMonitor() {
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
+        }
+    }
+
+    /**
+     * Send ping packet with client timestamp to measure RTT.
+     */
+    sendPing() {
+        if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+            this.lastPingSentTime = performance.now();
+            try {
+                this.websocket.send(JSON.stringify({
+                    type: 'ping',
+                    timestamp: Math.round(this.lastPingSentTime)
+                }));
+            } catch (e) {
+                // Ignore send errors
+            }
+        }
+    }
+
+    /**
+     * Handle pong response from server and update latency indicators.
+     */
+    handlePong(data) {
+        const now = performance.now();
+        let rtt;
+        if (typeof data.timestamp === 'number' && data.timestamp > 0) {
+            rtt = Math.max(0, Math.round(now - data.timestamp));
+        } else if (this.lastPingSentTime) {
+            rtt = Math.max(0, Math.round(now - this.lastPingSentTime));
+        }
+        if (typeof rtt === 'number') {
+            this.currentPing = rtt;
+            this.updatePingDisplay(rtt);
+        }
+    }
+
+    /**
+     * Update ping text and status colors in top-right HUD and player info HUD.
+     */
+    updatePingDisplay(rtt) {
+        let color = 0x00ff88; // Green (< 60ms)
+        let strokeColor = 0x00aa55;
+        if (rtt >= 130) {
+            color = 0xff4444; // Red (severe lag)
+            strokeColor = 0xaa2222;
+        } else if (rtt >= 60) {
+            color = 0xffaa00; // Yellow/Amber (moderate latency)
+            strokeColor = 0xaa7700;
+        }
+
+        const text = `${rtt} ms`;
+        if (this.pingLabel) {
+            this.pingLabel.text = text;
+            this.pingLabel.style.fill = color;
+        }
+        if (this.pingDot) {
+            this.pingDot.clear();
+            this.pingDot.circle(12, 13, 4).fill({ color: color });
+        }
+        if (this.pingBg) {
+            this.pingBg.clear();
+            this.pingBg.roundRect(0, 0, 92, 26, 6).fill({ color: 0x000000, alpha: 0.65 });
+            this.pingBg.roundRect(0, 0, 92, 26, 6).stroke({ width: 1.5, color: strokeColor, alpha: 0.8 });
+        }
+        if (this.hudPingText) {
+            this.hudPingText.text = text;
+            this.hudPingText.style.fill = color;
+        }
     }
 
     /**
@@ -609,6 +743,23 @@ class GameEngine {
         });
         livesText.position.set(40, 30);
         infoContainer.addChild(livesText);
+
+        // Ping indicator in HUD
+        const pingLabel = new PIXI.Text('PING', {
+            fontSize: 10,
+            fill: 0xffffff,
+            fontWeight: 'bold'
+        });
+        pingLabel.position.set(150, 30);
+        infoContainer.addChild(pingLabel);
+
+        const pingText = new PIXI.Text('-- ms', {
+            fontSize: 9,
+            fill: 0x00ff88,
+            fontWeight: 'bold'
+        });
+        pingText.position.set(185, 30);
+        infoContainer.addChild(pingText);
         
         // Store references for updates (removed health references)
         this.hudWeaponText = weaponText;
@@ -618,6 +769,7 @@ class GameEngine {
         this.hudInputText = inputText;
         this.hudLivesLabel = livesLabel;
         this.hudLivesText = livesText;
+        this.hudPingText = pingText;
         
         this.hudContainer.addChild(infoContainer);
     }
@@ -723,7 +875,7 @@ class GameEngine {
             y: 0,
             targetX: 0,
             targetY: 0,
-            smoothing: 0.1
+            smoothing: 0.25
         };
         
         // Start game loop - store reference for cleanup
@@ -873,6 +1025,7 @@ class GameEngine {
             this.websocket.binaryType = 'arraybuffer';
 
             this.websocket.onopen = () => {
+                this.startPingMonitor();
                 resolve();
             };
 
@@ -893,6 +1046,7 @@ class GameEngine {
             };
 
             this.websocket.onclose = () => {
+                this.stopPingMonitor();
                 if (!this.expectingSocketClose) {
                     this.showConnectionError();
                 }
@@ -1039,6 +1193,9 @@ class GameEngine {
         }
 
         switch (data.type) {
+            case 'pong':
+                this.handlePong(data);
+                break;
             case 'lobbyInit':
                 this.handleLobbyInit(data);
                 break;
@@ -1112,6 +1269,11 @@ class GameEngine {
     
     handleInitialState(data) {
         this.myPlayerId = data.playerId;
+        const localSprite = this.players.get(this.myPlayerId);
+        if (localSprite && localSprite.interpolator) {
+            localSprite.interpolator.hasRotation = false;
+            localSprite.interpolator.lerpRate = 24.0;
+        }
         // World may already be set up from a prior lobbyInit; setup is idempotent.
         this.setupWorldFromInitData(data);
 
@@ -2142,11 +2304,13 @@ class GameEngine {
         // Set player z-index to ensure it's on top
         sprite.zIndex = 10;
 
+        const isLocalPlayer = playerData.id === this.myPlayerId;
         sprite.interpolator = new EntityInterpolator(sprite, {
             vx: playerData.vx || 0,
             vy: playerData.vy || 0,
-            hasRotation: true,
+            hasRotation: !isLocalPlayer,
             snapThreshold: 150,
+            lerpRate: isLocalPlayer ? 24.0 : 18.0,
             onUpdate: (s) => this.syncPlayerChildComponents(s)
         });
 
@@ -2166,12 +2330,18 @@ class GameEngine {
             if (playerData.weaponRange === undefined) playerData.weaponRange = sprite.playerData.weaponRange;
         }
 
+        const isLocalPlayer = playerData.id === this.myPlayerId;
+        if (isLocalPlayer && sprite.interpolator) {
+            sprite.interpolator.hasRotation = false;
+            sprite.interpolator.lerpRate = 24.0;
+        }
+
         sprite.interpolator.updateFromServer(
             playerData.x,
             playerData.y,
             playerData.vx || 0,
             playerData.vy || 0,
-            playerData.rotation || 0
+            isLocalPlayer ? null : (playerData.rotation || 0)
         );
         
         // Handle death marker logic
@@ -2230,6 +2400,9 @@ class GameEngine {
         if (this.players) {
             this.players.forEach(p => p.interpolator?.update(deltaTime));
         }
+        // Immediately orient the local player sprite towards current aim target
+        this.updateLocalPlayerAim();
+
         if (this.projectiles) {
             this.projectiles.forEach(p => p.interpolator?.update(deltaTime));
         }
@@ -2246,6 +2419,28 @@ class GameEngine {
         }
         if (this.flags) {
             this.flags.forEach(f => f.interpolator?.update(deltaTime));
+        }
+    }
+
+    /**
+     * Immediately rotate the local player sprite to match the mouse / gamepad aim angle
+     * for instant client-side responsiveness without waiting for network round-trips.
+     */
+    updateLocalPlayerAim() {
+        if (!this.myPlayerId || !this.inputManager) return;
+        const myPlayer = this.players.get(this.myPlayerId);
+        if (!myPlayer || !myPlayer.visible) return;
+        if (myPlayer.playerData && (!myPlayer.playerData.active || myPlayer.playerData.respawnTime > 0)) {
+            return;
+        }
+
+        if (this.inputManager.mouse && this.inputManager.mouse.hasPosition) {
+            this.inputManager.updateMouseWorldCoordinates();
+            const dx = this.inputManager.mouse.worldX - myPlayer.x;
+            const dy = this.inputManager.mouse.worldY - myPlayer.y;
+            if (dx * dx + dy * dy > 0.001) {
+                myPlayer.rotation = Math.atan2(dy, dx);
+            }
         }
     }
 
@@ -6005,6 +6200,16 @@ class GameEngine {
             return;
         }
         if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+            // Drop routine continuous movement packets if client-to-server outbound buffer
+            // is backed up to avoid queue buildup and latency spiraling during network hitches.
+            if (this.websocket.bufferedAmount > 2048) {
+                // High-priority action inputs (shooting, utility activation, reload) can still proceed
+                // unless buffer is severely backed up (> 8192 bytes).
+                const hasAction = input.left || input.altFire || input.reload;
+                if (!hasAction || this.websocket.bufferedAmount > 8192) {
+                    return;
+                }
+            }
             this.websocket.send(JSON.stringify(input));
         }
     }
@@ -6242,6 +6447,9 @@ class GameEngine {
             this._lobbyCountdownInterval = null;
         }
 
+        // Stop periodic ping monitor
+        this.stopPingMonitor();
+
         // Clear all pending timeouts
         this.pendingTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
         this.pendingTimeouts = [];
@@ -6373,6 +6581,15 @@ class GameEngine {
             }
             this.smokeOverlay.destroy({ children: true, context: true });
             this.smokeOverlay = null;
+        }
+
+        // Clean up ping display
+        if (this.pingContainer) {
+            if (this.pingContainer.parent) {
+                this.pingContainer.parent.removeChild(this.pingContainer);
+            }
+            this.pingContainer.destroy({ children: true });
+            this.pingContainer = null;
         }
         
         // Close WebSocket connection
