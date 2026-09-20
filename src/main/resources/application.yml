@@ -9,26 +9,16 @@ micronaut:
         threads: 8
       max-header-size: 8192
       websocket:
-        compression: true
+        compression: false # no need to compress because we byte pack
+      child-options:
+        tcp-no-delay: true
+        so-keepalive: true
   executors:
     scheduled:
       type: scheduled
       core-pool-size: 8
   jackson:
     bean-introspection-module: true
-  http:
-    client:
-      ws:
-        compression:
-          enabled: true
-    services:
-      default:
-        ws:
-          compression:
-            enabled: true
-# Management endpoints: expose ONLY /health (for load-balancer / uptime probes),
-# with no detail breakdown so it doesn't leak host internals. All other
-# management endpoints (env, beans, loggers, refresh, …) stay disabled.
 endpoints:
   all:
     enabled: false
@@ -37,7 +27,7 @@ endpoints:
     enabled: true
     sensitive: false
     details-visible: NEVER
-# Application-specific settings.
+
 app:
   # Comma-separated allowlist of permitted WebSocket Origins
   # (e.g. https://game.example.com). Empty = allow any origin, which is fine for
