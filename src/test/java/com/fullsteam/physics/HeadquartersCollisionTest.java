@@ -3,8 +3,15 @@ package com.fullsteam.physics;
 import com.fullsteam.games.BaseTestClass;
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.games.GameManager;
+import com.fullsteam.model.BulletEffect;
+import com.fullsteam.model.FieldEffectCircle;
+import com.fullsteam.model.FieldEffectType;
+import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.Rules;
+import org.dyn4j.geometry.Vector2;
 import org.junit.jupiter.api.BeforeEach;
+
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -135,5 +142,74 @@ class HeadquartersCollisionTest extends BaseTestClass {
         // Both HQs should have taken their respective damage
         assertEquals(800.0, team2HQ.getHealth());
         assertEquals(700.0, team1HQ.getHealth());
+    }
+
+    @Test
+    @DisplayName("GameManager handles headquarters destruction by non-player without throwing and creates explosion")
+    void testHeadquartersDestructionByNonPlayer() {
+        int initialEffectCount = gameEntities.getAllFieldEffects().size();
+
+        // Destroy HQ by zombie or environmental hazard (attacker is null)
+        boolean destroyed = team1HQ.takeDamage(1000.0);
+        assertTrue(destroyed);
+        gameManager.handleHeadquartersDamage(team1HQ, null, 1000.0, true);
+
+        // Verify HQ is destroyed and explosion is created
+        assertFalse(team1HQ.isActive());
+        assertEquals(0.0, team1HQ.getHealth());
+        assertEquals(initialEffectCount + 1, gameEntities.getAllFieldEffects().size());
+    }
+
+    @Test
+    @DisplayName("CollisionProcessor handles zombie projectile lethal impact on Headquarters")
+    void testZombieProjectileLethalImpactOnHQ() {
+        int initialEffectCount = gameEntities.getAllFieldEffects().size();
+
+        // Projectile fired by a zombie (ownerId < 0, ownerTeam = 0)
+        Projectile zombieProjectile = new Projectile(
+                101,
+                team1HQ.getPosition(),
+                new Vector2(1, 0),
+                1000.0,
+                500.0,
+                -99,
+                0.0,
+                Set.of(),
+                Ordinance.PROJECTILE,
+                10.0,
+                1.0
+        );
+
+        CollisionProcessor collisionProcessor = new CollisionProcessor(gameManager, gameEntities);
+        collisionProcessor.handleEntityCollision(zombieProjectile, team1HQ);
+
+        assertFalse(team1HQ.isActive());
+        assertEquals(0.0, team1HQ.getHealth());
+        assertEquals(initialEffectCount + 1, gameEntities.getAllFieldEffects().size());
+    }
+
+    @Test
+    @DisplayName("CollisionProcessor handles field effect lethal damage on Headquarters")
+    void testFieldEffectLethalDamageOnHQ() {
+        int initialEffectCount = gameEntities.getAllFieldEffects().size();
+
+        FieldEffectCircle explosion = new FieldEffectCircle(
+                -99,
+                FieldEffectType.EXPLOSION,
+                team1HQ.getPosition(),
+                100.0,
+                100.0,
+                1000.0,
+                2.0,
+                0,
+                0
+        );
+
+        CollisionProcessor collisionProcessor = new CollisionProcessor(gameManager, gameEntities);
+        collisionProcessor.handleEntityCollision(explosion, team1HQ);
+
+        assertFalse(team1HQ.isActive());
+        assertEquals(0.0, team1HQ.getHealth());
+        assertEquals(initialEffectCount + 1, gameEntities.getAllFieldEffects().size());
     }
 }

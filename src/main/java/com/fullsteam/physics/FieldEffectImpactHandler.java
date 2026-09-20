@@ -257,25 +257,20 @@ public class FieldEffectImpactHandler {
         double deltaTime = gameEntities.getWorld().getTimeStep().getDeltaTime();
 
         switch (fieldEffect.getType()) {
-            case LASER -> {
-                if (!fieldEffect.getAffectedEntities().contains(hq.getId())) {
+            case EXPLOSION, FRAGMENTATION, LASER -> {
+                if (fieldEffect.getAffectedEntities().add(hq.getId())) {
                     double damageDealt = fieldEffect.getDamage();
                     boolean destroyed = hq.takeDamage(damageDealt);
-                    fieldEffect.markAsAffected(hq);
                     Player attacker = gameEntities.getPlayer(fieldEffect.getOwnerId());
-                    if (attacker != null) {
-                        gameManager.handleHeadquartersDamage(hq, attacker, damageDealt, destroyed);
-                    }
+                    gameManager.handleHeadquartersDamage(hq, attacker, damageDealt, destroyed);
                     gameEntities.recordDamageHit(hq.getPosition().x, hq.getPosition().y, damageDealt, fieldEffect.getOwnerId(), hq.getId(), destroyed);
                 }
             }
-            case PLASMA, FIRE, ELECTRIC, FREEZE, POISON, EARTHQUAKE, EXPLOSION, FRAGMENTATION -> {
+            case PLASMA, FIRE, ELECTRIC, FREEZE, POISON, EARTHQUAKE -> {
                 double damageDealt = fieldEffect.getDamage() * deltaTime;
                 boolean destroyed = hq.takeDamage(damageDealt);
                 Player attacker = gameEntities.getPlayer(fieldEffect.getOwnerId());
-                if (attacker != null) {
-                    gameManager.handleHeadquartersDamage(hq, attacker, damageDealt, destroyed);
-                }
+                gameManager.handleHeadquartersDamage(hq, attacker, damageDealt, destroyed);
                 gameEntities.recordDotDamageHit(hq.getPosition().x, hq.getPosition().y, damageDealt, fieldEffect.getOwnerId(), hq.getId(), destroyed);
             }
             default -> {

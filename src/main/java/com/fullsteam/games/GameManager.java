@@ -1474,6 +1474,8 @@ public class GameManager {
             // Broadcast HQ destruction event
             if (attacker != null) {
                 gameEventManager.broadcastHeadquartersDestroyed(hq.getOwnerTeam(), attacker.getTeam());
+            } else {
+                gameEventManager.broadcastHeadquartersDestroyed(hq.getOwnerTeam(), 0);
             }
         }
     }

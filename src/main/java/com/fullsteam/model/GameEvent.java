@@ -224,9 +224,17 @@ public class GameEvent {
      * Create a headquarters destruction event
      */
     public static GameEvent createHeadquartersDestroyedEvent(int destroyedTeam, int attackingTeam) {
-        String teamColor = getTeamColorHex(attackingTeam);
-        String message = String.format("<color:%s>Team %d</color> destroyed Team %d's Headquarters!",
-                teamColor, attackingTeam, destroyedTeam);
+        String teamColor;
+        String message;
+        if (attackingTeam > 0) {
+            teamColor = getTeamColorHex(attackingTeam);
+            message = String.format("<color:%s>Team %d</color> destroyed Team %d's Headquarters!",
+                    teamColor, attackingTeam, destroyedTeam);
+        } else {
+            teamColor = getTeamColorHex(destroyedTeam);
+            message = String.format("<color:%s>Team %d</color>'s Headquarters was destroyed!",
+                    teamColor, destroyedTeam);
+        }
 
         return GameEvent.builder()
                 .message(message)

@@ -72,7 +72,7 @@ public class Headquarters extends OwnedGameEntity implements Damageable {
         health -= damage;
         if (health <= 0) {
             health = 0;
-            active = false;
+            setActive(false);
             return true; // Headquarters destroyed!
         }
         return false;

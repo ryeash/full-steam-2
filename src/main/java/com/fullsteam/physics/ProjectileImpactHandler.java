@@ -89,9 +89,7 @@ public class ProjectileImpactHandler {
         } else if (victim instanceof Headquarters hq) {
             killed = hq.takeDamage(damage);
             Player attacker = gameEntities.getPlayer(projectile.getOwnerId());
-            if (attacker != null) {
-                gameManager.handleHeadquartersDamage(hq, attacker, damage, killed);
-            }
+            gameManager.handleHeadquartersDamage(hq, attacker, damage, killed);
         } else if (victim instanceof Zombie zombie) {
             killed = zombie.takeDamage(damage);
             if (killed) {

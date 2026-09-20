@@ -4375,8 +4375,9 @@ class GameEngine {
         const teamColor = this.getTeamColor(team);
         const darkerTeamColor = this.darkenColor(teamColor);
 
+        const isDestroyed = entityData.isDestroyed || entityData.active === false || (entityData.health !== undefined && entityData.health <= 0);
         // Health is already sent as a percentage (0.0 - 1.0) from backend
-        const healthPct = entityData.health || 1.0;
+        const healthPct = typeof entityData.health === 'number' ? Math.max(0, Math.min(1, entityData.health)) : (isDestroyed ? 0 : 1.0);
         const damageAlpha = healthPct < 1.0 ? (1.0 - healthPct) * 0.6 : 0;
 
         // Re-issue the wall path(s) so they can be filled, damage-overlaid, and stroked.
@@ -4390,6 +4391,61 @@ class GameEngine {
             }
         };
 
+        const turrets = turretShapes.map(c => ({ x: c.cx, y: c.cy, r: c.r }));
+
+        if (isDestroyed) {
+            // Destroyed / Ruins visual - distinct charred rubble style at full opacity
+            traceWalls();
+            graphics.fill({ color: 0x1f1f1f, alpha: 0.95 });
+            traceWalls();
+            graphics.stroke({ width: 3, color: 0x444444, alpha: 0.9 });
+
+            turrets.forEach(turret => {
+                graphics.circle(turret.x, turret.y, turret.r).fill({ color: 0x151515, alpha: 0.95 });
+                graphics.circle(turret.x, turret.y, turret.r).stroke({ width: 2, color: 0x333333, alpha: 0.8 });
+                graphics.circle(turret.x, turret.y, turret.r * 0.5).fill({ color: 0x0a0a0a, alpha: 0.9 });
+            });
+
+            // Scorched crater / center
+            const centerSize = Math.min(halfWidth, halfHeight) * 0.5;
+            graphics.circle(0, 0, centerSize).fill({ color: 0x111111, alpha: 0.9 });
+            graphics.circle(0, 0, centerSize).stroke({ width: 2, color: 0x552222, alpha: 0.8 });
+
+            // Team indicator - clearly marked destroyed
+            const statusText = new PIXI.Text(`HQ ${team}\nDESTROYED`, {
+                fontSize: 13,
+                fill: 0xFF4444,
+                fontWeight: 'bold',
+                align: 'center',
+                stroke: 0x000000,
+                strokeThickness: 3
+            });
+            statusText.anchor.set(0.5);
+            statusText.scale.y = -1; // Flip Y-axis back so text is readable
+            graphics.addChild(statusText);
+
+            // Empty dark bar labeled DESTROYED
+            const barWidth = width * 0.8;
+            const barHeight = 6;
+            const barY = -halfHeight - 15;
+            graphics.rect(-barWidth / 2, barY, barWidth, barHeight).fill({ color: 0x1a1a1a, alpha: 0.8 });
+            graphics.rect(-barWidth / 2, barY, barWidth, barHeight).stroke({ width: 1.5, color: 0x552222, alpha: 0.8 });
+
+            const labelText = new PIXI.Text('DESTROYED', {
+                fontSize: 9,
+                fill: 0xCC3333,
+                fontWeight: 'bold',
+                stroke: 0x000000,
+                strokeThickness: 2
+            });
+            labelText.anchor.set(0.5);
+            labelText.scale.y = -1;
+            labelText.position.set(0, barY - 10);
+            graphics.addChild(labelText);
+
+            return graphics;
+        }
+
         // Walls: team-colored fill, damage overlay, fortified white outline.
         traceWalls();
         graphics.fill({ color: teamColor, alpha: 0.9 });
@@ -4400,7 +4456,6 @@ class GameEngine {
         traceWalls();
         graphics.stroke({ width: 4, color: 0xFFFFFF, alpha: 0.9 });
 
-        const turrets = turretShapes.map(c => ({ x: c.cx, y: c.cy, r: c.r }))
         turrets.forEach(turret => {
             // Turret base (darker shade of team color)
             graphics.circle(turret.x, turret.y, turret.r).fill({ color: darkerTeamColor, alpha: 0.95 });
@@ -4487,10 +4542,11 @@ class GameEngine {
         const graphics = container.getChildAt(0);
         if (!graphics) return;
 
-        // Only rebuild when health or team changes. The HQ is otherwise static,
+        // Only rebuild when health, team, or destroyed state changes. The HQ is otherwise static,
         // and a rebuild allocates two PIXI.Text objects (each owns a GPU texture),
         // so redrawing every tick churned both geometry and textures.
-        const renderKey = `${entityData.health}|${entityData.team || entityData.ownerTeam || 0}`;
+        const isDestroyed = entityData.isDestroyed || entityData.active === false || (entityData.health !== undefined && entityData.health <= 0);
+        const renderKey = `${entityData.health}|${entityData.team || entityData.ownerTeam || 0}|${isDestroyed}`;
         if (container._hqRenderKey === renderKey) return;
         container._hqRenderKey = renderKey;
 
@@ -4583,8 +4639,10 @@ class GameEngine {
      * Update utility entity visual state
      */
     updateUtilityEntityVisual(container, entityData) {
-        // Update alpha based on activity
-        if (!entityData.active) {
+        // Headquarters manages its own destroyed / ruin styling at full opacity (never ephemeral)
+        if (entityData.type === 'HEADQUARTERS') {
+            container.alpha = 1.0;
+        } else if (!entityData.active) {
             container.alpha = 0.5;
         } else {
             container.alpha = 1.0;
