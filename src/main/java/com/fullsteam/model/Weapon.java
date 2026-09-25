@@ -137,10 +137,33 @@ public class Weapon {
     }
 
     /**
-     * Roll damage for a single trigger pull using the weapon's variance formula.
+     * Returns the 1-based index of the round currently being fired from the magazine.
+     * When currentAmmo has been decremented for the shot, this is (magazineSize - currentAmmo).
+     * Defaults to 1 if magazineSize <= 1 or if currentAmmo has not yet been decremented.
+     */
+    public int getRoundNumberInMagazine() {
+        if (magazineSize <= 1) {
+            return 1;
+        }
+        int round = magazineSize - currentAmmo;
+        if (round <= 0) {
+            round = 1;
+        }
+        return Math.min(magazineSize, round);
+    }
+
+    /**
+     * Roll damage for a single trigger pull using the weapon's variance formula and magazine state.
      */
     public double rollDamage() {
-        return varianceFormula.evaluate(minDamage, maxDamage);
+        return rollDamage(getRoundNumberInMagazine());
+    }
+
+    /**
+     * Roll damage for an explicit round number in the current magazine.
+     */
+    public double rollDamage(int roundNumber) {
+        return varianceFormula.evaluate(minDamage, maxDamage, this, roundNumber);
     }
 
     /**
@@ -148,6 +171,13 @@ public class Weapon {
      */
     public double rollDamagePerBullet() {
         return damagePerBullet(rollDamage(), bulletsPerShot);
+    }
+
+    /**
+     * Roll per-bullet damage for an explicit round number in the current magazine.
+     */
+    public double rollDamagePerBullet(int roundNumber) {
+        return damagePerBullet(rollDamage(roundNumber), bulletsPerShot);
     }
 
     /**

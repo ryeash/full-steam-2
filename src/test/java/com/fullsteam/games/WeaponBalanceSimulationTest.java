@@ -210,10 +210,11 @@ class WeaponBalanceSimulationTest {
 
             int effectPts = w.getBulletEffects().stream().mapToInt(BulletEffect::getPointCost).sum();
             int ordPts = w.getOrdinance().getPointCost();
+            int varPts = w.getVarianceFormula() != null ? w.getVarianceFormula().getPointCost() : 0;
             m.attrPoints = w.getAttributePoints();
             m.effectPoints = effectPts;
             m.ordPoints = ordPts;
-            m.totalPoints = m.attrPoints + effectPts + ordPts;
+            m.totalPoints = m.attrPoints + effectPts + ordPts + varPts;
 
             results.add(m);
         }

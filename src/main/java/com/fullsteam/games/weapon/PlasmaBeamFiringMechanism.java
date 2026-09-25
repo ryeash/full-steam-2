@@ -91,12 +91,12 @@ public class PlasmaBeamFiringMechanism implements FiringMechanism {
         double spread = Math.max((shots - 1) * 0.08, (1.0 - weapon.getAccuracy()) * 0.17);
 
         List<GameEntity> fired = new ArrayList<>(shots);
+        double perBeamDamageRate = weapon.rollDamagePerBullet() * weapon.getFireRate();
 
         for (int i = 0; i < shots; i++) {
             double angleOffset = (shots == 1) ? 0.0 : -spread / 2.0 + i * (spread / (shots - 1));
             double angle = baseAngle + angleOffset;
             Vector2 aimDir = new Vector2(Math.cos(angle), Math.sin(angle));
-            double perBeamDamageRate = weapon.rollDamagePerBullet() * weapon.getFireRate();
 
             fired.add(new FieldEffectBeam(
                     position,
@@ -117,8 +117,9 @@ public class PlasmaBeamFiringMechanism implements FiringMechanism {
     private double[] rollPlasmaBeamDamageRates(Weapon weapon, int actualShots) {
         int numBeams = Math.max(1, actualShots);
         double[] rates = new double[numBeams];
+        double rolledDamageRate = weapon.rollDamagePerBullet() * weapon.getFireRate();
         for (int k = 0; k < numBeams; k++) {
-            rates[k] = weapon.rollDamagePerBullet() * weapon.getFireRate();
+            rates[k] = rolledDamageRate;
         }
         return rates;
     }

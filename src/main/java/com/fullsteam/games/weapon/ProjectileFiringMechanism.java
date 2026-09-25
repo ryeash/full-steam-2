@@ -65,6 +65,7 @@ public class ProjectileFiringMechanism implements FiringMechanism {
         double spread = (1.0 - weapon.getAccuracy()) * 0.17;
         int shots = Math.max(1, weapon.getBulletsPerShot());
         List<GameEntity> fired = new ArrayList<>(shots);
+        double rolledDamage = weapon.rollDamagePerBullet();
 
         double angle = baseAngle;
         for (int i = 0; i < shots; i++) {
@@ -73,7 +74,6 @@ public class ProjectileFiringMechanism implements FiringMechanism {
             Vector2 jitter = new Vector2(
                     (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0,
                     (i > 0) ? ThreadLocalRandom.current().nextDouble(-5, 5) : 0);
-            double rolledDamage = weapon.rollDamagePerBullet();
 
             fired.add(new Projectile(
                     ownerId,

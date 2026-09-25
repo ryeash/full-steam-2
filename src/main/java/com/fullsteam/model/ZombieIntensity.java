@@ -1,7 +1,9 @@
 package com.fullsteam.model;
 
 import io.micronaut.core.annotation.Introspected;
+import lombok.Getter;
 
+@Getter
 @Introspected
 public enum ZombieIntensity {
     LOW(10, 5, 25.0, 0.6),
@@ -19,21 +21,5 @@ public enum ZombieIntensity {
         this.waveSize = waveSize;
         this.spawnIntervalSeconds = spawnIntervalSeconds;
         this.spawnRateMultiplier = spawnRateMultiplier;
-    }
-
-    public int getMaxZombies() {
-        return maxZombies;
-    }
-
-    public int getWaveSize() {
-        return waveSize;
-    }
-
-    public double getSpawnIntervalSeconds() {
-        return spawnIntervalSeconds;
-    }
-
-    public double getSpawnRateMultiplier() {
-        return spawnRateMultiplier;
     }
 }

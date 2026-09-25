@@ -95,9 +95,9 @@ public class WeaponConfig {
     // Pure Sniper Rifle - Maximizes range, damage, and projectile speed
     public static final WeaponConfig SNIPER_RIFLE_PRESET = new WeaponConfig(
             "Sniper Rifle",
-            21,
-            21,
-            DamageVarianceFormula.GAUSSIAN,
+            14,
+            28,
+            DamageVarianceFormula.FIRST_STRIKE,
             2,
             27,
             0,
@@ -137,9 +137,9 @@ public class WeaponConfig {
     // Example: Bouncy SMG with damping
     public static final WeaponConfig BOUNCY_SMG_PRESET = new WeaponConfig(
             "Bouncy SMG",
-            5,
-            10,
-            DamageVarianceFormula.INVERSE_GAUSSIAN,
+            4,
+            17,     // 21 dmg pts - 6 var cost = 15 effective
+            DamageVarianceFormula.CRIT_GAMBLE,
             30,
             2,
             0,
@@ -369,7 +369,7 @@ public class WeaponConfig {
             "Twin Sixes",
             15,
             25,
-            DamageVarianceFormula.UNIFORM,
+            DamageVarianceFormula.MAGAZINE_RAMP,
             26,     // fire rate
             7,      // range
             -5,     // Imperfect accuracy
@@ -430,9 +430,9 @@ public class WeaponConfig {
     // Railgun
     public static final WeaponConfig RAILGUN_PRESET = new WeaponConfig(
             "Railgun",
-            11,
-            11,
-            DamageVarianceFormula.GAUSSIAN,
+            6,
+            10,     // 16 dmg pts + 6 var cost = 22 effective
+            DamageVarianceFormula.HEAVY_SLUG,
             1,      // Very slow fire rate
             9,      // range
             0,      // Perfect accuracy

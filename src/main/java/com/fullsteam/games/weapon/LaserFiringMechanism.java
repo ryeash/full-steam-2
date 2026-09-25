@@ -75,12 +75,12 @@ public class LaserFiringMechanism implements FiringMechanism {
         double spread = (1.0 - weapon.getAccuracy()) * 0.17;
         int shots = Math.max(1, weapon.getBulletsPerShot());
         List<GameEntity> fired = new ArrayList<>(shots);
+        double rolledDamage = weapon.rollDamagePerBullet();
 
         double angle = baseAngle;
         for (int i = 0; i < shots; i++) {
             angle += (ThreadLocalRandom.current().nextDouble() - 0.5) * 2.0 * spread;
             Vector2 aimDir = new Vector2(Math.cos(angle), Math.sin(angle));
-            double rolledDamage = weapon.rollDamagePerBullet();
 
             fired.add(new FieldEffectBeam(
                     position,
