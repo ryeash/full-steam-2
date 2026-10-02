@@ -207,6 +207,9 @@ public class Oddball extends GameEntity implements HasWeapon, Damageable {
     }
 
     private Player nearestPlayer(Collection<Player> players) {
+        if (this.isVisionObscured()) {
+            return null;
+        }
         Player nearest = null;
         double nearestDist = DETECTION_RANGE;
         Vector2 myPos = getPosition();
@@ -224,6 +227,9 @@ public class Oddball extends GameEntity implements HasWeapon, Damageable {
     }
 
     private Vector2 clusterCenter(Collection<Player> players) {
+        if (this.isVisionObscured()) {
+            return getPosition();
+        }
         double sumX = 0, sumY = 0;
         int count = 0;
         Vector2 myPos = getPosition();
@@ -241,6 +247,9 @@ public class Oddball extends GameEntity implements HasWeapon, Damageable {
     }
 
     private Player scoreLeader(Collection<Player> players) {
+        if (this.isVisionObscured()) {
+            return null;
+        }
         Player leader = null;
         double bestScore = -1;
         Vector2 myPos = getPosition();

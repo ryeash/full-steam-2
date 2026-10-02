@@ -1,6 +1,7 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.games.GameManager;
+import com.fullsteam.model.BulletEffect;
 import com.fullsteam.model.FieldEffect;
 import lombok.Getter;
 import org.dyn4j.dynamics.Body;
@@ -58,11 +59,35 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
 
     @Override
     public boolean collision(BroadphaseCollisionData<Body, BodyFixture> collision) {
-        return true;
+        return shouldAllowCollisionPair(collision.getBody1(), collision.getBody2());
     }
 
     @Override
     public boolean collision(NarrowphaseCollisionData<Body, BodyFixture> collision) {
+        return shouldAllowCollisionPair(collision.getBody1(), collision.getBody2());
+    }
+
+    private boolean shouldAllowCollisionPair(Body body1, Body body2) {
+        Object userData1 = body1.getUserData();
+        Object userData2 = body2.getUserData();
+
+        // 1. Inactive entities should never collide or participate in collision pipeline
+        if (userData1 instanceof GameEntity a && !a.isActive()) {
+            return false;
+        }
+        if (userData2 instanceof GameEntity b && !b.isActive()) {
+            return false;
+        }
+
+        // 2. Two projectiles only collide if at least one is bouncy
+        if (userData1 instanceof Projectile p1 && userData2 instanceof Projectile p2) {
+            boolean p1Bouncy = p1.getBulletEffects().contains(BulletEffect.BOUNCY);
+            boolean p2Bouncy = p2.getBulletEffects().contains(BulletEffect.BOUNCY);
+            if (!p1Bouncy && !p2Bouncy) {
+                return false;
+            }
+        }
+
         return true;
     }
 

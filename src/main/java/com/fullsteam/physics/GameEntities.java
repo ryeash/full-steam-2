@@ -237,6 +237,13 @@ public class GameEntities {
         return kothZones.values();
     }
 
+    public void resetVisionObscuredFlags() {
+        players.values().forEach(p -> p.setVisionObscured(false));
+        oddballNpcs.values().forEach(o -> o.setVisionObscured(false));
+        zombies.values().forEach(z -> z.setVisionObscured(false));
+        turrets.values().forEach(t -> t.setVisionObscured(false));
+    }
+
     public void addPostUpdateHook(Runnable runnable) {
         postWorldUpdateHooks.offer(Objects.requireNonNull(runnable));
     }

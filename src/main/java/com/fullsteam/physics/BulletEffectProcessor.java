@@ -147,16 +147,26 @@ public class BulletEffectProcessor {
         return projectile.hasBulletEffect(BulletEffect.BOUNCY);
     }
 
+    public static final double MISSILE_HOMING_DISTANCE = 420.0;
+    public static final double MISSILE_TURN_RATE = 3.5; // rad/s (~200 deg/s)
+
     /**
      * Apply homing behavior to a projectile (called during projectile update)
      */
     public void applyHomingBehavior(Projectile projectile) {
+        applyHomingBehavior(projectile, 1.0 / 60.0);
+    }
+
+    /**
+     * Apply homing behavior with frame delta time
+     */
+    public void applyHomingBehavior(Projectile projectile, double deltaTime) {
         if (!projectile.hasBulletEffect(BulletEffect.HOMING)) {
             return;
         }
 
-        // Find nearest enemy player (**only** players, not turrets, NPCs, etc.)
-        Player nearestEnemy = findNearestEnemy(projectile);
+        double maxDist = projectile.isMissile() ? MISSILE_HOMING_DISTANCE : HOMING_DISTANCE;
+        Damageable nearestEnemy = findNearestEnemy(projectile, maxDist);
         if (nearestEnemy == null) {
             return;
         }
@@ -166,7 +176,12 @@ public class BulletEffectProcessor {
         Vector2 direction = targetPos.copy().subtract(projectilePos);
 
         double distance = direction.getMagnitude();
-        if (distance > HOMING_DISTANCE) {
+        if (distance > maxDist) {
+            return;
+        }
+
+        if (projectile.isMissile()) {
+            applyMissileHoming(projectile, targetPos, deltaTime);
             return;
         }
 
@@ -197,13 +212,41 @@ public class BulletEffectProcessor {
         }
     }
 
-    private Player findNearestEnemy(Projectile projectile) {
-        Player nearest = null;
-        double nearestDistance = Double.MAX_VALUE;
+    private void applyMissileHoming(Projectile projectile, Vector2 targetPos, double deltaTime) {
+        Vector2 toTarget = targetPos.copy().subtract(projectile.getPosition());
+        double targetAngle = Math.atan2(toTarget.y, toTarget.x);
+        double currentHeading = projectile.getHeading();
+
+        double angleDiff = normalizeAngle(targetAngle - currentHeading);
+        double maxTurn = MISSILE_TURN_RATE * Math.max(0.001, deltaTime);
+        double turnStep = Math.max(-maxTurn, Math.min(maxTurn, angleDiff));
+
+        double newHeading = normalizeAngle(currentHeading + turnStep);
+        projectile.setHeading(newHeading);
+        projectile.getBody().getTransform().setRotation(newHeading);
+    }
+
+    private static double normalizeAngle(double angle) {
+        while (angle > Math.PI) angle -= 2 * Math.PI;
+        while (angle < -Math.PI) angle += 2 * Math.PI;
+        return angle;
+    }
+
+    private Damageable findNearestEnemy(Projectile projectile) {
+        return findNearestEnemy(projectile, HOMING_DISTANCE);
+    }
+
+    private Damageable findNearestEnemy(Projectile projectile, double maxDistance) {
+        if (gameEntities == null) {
+            return null;
+        }
+
+        Damageable nearest = null;
+        double nearestDistance = maxDistance;
 
         for (Player player : gameEntities.getAllPlayers()) {
-            if (!player.isActive() || !projectile.canDamage(player)) {
-                continue; // Skip teammates and self
+            if (!isValidHomingTarget(projectile, player)) {
+                continue; // Skip teammates, self, dead, and players obscured by smoke
             }
             double distance = projectile.getPosition().distance(player.getPosition());
             if (distance < nearestDistance) {
@@ -212,7 +255,48 @@ public class BulletEffectProcessor {
             }
         }
 
+        for (Oddball oddball : gameEntities.getAllOddballNpcs()) {
+            if (!isValidHomingTarget(projectile, oddball)) {
+                continue; // Skip inactive, non-damageable, or obscured oddballs
+            }
+            double distance = projectile.getPosition().distance(oddball.getPosition());
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearest = oddball;
+            }
+        }
+
+        for (Zombie zombie : gameEntities.getAllZombies()) {
+            if (!isValidHomingTarget(projectile, zombie)) {
+                continue; // Skip friendly/dead zombies
+            }
+            double distance = projectile.getPosition().distance(zombie.getPosition());
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearest = zombie;
+            }
+        }
+
+        for (Turret turret : gameEntities.getAllTurrets()) {
+            if (!isValidHomingTarget(projectile, turret)) {
+                continue; // Skip friendly/destroyed turrets
+            }
+            double distance = projectile.getPosition().distance(turret.getPosition());
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearest = turret;
+            }
+        }
+
         return nearest;
+    }
+
+    private boolean isValidHomingTarget(Projectile projectile, Damageable candidate) {
+        return candidate != null
+                && candidate.isActive()
+                && candidate.getHealth() > 0
+                && !candidate.isVisionObscured()
+                && projectile.canDamage(candidate);
     }
 
     /**

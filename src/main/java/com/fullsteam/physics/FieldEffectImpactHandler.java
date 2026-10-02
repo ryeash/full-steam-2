@@ -36,6 +36,13 @@ public class FieldEffectImpactHandler {
             return;
         }
 
+        if (fieldEffect.getType() == FieldEffectType.SMOKE) {
+            if (victim instanceof GameEntity ge && fieldEffect.canAffect(ge)) {
+                victim.setVisionObscured(true);
+            }
+            return;
+        }
+
         if (victim instanceof Player player) {
             handlePlayerFieldEffect(fieldEffect, player);
         } else if (victim instanceof Turret turret) {

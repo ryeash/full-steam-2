@@ -59,7 +59,7 @@ public class Turret extends OwnedGameEntity implements HasWeapon, Damageable {
         if (!active) {
             return;
         }
-        if (currentTarget != null && (!currentTarget.isActive() || !isValidTarget(currentTarget))) {
+        if (currentTarget != null && (!currentTarget.isActive() || !isValidTarget(currentTarget) || this.isVisionObscured())) {
             currentTarget = null;
         }
     }
@@ -68,7 +68,8 @@ public class Turret extends OwnedGameEntity implements HasWeapon, Damageable {
      * Find and acquire the nearest valid target from players and zombies.
      */
     public void acquireTarget(Collection<Player> players, Collection<Zombie> zombies) {
-        if (!active) {
+        if (!active || this.isVisionObscured()) {
+            currentTarget = null;
             return;
         }
 
@@ -131,11 +132,11 @@ public class Turret extends OwnedGameEntity implements HasWeapon, Damageable {
     }
 
     private boolean isTargetable(OwnedGameEntity target) {
-        if (target == null || !target.isActive() || target.getHealth() <= 0) {
+        if (target == null || !target.isActive() || target.getHealth() <= 0 || target.isVisionObscured()) {
             return false;
         }
         if (target instanceof Player player) {
-            if (player.isVisionObscured() || player.getId() == ownerId) {
+            if (player.getId() == ownerId) {
                 return false;
             }
             if (ownerTeam == 0 || player.getTeam() == 0) {
@@ -156,7 +157,7 @@ public class Turret extends OwnedGameEntity implements HasWeapon, Damageable {
     }
 
     public boolean canFire() {
-        if (!active || currentTarget == null) {
+        if (!active || currentTarget == null || this.isVisionObscured() || currentTarget.isVisionObscured()) {
             return false;
         }
         long now = System.currentTimeMillis();

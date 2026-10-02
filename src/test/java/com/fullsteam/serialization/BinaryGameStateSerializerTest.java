@@ -194,7 +194,10 @@ public class BinaryGameStateSerializerTest {
         float pvx = in.readFloat();
         float pvy = in.readFloat();
         float pCaliber = in.readFloat();
+        float pRot = in.readFloat();
         int effectMask = in.readShort() & 0xFFFF;
+        int pOrd = in.readByte() & 0xFF;
+        assertEquals(Ordinance.PROJECTILE.ordinal(), pOrd);
 
         // 3. Field Effects Section
         int feCount = in.readShort();

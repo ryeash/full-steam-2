@@ -879,16 +879,16 @@ body.game-page html {
 /* --- Customization grid (4 columns) --- */
 #loadout-modal .customization-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 16px;
     margin-top: 16px;
 }
 
 @media (max-width: 1200px) {
-    #loadout-modal .customization-grid { grid-template-columns: 1fr 1fr; }
+    #loadout-modal .customization-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 700px) {
-    #loadout-modal .customization-grid { grid-template-columns: 1fr; }
+    #loadout-modal .customization-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 #loadout-modal .customization-section {
@@ -896,6 +896,8 @@ body.game-page html {
     border: 2px solid #444;
     border-radius: 8px;
     padding: 14px;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 #loadout-modal .customization-section h3 {
@@ -965,22 +967,52 @@ body.game-page html {
     overflow: hidden;
 }
 
-#loadout-modal .pt-used  { font-size: 1.15em; font-weight: bold; }
-#loadout-modal .pt-sep   { color: #666; }
-#loadout-modal .pt-max   { font-weight: bold; color: #aaa; }
+#loadout-modal .pt-allocation {
+    display: inline-flex;
+    align-items: baseline;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+#loadout-modal .pt-used {
+    font-size: 1.15em;
+    font-weight: bold;
+    display: inline-block;
+    min-width: 3ch;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    box-sizing: border-box;
+}
+
+#loadout-modal .pt-sep   { color: #666; margin: 0 1px; }
+#loadout-modal .pt-max   { font-weight: bold; color: #aaa; display: inline-block; min-width: 3ch; font-variant-numeric: tabular-nums; }
 #loadout-modal .pt-label { color: #aaa; margin-right: 4px; }
 
 #loadout-modal .points-over  { color: #ff4444; }
 #loadout-modal .points-under { color: #ffaa00; }
 #loadout-modal .points-used  { color: #5fc4b8; }
 
-#loadout-modal .alloc-icon    { font-size: 1em; }
+#loadout-modal .alloc-icon {
+    font-size: 1em;
+    display: inline-block;
+    width: 1.4em;
+    text-align: center;
+    flex-shrink: 0;
+}
 #loadout-modal .alloc-perfect { color: #5fc4b8; }
 #loadout-modal .alloc-under   { color: #ffaa00; }
 #loadout-modal .alloc-over    { color: #ff4444; }
 
-#loadout-modal .pt-breakdown-label { color: #888; margin-left: 6px; }
-#loadout-modal .pt-breakdown-value { color: #fff; font-weight: bold; margin-right: 2px; }
+#loadout-modal .pt-breakdown-label { color: #888; margin-left: 6px; flex-shrink: 0; }
+#loadout-modal .pt-breakdown-value {
+    color: #fff;
+    font-weight: bold;
+    margin-right: 2px;
+    display: inline-block;
+    min-width: 2ch;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
 
 #loadout-modal .hidden { display: none; }
 
@@ -1045,6 +1077,7 @@ body.game-page html {
     border-top: 1px solid #333;
     text-align: center;
     font-weight: bold;
+    font-variant-numeric: tabular-nums;
 }
 #loadout-modal .rs-budget.ok   { color: #5fc4b8; }
 #loadout-modal .rs-budget.over { color: #ff4444; }
@@ -1151,9 +1184,10 @@ body.game-page html {
 #loadout-modal .slider-value {
     color: #5fc4b8;
     font-weight: bold;
-    min-width: 28px;
+    min-width: 52px;
     text-align: right;
     font-size: 0.9em;
+    font-variant-numeric: tabular-nums;
 }
 
 /* --- Effect / ordinance / utility options --- */

@@ -41,6 +41,10 @@ public class OddballBehavior implements AIBehavior {
     private Role role = Role.SEEK;
     private double evalTimer = 0.0;
 
+    public int getTargetNpcId() {
+        return targetNpcId;
+    }
+
     // Stable strafe side so the AI doesn't flip-flop every tick
     private double strafeSign = 1.0;
 
@@ -57,7 +61,7 @@ public class OddballBehavior implements AIBehavior {
         }
 
         Oddball target = gameEntities.getOddballNpc(targetNpcId);
-        if (target == null || !target.isActive()) {
+        if (target == null || !target.isActive() || target.isVisionObscured()) {
             role = Role.SEEK;
             target = null;
         } else {
@@ -105,7 +109,7 @@ public class OddballBehavior implements AIBehavior {
         Vector2 myPos = aiPlayer.getPosition();
 
         for (Oddball npc : gameEntities.getAllOddballNpcs()) {
-            if (!npc.isActive()) {
+            if (!npc.isActive() || npc.isVisionObscured()) {
                 continue;
             }
             double dist = myPos.distance(npc.getPosition());

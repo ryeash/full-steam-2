@@ -114,7 +114,7 @@ public interface AIBehavior {
         }
 
         for (Turret turret : gameEntities.getAllTurrets()) {
-            if (!turret.isActive()) {
+            if (!turret.isActive() || turret.isVisionObscured()) {
                 continue;
             }
             AITargetWrapper wrapper = AITargetWrapper.fromTurret(turret);
@@ -124,7 +124,7 @@ public interface AIBehavior {
         }
 
         for (Zombie zombie : gameEntities.getAllZombies()) {
-            if (!zombie.isActive() || zombie.getHealth() <= 0) {
+            if (!zombie.isActive() || zombie.getHealth() <= 0 || zombie.isVisionObscured()) {
                 continue;
             }
             targets.add(AITargetWrapper.fromZombie(zombie));

@@ -267,12 +267,14 @@ public class BinaryGameStateSerializer {
                     out.writeFloat((float) proj.getBody().getLinearVelocity().x);
                     out.writeFloat((float) proj.getBody().getLinearVelocity().y);
                     out.writeFloat((float) proj.getCaliber());
+                    out.writeFloat((float) proj.getBody().getTransform().getRotation().toRadians());
 
                     int effectMask = 0;
                     for (var effect : proj.getBulletEffects()) {
                         effectMask |= (1 << effect.ordinal());
                     }
                     out.writeShort(effectMask);
+                    out.writeByte(proj.getOrdinance().ordinal());
                 }
             }
 
@@ -321,10 +323,22 @@ public class BinaryGameStateSerializer {
             }
 
             // 4. Turrets
-            int turretCount = (turrets != null) ? turrets.size() : 0;
+            int turretCount = 0;
+            if (turrets != null && !turrets.isEmpty()) {
+                if (filterPlayerVision) {
+                    for (Turret t : turrets) {
+                        if (t.isActive() && !t.isVisionObscured()) turretCount++;
+                    }
+                } else {
+                    for (Turret t : turrets) {
+                        if (t.isActive()) turretCount++;
+                    }
+                }
+            }
             out.writeShort(turretCount);
             if (turretCount > 0) {
                 for (Turret t : turrets) {
+                    if (!t.isActive() || (filterPlayerVision && t.isVisionObscured())) continue;
                     out.writeShort(t.getId());
                     out.writeByte(t.getOwnerTeam());
                     out.writeFloat((float) t.getPosition().x);
@@ -406,19 +420,19 @@ public class BinaryGameStateSerializer {
             int oddballCount = 0;
             if (oddballs != null && !oddballs.isEmpty()) {
                 for (Oddball ob : oddballs) {
-                    if (ob.isActive()) oddballCount++;
+                    if (ob.isActive() && (!filterPlayerVision || !ob.isVisionObscured())) oddballCount++;
                 }
             }
             int zombieCount = 0;
             if (zombies != null && !zombies.isEmpty()) {
                 for (Zombie z : zombies) {
-                    if (z.isActive()) zombieCount++;
+                    if (z.isActive() && (!filterPlayerVision || !z.isVisionObscured())) zombieCount++;
                 }
             }
             out.writeShort(oddballCount + zombieCount);
             if (oddballCount > 0) {
                 for (Oddball ob : oddballs) {
-                    if (!ob.isActive()) continue;
+                    if (!ob.isActive() || (filterPlayerVision && ob.isVisionObscured())) continue;
                     out.writeShort(ob.getId());
                     out.writeByte(0); // category: 0 = ODDBALL
                     out.writeByte(ob.getPersonality().ordinal());
@@ -434,7 +448,7 @@ public class BinaryGameStateSerializer {
             }
             if (zombieCount > 0) {
                 for (Zombie z : zombies) {
-                    if (!z.isActive()) continue;
+                    if (!z.isActive() || (filterPlayerVision && z.isVisionObscured())) continue;
                     out.writeShort(z.getId());
                     out.writeByte(1); // category: 1 = ZOMBIE
                     out.writeByte(z.getType().ordinal());

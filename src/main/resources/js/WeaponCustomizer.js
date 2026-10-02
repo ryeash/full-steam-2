@@ -119,7 +119,9 @@ class WeaponCustomizer {
                             </div>
                             <div class="point-tracker">
                                 <div class="point-status-line">
-                                    <span id="points-used" class="pt-used">0</span><span class="pt-sep">/</span><span id="points-max" class="pt-max">100</span><span class="pt-label">pts</span>
+                                    <span class="pt-allocation">
+                                        <span id="points-used" class="pt-used">0</span><span class="pt-sep">/</span><span id="points-max" class="pt-max">100</span><span class="pt-label">pts</span>
+                                    </span>
                                     <span id="alloc-icon" class="alloc-icon">⚠</span>
                                     <span class="pt-breakdown-label">Attr:</span><span id="attr-points" class="pt-breakdown-value">0</span>
                                     <span class="pt-breakdown-label">FX:</span><span id="effect-points" class="pt-breakdown-value">0</span>
@@ -326,7 +328,7 @@ class WeaponCustomizer {
             kinetic: ['ASSAULT_RIFLE', 'HAND_CANNON', 'SNIPER_RIFLE', 'MINIGUN', 'SHOTGUN', 'TWIN_SIXES', 'CONCUSSION_CANNON'],
             effects: ['ROCKET_LAUNCHER', 'INCENDIARY_SHOTGUN', 'ARC_PISTOL', 'ICE_CANNON', 'TOXIC_SPRAYER',
                       'PIERCING_RIFLE', 'BOUNCY_SMG', 'SEEKER_DART', 'CLUSTER_MORTAR',
-                      'NAPALM_LAUNCHER', 'STORM_CALLER', 'VENOM_NEEDLER', 'FROST_LANCE', 'SHRAPNEL_CANNON', 'PHANTOM_NEEDLES'],
+                      'NAPALM_LAUNCHER', 'STORM_CALLER', 'VENOM_NEEDLER', 'FROST_LANCE', 'SHRAPNEL_CANNON', 'PHANTOM_NEEDLES', 'KILLER_BEES'],
             beams: ['LASER_RIFLE', 'PLASMA_CANNON', 'ARC_LASER', 'RAILGUN', 'RICOCHET_LASER']
         };
         Object.entries(categories).forEach(([categoryName, presetKeys]) => {

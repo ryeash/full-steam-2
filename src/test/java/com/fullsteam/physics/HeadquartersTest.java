@@ -244,5 +244,65 @@ class HeadquartersTest extends BaseTestClass {
         // Should have no headquarters in FFA
         assertTrue(gmFFA.getGameEntities().getAllHeadquarters().isEmpty());
     }
+
+    @Test
+    @DisplayName("Headquarters physics body contains rectangle wall fixture and 4 corner turret circle fixtures")
+    void testHeadquartersPhysicsFixtures() {
+        Headquarters hq = gameManager.getGameEntities().getAllHeadquarters().iterator().next();
+        org.dyn4j.dynamics.Body body = hq.getBody();
+
+        assertEquals(5, body.getFixtureCount(), "Headquarters should have 1 wall polygon + 4 corner turret circle fixtures");
+
+        int polygonCount = 0;
+        int circleCount = 0;
+        for (int i = 0; i < body.getFixtureCount(); i++) {
+            var shape = body.getFixture(i).getShape();
+            if (shape instanceof org.dyn4j.geometry.Polygon) {
+                polygonCount++;
+            } else if (shape instanceof org.dyn4j.geometry.Circle circle) {
+                circleCount++;
+                assertEquals(15.0, circle.getRadius(), 0.001, "Turret circle radius should be 15.0");
+                assertTrue(Math.abs(Math.abs(circle.getCenter().x) - 40.0) < 0.001);
+                assertTrue(Math.abs(Math.abs(circle.getCenter().y) - 30.0) < 0.001);
+            }
+        }
+        assertEquals(1, polygonCount, "Should have 1 wall rectangle fixture");
+        assertEquals(4, circleCount, "Should have 4 corner turret circle fixtures");
+    }
+
+    @Test
+    @DisplayName("Headquarters initial game state serialization includes team, ownerTeam, and shapes with circle turrets")
+    @SuppressWarnings("unchecked")
+    void testHeadquartersInitialGameStateSerialization() {
+        Player player = gameManager.getGameEntities().getPlayer(1);
+        var initialState = gameManager.getGameStateSerializer().createInitialGameState(player);
+
+        assertTrue(initialState.containsKey("headquarters"));
+        var hqList = (java.util.List<java.util.Map<String, Object>>) initialState.get("headquarters");
+        assertEquals(2, hqList.size());
+
+        for (var hqMap : hqList) {
+            assertNotNull(hqMap.get("id"));
+            assertNotNull(hqMap.get("team"));
+            assertNotNull(hqMap.get("ownerTeam"));
+            assertEquals(hqMap.get("team"), hqMap.get("ownerTeam"));
+
+            String shapes = (String) hqMap.get("shapes");
+            assertNotNull(shapes);
+            assertFalse(shapes.isEmpty());
+
+            // Shapes string should contain 5 fixtures joined by ';' (1 polygon + 4 circles)
+            String[] fixtures = shapes.split(";");
+            assertEquals(5, fixtures.length, "Shapes should serialize all 5 fixtures (1 wall + 4 turrets)");
+
+            int circleFixtures = 0;
+            for (String fixture : fixtures) {
+                if (fixture.matches("\\([-0-9.]+,[-0-9.]+,15\\)")) {
+                    circleFixtures++;
+                }
+            }
+            assertEquals(4, circleFixtures, "Should serialize 4 corner turret circles with radius 15");
+        }
+    }
 }
 

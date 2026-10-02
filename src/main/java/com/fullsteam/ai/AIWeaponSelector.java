@@ -30,7 +30,8 @@ public class AIWeaponSelector {
             WeaponConfig.SEEKER_DART_PRESET,
             WeaponConfig.ARC_PISTOL_PRESET,
             WeaponConfig.TOXIC_SPRAYER_PRESET,
-            WeaponConfig.ICE_CANNON_PRESET
+            WeaponConfig.ICE_CANNON_PRESET,
+            WeaponConfig.KILLER_BEES_PRESET
     );
 
     private static final List<WeaponConfig> EXPLOSIVE_WEAPONS = List.of(
@@ -71,7 +72,8 @@ public class AIWeaponSelector {
             WeaponConfig.VENOM_NEEDLER_PRESET,
             WeaponConfig.FROST_LANCE_PRESET,
             WeaponConfig.SHRAPNEL_CANNON_PRESET,
-            WeaponConfig.PHANTOM_NEEDLES_PRESET
+            WeaponConfig.PHANTOM_NEEDLES_PRESET,
+            WeaponConfig.KILLER_BEES_PRESET
     );
 
     /**

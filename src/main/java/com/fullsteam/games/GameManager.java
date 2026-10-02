@@ -816,7 +816,7 @@ public class GameManager {
                     world.removeBody(projectile.getBody());
                     return true;
                 }
-                collisionProcessor.getBulletEffectProcessor().applyHomingBehavior(projectile);
+                collisionProcessor.getBulletEffectProcessor().applyHomingBehavior(projectile, deltaTime);
                 return false;
             });
 
@@ -824,7 +824,7 @@ public class GameManager {
             updateDefenseLaserBeamEndpoints();
 
             // Reset vision flags before physics collision pass re-evaluates them
-            gameEntities.getAllPlayers().forEach(p -> p.setVisionObscured(false));
+            gameEntities.resetVisionObscuredFlags();
 
             world.updatev(deltaTime);
 

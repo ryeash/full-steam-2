@@ -48,8 +48,6 @@ public class Player extends OwnedGameEntity implements HasWeapon, Damageable {
     private int activePlasmaBeamShotCount = 1;
     private double[] activePlasmaBeamDamageRates = new double[0];
 
-    private boolean visionObscured = false; // Set true each tick while inside SMOKE field, reset before collision processing
-
     private int livesRemaining = -1; // -1 = unlimited, 0 = eliminated
     private boolean eliminated = false; // Permanently eliminated (no more respawns)
     private long eliminationTime = 0; // Timestamp when player was eliminated (for Battle Royale ranking)

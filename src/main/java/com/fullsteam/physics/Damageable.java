@@ -19,6 +19,13 @@ public interface Damageable {
 
     double getHealth();
 
+    default boolean isVisionObscured() {
+        return false;
+    }
+
+    default void setVisionObscured(boolean visionObscured) {
+    }
+
     /**
      * Apply damage to this entity.
      *

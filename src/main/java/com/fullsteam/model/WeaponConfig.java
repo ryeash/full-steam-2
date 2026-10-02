@@ -164,16 +164,16 @@ public class WeaponConfig {
             1,
             7,
             0,
-            7,
-            9,
-            0,     // projectile speed
+            4,      // magazine size
+            2,      // reload
+            0,      // projectile speed
             0,
             0,
             -5,     // handling
             20,     // caliber
             5,      // knockback
             Set.of(BulletEffect.EXPLOSIVE),
-            Ordinance.PROJECTILE  // total: 100 pts
+            Ordinance.MISSILE  // total: 100 pts (attr 65 + fx 25 + ord 10)
     );
 
     public static final WeaponConfig SHOTGUN_PRESET = new WeaponConfig(
@@ -595,6 +595,27 @@ public class WeaponConfig {
             0,      // knockback
             Set.of(BulletEffect.HOMING, BulletEffect.BOUNCY),
             Ordinance.PROJECTILE  // total: 100 pts
+    );
+
+    // Killer Bees: Triple shot, high caliber, homing, missile, non-explosive, high-damage launcher
+    public static final WeaponConfig KILLER_BEES_PRESET = new WeaponConfig(
+            "Killer Bees",
+            16,     // min damage
+            18,     // max damage
+            DamageVarianceFormula.GAUSSIAN,
+            3,      // fire rate
+            6,      // range
+            -4,     // accuracy (swarm dispersal)
+            2,      // magazine size (5 shots = 15 missiles per mag)
+            1,      // reload time
+            3,      // projectile speed
+            10,     // bullets per shot (stepped: 3 missiles per shot)
+            -5,     // linear damping (negative damping for drift/slide)
+            -5,     // handling (heavy launcher)
+            12,     // caliber (high caliber: 1.6x size)
+            3,      // knockback
+            Set.of(BulletEffect.HOMING),
+            Ordinance.MISSILE  // total: 100 pts (attr 60 + fx 30 + ord 10)
     );
 
     // Spitter Spit: Long range, high caliber, slow moving, poison projectile

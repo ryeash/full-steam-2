@@ -15,9 +15,11 @@ import org.dyn4j.geometry.Polygon;
 import org.dyn4j.geometry.Vector2;
 
 import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.StringJoiner;
 
@@ -30,7 +32,7 @@ import java.util.StringJoiner;
  */
 public class GameStateSerializer {
 
-    private static final DecimalFormat DOUBLE_SHORTFORM = new DecimalFormat("#.##");
+    private static final DecimalFormat DOUBLE_SHORTFORM = new DecimalFormat("#.##", DecimalFormatSymbols.getInstance(Locale.US));
 
     private final GameConfig gameConfig;
     private final GameEntities gameEntities;
@@ -157,6 +159,7 @@ public class GameStateSerializer {
             hqState.put("id", hq.getId());
             hqState.put("x", pos.x);
             hqState.put("y", pos.y);
+            hqState.put("team", hq.getOwnerTeam());
             hqState.put("ownerTeam", hq.getOwnerTeam());
             hqState.put("shapes", verticesShorthand(hq.getBody()));
             hqStates.add(hqState);

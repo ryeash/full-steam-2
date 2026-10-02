@@ -287,7 +287,7 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
         }
 
         retargetTimer -= deltaTime;
-        boolean targetValid = currentTargetEntity != null && currentTargetEntity.isActive() && currentTargetEntity.getHealth() > 0;
+        boolean targetValid = currentTargetEntity != null && currentTargetEntity.isActive() && currentTargetEntity.getHealth() > 0 && !currentTargetEntity.isVisionObscured() && !this.isVisionObscured();
 
         if (attackPattern == ZombieAttackPattern.OBSESSED_PLAYER) {
             if (!targetValid) {
@@ -300,9 +300,9 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
         }
 
         Vector2 targetPosition = null;
-        if (currentTargetEntity != null && currentTargetEntity.isActive() && currentTargetEntity.getHealth() > 0) {
+        if (currentTargetEntity != null && currentTargetEntity.isActive() && currentTargetEntity.getHealth() > 0 && !currentTargetEntity.isVisionObscured() && !this.isVisionObscured()) {
             targetPosition = currentTargetEntity.getPosition();
-        } else if (staticTargetPosition != null) {
+        } else if (staticTargetPosition != null && !this.isVisionObscured()) {
             targetPosition = staticTargetPosition;
         }
 
@@ -363,6 +363,12 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
     }
 
     private void acquireTarget(GameEntities gameEntities) {
+        if (this.isVisionObscured()) {
+            currentTargetEntity = null;
+            staticTargetPosition = null;
+            return;
+        }
+
         Collection<Player> players = gameEntities.getAllPlayers();
         Collection<Headquarters> hqs = gameEntities.getAllHeadquarters();
         Collection<Turret> turrets = gameEntities.getAllTurrets();
@@ -373,10 +379,10 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
         // 1. If obsessed with a specific player/entity, keep tracking it until dead
         if (attackPattern == ZombieAttackPattern.OBSESSED_PLAYER && targetEntityId != null) {
             Player obsessedPlayer = gameEntities.getPlayer(targetEntityId);
-            if (obsessedPlayer != null && obsessedPlayer.isActive() && obsessedPlayer.getHealth() > 0) {
+            if (obsessedPlayer != null && obsessedPlayer.isActive() && obsessedPlayer.getHealth() > 0 && !obsessedPlayer.isVisionObscured()) {
                 currentTargetEntity = obsessedPlayer;
                 return;
-            } else {
+            } else if (obsessedPlayer == null || !obsessedPlayer.isActive() || obsessedPlayer.getHealth() <= 0) {
                 targetEntityId = null;
             }
         }
@@ -434,7 +440,7 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
         Vector2 myPos = getPosition();
 
         for (Player p : players) {
-            if (!p.isActive() || p.getHealth() <= 0) {
+            if (!p.isActive() || p.getHealth() <= 0 || p.isVisionObscured()) {
                 continue;
             }
             double distSq = myPos.distanceSquared(p.getPosition());
@@ -470,7 +476,7 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
         Vector2 myPos = getPosition();
 
         for (Turret t : turrets) {
-            if (!t.isActive() || t.getHealth() <= 0) {
+            if (!t.isActive() || t.getHealth() <= 0 || t.isVisionObscured()) {
                 continue;
             }
             double distSq = myPos.distanceSquared(t.getPosition());
@@ -487,7 +493,7 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
         double lowestHealth = Double.MAX_VALUE;
 
         for (Player p : players) {
-            if (!p.isActive() || p.getHealth() <= 0) {
+            if (!p.isActive() || p.getHealth() <= 0 || p.isVisionObscured()) {
                 continue;
             }
             if (p.getHealth() < lowestHealth) {
@@ -503,7 +509,7 @@ public class Zombie extends OwnedGameEntity implements Damageable, MeleeAttacker
         int count = 0;
 
         for (Player p : players) {
-            if (p.isActive() && p.getHealth() > 0) {
+            if (p.isActive() && p.getHealth() > 0 && !p.isVisionObscured()) {
                 sumX += p.getPosition().x;
                 sumY += p.getPosition().y;
                 count++;

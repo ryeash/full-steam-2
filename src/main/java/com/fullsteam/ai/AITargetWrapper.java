@@ -70,10 +70,7 @@ public class AITargetWrapper {
         if (!entity.isActive()) {
             return false;
         }
-        if (entity instanceof Player player) {
-            return !player.isVisionObscured();
-        }
-        return true;
+        return !entity.isVisionObscured();
     }
 
     public double getHealth() {

@@ -227,6 +227,7 @@ public class Weapon {
             case PROJECTILE -> "Projectile";
             case LASER -> "Laser";
             case PLASMA_BEAM -> "Plasma Beam";
+            case MISSILE -> "Missile";
         };
         displayName.append(ordinanceTag);
 

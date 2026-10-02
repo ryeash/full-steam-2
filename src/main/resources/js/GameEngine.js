@@ -231,6 +231,7 @@ class GameEngine {
         hudBg.roundRect(10, 10, 280, 170, 8).fill({ color: 0x000000, alpha: 0.7 });
         hudBg.roundRect(10, 10, 280, 170, 8).stroke({ width: 2, color: 0x444444, alpha: 0.8 });
         this.hudContainer.addChild(hudBg);
+        this.hudBg = hudBg;
         
         // Player info (bottom portion) - minimap will be created after world bounds are received
         this.createHUDPlayerInfo();
@@ -285,7 +286,7 @@ class GameEngine {
     }
 
     /**
-     * Create floating ping badge in top right corner.
+     * Create floating ping badge in top-left mini-map / info HUD box.
      */
     createPingDisplay() {
         this.pingContainer = new PIXI.Container();
@@ -311,20 +312,26 @@ class GameEngine {
         label.position.set(22, 13);
         this.pingContainer.addChild(label);
         this.pingLabel = label;
+        this.hudPingText = label;
 
-        this.uiContainer.addChild(this.pingContainer);
+        if (this.hudContainer) {
+            this.hudContainer.addChild(this.pingContainer);
+        } else {
+            this.uiContainer.addChild(this.pingContainer);
+        }
         this.updatePingPosition();
     }
 
     /**
-     * Keep ping display aligned to top-right of canvas viewport.
+     * Keep ping display aligned within the top-left mini-map / info HUD box.
      */
     updatePingPosition() {
-        if (!this.pingContainer || !this.app || !this.app.screen) return;
-        this.pingContainer.position.set(
-            this.app.screen.width - 105,
-            10
-        );
+        if (!this.pingContainer) return;
+        const totalWidth = (this.hudMinimap && this.minimapWidth)
+            ? Math.max(280, this.minimapWidth + 40)
+            : 280;
+        const pingX = 10 + totalWidth - 92 - 12;
+        this.pingContainer.position.set(pingX, 20);
     }
 
     /**
@@ -383,7 +390,7 @@ class GameEngine {
     }
 
     /**
-     * Update ping text and status colors in top-right HUD and player info HUD.
+     * Update ping text and status colors in top-left HUD.
      */
     updatePingDisplay(rtt) {
         let color = 0x00ff88; // Green (< 60ms)
@@ -410,7 +417,7 @@ class GameEngine {
             this.pingBg.roundRect(0, 0, 92, 26, 6).fill({ color: 0x000000, alpha: 0.65 });
             this.pingBg.roundRect(0, 0, 92, 26, 6).stroke({ width: 1.5, color: strokeColor, alpha: 0.8 });
         }
-        if (this.hudPingText) {
+        if (this.hudPingText && this.hudPingText !== this.pingLabel) {
             this.hudPingText.text = text;
             this.hudPingText.style.fill = color;
         }
@@ -623,7 +630,7 @@ class GameEngine {
         if (!this.hudMinimap || !this.minimapHeight) return;
         
         // Adjust HUD background size to accommodate the minimap
-        const hudBg = this.hudContainer.children[0]; // First child is the background
+        const hudBg = this.hudBg || this.hudContainer.children[0]; // First child is the background
         if (hudBg) {
             const totalWidth = Math.max(280, this.minimapWidth + 40); // 20px margins on each side
             const totalHeight = this.minimapHeight + 90; // Minimap + title + player info section
@@ -643,6 +650,9 @@ class GameEngine {
         if (playerInfoContainer) {
             playerInfoContainer.position.set(20, 30 + this.minimapHeight + 10); // Below minimap with padding
         }
+
+        // Keep ping display aligned with updated HUD width
+        this.updatePingPosition();
     }
     
     /**
@@ -743,23 +753,6 @@ class GameEngine {
         });
         livesText.position.set(40, 30);
         infoContainer.addChild(livesText);
-
-        // Ping indicator in HUD
-        const pingLabel = new PIXI.Text('PING', {
-            fontSize: 10,
-            fill: 0xffffff,
-            fontWeight: 'bold'
-        });
-        pingLabel.position.set(150, 30);
-        infoContainer.addChild(pingLabel);
-
-        const pingText = new PIXI.Text('-- ms', {
-            fontSize: 9,
-            fill: 0x00ff88,
-            fontWeight: 'bold'
-        });
-        pingText.position.set(185, 30);
-        infoContainer.addChild(pingText);
         
         // Store references for updates (removed health references)
         this.hudWeaponText = weaponText;
@@ -769,7 +762,6 @@ class GameEngine {
         this.hudInputText = inputText;
         this.hudLivesLabel = livesLabel;
         this.hudLivesText = livesText;
-        this.hudPingText = pingText;
         
         this.hudContainer.addChild(infoContainer);
     }
@@ -950,6 +942,19 @@ class GameEngine {
         projectileGraphics.circle(0, 0, 3).fill(0xf39c12);
         this.projectileTexture = this.app.renderer.generateTexture(projectileGraphics);
         projectileGraphics.destroy({ context: true }); // Clean up graphics after generating texture
+
+        // Missile - sleek aerodynamic triangle
+        const missileGraphics = new PIXI.Graphics();
+        // Nose tip at (+9, 0), rear fins at (-7, -5) and (-7, 5), thruster indent at (-5, 0)
+        missileGraphics.poly([9, 0, -7, -5, -5, 0, -7, 5]).fill(0xd4d8e2);
+        // Nose cone accent
+        missileGraphics.poly([9, 0, 3, -2.5, 3, 2.5]).fill(0xee4422);
+        // Engine thruster nozzle
+        missileGraphics.poly([-5, -1.5, -7, -2.5, -7, 2.5, -5, 1.5]).fill(0x33333e);
+        // Thruster flame glow
+        missileGraphics.circle(-5, 0, 2).fill(0xffbb00);
+        this.missileTexture = this.app.renderer.generateTexture(missileGraphics);
+        missileGraphics.destroy({ context: true });
 
         // Shared soft-glow circle. This is the single reusable base texture for
         // ALL field effects, power-up auras, and particle-style visuals. Instead
@@ -1293,7 +1298,30 @@ class GameEngine {
      */
     setupWorldFromInitData(data, includeMinimap = true) {
         if (data.headquarters) {
-            data.headquarters.forEach(hq => this.initialHeadquarters.set(hq.id, hq));
+            data.headquarters.forEach(hq => {
+                this.initialHeadquarters.set(hq.id, hq);
+                // Also index by 16-bit signed/unsigned ID in case entity ID exceeded 32767
+                const id16 = (hq.id << 16) >> 16;
+                this.initialHeadquarters.set(id16, hq);
+                this.initialHeadquarters.set(hq.id & 0xFFFF, hq);
+                const team = hq.team !== undefined ? hq.team : hq.ownerTeam;
+                if (team !== undefined) {
+                    this.initialHeadquarters.set(`team_${team}`, hq);
+                }
+
+                // If HQ was already created in utilityEntities before init data arrived, refresh it
+                const existing = this.utilityEntities.get(hq.id)
+                    || this.utilityEntities.get(id16)
+                    || this.utilityEntities.get(hq.id & 0xFFFF)
+                    || Array.from(this.utilityEntities.values()).find(e =>
+                        e.entityData && e.entityData.type === 'HEADQUARTERS' && (e.entityData.ownerTeam !== undefined ? e.entityData.ownerTeam : e.entityData.team) === team
+                    );
+                if (existing && existing.entityData) {
+                    existing.entityData.shapes = hq.shapes;
+                    delete existing._hqRenderKey;
+                    this.updateHeadquartersVisual(existing, existing.entityData);
+                }
+            });
         }
         if (data.kothZones) {
             data.kothZones.forEach(zone => this.initialKothZones.set(zone.id, zone));
@@ -2201,7 +2229,7 @@ class GameEngine {
 
         const deathsSpan = document.createElement('span');
         deathsSpan.className = 'stat-deaths';
-        deathsSpan.textContent = `${(this.getBreakdown(score).deaths ?? score.deaths) || 0} D`;
+        deathsSpan.textContent = `${this.playerDeaths(score)} D`;
         stats.appendChild(deathsSpan);
 
         row.appendChild(stats);
@@ -2326,6 +2354,8 @@ class GameEngine {
         if (sprite.playerData) {
             if (playerData.name === undefined) playerData.name = sprite.playerData.name;
             if (playerData.score === undefined) playerData.score = sprite.playerData.score;
+            if (playerData.kills === undefined) playerData.kills = sprite.playerData.kills ?? sprite.playerData.score?.kills;
+            if (playerData.deaths === undefined) playerData.deaths = sprite.playerData.deaths ?? sprite.playerData.score?.deaths;
             if (playerData.activePowerUps === undefined) playerData.activePowerUps = sprite.playerData.activePowerUps;
             if (playerData.weaponRange === undefined) playerData.weaponRange = sprite.playerData.weaponRange;
         }
@@ -3117,14 +3147,18 @@ class GameEngine {
     }
     
     createProjectile(projectileData) {
+        const isMissile = projectileData.ordinance === 'MISSILE';
+
         // Create main projectile container
         const projectileContainer = new PIXI.Container();
-        
         projectileContainer.position.set(projectileData.x, projectileData.y);
+        if (isMissile) {
+            projectileContainer.rotation = projectileData.rotation || 0;
+        }
         
         // Create the main projectile sprite
-        const sprite = new PIXI.Sprite(this.projectileTexture);
-        sprite.anchor.set(0.5);
+        const sprite = new PIXI.Sprite(isMissile ? this.missileTexture : this.projectileTexture);
+        sprite.anchor.set(isMissile ? (7 / 16) : 0.5, 0.5);
         
         // Flip Y-axis back so sprite appears right-side up (gameContainer is Y-flipped)
         sprite.scale.y = -1;
@@ -3157,7 +3191,7 @@ class GameEngine {
             this.createPlasmaEffects(projectileContainer, sprite);
         }
 
-        // Trails are now derived from caliber/speed/effects, not the ordinance name.
+        // Trails are now derived from caliber/speed/effects, or ordinance type (missiles always trail).
         if (this.shouldProjectileHaveTrail(projectileData)) {
             const trail = this.createProjectileTrail(projectileData);
             trail.zIndex = -1; // Behind the main projectile
@@ -3176,20 +3210,22 @@ class GameEngine {
         this.projectiles.set(projectileData.id, projectileContainer);
         this.gameContainer.addChild(projectileContainer);
         
-        // Create interpolator for smooth movement
+        // Create interpolator for smooth movement and rotation
         projectileContainer.interpolator = new EntityInterpolator(projectileContainer, {
             vx: projectileData.vx || 0,
             vy: projectileData.vy || 0,
             snapThreshold: 100,
-            lerpRate: 24.0
+            lerpRate: 24.0,
+            hasRotation: isMissile
         });
     }
     
     /**
      * Whether a projectile leaves a trail — derived from gameplay rather than the
-     * ordinance name: big-caliber rounds (exhaust/smoke) or very fast rounds (tracer).
+     * ordinance name: missiles always trail, big-caliber rounds (exhaust/smoke), or very fast rounds (tracer).
      */
     shouldProjectileHaveTrail(projectileData) {
+        if (projectileData.ordinance === 'MISSILE') return true;
         const caliber = projectileData.caliber || 1;
         const speed = Math.hypot(projectileData.vx || 0, projectileData.vy || 0);
         return caliber >= 1.3 || speed >= 800;
@@ -3197,30 +3233,40 @@ class GameEngine {
 
     /**
      * Trail style derived from caliber (width) and the dominant bullet effect
-     * (color), instead of the ordinance type.
+     * (color), with billowing smoke for missiles.
      */
     createProjectileTrail(projectileData) {
         const trail = new PIXI.Graphics();
         const caliber = projectileData.caliber || 1;
         const effects = projectileData.bulletEffects || [];
+        const isMissile = projectileData.ordinance === 'MISSILE';
 
-        let color = 0xff8800, secondary = 0xffcc44; // default warm exhaust
+        let color = isMissile ? 0xd0d5dd : 0xff8800;
+        let secondary = isMissile ? 0xffaa22 : 0xffcc44; // nozzle thrust
+
         if (effects.includes('SMOKE'))         { color = 0x666666; secondary = 0x999999; }
-        else if (effects.includes('FREEZING')) { color = 0x88ccff; secondary = 0xcceeff; }
-        else if (effects.includes('POISON'))   { color = 0x88cc44; secondary = 0xaaff66; }
-        else if (effects.includes('ELECTRIC')) { color = 0x66ccff; secondary = 0xaaddff; }
-        else if (effects.includes('INCENDIARY') || effects.includes('EXPLOSIVE')) { color = 0xff6600; secondary = 0xffaa00; }
+        else if (effects.includes('FREEZING')) { color = isMissile ? 0x99d4ee : 0x88ccff; secondary = 0xddeeff; }
+        else if (effects.includes('POISON'))   { color = isMissile ? 0xaacc66 : 0x88cc44; secondary = 0xddff88; }
+        else if (effects.includes('ELECTRIC')) { color = isMissile ? 0x88ccee : 0x66ccff; secondary = 0xccffff; }
+        else if (effects.includes('INCENDIARY') || effects.includes('EXPLOSIVE')) {
+            color = isMissile ? 0xd48855 : 0xff6600;
+            secondary = 0xffaa00;
+        }
 
+        trail.isMissile = isMissile;
         trail.trailColor = color;
         trail.trailSecondaryColor = secondary;
-        trail.trailWidth = 3 * caliber + 2; // ~5 at baseline, ~8 at ×2
-        trail.trailAlpha = 0.7;
+        trail.trailWidth = (isMissile ? 4.5 : 3.0) * caliber + 2; // wider for missile smoke
+        trail.trailAlpha = isMissile ? 0.85 : 0.7;
         return trail;
     }
 
-    /** Trail length (sample count) derived from caliber — bigger rounds trail longer. */
+    /** Trail length (sample count) derived from caliber — missiles trail ~2.5x-3x longer than bullets. */
     getTrailLength(projectileData) {
         const caliber = projectileData.caliber || 1;
+        if (projectileData.ordinance === 'MISSILE') {
+            return Math.round(28 + (caliber - 1) * 12); // ~28 baseline, ~40 at ×2
+        }
         return Math.round(8 + (caliber - 1) * 7); // ~8 baseline, ~15 at ×2
     }
     
@@ -3304,9 +3350,14 @@ class GameEngine {
         trail.clear();
         if (count < 2) return;
 
-        // The trail Graphics is a CHILD of the moving container, so draw each
-        // recorded world point relative to the container's current position.
+        // The trail Graphics is a CHILD of the moving container, so unrotate each
+        // recorded world point by -container.rotation to keep world positions fixed.
+        const rot = projectileContainer.rotation || 0;
+        const cosR = Math.cos(rot);
+        const sinR = Math.sin(rot);
+
         const startIndex = (head - count + maxLen) % maxLen;
+        const isMissile = !!trail.isMissile;
         const bigBore = (projectileContainer.projectileData?.caliber || 1) >= 1.7;
 
         for (let i = 1; i < count; i++) {
@@ -3314,23 +3365,48 @@ class GameEngine {
             const currIdx = ((startIndex + i) % maxLen) * 2;
             const progress = i / (count - 1); // 0 = oldest segment, 1 = newest
 
-            const ax = coords[prevIdx] - cx;
-            const ay = coords[prevIdx + 1] - cy;
-            const bx = coords[currIdx] - cx;
-            const by = coords[currIdx + 1] - cy;
+            const dax = coords[prevIdx] - cx;
+            const day = coords[prevIdx + 1] - cy;
+            const dbx = coords[currIdx] - cx;
+            const dby = coords[currIdx + 1] - cy;
 
-            const width = trail.trailWidth * (0.2 + 0.8 * progress);
-            const alpha = trail.trailAlpha * progress;
+            // Unrotate into local coordinate space
+            const ax = dax * cosR + day * sinR;
+            const ay = -dax * sinR + day * cosR;
+            const bx = dbx * cosR + dby * sinR;
+            const by = -dbx * sinR + dby * cosR;
 
-            trail.moveTo(ax, ay);
-            trail.lineTo(bx, by);
-            trail.stroke({ width, color: trail.trailColor, alpha });
+            if (isMissile) {
+                // Expanding smoke plume: wider at the back (older), compact near the engine
+                const width = trail.trailWidth * (0.6 + 1.2 * (1.0 - progress));
+                const alpha = trail.trailAlpha * Math.pow(progress, 0.65);
 
-            // Bright inner core near the head of a large round's exhaust.
-            if (bigBore && progress > 0.7) {
                 trail.moveTo(ax, ay);
                 trail.lineTo(bx, by);
-                trail.stroke({ width: width * 0.4, color: trail.trailSecondaryColor, alpha: alpha * 0.8 });
+                trail.stroke({ width, color: trail.trailColor, alpha });
+
+                // Bright fiery engine flame core near the rocket nozzle
+                if (progress > 0.6) {
+                    const coreProgress = (progress - 0.6) / 0.4;
+                    const coreWidth = width * (0.35 + 0.25 * coreProgress);
+                    trail.moveTo(ax, ay);
+                    trail.lineTo(bx, by);
+                    trail.stroke({ width: coreWidth, color: trail.trailSecondaryColor, alpha: alpha * 0.95 });
+                }
+            } else {
+                const width = trail.trailWidth * (0.2 + 0.8 * progress);
+                const alpha = trail.trailAlpha * progress;
+
+                trail.moveTo(ax, ay);
+                trail.lineTo(bx, by);
+                trail.stroke({ width, color: trail.trailColor, alpha });
+
+                // Bright inner core near the head of a large round's exhaust.
+                if (bigBore && progress > 0.7) {
+                    trail.moveTo(ax, ay);
+                    trail.lineTo(bx, by);
+                    trail.stroke({ width: width * 0.4, color: trail.trailSecondaryColor, alpha: alpha * 0.8 });
+                }
             }
         }
     }
@@ -3340,34 +3416,34 @@ class GameEngine {
      */
     customizeProjectileAppearance(sprite, projectileData) {
         const effects = projectileData.bulletEffects || [];
+        const isMissile = projectileData.ordinance === 'MISSILE';
 
-        // Base appearance. Size is driven by CALIBER (applied as a scale multiplier
-        // by the caller), and color is modulated by bullet effects below — there's
-        // no longer a per-ordinance sub-type to switch on.
         sprite.scale.set(1.0);
-        sprite.tint = 0xf39c12; // Default projectile color
+        if (!isMissile) {
+            sprite.tint = 0xf39c12; // Default projectile color
+        }
 
         // Add visual effects for special bullet effects
         if (effects.includes('HOMING')) {
             // Add a subtle glow for homing projectiles
             const glow = new PIXI.Graphics();
-            glow.circle(0, 0, 8).fill({ color: 0xffffff, alpha: 0.3 });
+            glow.circle(isMissile ? 3 : 0, 0, isMissile ? 6 : 8).fill({ color: 0xffffff, alpha: 0.3 });
             sprite.addChild(glow);
         }
         
         if (effects.includes('ELECTRIC')) {
             // Add electric sparks
-            sprite.tint = this.blendColors(sprite.tint, 0x88aaff, 0.5);
+            sprite.tint = this.blendColors(sprite.tint || 0xffffff, 0x88aaff, 0.5);
         }
         
         if (effects.includes('INCENDIARY')) {
             // Add fire tint
-            sprite.tint = this.blendColors(sprite.tint, 0xff4444, 0.3);
+            sprite.tint = this.blendColors(sprite.tint || 0xffffff, 0xff4444, 0.3);
         }
         
         if (effects.includes('FREEZING')) {
             // Add ice tint
-            sprite.tint = this.blendColors(sprite.tint, 0x88ccff, 0.3);
+            sprite.tint = this.blendColors(sprite.tint || 0xffffff, 0x88ccff, 0.3);
         }
         
         if (effects.includes('PIERCING')) {
@@ -3383,12 +3459,13 @@ class GameEngine {
         // Update projectile data
         projectileContainer.projectileData = projectileData;
         
-        // Use interpolator for smooth movement
+        // Use interpolator for smooth movement and rotation
         projectileContainer.interpolator.updateFromServer(
             projectileData.x,
             projectileData.y,
             projectileData.vx || 0,
-            projectileData.vy || 0
+            projectileData.vy || 0,
+            projectileData.rotation !== undefined ? projectileData.rotation : null
         );
     }
     
@@ -4540,8 +4617,16 @@ class GameEngine {
         // Derive dimensions from the compact shapes string or initialHQ map
         let shapesData = entityData.shapes;
         if ((!shapesData || (Array.isArray(shapesData) && shapesData.length === 0)) && this.initialHeadquarters) {
-            const initHq = this.initialHeadquarters.get(entityData.id);
-            if (initHq) shapesData = initHq.shapes;
+            const team = entityData.team !== undefined ? entityData.team : (entityData.ownerTeam || 0);
+            const initHq = this.initialHeadquarters.get(entityData.id)
+                || this.initialHeadquarters.get((entityData.id << 16) >> 16)
+                || this.initialHeadquarters.get(entityData.id & 0xFFFF)
+                || this.initialHeadquarters.get(`team_${team}`)
+                || Array.from(this.initialHeadquarters.values()).find(h => (h.ownerTeam !== undefined ? h.ownerTeam : h.team) === team);
+            if (initHq) {
+                shapesData = initHq.shapes;
+                entityData.shapes = shapesData;
+            }
         }
         const shapes = BinaryStateDecoder.parseShapes(shapesData);
 
@@ -4586,7 +4671,18 @@ class GameEngine {
             }
         };
 
-        const turrets = turretShapes.map(c => ({ x: c.cx, y: c.cy, r: c.r }));
+        let turrets = turretShapes.map(c => ({ x: c.cx, y: c.cy, r: c.r }));
+        if (turrets.length === 0) {
+            // Standard HQ has 4 corner turrets with radius HQ_TURRET_RADIUS (15px)
+            // matching the physics body created in Headquarters.java
+            const turretRadius = 15;
+            turrets = [
+                { x: -halfWidth, y: -halfHeight, r: turretRadius },
+                { x: halfWidth,  y: -halfHeight, r: turretRadius },
+                { x: halfWidth,  y: halfHeight,  r: turretRadius },
+                { x: -halfWidth, y: halfHeight,  r: turretRadius }
+            ];
+        }
 
         if (isDestroyed) {
             // Destroyed / Ruins visual - distinct charred rubble style at full opacity
@@ -4736,6 +4832,20 @@ class GameEngine {
     updateHeadquartersVisual(container, entityData) {
         const graphics = container.getChildAt(0);
         if (!graphics) return;
+
+        // Ensure shapesData is populated if initialHeadquarters became available after initial creation
+        if ((!entityData.shapes || (Array.isArray(entityData.shapes) && entityData.shapes.length === 0)) && this.initialHeadquarters) {
+            const team = entityData.team !== undefined ? entityData.team : (entityData.ownerTeam || 0);
+            const initHq = this.initialHeadquarters.get(entityData.id)
+                || this.initialHeadquarters.get((entityData.id << 16) >> 16)
+                || this.initialHeadquarters.get(entityData.id & 0xFFFF)
+                || this.initialHeadquarters.get(`team_${team}`)
+                || Array.from(this.initialHeadquarters.values()).find(h => (h.ownerTeam !== undefined ? h.ownerTeam : h.team) === team);
+            if (initHq && initHq.shapes) {
+                entityData.shapes = initHq.shapes;
+                delete container._hqRenderKey; // Force rebuild with shapes
+            }
+        }
 
         // Only rebuild when health, team, or destroyed state changes. The HQ is otherwise static,
         // and a rebuild allocates two PIXI.Text objects (each owns a GPU texture),
@@ -5873,6 +5983,15 @@ class GameEngine {
         return entry.kills || 0;
     }
 
+    /** Authoritative deaths for any entry: breakdown.deaths, else numeric deaths, else 0. */
+    playerDeaths(entry) {
+        if (!entry) return 0;
+        const bd = this.getBreakdown(entry);
+        if (bd && typeof bd.deaths === 'number') return bd.deaths;
+        if (typeof entry.deaths === 'number') return entry.deaths;
+        return 0;
+    }
+
     /** Append one styled stat span per active score component to a stats element. */
     appendScoreStats(statsEl, entry, columns) {
         const bd = this.getBreakdown(entry);
@@ -5935,7 +6054,7 @@ class GameEngine {
                             <td style="text-align: left;">#${i + 1} <span style="color: ${this.getTeamColorCSS(player.team || 0)}">●</span> ${player.name || `Player ${player.id}`}${vipIndicator}</td>
                             ${showScore ? `<td style="font-weight: bold;">${this.playerScoreTotal(player)}</td>` : ''}
                             ${columns.map(c => `<td${c.color ? ` style="color: ${c.color};"` : ''}>${c.read(this.getBreakdown(player))}</td>`).join('')}
-                            <td>${player.deaths || 0}</td>
+                            <td>${this.playerDeaths(player)}</td>
                             <td>${player.active ? 'Alive' : (player.eliminated ? 'Out' : 'Dead')}</td>
                         </tr>
                     `}).join('')}
@@ -5976,7 +6095,7 @@ class GameEngine {
             const componentTotals = columns
                 .map(c => `${c.label}: ${teamPlayers.reduce((s, p) => s + (c.read(this.getBreakdown(p)) || 0), 0)}`)
                 .join(' | ');
-            const teamDeaths = teamPlayers.reduce((s, p) => s + (p.deaths || 0), 0);
+            const teamDeaths = teamPlayers.reduce((s, p) => s + this.playerDeaths(p), 0);
             const headerStats = `Score: ${effectiveScore}${componentTotals ? ' | ' + componentTotals : ''} | D: ${teamDeaths}`;
 
             html += `
@@ -6001,7 +6120,7 @@ class GameEngine {
                                 <td style="padding: 2px; text-align: left;">${player.name || `Player ${player.id}`}${vipIndicator}</td>
                                 <td style="padding: 2px; text-align: center; font-weight: bold;">${this.playerScoreTotal(player)}</td>
                                 ${columns.map(c => `<td style="padding: 2px; text-align: center;${c.color ? ` color: ${c.color};` : ''}">${c.read(this.getBreakdown(player))}</td>`).join('')}
-                                <td style="padding: 2px; text-align: center;">${player.deaths || 0}</td>
+                                <td style="padding: 2px; text-align: center;">${this.playerDeaths(player)}</td>
                                 <td style="padding: 2px; text-align: center;">${player.active ? '✓' : '✗'}</td>
                             </tr>
                         `}).join('')}

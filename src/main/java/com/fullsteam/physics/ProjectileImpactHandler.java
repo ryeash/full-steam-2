@@ -30,7 +30,7 @@ public class ProjectileImpactHandler {
      */
     public boolean handleProjectileDamageableImpact(Projectile projectile, Damageable victim) {
         if (!victim.isActive() || victim.getHealth() <= 0) {
-            return true;
+            return false;
         }
 
         // 1. Team-awareness / damage eligibility check
@@ -158,23 +158,7 @@ public class ProjectileImpactHandler {
     }
 
     private boolean canProjectileDamage(Projectile projectile, Damageable victim) {
-        if (victim instanceof Player player) {
-            return projectile.canDamage(player);
-        } else if (victim instanceof Turret turret) {
-            if (projectile.getOwnerId() == turret.getOwnerId()) return false;
-            if (projectile.getOwnerTeam() == 0 || turret.getOwnerTeam() == 0) return true;
-            return projectile.getOwnerTeam() != turret.getOwnerTeam();
-        } else if (victim instanceof Headquarters hq) {
-            return projectile.getOwnerTeam() != hq.getOwnerTeam();
-        } else if (victim instanceof Zombie) {
-            if (projectile.getOwnerId() < 0) {
-                return false; // Zombie projectiles pass through and do not damage other zombies
-            }
-            return true; // Zombies are hostile to all
-        } else if (victim instanceof Oddball) {
-            return projectile.getOwnerId() > 0; // Player-fired shots score on Oddballs
-        }
-        return true;
+        return projectile.canDamage(victim);
     }
 
     private boolean trackAffectedTarget(Projectile projectile, Damageable victim) {

@@ -50,6 +50,7 @@ public class WeaponSystem {
         this.beamPathCalculator = new BeamPathCalculator(world);
 
         mechanisms.put(Ordinance.PROJECTILE, new ProjectileFiringMechanism(gameEntities));
+        mechanisms.put(Ordinance.MISSILE, new ProjectileFiringMechanism(gameEntities));
         mechanisms.put(Ordinance.LASER, new LaserFiringMechanism(gameEntities, beamPathCalculator, bulletEffectProcessor));
         mechanisms.put(Ordinance.PLASMA_BEAM, new PlasmaBeamFiringMechanism(gameEntities, beamPathCalculator, bulletEffectProcessor));
     }
@@ -70,7 +71,7 @@ public class WeaponSystem {
     }
 
     public void handleTurretFire(Turret turret) {
-        if (turret.getCurrentTarget() == null || !turret.canFire()) {
+        if (turret.getCurrentTarget() == null || !turret.canFire() || turret.isVisionObscured() || turret.getCurrentTarget().isVisionObscured()) {
             return;
         }
         turret.setLastShotTime(System.currentTimeMillis());
@@ -89,7 +90,7 @@ public class WeaponSystem {
     }
 
     public void handleOddballFire(Oddball oddball) {
-        if (oddball.getCurrentTarget() == null || !oddball.isActive()) {
+        if (oddball.getCurrentTarget() == null || !oddball.isActive() || oddball.isVisionObscured() || oddball.getCurrentTarget().isVisionObscured()) {
             return;
         }
 
@@ -116,12 +117,12 @@ public class WeaponSystem {
     }
 
     public void handleZombieFire(Zombie zombie) {
-        if (zombie == null || !zombie.canFire()) {
+        if (zombie == null || !zombie.canFire() || zombie.isVisionObscured()) {
             return;
         }
 
         OwnedGameEntity target = zombie.getCurrentTargetEntity();
-        if (target == null || !target.isActive() || target.getHealth() <= 0) {
+        if (target == null || !target.isActive() || target.getHealth() <= 0 || target.isVisionObscured()) {
             return;
         }
 

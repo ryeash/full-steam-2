@@ -208,6 +208,7 @@ public class GameController {
         presets.put("FROST_LANCE", createPresetData(WeaponConfig.FROST_LANCE_PRESET));
         presets.put("SHRAPNEL_CANNON", createPresetData(WeaponConfig.SHRAPNEL_CANNON_PRESET));
         presets.put("PHANTOM_NEEDLES", createPresetData(WeaponConfig.PHANTOM_NEEDLES_PRESET));
+        presets.put("KILLER_BEES", createPresetData(WeaponConfig.KILLER_BEES_PRESET));
 
         data.put("presets", presets);
 

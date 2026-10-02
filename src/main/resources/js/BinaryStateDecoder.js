@@ -18,6 +18,8 @@ class BinaryStateDecoder {
         'BOUNCY', 'PIERCING', 'FRAGMENTING', 'HOMING', 'STRIKE', 'SMOKE'
     ];
 
+    static ORDINANCES = ['PROJECTILE', 'LASER', 'PLASMA_BEAM', 'MISSILE'];
+
     static KOTH_ZONE_STATES = ['NEUTRAL', 'CONTROLLED', 'CONTESTED'];
 
     static NPC_CATEGORIES = ['ODDBALL', 'ZOMBIE'];
@@ -237,6 +239,7 @@ class BinaryStateDecoder {
             const vx = view.getFloat32(ptr.offset); ptr.offset += 4;
             const vy = view.getFloat32(ptr.offset); ptr.offset += 4;
             const caliber = view.getFloat32(ptr.offset); ptr.offset += 4;
+            const rotation = view.getFloat32(ptr.offset); ptr.offset += 4;
 
             const effectMask = view.getUint16(ptr.offset); ptr.offset += 2;
             const bulletEffects = [];
@@ -245,6 +248,8 @@ class BinaryStateDecoder {
                     bulletEffects.push(BinaryStateDecoder.BULLET_EFFECTS[e]);
                 }
             }
+            const ordOrdinal = view.getUint8(ptr.offset++);
+            const ordinance = BinaryStateDecoder.ORDINANCES[ordOrdinal] || 'PROJECTILE';
 
             state.projectiles.push({
                 id: id,
@@ -253,6 +258,8 @@ class BinaryStateDecoder {
                 vx: vx,
                 vy: vy,
                 caliber: caliber,
+                rotation: rotation,
+                ordinance: ordinance,
                 bulletEffects: bulletEffects
             });
         }

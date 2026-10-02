@@ -13,6 +13,7 @@ public abstract class GameEntity {
     protected double health;
     protected double maxHealth;
     protected boolean active = true;
+    protected boolean visionObscured = false;
     protected long lastUpdateTime;
     protected final long created = System.currentTimeMillis();
     protected long expires = -1L;
