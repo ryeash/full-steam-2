@@ -43,8 +43,8 @@ dependencies {
     implementation("io.micronaut:micronaut-jackson-databind")
     implementation("io.micronaut:micronaut-runtime")
     implementation("io.micronaut:micronaut-inject")
-    implementation("ch.qos.logback:logback-classic")
     implementation("io.micronaut.validation:micronaut-validation")
+    implementation("ch.qos.logback:logback-classic")
     runtimeOnly("org.yaml:snakeyaml")
 
     implementation("org.apache.commons:commons-lang3:3.20.0")
