@@ -289,8 +289,8 @@ public class AIPlayerManager {
             input.setMoveY(input.getMoveY() * 0.5);
         }
 
-        // Modify shooting based on patience
-        if (input.isLeft() && personality.getPatience() > 0.7) {
+        // Modify shooting based on patience (do not interrupt an active continuous plasma beam)
+        if (input.isLeft() && personality.getPatience() > 0.7 && !aiPlayer.hasActivePlasmaBeam()) {
             // Patient personalities wait for better shots
             if (ThreadLocalRandom.current().nextDouble() < 0.3) {
                 input.setLeft(false);

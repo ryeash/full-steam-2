@@ -224,10 +224,16 @@ public class OddballBehavior implements AIBehavior {
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
     private void aimAndShoot(AIPlayer aiPlayer, Vector2 targetPos, double dist, PlayerInput input) {
-        input.setWorldX(targetPos.x);
-        input.setWorldY(targetPos.y);
+        if (aiPlayer.isUsingPlasmaBeam()) {
+            Vector2 aim = aiPlayer.trackAim(targetPos, -1, 0.016);
+            input.setWorldX(aim.x);
+            input.setWorldY(aim.y);
+        } else {
+            input.setWorldX(targetPos.x);
+            input.setWorldY(targetPos.y);
+        }
         double weaponRange = aiPlayer.getCurrentWeapon().getRange();
-        if (dist < weaponRange * 0.95) {
+        if (dist < weaponRange * 0.95 && aiPlayer.canShoot()) {
             input.setLeft(true);
         }
     }

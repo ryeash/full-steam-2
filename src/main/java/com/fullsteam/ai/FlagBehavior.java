@@ -284,8 +284,14 @@ public class FlagBehavior implements AIBehavior {
                 input.setMoveY(direction.y);
 
                 // Aim at carrier
-                input.setWorldX(predictedPos.x);
-                input.setWorldY(predictedPos.y);
+                if (aiPlayer.isUsingPlasmaBeam()) {
+                    Vector2 aim = aiPlayer.trackAim(carrierPos, carrier.getId(), deltaTime);
+                    input.setWorldX(aim.x);
+                    input.setWorldY(aim.y);
+                } else {
+                    input.setWorldX(predictedPos.x);
+                    input.setWorldY(predictedPos.y);
+                }
 
                 // Shoot if in range
                 if (distance < aiPlayer.getCurrentWeapon().getRange() && aiPlayer.canShoot()) {
@@ -388,21 +394,28 @@ public class FlagBehavior implements AIBehavior {
         if (nearestEnemy != null) {
             // Aim at enemy
             Vector2 enemyPos = nearestEnemy.getPosition();
-            Vector2 enemyVel = nearestEnemy.getVelocity();
 
-            // Lead target with skill-based factor
-            double accuracy = aiPlayer.getPersonality().getAccuracy();
-            double skillLevel = aiPlayer.getPersonality().getSkillLevel();
-            double projectileSpeed = aiPlayer.getCurrentWeapon().getProjectileSpeed();
-            double timeToTarget = nearestDistance / projectileSpeed;
-            double leadFactor = 0.35 + 0.65 * skillLevel;
-            Vector2 predictedPos = enemyPos.copy().add(enemyVel.copy().multiply(timeToTarget * leadFactor));
+            if (aiPlayer.isUsingPlasmaBeam()) {
+                Vector2 aim = aiPlayer.trackAim(enemyPos, nearestEnemy.getId(), 0.016);
+                input.setWorldX(aim.x);
+                input.setWorldY(aim.y);
+            } else {
+                Vector2 enemyVel = nearestEnemy.getVelocity();
 
-            double spread = (1.0 - accuracy) * 40.0;
-            predictedPos.add((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread);
+                // Lead target with skill-based factor
+                double accuracy = aiPlayer.getPersonality().getAccuracy();
+                double skillLevel = aiPlayer.getPersonality().getSkillLevel();
+                double projectileSpeed = aiPlayer.getCurrentWeapon().getProjectileSpeed();
+                double timeToTarget = nearestDistance / projectileSpeed;
+                double leadFactor = 0.35 + 0.65 * skillLevel;
+                Vector2 predictedPos = enemyPos.copy().add(enemyVel.copy().multiply(timeToTarget * leadFactor));
 
-            input.setWorldX(predictedPos.x);
-            input.setWorldY(predictedPos.y);
+                double spread = (1.0 - accuracy) * 40.0;
+                predictedPos.add((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread);
+
+                input.setWorldX(predictedPos.x);
+                input.setWorldY(predictedPos.y);
+            }
 
             // Shoot if in good range
             double weaponRange = aiPlayer.getCurrentWeapon().getRange();

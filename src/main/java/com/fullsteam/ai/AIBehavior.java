@@ -85,7 +85,7 @@ public interface AIBehavior {
 
         if (currentAmmo == 0) {
             input.setReload(true);
-        } else if (isSafe && currentAmmo < magazineSize * 0.3) {
+        } else if (isSafe && currentAmmo < magazineSize * 0.3 && !aiPlayer.hasActivePlasmaBeam()) {
             input.setReload(true);
         }
     }

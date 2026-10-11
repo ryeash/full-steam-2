@@ -165,7 +165,7 @@ public class KothBehavior implements AIBehavior {
         }
 
         // Always engage enemies
-        engageEnemiesInZone(aiPlayer, zone, gameEntities, input);
+        engageEnemiesInZone(aiPlayer, zone, gameEntities, input, deltaTime);
 
         // Smart reload
         smartReload(aiPlayer, input, distance < zoneRadius && !areEnemiesNearby(aiPlayer, gameEntities, 200));
@@ -242,7 +242,7 @@ public class KothBehavior implements AIBehavior {
     /**
      * Engage enemies in or near the zone.
      */
-    private void engageEnemiesInZone(AIPlayer aiPlayer, KothZone zone, GameEntities gameEntities, PlayerInput input) {
+    private void engageEnemiesInZone(AIPlayer aiPlayer, KothZone zone, GameEntities gameEntities, PlayerInput input, double deltaTime) {
         Vector2 myPos = aiPlayer.getPosition();
         Vector2 zonePos = zone.getPosition();
 
@@ -281,23 +281,30 @@ public class KothBehavior implements AIBehavior {
         if (bestTarget != null) {
             // Aim and shoot at target
             Vector2 targetPos = bestTarget.getPosition();
-            Vector2 targetVel = bestTarget.getVelocity();
             double distance = myPos.distance(targetPos);
 
-            // Lead target with skill-based factor
-            double accuracy = aiPlayer.getPersonality().getAccuracy();
-            double skillLevel = aiPlayer.getPersonality().getSkillLevel();
-            double projectileSpeed = aiPlayer.getCurrentWeapon().getProjectileSpeed();
-            double timeToTarget = distance / projectileSpeed;
-            double leadFactor = 0.35 + 0.65 * skillLevel;
-            Vector2 predictedPos = targetPos.copy().add(targetVel.copy().multiply(timeToTarget * leadFactor));
+            if (aiPlayer.isUsingPlasmaBeam()) {
+                Vector2 aim = aiPlayer.trackAim(targetPos, bestTarget.getId(), deltaTime);
+                input.setWorldX(aim.x);
+                input.setWorldY(aim.y);
+            } else {
+                Vector2 targetVel = bestTarget.getVelocity();
 
-            // Add accuracy variation
-            double spread = (1.0 - accuracy) * 40.0;
-            predictedPos.add((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread);
+                // Lead target with skill-based factor
+                double accuracy = aiPlayer.getPersonality().getAccuracy();
+                double skillLevel = aiPlayer.getPersonality().getSkillLevel();
+                double projectileSpeed = aiPlayer.getCurrentWeapon().getProjectileSpeed();
+                double timeToTarget = distance / projectileSpeed;
+                double leadFactor = 0.35 + 0.65 * skillLevel;
+                Vector2 predictedPos = targetPos.copy().add(targetVel.copy().multiply(timeToTarget * leadFactor));
 
-            input.setWorldX(predictedPos.x);
-            input.setWorldY(predictedPos.y);
+                // Add accuracy variation
+                double spread = (1.0 - accuracy) * 40.0;
+                predictedPos.add((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread);
+
+                input.setWorldX(predictedPos.x);
+                input.setWorldY(predictedPos.y);
+            }
 
             // Shoot if in range
             double weaponRange = aiPlayer.getCurrentWeapon().getRange();

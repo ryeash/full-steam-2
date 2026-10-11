@@ -64,7 +64,7 @@ public class GamePresets {
                     .enableAIFilling(true)
                     .rules(Rules.builder()
                             .timeLimit(600)
-                            .flagsPerTeam(2)
+                            .flagsPerTeam(1)
                             .scoreStyle(ScoreStyle.OBJECTIVE)
                             .victoryCondition(VictoryCondition.SCORE_LIMIT)
                             .scoreLimit(3)

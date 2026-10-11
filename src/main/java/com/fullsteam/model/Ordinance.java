@@ -4,10 +4,10 @@ import lombok.Getter;
 
 @Getter
 public enum Ordinance {
-    PROJECTILE(0, "Projectile", "Standard projectile", 1.0, 0.7, 50.0, 0.0),
-    LASER(50, "Laser", "Instant-hit beam weapon", 2.0, 0.8, 0.0, 0.3),
-    PLASMA_BEAM(45, "Plasma Beam", "Continuous damage beam", 1.5, 1.0, 0.0, 0.8),
-    MISSILE(10, "Missile", "Accelerating self-propelled missile", 1.0, 1.0, 20.0, 0.0);
+    PROJECTILE(0, "Projectile", "Standard projectile", 1.0, 0.7, 50.0, 0.0, 1.0),
+    LASER(50, "Laser", "Instant-hit beam weapon", 2.0, 0.8, 0.0, 0.3, 1.0),
+    PLASMA_BEAM(45, "Plasma Beam", "Continuous damage beam", 1.5, 1.0, 0.0, 0.8, 1.0),
+    MISSILE(10, "Missile", "Accelerating self-propelled missile", 1.0, 1.0, 20.0, 0.0, 0.65);
 
     private final int pointCost;
     private final String displayName;
@@ -16,6 +16,7 @@ public enum Ordinance {
     private final double areaOfEffectModification; // how much the ordinance alters the size of the AOE bullet effect
     private final double minimumVelocity;
     private final double beamDuration; // How long the beam lasts (seconds)
+    private final double rangeMultiplier; // Range percentage multiplier (e.g. 0.65 = 35% range penalty, 1.0 = no penalty)
 
     Ordinance(int pointCost,
               String displayName,
@@ -23,7 +24,8 @@ public enum Ordinance {
               double speedMultiplier,
               double areaOfEffectModification,
               double minimumVelocity,
-              double beamDuration) {
+              double beamDuration,
+              double rangeMultiplier) {
         this.pointCost = pointCost;
         this.displayName = displayName;
         this.description = description;
@@ -31,6 +33,7 @@ public enum Ordinance {
         this.areaOfEffectModification = areaOfEffectModification;
         this.minimumVelocity = minimumVelocity;
         this.beamDuration = beamDuration;
+        this.rangeMultiplier = rangeMultiplier;
     }
 
     /**

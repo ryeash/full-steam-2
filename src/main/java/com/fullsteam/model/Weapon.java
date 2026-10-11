@@ -95,7 +95,8 @@ public class Weapon {
         this.damage = this.varianceFormula.expectedValue(this.minDamage, this.maxDamage);
 
         this.fireRate = stats.get(WeaponAttribute.FIRE_RATE);
-        this.range = stats.get(WeaponAttribute.RANGE);
+        double rawRange = stats.get(WeaponAttribute.RANGE);
+        this.range = Math.max(30.0, rawRange * ordinance.getRangeMultiplier());
         this.accuracy = stats.get(WeaponAttribute.ACCURACY);
         this.magazineSize = (int) Math.round(stats.get(WeaponAttribute.MAGAZINE_SIZE));
         this.reloadTime = stats.get(WeaponAttribute.RELOAD_TIME);

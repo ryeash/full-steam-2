@@ -1284,11 +1284,32 @@ public class GameManager {
         player.setRespawnTime(0);
         player.getWeapon().reload();
 
-        // Move to spawn point
+        // Clear any lingering attribute modifications / debuffs from previous life
+        player.getAttributeModifications().removeIf(am -> {
+            am.revert(player);
+            return true;
+        });
+
+        // Reset physics body state and restore damping to defaults
+        Body body = player.getBody();
+        body.setLinearDamping(Config.PLAYER_LINEAR_DAMPING);
+        body.setAngularDamping(Config.PLAYER_ANGULAR_DAMPING);
+        body.clearForce();
+        body.clearAccumulatedForce();
+        body.clearTorque();
+        body.clearAccumulatedTorque();
+        body.setLinearVelocity(0, 0);
+        body.setAngularVelocity(0);
+        body.setAtRest(false);
+        body.setEnabled(true);
+
+        // Move to spawn point and sync transforms
         Vector2 spawnPoint = spawnPointManager.findVariedSpawnPointForTeam(player.getTeam());
-        player.getBody().getTransform().setTranslation(spawnPoint.x, spawnPoint.y);
-        player.getBody().setLinearVelocity(0, 0);
-        player.getBody().setAngularVelocity(0);
+        body.getTransform().setTranslation(spawnPoint.x, spawnPoint.y);
+        body.getPreviousTransform().set(body.getTransform());
+
+        // Notify world so broadphase AABBs and contacts update immediately
+        world.setUpdateRequired(true);
 
         // Apply spawn invincibility to give player time to get their bearings
         StatusEffectManager.applySpawnInvincibility(player);

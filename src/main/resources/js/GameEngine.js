@@ -2375,7 +2375,7 @@ class GameEngine {
         );
         
         // Handle death marker logic
-        const isDead = !playerData.active && playerData.respawnTime > 0;
+        const isDead = !playerData.active;
         
         // Show/hide player sprite and death marker
         sprite.visible = playerData.active;
@@ -2460,7 +2460,7 @@ class GameEngine {
         if (!this.myPlayerId || !this.inputManager) return;
         const myPlayer = this.players.get(this.myPlayerId);
         if (!myPlayer || !myPlayer.visible) return;
-        if (myPlayer.playerData && (!myPlayer.playerData.active || myPlayer.playerData.respawnTime > 0)) {
+        if (myPlayer.playerData && !myPlayer.playerData.active) {
             return;
         }
 
@@ -2480,7 +2480,7 @@ class GameEngine {
      */
     syncPlayerChildComponents(sprite) {
         if (!sprite) return;
-        const isDead = !sprite.playerData || (!sprite.playerData.active && sprite.playerData.respawnTime > 0);
+        const isDead = !sprite.playerData || !sprite.playerData.active;
         if (sprite.deathMarker && isDead) {
             sprite.deathMarker.position.set(sprite.x, sprite.y);
         }
@@ -5817,7 +5817,7 @@ class GameEngine {
         // Update consolidated HUD
         this.updateConsolidatedHUD(myPlayer);
         
-        if (!myPlayer.active && myPlayer.respawnTime > 0) {
+        if (!myPlayer.active) {
             this.showRespawnTimer(myPlayer.respawnTime, myPlayer);
         } else {
             this.hideDeathScreen();

@@ -63,10 +63,10 @@ test {
     // Test output configuration
     testLogging {
         events "passed", "skipped", "failed"
-        exceptionFormat "full"
-        showCauses true
-        showExceptions true
-        showStackTraces true
+        exceptionFormat = "full"
+        showCauses = true
+        showExceptions = true
+        showStackTraces = true
     }
 
     // Performance optimizations for faster test execution

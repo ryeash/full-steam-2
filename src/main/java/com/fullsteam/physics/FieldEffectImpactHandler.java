@@ -85,7 +85,7 @@ public class FieldEffectImpactHandler {
     }
 
     private void handlePlayerFieldEffect(FieldEffect fieldEffect, Player player) {
-        if (!fieldEffect.canAffect(player)) {
+        if (!player.isActive() || !fieldEffect.canAffect(player)) {
             return;
         }
 
@@ -147,10 +147,11 @@ public class FieldEffectImpactHandler {
                 boolean armorMitigated = player.isLastDamageArmorMitigated();
                 if (killed) {
                     gameManager.killPlayer(player, fieldEffect.getOwnerId());
+                } else if (player.isActive()) {
+                    StatusEffectManager.applySlowEffect(player, Config.PLAYER_LINEAR_DAMPING * 2.0, 0.5,
+                            Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Electric Field"));
                 }
                 gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed, armorMitigated);
-                StatusEffectManager.applySlowEffect(player, Config.PLAYER_LINEAR_DAMPING * 2.0, 0.5,
-                        Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Electric Field"));
             }
             case FREEZE -> {
                 double damage = fieldEffect.getDamage() * deltaTime;
@@ -158,10 +159,11 @@ public class FieldEffectImpactHandler {
                 boolean armorMitigated = player.isLastDamageArmorMitigated();
                 if (killed) {
                     gameManager.killPlayer(player, fieldEffect.getOwnerId());
+                } else if (player.isActive()) {
+                    StatusEffectManager.applySlowEffect(player, Config.PLAYER_LINEAR_DAMPING * 3.0, 1.0,
+                            Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Freeze Field"));
                 }
                 gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed, armorMitigated);
-                StatusEffectManager.applySlowEffect(player, Config.PLAYER_LINEAR_DAMPING * 3.0, 1.0,
-                        Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Freeze Field"));
             }
             case POISON -> {
                 double damage = fieldEffect.getDamage() * deltaTime;
@@ -169,9 +171,10 @@ public class FieldEffectImpactHandler {
                 boolean armorMitigated = player.isLastDamageArmorMitigated();
                 if (killed) {
                     gameManager.killPlayer(player, fieldEffect.getOwnerId());
+                } else if (player.isActive()) {
+                    StatusEffectManager.applyPoison(gameManager, player, fieldEffect.getDamage() * 0.2, 1.5, fieldEffect.getOwnerId());
                 }
                 gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed, armorMitigated);
-                StatusEffectManager.applyPoison(gameManager, player, fieldEffect.getDamage() * 0.2, 1.5, fieldEffect.getOwnerId());
             }
             case EARTHQUAKE -> {
                 double damage = fieldEffect.getDamage() * deltaTime;
@@ -179,17 +182,22 @@ public class FieldEffectImpactHandler {
                 boolean armorMitigated = player.isLastDamageArmorMitigated();
                 if (killed) {
                     gameManager.killPlayer(player, fieldEffect.getOwnerId());
+                } else if (player.isActive()) {
+                    StatusEffectManager.applySlowEffect(player, Config.PLAYER_LINEAR_DAMPING * 1.5, 0.7, "Earthquake");
                 }
                 gameEntities.recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, fieldEffect.getOwnerId(), player.getId(), killed, armorMitigated);
-                StatusEffectManager.applySlowEffect(player, Config.PLAYER_LINEAR_DAMPING * 1.5, 0.7, "Earthquake");
             }
             case HEAL_ZONE -> {
-                double healAmount = fieldEffect.getDamage() * deltaTime;
-                player.heal(healAmount);
+                if (player.isActive()) {
+                    double healAmount = fieldEffect.getDamage() * deltaTime;
+                    player.heal(healAmount);
+                }
             }
             case SLOW_FIELD -> {
-                String source = Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Slow Field");
-                StatusEffectManager.applySlowEffect(player, Config.PLAYER_LINEAR_DAMPING * 4.0, 1.0, source);
+                if (player.isActive()) {
+                    String source = Optional.ofNullable(gameEntities.getPlayer(fieldEffect.getOwnerId())).map(Player::getPlayerName).orElse("Slow Field");
+                    StatusEffectManager.applySlowEffect(player, Config.PLAYER_LINEAR_DAMPING * 4.0, 1.0, source);
+                }
             }
             case SHIELD_BARRIER -> {
                 // Players pass through barrier

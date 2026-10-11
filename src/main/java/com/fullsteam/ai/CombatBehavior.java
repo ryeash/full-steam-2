@@ -76,6 +76,7 @@ public class CombatBehavior implements AIBehavior {
             targetId = -1;
             isRetreating = false;
             timeSinceLastTarget += deltaTime;
+            aiPlayer.resetAimTracking();
         }
 
         return input;
@@ -175,18 +176,23 @@ public class CombatBehavior implements AIBehavior {
         double distance = playerPos.distance(targetPos);
 
         // Check if using beam weapon (instant hit, no prediction needed)
+        boolean isPlasmaBeam = aiPlayer.isUsingPlasmaBeam();
         boolean isBeamWeapon = isBeamWeapon(aiPlayer);
 
         double accuracy = aiPlayer.getPersonality().getAccuracy();
         double skillLevel = aiPlayer.getPersonality().getSkillLevel();
 
         Vector2 aimPos;
-        if (isBeamWeapon) {
+        if (isPlasmaBeam) {
+            // Plasma beam is continuous: smooth tracking while holding fire without random per-frame noise
+            aimPos = aiPlayer.trackAim(targetPos, target.getId(), deltaTime);
+        } else if (isBeamWeapon) {
             // Beam weapons are instant hit - aim directly at target with skill spread
             aimPos = targetPos.copy();
 
             double spread = (1.0 - accuracy) * 40.0;
             aimPos.add((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread);
+            aiPlayer.resetAimTracking();
         } else {
             // Projectile weapons - predict target movement with skill-based lead
             Vector2 targetVelocity = target.getVelocity();
@@ -207,6 +213,7 @@ public class CombatBehavior implements AIBehavior {
             double randomOffsetY = (Math.random() - 0.5) * totalSpread;
 
             aimPos.add(randomOffsetX, randomOffsetY);
+            aiPlayer.resetAimTracking();
         }
 
         // Set aim
@@ -214,10 +221,15 @@ public class CombatBehavior implements AIBehavior {
         input.setWorldY(aimPos.y);
 
         // Enhanced shooting decision
-        boolean shouldShoot = shouldShootAtTarget(aiPlayer, target, distance);
-        if (shouldShoot && aiPlayer.canShoot() && lastShotTime > 0.1) { // Minimum time between shots
-            input.setLeft(true);
-            lastShotTime = 0;
+        double weaponRange = aiPlayer.getCurrentWeapon().getRange();
+        if (isPlasmaBeam) {
+            handlePlasmaBeamShooting(aiPlayer, target, distance, weaponRange, input);
+        } else {
+            boolean shouldShoot = shouldShootAtTarget(aiPlayer, target, distance);
+            if (shouldShoot && aiPlayer.canShoot() && lastShotTime > 0.1) { // Minimum time between shots
+                input.setLeft(true);
+                lastShotTime = 0;
+            }
         }
 
         // Smart reloading with improved ammo management
@@ -236,6 +248,11 @@ public class CombatBehavior implements AIBehavior {
             shouldReload = true; // Reload when safe and below 25%
         } else if (ammoPercent < 0.4 && !target.isActive()) {
             shouldReload = true; // Reload during lull in combat
+        }
+
+        // Don't interrupt an active plasma beam to reload early if ammo is still remaining
+        if (aiPlayer.hasActivePlasmaBeam() && currentAmmo > 0) {
+            shouldReload = false;
         }
 
         // Don't reload if enemy is very close and we have some ammo
@@ -315,6 +332,12 @@ public class CombatBehavior implements AIBehavior {
         targetId = -1;
         timeSinceLastTarget = 0;
         lastShotTime = 0;
+        aiPlayer.resetAimTracking();
+    }
+
+    @Override
+    public void onExit(AIPlayer aiPlayer) {
+        aiPlayer.resetAimTracking();
     }
 
     @Override
@@ -464,6 +487,40 @@ public class CombatBehavior implements AIBehavior {
             return 0.7 + (distance / optimalRangeStart) * 0.3;
         } else {
             return 0.7 * (weaponRange - distance) / (weaponRange - optimalRangeEnd);
+        }
+    }
+
+    /**
+     * Handle continuous firing decision for the plasma beam.
+     * When actively firing, holds the button down and tracks the target.
+     * Releases fire when the target dies, is lost, goes out of range, or ammo runs out.
+     */
+    private void handlePlasmaBeamShooting(AIPlayer aiPlayer, AITargetWrapper target, double distance, double weaponRange, PlayerInput input) {
+        boolean currentlyHolding = aiPlayer.hasActivePlasmaBeam();
+
+        if (currentlyHolding) {
+            // While holding the plasma beam:
+            // Maintain continuous fire as long as the target is alive, visible, within range, and we have ammo.
+            boolean targetStillValid = target != null && target.isActive() && target.getHealth() > 0 && target.isVisible();
+            boolean inRange = distance <= weaponRange * 1.1; // 10% buffer so beam doesn't flicker at edge
+            boolean hasAmmo = aiPlayer.getCurrentWeapon().getCurrentAmmo() > 0 && !aiPlayer.isReloading();
+
+            if (targetStillValid && inRange && hasAmmo) {
+                input.setLeft(true); // Keep holding the fire button!
+            } else {
+                input.setLeft(false); // Release trigger
+                aiPlayer.resetAimTracking();
+            }
+        } else {
+            // Not currently firing: decide whether to start firing
+            boolean inRange = distance <= weaponRange * 0.95;
+            boolean canShoot = aiPlayer.canShoot();
+            boolean targetVisible = target != null && target.isActive() && target.isVisible();
+
+            if (inRange && canShoot && targetVisible) {
+                input.setLeft(true); // Press and start holding!
+                lastShotTime = 0;
+            }
         }
     }
 

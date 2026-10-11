@@ -11,8 +11,6 @@ import org.dyn4j.world.BroadphaseCollisionData;
 import org.dyn4j.world.ManifoldCollisionData;
 import org.dyn4j.world.NarrowphaseCollisionData;
 import org.dyn4j.world.listener.CollisionListener;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Main Dyn4j collision listener and coordinator.
@@ -20,36 +18,18 @@ import org.slf4j.LoggerFactory;
  * {@link ProjectileImpactHandler}, {@link FieldEffectImpactHandler},
  * {@link MeleeImpactHandler}, {@link ObjectiveImpactHandler}, and {@link NetProjectileImpactHandler}.
  */
+@Getter
 public class CollisionProcessor implements CollisionListener<Body, BodyFixture> {
 
-    private static final Logger log = LoggerFactory.getLogger(CollisionProcessor.class);
-
-    private final GameManager gameManager;
-    private final GameEntities gameEntities;
-
-    @Getter
     private final BulletEffectProcessor bulletEffectProcessor;
-
-    @Getter
     private final ProjectileImpactHandler projectileHandler;
-
-    @Getter
     private final FieldEffectImpactHandler fieldEffectHandler;
-
-    @Getter
     private final MeleeImpactHandler meleeHandler;
-
-    @Getter
     private final ObjectiveImpactHandler objectiveHandler;
-
-    @Getter
     private final NetProjectileImpactHandler netHandler;
 
     public CollisionProcessor(GameManager gameManager, GameEntities gameEntities) {
-        this.gameManager = gameManager;
-        this.gameEntities = gameEntities;
         this.bulletEffectProcessor = new BulletEffectProcessor(gameEntities);
-
         this.projectileHandler = new ProjectileImpactHandler(gameManager, gameEntities, bulletEffectProcessor);
         this.fieldEffectHandler = new FieldEffectImpactHandler(gameManager, gameEntities);
         this.meleeHandler = new MeleeImpactHandler(gameManager, gameEntities);
@@ -83,11 +63,8 @@ public class CollisionProcessor implements CollisionListener<Body, BodyFixture> 
         if (userData1 instanceof Projectile p1 && userData2 instanceof Projectile p2) {
             boolean p1Bouncy = p1.getBulletEffects().contains(BulletEffect.BOUNCY);
             boolean p2Bouncy = p2.getBulletEffects().contains(BulletEffect.BOUNCY);
-            if (!p1Bouncy && !p2Bouncy) {
-                return false;
-            }
+            return p1Bouncy || p2Bouncy;
         }
-
         return true;
     }
 

@@ -149,7 +149,7 @@ public class GameWebSocketEndpoint {
                     }
                     break;
                 default:
-                    log.warn("Received unknown message type '{}' from player {}", type, playerId);
+                    log.warn("Received unknown message type from player {}", playerId);
                     break;
             }
         } catch (Exception e) {

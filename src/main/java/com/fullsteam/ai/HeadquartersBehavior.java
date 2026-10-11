@@ -199,14 +199,20 @@ public class HeadquartersBehavior implements AIBehavior {
         }
 
         // Aim at HQ
-        input.setWorldX(hqPos.x);
-        input.setWorldY(hqPos.y);
+        if (aiPlayer.isUsingPlasmaBeam()) {
+            Vector2 aim = aiPlayer.trackAim(hqPos, targetHQId, deltaTime);
+            input.setWorldX(aim.x);
+            input.setWorldY(aim.y);
+        } else {
+            input.setWorldX(hqPos.x);
+            input.setWorldY(hqPos.y);
+        }
 
         // Shoot at HQ if in range and no immediate threats
         AITargetWrapper nearbyEnemy = findNearestEnemy(aiPlayer, gameEntities, 250);
         if (nearbyEnemy != null) {
             // Prioritize nearby enemies over HQ
-            engageEnemy(aiPlayer, nearbyEnemy, input);
+            engageEnemy(aiPlayer, nearbyEnemy, input, deltaTime);
         } else if (distance < weaponRange && aiPlayer.canShoot()) {
             input.setLeft(true);
         }
@@ -298,7 +304,7 @@ public class HeadquartersBehavior implements AIBehavior {
         // Prioritize enemies threatening HQ
         AITargetWrapper bestThreat = findBestThreatToHQ(aiPlayer, myHQ, gameEntities);
         if (bestThreat != null) {
-            engageEnemy(aiPlayer, bestThreat, input);
+            engageEnemy(aiPlayer, bestThreat, input, deltaTime);
 
             // Use utility on threats
             double threatDistance = myPos.distance(bestThreat.getPosition());
@@ -309,7 +315,7 @@ public class HeadquartersBehavior implements AIBehavior {
             // No immediate threats, look for distant enemies
             AITargetWrapper distantEnemy = findNearestEnemy(aiPlayer, gameEntities, 500);
             if (distantEnemy != null) {
-                engageEnemy(aiPlayer, distantEnemy, input);
+                engageEnemy(aiPlayer, distantEnemy, input, deltaTime);
             }
         }
 
@@ -320,26 +326,32 @@ public class HeadquartersBehavior implements AIBehavior {
     /**
      * Engage an enemy (player or turret) with aiming and shooting.
      */
-    private void engageEnemy(AIPlayer aiPlayer, AITargetWrapper enemy, PlayerInput input) {
+    private void engageEnemy(AIPlayer aiPlayer, AITargetWrapper enemy, PlayerInput input, double deltaTime) {
         Vector2 myPos = aiPlayer.getPosition();
         Vector2 enemyPos = enemy.getPosition();
         Vector2 enemyVel = enemy.getVelocity();
         double distance = myPos.distance(enemyPos);
 
-        // Lead target with skill-based factor
-        double accuracy = aiPlayer.getPersonality().getAccuracy();
-        double skillLevel = aiPlayer.getPersonality().getSkillLevel();
-        double projectileSpeed = aiPlayer.getCurrentWeapon().getProjectileSpeed();
-        double timeToTarget = distance / projectileSpeed;
-        double leadFactor = 0.35 + 0.65 * skillLevel;
-        Vector2 predictedPos = enemyPos.copy().add(enemyVel.copy().multiply(timeToTarget * leadFactor));
+        if (aiPlayer.isUsingPlasmaBeam()) {
+            Vector2 aim = aiPlayer.trackAim(enemyPos, enemy.getId(), deltaTime);
+            input.setWorldX(aim.x);
+            input.setWorldY(aim.y);
+        } else {
+            // Lead target with skill-based factor
+            double accuracy = aiPlayer.getPersonality().getAccuracy();
+            double skillLevel = aiPlayer.getPersonality().getSkillLevel();
+            double projectileSpeed = aiPlayer.getCurrentWeapon().getProjectileSpeed();
+            double timeToTarget = distance / projectileSpeed;
+            double leadFactor = 0.35 + 0.65 * skillLevel;
+            Vector2 predictedPos = enemyPos.copy().add(enemyVel.copy().multiply(timeToTarget * leadFactor));
 
-        // Add accuracy variation
-        double spread = (1.0 - accuracy) * 40.0;
-        predictedPos.add((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread);
+            // Add accuracy variation
+            double spread = (1.0 - accuracy) * 40.0;
+            predictedPos.add((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread);
 
-        input.setWorldX(predictedPos.x);
-        input.setWorldY(predictedPos.y);
+            input.setWorldX(predictedPos.x);
+            input.setWorldY(predictedPos.y);
+        }
 
         // Shoot if in range
         double weaponRange = aiPlayer.getCurrentWeapon().getRange();

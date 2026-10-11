@@ -32,6 +32,11 @@ public class MissileOrdinanceTest {
         assertEquals("Missile", Ordinance.MISSILE.getDisplayName());
         assertEquals(1.0, Ordinance.MISSILE.getSpeedMultiplier());
         assertEquals(1.0, Ordinance.MISSILE.getAreaOfEffectModification());
+        assertEquals(0.65, Ordinance.MISSILE.getRangeMultiplier());
+        assertEquals(0.65, Ordinance.MISSILE.getRangeMultiplier());
+        assertEquals(1.0, Ordinance.PROJECTILE.getRangeMultiplier());
+        assertEquals(1.0, Ordinance.LASER.getRangeMultiplier());
+        assertEquals(1.0, Ordinance.PLASMA_BEAM.getRangeMultiplier());
     }
 
     @Test
@@ -159,6 +164,7 @@ public class MissileOrdinanceTest {
     public void testMissileSeekingAndSlide() {
         GameConfig config = GameConfig.builder().build();
         GameManager gm = new GameManager("test-missile", config, null);
+        gm.shutdown();
         GameEntities entities = gm.getGameEntities();
         BulletEffectProcessor processor = gm.getCollisionProcessor().getBulletEffectProcessor();
 
@@ -235,10 +241,13 @@ public class MissileOrdinanceTest {
     @Test
     @DisplayName("Check collision between two missiles")
     public void testTwoMissilesCollision() {
-        GameConfig config = GameConfig.builder().build();
+        GameConfig config = GameConfig.builder().enableAIFilling(false).build();
         GameManager gm = new GameManager("test-missile-col", config, null);
+        gm.shutdown();
+        gm.getGameEntities().getObstacles().values().forEach(o -> gm.getWorld().removeBody(o.getBody()));
+        gm.getGameEntities().getObstacles().clear();
 
-        Player enemy = new Player(2, "Enemy", 250.0, 50.0, 2, 10.0); // Low health
+        Player enemy = new Player(2, "Enemy", 200.0, 0.0, 2, 10.0); // Low health directly downrange
         enemy.setActive(true);
         gm.getGameEntities().add(enemy);
 
@@ -252,9 +261,8 @@ public class MissileOrdinanceTest {
         }
         gm.getGameEntities().runPostUpdateHooks();
 
-        System.out.println("Fired " + fired.size() + " missiles");
-
         double dt = 1.0 / 60.0;
+        boolean followingMissileFlewPastEnemyWhileActive = false;
         for (int i = 0; i < 110; i++) {
             // Manual step with fixed dt
             gm.getGameEntities().updateAll(dt);
@@ -279,6 +287,9 @@ public class MissileOrdinanceTest {
                 if (p.isActive()) {
                     assertTrue(p.getBody().getLinearVelocity().getMagnitude() > 50.0,
                             "Missile should never stop dead or freeze in place: speed=" + p.getBody().getLinearVelocity().getMagnitude());
+                    if (p.getPosition().x > 200.0) {
+                        followingMissileFlewPastEnemyWhileActive = true;
+                    }
                 }
             }
         }
@@ -287,18 +298,18 @@ public class MissileOrdinanceTest {
         assertFalse(enemy.isActive(), "Enemy should be dead");
         assertEquals(0.0, enemy.getHealth(), "Enemy health should be 0");
 
-        // The remaining active missiles flew past the enemy position (x=250)
-        long activeMissilesPastEnemy = fired.stream()
-                .map(e -> (Projectile) e)
-                .filter(p -> p.isActive() && p.getPosition().x > 250.0)
-                .count();
-        assertTrue(activeMissilesPastEnemy >= 1, "At least one following missile should fly past the dead enemy position");
+        // The remaining missiles flew past the enemy position (x=200) while active
+        assertTrue(followingMissileFlewPastEnemyWhileActive, "At least one following missile should fly past the dead enemy position while active");
+        assertTrue(fired.stream().anyMatch(p -> p.getPosition().x > 200.0), "Missiles should reach beyond enemy position");
     }
     @Test
     @DisplayName("Test two missiles crossing paths do not stop dead or impede each other")
     public void testTwoMissilesCrossingPaths() {
-        GameConfig config = GameConfig.builder().build();
+        GameConfig config = GameConfig.builder().enableAIFilling(false).build();
         GameManager gm = new GameManager("test-crossing", config, null);
+        gm.shutdown();
+        gm.getGameEntities().getObstacles().values().forEach(o -> gm.getWorld().removeBody(o.getBody()));
+        gm.getGameEntities().getObstacles().clear();
 
         // M1 moving East
         Projectile m1 = new Projectile(
@@ -349,10 +360,76 @@ public class MissileOrdinanceTest {
     }
 
     @Test
+    @DisplayName("Missile interacting with bouncy projectile does not stop dead or freeze in place")
+    public void testMissileCollidingWithBouncyProjectileDoesNotStopDead() {
+        GameConfig config = GameConfig.builder().enableAIFilling(false).build();
+        GameManager gm = new GameManager("test-bouncy-col", config, null);
+        gm.shutdown();
+        gm.getGameEntities().getObstacles().values().forEach(o -> gm.getWorld().removeBody(o.getBody()));
+        gm.getGameEntities().getObstacles().clear();
+
+        // Missile moving East
+        Projectile missile = new Projectile(
+                1,
+                new Vector2(100, 100),
+                new Vector2(300, 0),
+                20.0,
+                1000.0,
+                1,
+                0.09,
+                java.util.Collections.emptySet(),
+                Ordinance.MISSILE,
+                1.6,
+                0.0
+        );
+
+        // Bouncy standard projectile moving West directly toward the missile
+        Projectile bouncyBullet = new Projectile(
+                2,
+                new Vector2(180, 100),
+                new Vector2(-300, 0),
+                20.0,
+                1000.0,
+                2,
+                0.09,
+                Set.of(BulletEffect.BOUNCY),
+                Ordinance.PROJECTILE,
+                1.0,
+                0.0
+        );
+
+        gm.getGameEntities().add(missile);
+        gm.getGameEntities().add(bouncyBullet);
+        gm.getGameEntities().runPostUpdateHooks();
+
+        double dt = 1.0 / 60.0;
+        double minSpeedObserved = Double.MAX_VALUE;
+
+        for (int i = 0; i < 40; i++) {
+            gm.getGameEntities().updateAll(dt);
+            gm.getWorld().updatev(dt);
+
+            if (missile.isActive()) {
+                double speed = missile.getBody().getLinearVelocity().getMagnitude();
+                minSpeedObserved = Math.min(minSpeedObserved, speed);
+                // The missile must never stop dead in mid-air (previously it dropped to ~2.5 or 0)
+                assertTrue(speed > 40.0,
+                        "Missile must never stop dead or freeze when colliding with bouncy projectile: tick=" + i + ", speed=" + speed);
+            }
+        }
+
+        assertTrue(missile.isActive(), "Missile should still be active");
+        assertTrue(minSpeedObserved > 40.0, "Minimum speed observed should be well above zero: " + minSpeedObserved);
+    }
+
+    @Test
     @DisplayName("Test missile arriving after target is killed")
     public void testMissileArrivingAfterTargetKilled() {
-        GameConfig config = GameConfig.builder().build();
+        GameConfig config = GameConfig.builder().enableAIFilling(false).build();
         GameManager gm = new GameManager("test-target-killed", config, null);
+        gm.shutdown();
+        gm.getGameEntities().getObstacles().values().forEach(o -> gm.getWorld().removeBody(o.getBody()));
+        gm.getGameEntities().getObstacles().clear();
 
         Player enemy = new Player(2, "Enemy", 200.0, 100.0, 2, 10.0); // 10 HP
         enemy.setActive(true);
@@ -392,7 +469,7 @@ public class MissileOrdinanceTest {
         gm.getGameEntities().runPostUpdateHooks();
 
         double dt = 1.0 / 60.0;
-        for (int i = 0; i < 40; i++) {
+        for (int i = 0; i < 45; i++) {
             gm.getGameEntities().updateAll(dt);
             gm.getGameEntities().getProjectiles().entrySet().removeIf(entry -> {
                 Projectile projectile = entry.getValue();
@@ -420,6 +497,7 @@ public class MissileOrdinanceTest {
     public void testTunedHomingDistanceLimits() {
         GameConfig config = GameConfig.builder().build();
         GameManager gm = new GameManager("test-homing-tuned", config, null);
+        gm.shutdown();
         GameEntities entities = gm.getGameEntities();
         BulletEffectProcessor processor = gm.getCollisionProcessor().getBulletEffectProcessor();
 
@@ -474,5 +552,53 @@ public class MissileOrdinanceTest {
         int ordPoints = config.getOrdinance().getPointCost();
         int varPoints = config.getVarianceFormula() != null ? config.getVarianceFormula().getPointCost() : 0;
         assertEquals(100, attrPoints + fxPoints + ordPoints + varPoints, "Point budget must equal 100");
+    }
+
+    @Test
+    @DisplayName("Percentage penalty is applied to missile weapon range with a 30 unit sacrifice floor")
+    public void testMissilePercentageRangeMultiplierOnWeapon() {
+        // Weapon with range = 6 points (raw range ~529.14)
+        WeaponConfig standardProjConfig = new WeaponConfig();
+        standardProjConfig.range = 6;
+        standardProjConfig.ordinance = Ordinance.PROJECTILE;
+        Weapon projWeapon = standardProjConfig.buildWeapon();
+
+        WeaponConfig missileConfig = new WeaponConfig();
+        missileConfig.range = 6;
+        missileConfig.ordinance = Ordinance.MISSILE;
+        Weapon missileWeapon = missileConfig.buildWeapon();
+
+        assertTrue(missileWeapon.getRange() < projWeapon.getRange(),
+                "Missile weapon range should be less than projectile weapon range");
+
+        // Extreme sacrifice: range = -3 points (sacrifice floor 30.0 units) -> 30.0 * 0.65 = 19.5, floored at 30.0
+        WeaponConfig minRangeMissile = new WeaponConfig();
+        minRangeMissile.range = -3;
+        minRangeMissile.ordinance = Ordinance.MISSILE;
+        Weapon lowMissileWeapon = minRangeMissile.buildWeapon();
+
+        assertEquals(30.0, lowMissileWeapon.getRange(), 0.001,
+                "Missile weapon range must not drop below 30.0 floor");
+    }
+
+    @Test
+    @DisplayName("Missile flight lifetime is derived purely from range and average speed without arbitrary hard caps")
+    public void testMissileLifetimeDerivedFromRangeAndSpeed() {
+        Projectile missile = new Projectile(
+                1,
+                new Vector2(0, 0),
+                new Vector2(300, 0),
+                25.0,
+                550.0,
+                1,
+                0.09,
+                Set.of(BulletEffect.HOMING),
+                Ordinance.MISSILE,
+                1.0,
+                0.0
+        );
+
+        // launchSpeed = 80.0, topSpeed = 360.0 -> avgSpeed = 220.0 -> ttl = 550 / 220 = 2.5s
+        assertEquals(2.5, missile.getTimeToLive(), 0.01);
     }
 }

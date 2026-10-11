@@ -238,14 +238,17 @@ public class Player extends OwnedGameEntity implements HasWeapon, Damageable {
 
     public boolean canShoot() {
         Weapon weapon = this.getCurrentWeapon();
+        if (weapon == null) {
+            return false;
+        }
         long now = System.currentTimeMillis();
-        double fireInterval = 1000.0 / weapon.getFireRate();
+        double fireInterval = 1000.0 / Math.max(0.1, weapon.getFireRate());
         // Check if we have enough ammo for at least one bullet (partial bursts are allowed)
         return isActive()
                 && health > 0
                 && !isReloading
                 && weapon.getCurrentAmmo() > 0
-                && (now - lastShotTime) >= fireInterval;
+                && (hasActivePlasmaBeam() || (now - lastShotTime) >= fireInterval);
     }
 
     public boolean canUseUtility() {

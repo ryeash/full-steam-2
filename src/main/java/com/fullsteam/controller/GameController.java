@@ -164,6 +164,7 @@ public class GameController {
                     ordData.put("cost", ord.getPointCost());
                     ordData.put("description", ord.getDescription());
                     ordData.put("speedMultiplier", ord.getSpeedMultiplier());
+                    ordData.put("rangeMultiplier", ord.getRangeMultiplier());
                     ordData.put("beam", ord.isBeamType());
                     return ordData;
                 })
@@ -324,6 +325,7 @@ public class GameController {
         derived.put("burstDamage", dpb * bullets);
         derived.put("dps", dpb * bullets * fireRate);
         derived.put("effectiveProjectileSpeed", res.values().get(WeaponAttribute.PROJECTILE_SPEED) * ordinance.getSpeedMultiplier());
+        derived.put("effectiveRange", Math.max(30.0, res.values().get(WeaponAttribute.RANGE) * ordinance.getRangeMultiplier()));
         derived.put("moveSpeedMultiplier", res.values().get(WeaponAttribute.HANDLING));
 
         Map<String, Object> out = new LinkedHashMap<>();
@@ -357,7 +359,7 @@ public class GameController {
             case FIRE_RATE -> String.format("%.1f shots/s", v);
             case RELOAD_TIME -> String.format("%.2f s", v);
             case LINEAR_DAMPING -> String.format("%.2f drag", v);
-            case RANGE -> Math.round(v) + " units";
+            case RANGE -> Math.round(Math.max(30.0, v * ordinance.getRangeMultiplier())) + " units";
             case PROJECTILE_SPEED -> Math.round(v * ordinance.getSpeedMultiplier()) + " units/s";
             case MAGAZINE_SIZE -> (int) Math.round(v) + " rounds";
             case BULLETS_PER_SHOT -> (int) Math.round(v) + (Math.round(v) == 1 ? " bullet" : " bullets");

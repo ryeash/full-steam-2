@@ -156,8 +156,10 @@ public class Projectile extends OwnedGameEntity {
 
         // Check velocity threshold for dismissal. Bigger-caliber (heavier) rounds
         // carry momentum, so they persist to a lower speed before dismissal.
+        // Self-propelled missiles maintain rocket thrust and are governed by time-to-live and max range.
         double currentSpeed = body.getLinearVelocity().getMagnitude();
-        if (currentSpeed < ordinance.getMinimumVelocity() / caliber && !dismissedByVelocity) {
+        if (ordinance != Ordinance.MISSILE && ordinance.getMinimumVelocity() > 0
+                && currentSpeed < ordinance.getMinimumVelocity() / caliber && !dismissedByVelocity) {
             // Mark as dismissed by velocity to trigger effects
             dismissedByVelocity = true;
             active = false;
@@ -169,10 +171,10 @@ public class Projectile extends OwnedGameEntity {
         Vector2 vel = body.getLinearVelocity();
         double speed = vel.getMagnitude();
 
-        // Bounce recovery for bouncy missiles: if velocity flipped backwards against heading, align heading to bounce
+        // Bounce recovery for bouncy missiles: if velocity deflected or flipped backwards, align heading to bounce
         if (bulletEffects.contains(BulletEffect.BOUNCY) && speed > 10.0) {
             Vector2 forward = new Vector2(Math.cos(heading), Math.sin(heading));
-            if (vel.dot(forward) < -speed * 0.2) {
+            if (vel.dot(forward) < 0.0 || (speed > 50.0 && vel.dot(forward) < speed * 0.7)) {
                 heading = Math.atan2(vel.y, vel.x);
             }
         }
@@ -183,15 +185,42 @@ public class Projectile extends OwnedGameEntity {
         double vForward = vel.dot(forward);
         double vLateral = vel.dot(lateral);
 
-        // Forward rocket propulsion accelerating toward top speed; always thrusts forward along heading
-        vForward = Math.min(topSpeed, Math.max(0.0, vForward) + thrustAcceleration * deltaTime);
+        // Forward rocket propulsion accelerating toward top speed
+        double dtSafe = Math.max(0.001, deltaTime);
+        double fwdAccel;
+        if (vForward < topSpeed) {
+            fwdAccel = Math.min(thrustAcceleration, (topSpeed - vForward) / dtSafe);
+        } else {
+            // Aerodynamic drag on excess speed (e.g. after explosion or bounce impulse)
+            fwdAccel = -(vForward - topSpeed) * Math.min(2.0, 1.0 / dtSafe);
+        }
 
         // Natural aerodynamic lateral slide decay
-        vLateral *= Math.max(0.0, 1.0 - lateralDampingRate * deltaTime);
+        double latAccel = -vLateral * Math.min(lateralDampingRate, 1.0 / dtSafe);
 
-        Vector2 newVel = forward.multiply(vForward).add(lateral.multiply(vLateral));
-        body.setLinearVelocity(newVel);
+        double mass = body.getMass().getMass();
+        if (mass <= 0) {
+            mass = 1.0;
+        }
+
+        Vector2 thrustForce = forward.copy().multiply(mass * fwdAccel);
+        Vector2 lateralForce = lateral.copy().multiply(mass * latAccel);
+
+        if (body.getOwner() == null) {
+            // Standalone / offline simulation without an active Dyn4j physics world
+            vForward += fwdAccel * deltaTime;
+            vLateral += latAccel * deltaTime;
+            Vector2 newVel = forward.multiply(vForward).add(lateral.multiply(vLateral));
+            body.setLinearVelocity(newVel);
+            body.getTransform().getTranslation().add(newVel.copy().multiply(deltaTime));
+        } else {
+            // Physics-native force application: dyn4j integrates velocities naturally
+            // and preserves impulses/bounces without overwriting or stopping dead
+            body.applyForce(thrustForce.add(lateralForce));
+        }
+
         body.getTransform().setRotation(heading);
+        body.setAngularVelocity(0.0);
 
         // Range check from initial launch position
         if (initialPosition.distance(getPosition()) >= maxRange) {
