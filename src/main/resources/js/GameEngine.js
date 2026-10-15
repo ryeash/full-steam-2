@@ -5,13 +5,16 @@ class GameEngine {
         this.uiContainer = null;
         this.players = new Map();
         this.projectiles = new Map();
-        this.projectileInterpolators = new Map();
         this.obstacles = new Map();
         this.fieldEffects = new Map();
-        this.utilityEntities = new Map(); // For turrets, nets, defense lasers, headquarters, power-ups
-        this.flags = new Map(); // CTF flags
-        this.oddballNpcs = new Map(); // Oddball NPC entities
-        this.kothZones = new Map(); // King of the Hill zones
+        this.utilityEntities = new Map();
+        this.flags = new Map();
+        this.oddballNpcs = new Map();
+        this.zombies = new Map();
+        this.kothZones = new Map();
+        this.initialHeadquarters = new Map();
+        this.initialKothZones = new Map();
+        this.initialConfig = {};
         this.myPlayerId = null;
         this.gameState = null;
         this.websocket = null;
@@ -61,6 +64,7 @@ class GameEngine {
             this.setupUI();
             this.createConsolidatedHUD();
             this.createGameTimer();
+            this.createPingDisplay();
             
             this.updateLoadingProgress(60, "Loading assets...");
             await this.loadAssets();
@@ -114,12 +118,9 @@ class GameEngine {
         // Set up interpolation ticker for smooth movement - store reference for cleanup
         const interpolationCallback = (ticker) => {
             const deltaTime = ticker.deltaTime;
-            const dt = deltaTime / 60.0; // Convert to seconds
-            
-            // Update all projectile interpolators every frame
-            this.projectileInterpolators.forEach(interpolator => {
-                interpolator.update(deltaTime);
-            });
+
+            // Update motion interpolation for all dynamic entities (players, projectiles, oddball NPCs, flags)
+            this.updateAllEntityInterpolations(deltaTime);
             
             // Animate plasma effects and extend projectile trails. Both ride the
             // interpolated container position, so they must run per render frame
@@ -143,23 +144,28 @@ class GameEngine {
         this.backgroundContainer = new PIXI.Container();
         this.gameContainer = new PIXI.Container();
         this.nameContainer = new PIXI.Container(); // Separate container for name labels
+        this.damageTextContainer = new PIXI.Container(); // Separate container for damage numbers
         this.uiContainer = new PIXI.Container();
+        this.floatingDamageTexts = [];
 
         // Flip Y-axis to match dyn4j physics coordinate system (Y-up)
         // This eliminates the need for coordinate conversions between physics and rendering
         this.gameContainer.scale.y = -1;
         this.nameContainer.scale.y = -1; // Also flip nameContainer to match
+        this.damageTextContainer.scale.y = -1;
 
         // Set up proper z-ordering
         this.backgroundContainer.zIndex = 0;
         this.gameContainer.zIndex = 1;
         this.gameContainer.sortableChildren = true
         this.nameContainer.zIndex = 50; // Above game objects but below UI
+        this.damageTextContainer.zIndex = 60; // Above game objects and names
         this.uiContainer.zIndex = 100;
 
         this.app.stage.addChild(this.backgroundContainer);
         this.app.stage.addChild(this.gameContainer);
         this.app.stage.addChild(this.nameContainer);
+        this.app.stage.addChild(this.damageTextContainer);
         this.app.stage.addChild(this.uiContainer);
 
         // Enable sorting for proper z-index handling
@@ -176,8 +182,24 @@ class GameEngine {
         this.eventHandlers.resize = () => {
             this.handleResize();
             this.updateGameTimerPosition();
+            this.updatePingPosition();
         };
         window.addEventListener('resize', this.eventHandlers.resize);
+
+        // Handle window navigation/unload events
+        this.eventHandlers.pagehide = () => this.destroy();
+        this.eventHandlers.beforeunload = () => this.destroy();
+        this.eventHandlers.popstate = () => this.destroy();
+        this.eventHandlers.pageshow = (e) => {
+            if (e.persisted) {
+                window.location.reload();
+            }
+        };
+
+        window.addEventListener('pagehide', this.eventHandlers.pagehide);
+        window.addEventListener('beforeunload', this.eventHandlers.beforeunload);
+        window.addEventListener('popstate', this.eventHandlers.popstate);
+        window.addEventListener('pageshow', this.eventHandlers.pageshow);
     }
     
     /**
@@ -209,6 +231,7 @@ class GameEngine {
         hudBg.roundRect(10, 10, 280, 170, 8).fill({ color: 0x000000, alpha: 0.7 });
         hudBg.roundRect(10, 10, 280, 170, 8).stroke({ width: 2, color: 0x444444, alpha: 0.8 });
         this.hudContainer.addChild(hudBg);
+        this.hudBg = hudBg;
         
         // Player info (bottom portion) - minimap will be created after world bounds are received
         this.createHUDPlayerInfo();
@@ -263,6 +286,144 @@ class GameEngine {
     }
 
     /**
+     * Create floating ping badge in top-left mini-map / info HUD box.
+     */
+    createPingDisplay() {
+        this.pingContainer = new PIXI.Container();
+        this.pingContainer.zIndex = 200;
+
+        const bg = new PIXI.Graphics();
+        bg.roundRect(0, 0, 92, 26, 6).fill({ color: 0x000000, alpha: 0.65 });
+        bg.roundRect(0, 0, 92, 26, 6).stroke({ width: 1.5, color: 0x444444, alpha: 0.8 });
+        this.pingContainer.addChild(bg);
+        this.pingBg = bg;
+
+        const dot = new PIXI.Graphics();
+        dot.circle(12, 13, 4).fill({ color: 0x00ff88 });
+        this.pingContainer.addChild(dot);
+        this.pingDot = dot;
+
+        const label = new PIXI.Text('-- ms', {
+            fontSize: 11,
+            fill: 0x00ff88,
+            fontWeight: 'bold'
+        });
+        label.anchor.set(0, 0.5);
+        label.position.set(22, 13);
+        this.pingContainer.addChild(label);
+        this.pingLabel = label;
+        this.hudPingText = label;
+
+        if (this.hudContainer) {
+            this.hudContainer.addChild(this.pingContainer);
+        } else {
+            this.uiContainer.addChild(this.pingContainer);
+        }
+        this.updatePingPosition();
+    }
+
+    /**
+     * Keep ping display aligned within the top-left mini-map / info HUD box.
+     */
+    updatePingPosition() {
+        if (!this.pingContainer) return;
+        const totalWidth = (this.hudMinimap && this.minimapWidth)
+            ? Math.max(280, this.minimapWidth + 40)
+            : 280;
+        const pingX = 10 + totalWidth - 92 - 12;
+        this.pingContainer.position.set(pingX, 20);
+    }
+
+    /**
+     * Start periodic ping polling.
+     */
+    startPingMonitor() {
+        this.stopPingMonitor();
+        this.sendPing();
+        this.pingInterval = setInterval(() => {
+            this.sendPing();
+        }, 1000);
+    }
+
+    /**
+     * Stop periodic ping polling.
+     */
+    stopPingMonitor() {
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
+        }
+    }
+
+    /**
+     * Send ping packet with client timestamp to measure RTT.
+     */
+    sendPing() {
+        if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+            this.lastPingSentTime = performance.now();
+            try {
+                this.websocket.send(JSON.stringify({
+                    type: 'ping',
+                    timestamp: Math.round(this.lastPingSentTime)
+                }));
+            } catch (e) {
+                // Ignore send errors
+            }
+        }
+    }
+
+    /**
+     * Handle pong response from server and update latency indicators.
+     */
+    handlePong(data) {
+        const now = performance.now();
+        let rtt;
+        if (typeof data.timestamp === 'number' && data.timestamp > 0) {
+            rtt = Math.max(0, Math.round(now - data.timestamp));
+        } else if (this.lastPingSentTime) {
+            rtt = Math.max(0, Math.round(now - this.lastPingSentTime));
+        }
+        if (typeof rtt === 'number') {
+            this.currentPing = rtt;
+            this.updatePingDisplay(rtt);
+        }
+    }
+
+    /**
+     * Update ping text and status colors in top-left HUD.
+     */
+    updatePingDisplay(rtt) {
+        let color = 0x00ff88; // Green (< 60ms)
+        let strokeColor = 0x00aa55;
+        if (rtt >= 130) {
+            color = 0xff4444; // Red (severe lag)
+            strokeColor = 0xaa2222;
+        } else if (rtt >= 60) {
+            color = 0xffaa00; // Yellow/Amber (moderate latency)
+            strokeColor = 0xaa7700;
+        }
+
+        const text = `${rtt} ms`;
+        if (this.pingLabel) {
+            this.pingLabel.text = text;
+            this.pingLabel.style.fill = color;
+        }
+        if (this.pingDot) {
+            this.pingDot.clear();
+            this.pingDot.circle(12, 13, 4).fill({ color: color });
+        }
+        if (this.pingBg) {
+            this.pingBg.clear();
+            this.pingBg.roundRect(0, 0, 92, 26, 6).fill({ color: 0x000000, alpha: 0.65 });
+            this.pingBg.roundRect(0, 0, 92, 26, 6).stroke({ width: 1.5, color: strokeColor, alpha: 0.8 });
+        }
+        if (this.hudPingText && this.hudPingText !== this.pingLabel) {
+            this.hudPingText.text = text;
+            this.hudPingText.style.fill = color;
+        }
+    }
+
+    /**
      * Update the game timer display with the remaining game time and team scores.
      * Games run continuously to a single deadline (or forever); there are no rounds.
      */
@@ -282,8 +443,13 @@ class GameEngine {
 
         this.gameTimerContainer.visible = true;
 
-        // Update the countdown (only present for timed games)
-        if (data.gameTimed) {
+        // Update the countdown (present for start countdown or timed games)
+        if (data.isCountdown || data.gameState === 'COUNTDOWN') {
+            this.gameTimerText.visible = true;
+            const remainingSec = Math.ceil(data.startCountdownRemaining || 0);
+            this.gameTimerText.text = `STARTING IN ${remainingSec}s`;
+            this.setTextFill(this.gameTimerText, 0xffaa00);
+        } else if (data.gameTimed) {
             this.gameTimerText.visible = true;
 
             const timeRemaining = data.gameTimeRemaining;
@@ -464,7 +630,7 @@ class GameEngine {
         if (!this.hudMinimap || !this.minimapHeight) return;
         
         // Adjust HUD background size to accommodate the minimap
-        const hudBg = this.hudContainer.children[0]; // First child is the background
+        const hudBg = this.hudBg || this.hudContainer.children[0]; // First child is the background
         if (hudBg) {
             const totalWidth = Math.max(280, this.minimapWidth + 40); // 20px margins on each side
             const totalHeight = this.minimapHeight + 90; // Minimap + title + player info section
@@ -484,6 +650,9 @@ class GameEngine {
         if (playerInfoContainer) {
             playerInfoContainer.position.set(20, 30 + this.minimapHeight + 10); // Below minimap with padding
         }
+
+        // Keep ping display aligned with updated HUD width
+        this.updatePingPosition();
     }
     
     /**
@@ -698,7 +867,7 @@ class GameEngine {
             y: 0,
             targetX: 0,
             targetY: 0,
-            smoothing: 0.1
+            smoothing: 0.25
         };
         
         // Start game loop - store reference for cleanup
@@ -774,6 +943,19 @@ class GameEngine {
         this.projectileTexture = this.app.renderer.generateTexture(projectileGraphics);
         projectileGraphics.destroy({ context: true }); // Clean up graphics after generating texture
 
+        // Missile - sleek aerodynamic triangle
+        const missileGraphics = new PIXI.Graphics();
+        // Nose tip at (+9, 0), rear fins at (-7, -5) and (-7, 5), thruster indent at (-5, 0)
+        missileGraphics.poly([9, 0, -7, -5, -5, 0, -7, 5]).fill(0xd4d8e2);
+        // Nose cone accent
+        missileGraphics.poly([9, 0, 3, -2.5, 3, 2.5]).fill(0xee4422);
+        // Engine thruster nozzle
+        missileGraphics.poly([-5, -1.5, -7, -2.5, -7, 2.5, -5, 1.5]).fill(0x33333e);
+        // Thruster flame glow
+        missileGraphics.circle(-5, 0, 2).fill(0xffbb00);
+        this.missileTexture = this.app.renderer.generateTexture(missileGraphics);
+        missileGraphics.destroy({ context: true });
+
         // Shared soft-glow circle. This is the single reusable base texture for
         // ALL field effects, power-up auras, and particle-style visuals. Instead
         // of rebuilding per-instance Graphics geometry every frame, we render a
@@ -845,21 +1027,31 @@ class GameEngine {
 
         return new Promise((resolve, reject) => {
             this.websocket = new WebSocket(wsUrl);
+            this.websocket.binaryType = 'arraybuffer';
 
             this.websocket.onopen = () => {
+                this.startPingMonitor();
                 resolve();
             };
 
             this.websocket.onmessage = (event) => {
                 try {
-                    const data = JSON.parse(event.data);
-                    this.handleServerMessage(data);
+                    let data;
+                    if (event.data instanceof ArrayBuffer) {
+                        data = BinaryStateDecoder.decode(event.data);
+                    } else {
+                        data = JSON.parse(event.data);
+                    }
+                    if (data) {
+                        this.handleServerMessage(data);
+                    }
                 } catch (error) {
                     console.error('Error parsing server message:', error);
                 }
             };
 
             this.websocket.onclose = () => {
+                this.stopPingMonitor();
                 if (!this.expectingSocketClose) {
                     this.showConnectionError();
                 }
@@ -887,12 +1079,14 @@ class GameEngine {
             // Normal player camera logic
             if (this.myPlayerId && this.players.has(this.myPlayerId)) {
                 const myPlayer = this.players.get(this.myPlayerId);
-                if (myPlayer && myPlayer.playerData) {
-                    this.camera.targetX = myPlayer.playerData.x;
-                    this.camera.targetY = myPlayer.playerData.y; // No inversion needed - coordinates match now!
+                if (myPlayer) {
+                    this.camera.targetX = myPlayer.x;
+                    this.camera.targetY = myPlayer.y;
                     
-                    // Update target zoom based on weapon range
-                    this.updateZoomForWeaponRange(myPlayer.playerData);
+                    if (myPlayer.playerData) {
+                        // Update target zoom based on weapon range
+                        this.updateZoomForWeaponRange(myPlayer.playerData);
+                    }
                 }
             } else {
                 // Default camera position if no player yet
@@ -908,6 +1102,7 @@ class GameEngine {
         this.zoomLevel += (this.targetZoomLevel - this.zoomLevel) * this.zoomSmoothingFactor;
         this.updateCameraTransform();
         this.updateMinimap();
+        this.updateFloatingDamageNumbers(deltaTime);
     }
     
     updateZoomForWeaponRange(playerData) {
@@ -949,12 +1144,14 @@ class GameEngine {
         const centerX = this.app.screen.width / 2;
         const centerY = this.app.screen.height / 2;
         
-        // Apply camera transform to game and name containers (both Y-flipped)
-        [this.gameContainer, this.nameContainer].forEach(container => {
-            container.position.set(centerX, centerY);
-            container.scale.set(this.zoomLevel, -this.zoomLevel); // Preserve Y-flip
-            container.pivot.x = this.camera.x;
-            container.pivot.y = this.camera.y;
+        // Apply camera transform to game, name, and damage text containers (all Y-flipped)
+        [this.gameContainer, this.nameContainer, this.damageTextContainer].forEach(container => {
+            if (container) {
+                container.position.set(centerX, centerY);
+                container.scale.set(this.zoomLevel, -this.zoomLevel); // Preserve Y-flip
+                container.pivot.x = this.camera.x;
+                container.pivot.y = this.camera.y;
+            }
         });
         
         // Background container needs same transform but also Y-flipped to match world coordinates
@@ -1001,6 +1198,9 @@ class GameEngine {
         }
 
         switch (data.type) {
+            case 'pong':
+                this.handlePong(data);
+                break;
             case 'lobbyInit':
                 this.handleLobbyInit(data);
                 break;
@@ -1074,6 +1274,11 @@ class GameEngine {
     
     handleInitialState(data) {
         this.myPlayerId = data.playerId;
+        const localSprite = this.players.get(this.myPlayerId);
+        if (localSprite && localSprite.interpolator) {
+            localSprite.interpolator.hasRotation = false;
+            localSprite.interpolator.lerpRate = 24.0;
+        }
         // World may already be set up from a prior lobbyInit; setup is idempotent.
         this.setupWorldFromInitData(data);
 
@@ -1092,6 +1297,46 @@ class GameEngine {
      *                       since the spectator HUD has its own full-map view.
      */
     setupWorldFromInitData(data, includeMinimap = true) {
+        if (data.headquarters) {
+            data.headquarters.forEach(hq => {
+                this.initialHeadquarters.set(hq.id, hq);
+                // Also index by 16-bit signed/unsigned ID in case entity ID exceeded 32767
+                const id16 = (hq.id << 16) >> 16;
+                this.initialHeadquarters.set(id16, hq);
+                this.initialHeadquarters.set(hq.id & 0xFFFF, hq);
+                const team = hq.team !== undefined ? hq.team : hq.ownerTeam;
+                if (team !== undefined) {
+                    this.initialHeadquarters.set(`team_${team}`, hq);
+                }
+
+                // If HQ was already created in utilityEntities before init data arrived, refresh it
+                const existing = this.utilityEntities.get(hq.id)
+                    || this.utilityEntities.get(id16)
+                    || this.utilityEntities.get(hq.id & 0xFFFF)
+                    || Array.from(this.utilityEntities.values()).find(e =>
+                        e.entityData && e.entityData.type === 'HEADQUARTERS' && (e.entityData.ownerTeam !== undefined ? e.entityData.ownerTeam : e.entityData.team) === team
+                    );
+                if (existing && existing.entityData) {
+                    existing.entityData.shapes = hq.shapes;
+                    delete existing._hqRenderKey;
+                    this.updateHeadquartersVisual(existing, existing.entityData);
+                }
+            });
+        }
+        if (data.kothZones) {
+            data.kothZones.forEach(zone => this.initialKothZones.set(zone.id, zone));
+        }
+        if (data.scoreStyle || data.activeScoreComponents) {
+            this.initialConfig = {
+                scoreStyle: data.scoreStyle,
+                scoringConfig: {
+                    components: data.activeScoreComponents || [],
+                    scoreStyle: data.scoreStyle,
+                    sortBy: data.sortBy || 'score'
+                }
+            };
+        }
+
         if (!this._worldSetupDone) {
             this.worldBounds.width = data.worldWidth || 2000;
             this.worldBounds.height = data.worldHeight || 2000;
@@ -1323,6 +1568,7 @@ class GameEngine {
             type: 'readyToSpawn',
             weaponConfig: config.weaponConfig,
             utilityWeapon: config.utilityWeapon,
+            armorType: config.armorType,
             playerName: nameSelect ? nameSelect.value : undefined
         };
         this.websocket.send(JSON.stringify(message));
@@ -1345,26 +1591,84 @@ class GameEngine {
     
     handleGameState(data) {
         this.gameState = data;
+
+        if (!data.scoreStyle && this.initialConfig.scoreStyle) {
+            data.scoreStyle = this.initialConfig.scoreStyle;
+            data.scoringConfig = this.initialConfig.scoringConfig;
+        }
+
+        if (data.gameTimeRemaining !== undefined) {
+            this.lastGameTimeRemaining = data.gameTimeRemaining;
+        } else if (this.lastGameTimeRemaining !== undefined) {
+            data.gameTimeRemaining = this.lastGameTimeRemaining;
+        }
+
+        if (data.teamScores !== undefined) {
+            this.lastTeamScores = data.teamScores;
+        } else if (this.lastTeamScores !== undefined) {
+            data.teamScores = this.lastTeamScores;
+        }
         
+        // Update pre-game countdown banner & loadout banner if active
+        const isCountdown = data.isCountdown || data.gameState === 'COUNTDOWN';
+        if (isCountdown) {
+            const remainingSec = Math.ceil(data.startCountdownRemaining || 0);
+            const banner = document.getElementById('game-start-banner');
+            const countdownText = document.getElementById('game-start-countdown-text');
+            if (banner && countdownText) {
+                countdownText.textContent = `${remainingSec}s`;
+                banner.style.display = 'block';
+            }
+            this.showLoadoutBanner(`Game starting in ${remainingSec}s - prepare loadout!`);
+        } else if (this.wasCountdown) {
+            const banner = document.getElementById('game-start-banner');
+            const countdownText = document.getElementById('game-start-countdown-text');
+            if (banner && countdownText) {
+                const label = banner.querySelector('.game-start-label');
+                if (label) label.textContent = 'BATTLE STARTED';
+                countdownText.textContent = 'FIGHT!';
+                banner.style.borderColor = '#00ff88';
+                banner.style.boxShadow = '0 0 25px rgba(0, 255, 136, 0.5)';
+                setTimeout(() => {
+                    banner.style.display = 'none';
+                    if (label) label.textContent = 'GAME STARTING IN';
+                    banner.style.borderColor = '#ffaa00';
+                    banner.style.boxShadow = '0 0 25px rgba(255, 170, 0, 0.4)';
+                }, 1500);
+            }
+            const loadoutBanner = document.getElementById('loadout-banner');
+            if (loadoutBanner) loadoutBanner.classList.remove('visible');
+        }
+        this.wasCountdown = isCountdown;
+
+        // Render damage numbers if present in state snapshot
+        if (data.hits && data.hits.length > 0) {
+            data.hits.forEach(hit => {
+                this.createFloatingDamageNumber(hit);
+            });
+        }
+
         // Update the game timer (countdown for timed games, plus team scores)
         if (data.gameState !== undefined) {
             this.updateGameTimer(data);
         }
         
+        const epoch = (this._frameEpoch = (this._frameEpoch || 0) + 1);
+        
         if (data.players) {
-            const currentPlayerIds = new Set();
-            
             data.players.forEach(playerData => {
-                currentPlayerIds.add(playerData.id);
-                if (this.players.has(playerData.id)) {
+                let player = this.players.get(playerData.id);
+                if (player) {
                     this.updatePlayer(playerData);
                 } else {
                     this.createPlayer(playerData);
+                    player = this.players.get(playerData.id);
                 }
+                if (player) player._lastSeenEpoch = epoch;
             });
             
             for (let [playerId, player] of this.players) {
-                if (!currentPlayerIds.has(playerId)) {
+                if (player._lastSeenEpoch !== epoch) {
                     this.removePlayer(playerId);
                 }
             }
@@ -1376,40 +1680,42 @@ class GameEngine {
         // Projectiles: cleanup runs unconditionally so an absent field (server
         // omits the key when the list is empty) clears any stale sprites.
         {
-            const currentProjectileIds = new Set();
             if (data.projectiles) {
                 data.projectiles.forEach(projectileData => {
-                    currentProjectileIds.add(projectileData.id);
-                    if (this.projectiles.has(projectileData.id)) {
+                    let proj = this.projectiles.get(projectileData.id);
+                    if (proj) {
                         this.updateProjectile(projectileData);
                     } else {
                         this.createProjectile(projectileData);
+                        proj = this.projectiles.get(projectileData.id);
                     }
+                    if (proj) proj._lastSeenEpoch = epoch;
                 });
             }
-            for (let [projectileId] of this.projectiles) {
-                if (!currentProjectileIds.has(projectileId)) {
+            for (let [projectileId, proj] of this.projectiles) {
+                if (proj._lastSeenEpoch !== epoch) {
                     this.removeProjectile(projectileId);
                 }
             }
         }
 
         // Obstacles are static — delivered once in the init payload and never
-        // re-sent in recurring gameState messages.  We still handle the field
+        // re-sent in recurring gameState messages. We still handle the field
         // if it appears (e.g. future reconnect flows) but never rely on its
         // absence to remove obstacles that were set up during initialisation.
         if (data.obstacles) {
-            const currentObstacleIds = new Set();
             data.obstacles.forEach(obstacleData => {
-                currentObstacleIds.add(obstacleData.id);
-                if (this.obstacles.has(obstacleData.id)) {
+                let obs = this.obstacles.get(obstacleData.id);
+                if (obs) {
                     this.updateObstacle(obstacleData);
                 } else {
                     this.createObstacle(obstacleData);
+                    obs = this.obstacles.get(obstacleData.id);
                 }
+                if (obs) obs._lastSeenEpoch = epoch;
             });
-            for (let [obstacleId] of this.obstacles) {
-                if (!currentObstacleIds.has(obstacleId)) {
+            for (let [obstacleId, obs] of this.obstacles) {
+                if (obs._lastSeenEpoch !== epoch) {
                     this.removeObstacle(obstacleId);
                 }
             }
@@ -1417,19 +1723,20 @@ class GameEngine {
 
         // Field effects: same absent-means-empty pattern as projectiles
         {
-            const currentFieldEffectIds = new Set();
             if (data.fieldEffects) {
                 data.fieldEffects.forEach(effectData => {
-                    currentFieldEffectIds.add(effectData.id);
-                    if (this.fieldEffects.has(effectData.id)) {
+                    let fe = this.fieldEffects.get(effectData.id);
+                    if (fe) {
                         this.updateFieldEffect(effectData);
                     } else {
                         this.createFieldEffect(effectData);
+                        fe = this.fieldEffects.get(effectData.id);
                     }
+                    if (fe) fe._lastSeenEpoch = epoch;
                 });
             }
-            for (let [effectId] of this.fieldEffects) {
-                if (!currentFieldEffectIds.has(effectId)) {
+            for (let [effectId, fe] of this.fieldEffects) {
+                if (fe._lastSeenEpoch !== epoch) {
                     this.removeFieldEffect(effectId);
                 }
             }
@@ -1437,62 +1744,120 @@ class GameEngine {
 
         // Handle flags (CTF mode)
         if (data.flags) {
-            const currentFlagIds = new Set();
             data.flags.forEach(flagData => {
-                currentFlagIds.add(flagData.id);
-                if (this.flags.has(flagData.id)) {
+                let flag = this.flags.get(flagData.id);
+                if (flag) {
                     this.updateFlag(flagData);
                 } else {
                     this.createFlag(flagData);
+                    flag = this.flags.get(flagData.id);
                 }
+                if (flag) flag._lastSeenEpoch = epoch;
             });
             
             for (let [flagId, flag] of this.flags) {
-                if (!currentFlagIds.has(flagId)) {
+                if (flag._lastSeenEpoch !== epoch) {
                     this.removeFlag(flagId);
                 }
             }
         }
         
-        // Handle Oddball NPCs
-        if (data.oddballNpcs) {
-            const currentNpcIds = new Set();
-            data.oddballNpcs.forEach(npcData => {
-                currentNpcIds.add(npcData.id);
-                if (this.oddballNpcs.has(npcData.id)) {
-                    this.updateOddballNpc(npcData);
+        // Handle NPCs (Unified list: Oddballs + Zombies)
+        if (data.npcs) {
+            data.npcs.forEach(npcData => {
+                if (npcData.category === 'ZOMBIE') {
+                    let z = this.zombies.get(npcData.id);
+                    if (z) {
+                        this.updateZombie(npcData);
+                    } else {
+                        this.createZombie(npcData);
+                        z = this.zombies.get(npcData.id);
+                    }
+                    if (z) z._lastSeenEpoch = epoch;
                 } else {
-                    this.createOddballNpc(npcData);
+                    let ob = this.oddballNpcs.get(npcData.id);
+                    if (ob) {
+                        this.updateOddballNpc(npcData);
+                    } else {
+                        this.createOddballNpc(npcData);
+                        ob = this.oddballNpcs.get(npcData.id);
+                    }
+                    if (ob) ob._lastSeenEpoch = epoch;
                 }
             });
-            for (let [npcId] of this.oddballNpcs) {
-                if (!currentNpcIds.has(npcId)) {
+
+            for (let [npcId, ob] of this.oddballNpcs) {
+                if (ob._lastSeenEpoch !== epoch) {
                     this.removeOddballNpc(npcId);
+                }
+            }
+            for (let [zombieId, z] of this.zombies) {
+                if (z._lastSeenEpoch !== epoch) {
+                    this.removeZombie(zombieId);
+                }
+            }
+        } else {
+            // Handle Oddball NPCs (legacy array fallback)
+            if (data.oddballNpcs) {
+                data.oddballNpcs.forEach(npcData => {
+                    let ob = this.oddballNpcs.get(npcData.id);
+                    if (ob) {
+                        this.updateOddballNpc(npcData);
+                    } else {
+                        this.createOddballNpc(npcData);
+                        ob = this.oddballNpcs.get(npcData.id);
+                    }
+                    if (ob) ob._lastSeenEpoch = epoch;
+                });
+                for (let [npcId, ob] of this.oddballNpcs) {
+                    if (ob._lastSeenEpoch !== epoch) {
+                        this.removeOddballNpc(npcId);
+                    }
+                }
+            }
+
+            // Handle Zombies (legacy array fallback)
+            if (data.zombies) {
+                data.zombies.forEach(zombieData => {
+                    let z = this.zombies.get(zombieData.id);
+                    if (z) {
+                        this.updateZombie(zombieData);
+                    } else {
+                        this.createZombie(zombieData);
+                        z = this.zombies.get(zombieData.id);
+                    }
+                    if (z) z._lastSeenEpoch = epoch;
+                });
+                for (let [zombieId, z] of this.zombies) {
+                    if (z._lastSeenEpoch !== epoch) {
+                        this.removeZombie(zombieId);
+                    }
                 }
             }
         }
 
         // Handle KOTH zones
         if (data.kothZones) {
-            const currentZoneIds = new Set();
             data.kothZones.forEach(zoneData => {
-                currentZoneIds.add(zoneData.id);
-                if (this.kothZones.has(zoneData.id)) {
+                let zone = this.kothZones.get(zoneData.id);
+                if (zone) {
                     this.updateKothZone(zoneData);
                 } else {
                     this.createKothZone(zoneData);
+                    zone = this.kothZones.get(zoneData.id);
                 }
+                if (zone) zone._lastSeenEpoch = epoch;
             });
             
             for (let [zoneId, zone] of this.kothZones) {
-                if (!currentZoneIds.has(zoneId)) {
+                if (zone._lastSeenEpoch !== epoch) {
                     this.removeKothZone(zoneId);
                 }
             }
         }
         
         // Handle utility entities (turrets, nets, defense lasers, headquarters, power-ups)
-        this.handleUtilityEntities(data);
+        this.handleUtilityEntities(data, epoch);
         
         this.updateUI(data);
     }
@@ -1500,60 +1865,64 @@ class GameEngine {
     /**
      * Handle all utility entities from server data
      */
-    handleUtilityEntities(data) {
-        const currentEntityIds = new Set();
+    handleUtilityEntities(data, epoch) {
+        epoch = epoch || this._frameEpoch || 0;
         
         // Handle turrets
         if (data.turrets) {
             data.turrets.forEach(turretData => {
-                currentEntityIds.add(turretData.id);
                 if (this.utilityEntities.has(turretData.id)) {
                     this.updateUtilityEntity(turretData);
                 } else {
                     this.createUtilityEntity(turretData);
                 }
+                const e = this.utilityEntities.get(turretData.id);
+                if (e) e._lastSeenEpoch = epoch;
             });
         }
         
         // Handle nets
         if (data.nets) {
             data.nets.forEach(netData => {
-                currentEntityIds.add(netData.id);
                 if (this.utilityEntities.has(netData.id)) {
                     this.updateUtilityEntity(netData);
                 } else {
                     this.createUtilityEntity(netData);
                 }
+                const e = this.utilityEntities.get(netData.id);
+                if (e) e._lastSeenEpoch = epoch;
             });
         }
         
         // Handle defense lasers
         if (data.defenseLasers) {
             data.defenseLasers.forEach(laserData => {
-                currentEntityIds.add(laserData.id);
                 if (this.utilityEntities.has(laserData.id)) {
                     this.updateUtilityEntity(laserData);
                 } else {
                     this.createUtilityEntity(laserData);
                 }
+                const e = this.utilityEntities.get(laserData.id);
+                if (e) e._lastSeenEpoch = epoch;
             });
         }
         
         // Handle headquarters
         if (data.headquarters) {
             data.headquarters.forEach(hqData => {
-                currentEntityIds.add(hqData.id);
                 if (this.utilityEntities.has(hqData.id)) {
                     this.updateUtilityEntity(hqData);
                 } else {
                     this.createUtilityEntity(hqData);
                 }
+                const e = this.utilityEntities.get(hqData.id);
+                if (e) e._lastSeenEpoch = epoch;
             });
         }
         
         // Remove entities that no longer exist
         for (let [entityId, entity] of this.utilityEntities) {
-            if (!currentEntityIds.has(entityId)) {
+            if (entity._lastSeenEpoch !== epoch) {
                 this.removeUtilityEntity(entityId);
             }
         }
@@ -1860,7 +2229,7 @@ class GameEngine {
 
         const deathsSpan = document.createElement('span');
         deathsSpan.className = 'stat-deaths';
-        deathsSpan.textContent = `${(this.getBreakdown(score).deaths ?? score.deaths) || 0} D`;
+        deathsSpan.textContent = `${this.playerDeaths(score)} D`;
         stats.appendChild(deathsSpan);
 
         row.appendChild(stats);
@@ -1874,8 +2243,7 @@ class GameEngine {
         const names = {
             'SCORE_LIMIT': 'Score Limit',
             'TIME_LIMIT': 'Time Limit',
-            'ELIMINATION': 'Elimination',
-            'ENDLESS': 'Endless'
+            'ELIMINATION': 'Elimination'
         };
         return names[condition] || condition;
     }
@@ -1923,6 +2291,11 @@ class GameEngine {
         // Create health bar above player
         const healthBarContainer = this.createPlayerHealthBar(playerData);
         sprite.healthBar = healthBarContainer;
+
+        const shieldArc = new PIXI.Graphics();
+        shieldArc.visible = false;
+        sprite.addChild(shieldArc);
+        sprite.shieldArc = shieldArc;
     
         // Create death marker (initially hidden)
         if (this.deathTexture) {
@@ -1958,7 +2331,17 @@ class GameEngine {
         
         // Set player z-index to ensure it's on top
         sprite.zIndex = 10;
-        
+
+        const isLocalPlayer = playerData.id === this.myPlayerId;
+        sprite.interpolator = new EntityInterpolator(sprite, {
+            vx: playerData.vx || 0,
+            vy: playerData.vy || 0,
+            hasRotation: !isLocalPlayer,
+            snapThreshold: 150,
+            lerpRate: isLocalPlayer ? 24.0 : 18.0,
+            onUpdate: (s) => this.syncPlayerChildComponents(s)
+        });
+
         sprite.playerData = playerData;
         this.players.set(playerData.id, sprite);
         this.gameContainer.addChild(sprite);
@@ -1968,12 +2351,31 @@ class GameEngine {
         const sprite = this.players.get(playerData.id);
         if (!sprite) return;
 
-        // Direct position update - no interpolation
-        sprite.position.set(playerData.x, playerData.y);
-        sprite.rotation = playerData.rotation || 0;
+        if (sprite.playerData) {
+            if (playerData.name === undefined) playerData.name = sprite.playerData.name;
+            if (playerData.score === undefined) playerData.score = sprite.playerData.score;
+            if (playerData.kills === undefined) playerData.kills = sprite.playerData.kills ?? sprite.playerData.score?.kills;
+            if (playerData.deaths === undefined) playerData.deaths = sprite.playerData.deaths ?? sprite.playerData.score?.deaths;
+            if (playerData.activePowerUps === undefined) playerData.activePowerUps = sprite.playerData.activePowerUps;
+            if (playerData.weaponRange === undefined) playerData.weaponRange = sprite.playerData.weaponRange;
+        }
+
+        const isLocalPlayer = playerData.id === this.myPlayerId;
+        if (isLocalPlayer && sprite.interpolator) {
+            sprite.interpolator.hasRotation = false;
+            sprite.interpolator.lerpRate = 24.0;
+        }
+
+        sprite.interpolator.updateFromServer(
+            playerData.x,
+            playerData.y,
+            playerData.vx || 0,
+            playerData.vy || 0,
+            isLocalPlayer ? null : (playerData.rotation || 0)
+        );
         
         // Handle death marker logic
-        const isDead = !playerData.active && playerData.respawnTime > 0;
+        const isDead = !playerData.active;
         
         // Show/hide player sprite and death marker
         sprite.visible = playerData.active;
@@ -1986,6 +2388,9 @@ class GameEngine {
 
         // Update name label position (doesn't rotate with player)
         if (sprite.nameLabel) {
+            if (playerData.name && sprite.nameLabel.text !== playerData.name) {
+                sprite.nameLabel.text = playerData.name;
+            }
             // Use current sprite position (which may be interpolated)
             sprite.nameLabel.position.set(sprite.x, sprite.y - 25);
             // Show name label for active players or dead players with respawn timer
@@ -2002,7 +2407,90 @@ class GameEngine {
             this.updatePlayerSubBars(sprite.healthBar, playerData);
         }
 
+        if (sprite.shieldArc) {
+            sprite.shieldArc.visible = playerData.isRiotShieldActive || false;
+            if (sprite.shieldArc.visible && !sprite.shieldArc._drawn) {
+                sprite.shieldArc._drawn = true;
+                sprite.shieldArc.clear();
+                sprite.shieldArc.arc(0, 0, 26, -Math.PI / 3, Math.PI / 3).stroke({ width: 4, color: 0x00E5FF, alpha: 0.9 });
+                sprite.shieldArc.arc(0, 0, 23, -Math.PI / 3, Math.PI / 3).stroke({ width: 2, color: 0x80F3FF, alpha: 0.6 });
+            }
+        }
+
+        // Update power-up visual indicators
+        this.updatePowerUpIndicators(sprite, playerData);
+
         sprite.playerData = playerData;
+    }
+
+    /**
+     * Advance motion interpolation for all dynamic entities (players, projectiles, oddballs, flags).
+     */
+    updateAllEntityInterpolations(deltaTime) {
+        if (this.players) {
+            this.players.forEach(p => p.interpolator?.update(deltaTime));
+        }
+        // Immediately orient the local player sprite towards current aim target
+        this.updateLocalPlayerAim();
+
+        if (this.projectiles) {
+            this.projectiles.forEach(p => p.interpolator?.update(deltaTime));
+        }
+        if (this.oddballNpcs) {
+            this.oddballNpcs.forEach(n => n.interpolator?.update(deltaTime));
+        }
+        if (this.zombies) {
+            this.zombies.forEach(z => {
+                z.interpolator?.update(deltaTime);
+                if (z.healthBar) {
+                    z.healthBar.position.set(z.x, z.y - (z.zombieRadius + 10));
+                }
+            });
+        }
+        if (this.flags) {
+            this.flags.forEach(f => f.interpolator?.update(deltaTime));
+        }
+    }
+
+    /**
+     * Immediately rotate the local player sprite to match the mouse / gamepad aim angle
+     * for instant client-side responsiveness without waiting for network round-trips.
+     */
+    updateLocalPlayerAim() {
+        if (!this.myPlayerId || !this.inputManager) return;
+        const myPlayer = this.players.get(this.myPlayerId);
+        if (!myPlayer || !myPlayer.visible) return;
+        if (myPlayer.playerData && !myPlayer.playerData.active) {
+            return;
+        }
+
+        if (this.inputManager.mouse && this.inputManager.mouse.hasPosition) {
+            this.inputManager.updateMouseWorldCoordinates();
+            const dx = this.inputManager.mouse.worldX - myPlayer.x;
+            const dy = this.inputManager.mouse.worldY - myPlayer.y;
+            if (dx * dx + dy * dy > 0.001) {
+                myPlayer.rotation = Math.atan2(dy, dx);
+            }
+        }
+    }
+
+    /**
+     * Sync player child components (health bar, name label, death marker, power-up container)
+     * to the interpolated player sprite position.
+     */
+    syncPlayerChildComponents(sprite) {
+        if (!sprite) return;
+        const isDead = !sprite.playerData || !sprite.playerData.active;
+        if (sprite.deathMarker && isDead) {
+            sprite.deathMarker.position.set(sprite.x, sprite.y);
+        }
+        if (sprite.nameLabel) {
+            sprite.nameLabel.position.set(sprite.x, sprite.y - 25);
+        }
+        if (sprite.healthBar) {
+            const yOffset = (sprite.healthBar.config && sprite.healthBar.config.yOffset) || 0;
+            sprite.healthBar.position.set(sprite.x, sprite.y - yOffset);
+        }
     }
     
     removePlayer(playerId) {
@@ -2066,7 +2554,13 @@ class GameEngine {
             sprite.deathMarker.destroy({ context: true });
             sprite.deathMarker = null;
         }
-        
+
+        // Clean up interpolator
+        if (sprite.interpolator) {
+            sprite.interpolator.destroy();
+            sprite.interpolator = null;
+        }
+
         // Clear player data reference
         sprite.playerData = null;
         
@@ -2118,6 +2612,173 @@ class GameEngine {
     }
     
     /**
+     * Shared damage text styles to eliminate per-hit TextStyle allocations
+     */
+    static DAMAGE_STYLES = {
+        attackerKill: new PIXI.TextStyle({
+            fontFamily: 'Arial, sans-serif', fontSize: 16, fontWeight: 'bold',
+            fill: 0xFF3330, stroke: { color: 0x000000, width: 3 },
+            dropShadow: { color: 0x000000, blur: 2, distance: 1 }
+        }),
+        attackerArmor: new PIXI.TextStyle({
+            fontFamily: 'Arial, sans-serif', fontSize: 14, fontWeight: 'bold',
+            fill: 0x00E5FF, stroke: { color: 0x000000, width: 3 },
+            dropShadow: { color: 0x000000, blur: 2, distance: 1 }
+        }),
+        attackerNormal: new PIXI.TextStyle({
+            fontFamily: 'Arial, sans-serif', fontSize: 13, fontWeight: 'bold',
+            fill: 0xFFFF55, stroke: { color: 0x000000, width: 3 },
+            dropShadow: { color: 0x000000, blur: 2, distance: 1 }
+        }),
+        victimArmor: new PIXI.TextStyle({
+            fontFamily: 'Arial, sans-serif', fontSize: 13, fontWeight: 'bold',
+            fill: 0x00E5FF, stroke: { color: 0x000000, width: 3 },
+            dropShadow: { color: 0x000000, blur: 2, distance: 1 }
+        }),
+        victimHealth: new PIXI.TextStyle({
+            fontFamily: 'Arial, sans-serif', fontSize: 13, fontWeight: 'bold',
+            fill: 0xFF3344, stroke: { color: 0x000000, width: 3 },
+            dropShadow: { color: 0x000000, blur: 2, distance: 1 }
+        }),
+        spectatorArmor: new PIXI.TextStyle({
+            fontFamily: 'Arial, sans-serif', fontSize: 12, fontWeight: 'bold',
+            fill: 0x00E5FF, stroke: { color: 0x000000, width: 3 },
+            dropShadow: { color: 0x000000, blur: 2, distance: 1 }
+        }),
+        spectatorNormal: new PIXI.TextStyle({
+            fontFamily: 'Arial, sans-serif', fontSize: 12, fontWeight: 'bold',
+            fill: 0xFFAA44, stroke: { color: 0x000000, width: 3 },
+            dropShadow: { color: 0x000000, blur: 2, distance: 1 }
+        })
+    };
+
+    /**
+     * Create floating damage number at hit position in world space
+     */
+    createFloatingDamageNumber(hit) {
+        if (!hit || typeof hit.damage !== 'number' || hit.damage <= 0) {
+            return;
+        }
+
+        const hasMyId = (this.myPlayerId !== null && this.myPlayerId !== undefined);
+        const isAttacker = (hasMyId && hit.attackerId === this.myPlayerId);
+        const isVictim = (hasMyId && hit.victimId === this.myPlayerId);
+        const isSpectator = !!this.spectatorMode || !hasMyId;
+
+        if (!isAttacker && !isVictim && !isSpectator) {
+            return;
+        }
+
+        const displayDamage = Math.max(1, Math.round(hit.damage));
+        let textStr = '';
+        let targetStyle = GameEngine.DAMAGE_STYLES.attackerNormal;
+        let initialScale = 1.0;
+
+        const isArmor = hit.armorMitigated || false;
+
+        if (isAttacker) {
+            if (hit.kill) {
+                textStr = isArmor ? `${displayDamage} 🛡️💀` : `${displayDamage} 💀`;
+                targetStyle = GameEngine.DAMAGE_STYLES.attackerKill;
+                initialScale = 1.3;
+            } else if (isArmor) {
+                textStr = `${displayDamage} 🛡️`;
+                targetStyle = GameEngine.DAMAGE_STYLES.attackerArmor;
+                initialScale = 1.1;
+            } else {
+                textStr = `${displayDamage}`;
+                targetStyle = GameEngine.DAMAGE_STYLES.attackerNormal;
+            }
+        } else if (isVictim) {
+            textStr = isArmor ? `-${displayDamage} 🛡️` : `-${displayDamage}`;
+            targetStyle = isArmor ? GameEngine.DAMAGE_STYLES.victimArmor : GameEngine.DAMAGE_STYLES.victimHealth;
+        } else {
+            // Spectator
+            textStr = isArmor ? `${displayDamage} 🛡️` : `${displayDamage}`;
+            targetStyle = isArmor ? GameEngine.DAMAGE_STYLES.spectatorArmor : GameEngine.DAMAGE_STYLES.spectatorNormal;
+        }
+
+        this.damageTextPool = this.damageTextPool || [];
+        let textObj;
+        if (this.damageTextPool.length > 0) {
+            textObj = this.damageTextPool.pop();
+            textObj.text = textStr;
+            textObj.style = targetStyle;
+            textObj.alpha = 1.0;
+            textObj.visible = true;
+        } else {
+            textObj = new PIXI.Text({ text: textStr, style: targetStyle });
+            textObj.anchor.set(0.5, 0.5);
+        }
+
+        textObj.scale.set(initialScale, -initialScale); // Flip Y back inside damageTextContainer
+
+        const startX = hit.x + (Math.random() * 12 - 6);
+        const startY = hit.y + (Math.random() * 12 - 6);
+        textObj.position.set(startX, startY);
+
+        const floatingObj = {
+            pixiText: textObj,
+            x: startX,
+            y: startY,
+            vx: (Math.random() - 0.5) * 16,
+            vy: 35 + Math.random() * 15,
+            life: 0,
+            maxLife: hit.kill ? 0.95 : 0.75,
+            initialScale: initialScale
+        };
+
+        if (this.damageTextContainer) {
+            if (textObj.parent !== this.damageTextContainer) {
+                this.damageTextContainer.addChild(textObj);
+            }
+            this.floatingDamageTexts.push(floatingObj);
+        }
+    }
+
+    /**
+     * Animate floating damage numbers upward and fade out
+     */
+    updateFloatingDamageNumbers(deltaTime) {
+        if (!this.floatingDamageTexts || this.floatingDamageTexts.length === 0) {
+            return;
+        }
+
+        for (let i = this.floatingDamageTexts.length - 1; i >= 0; i--) {
+            const item = this.floatingDamageTexts[i];
+            item.life += deltaTime;
+            const progress = item.life / item.maxLife;
+
+            if (progress >= 1.0) {
+                item.pixiText.visible = false;
+                this.damageTextPool = this.damageTextPool || [];
+                if (this.damageTextPool.length < 60) {
+                    this.damageTextPool.push(item.pixiText);
+                } else {
+                    if (this.damageTextContainer) {
+                        this.damageTextContainer.removeChild(item.pixiText);
+                    }
+                    item.pixiText.destroy({ context: true });
+                }
+                this.floatingDamageTexts.splice(i, 1);
+                continue;
+            }
+
+            item.x += item.vx * deltaTime;
+            item.y += item.vy * deltaTime;
+            item.pixiText.position.set(item.x, item.y);
+
+            if (item.initialScale > 1.0) {
+                const scaleProgress = Math.min(1.0, progress * 4.0);
+                const currentScale = item.initialScale - (item.initialScale - 1.0) * scaleProgress;
+                item.pixiText.scale.set(currentScale, -currentScale);
+            }
+
+            item.pixiText.alpha = Math.max(0, 1 - Math.pow(progress, 2));
+        }
+    }
+
+    /**
      * Update a health bar for any entity
      * @param {PIXI.Container} healthBarContainer - The health bar container
      * @param {Object} entityData - The entity data
@@ -2133,12 +2794,21 @@ class GameEngine {
             healthBarContainer.position.set(sprite.x, sprite.y - yOffset);
         }
         
-        // Calculate health percentage
+        // Calculate health percentage & armor
         const healthPercent = entityData.health;
+        const armorPct = entityData.armor ?? 0;
+        
+        // Track whether this entity has armor capacity during its current life/spawn
+        if (armorPct > 0) {
+            healthBarContainer._hasArmorCapacity = true;
+        } else if (healthPercent >= 1.0) {
+            healthBarContainer._hasArmorCapacity = false;
+        }
+        const hasArmorLayout = healthBarContainer._hasArmorCapacity || false;
         
         // Determine visibility
         const isDamaged = healthPercent < 1.0;
-        healthBarContainer.visible = entityData.active && (config.showWhenFull || isDamaged);
+        healthBarContainer.visible = entityData.active && (config.showWhenFull || isDamaged || armorPct > 0 || hasArmorLayout);
         
         if (!healthBarContainer.visible) {
             return;
@@ -2152,24 +2822,62 @@ class GameEngine {
             healthColor = 0xFFC300; // Amber-yellow (mid health)
         }
 
-        // Only rebuild the fill geometry when it actually changes. Rebuilding a
-        // Graphics every frame (clear + redraw) for every entity is the PixiJS
-        // anti-pattern that churns GPU geometry; health rarely changes, so this
-        // skips the vast majority of redraws.
-        const fill = healthBarContainer.healthFill;
-        if (fill._lastHealthPercent === healthPercent && fill._lastHealthColor === healthColor) {
-            return;
-        }
-        fill._lastHealthPercent = healthPercent;
-        fill._lastHealthColor = healthColor;
+        const gap = 2;
+        const segmentWidth = Math.floor((config.width - gap) / 2);
 
-        fill.clear();
-        fill.roundRect(
-            -config.width/2, 0, 
-            config.width * healthPercent, 
-            config.height, 
-            config.cornerRadius
-        ).fill(healthColor);
+        // Health background
+        const healthBg = healthBarContainer.healthBg;
+        if (healthBg && healthBg._lastHasArmorLayout !== hasArmorLayout) {
+            healthBg._lastHasArmorLayout = hasArmorLayout;
+            healthBg.clear();
+            const bgWidth = hasArmorLayout ? segmentWidth : config.width;
+            healthBg.roundRect(-config.width / 2, 0, bgWidth, config.height, config.cornerRadius).fill(config.bgColor);
+        }
+
+        // Health fill
+        const fill = healthBarContainer.healthFill;
+        if (fill._lastHealthPercent !== healthPercent || fill._lastHealthColor !== healthColor || fill._lastHasArmorLayout !== hasArmorLayout) {
+            fill._lastHealthPercent = healthPercent;
+            fill._lastHealthColor = healthColor;
+            fill._lastHasArmorLayout = hasArmorLayout;
+            fill.clear();
+            const fillWidth = hasArmorLayout ? segmentWidth : config.width;
+            fill.roundRect(
+                -config.width / 2, 0, 
+                fillWidth * healthPercent, 
+                config.height, 
+                config.cornerRadius
+            ).fill(healthColor);
+        }
+
+        // Armor background & fill (right half when player has armor capacity)
+        const armorBg = healthBarContainer.armorBg;
+        const armorFill = healthBarContainer.armorFill;
+
+        if (armorBg && armorFill) {
+            armorBg.visible = hasArmorLayout;
+            armorFill.visible = hasArmorLayout;
+
+            if (hasArmorLayout) {
+                if (armorBg._lastHasArmorLayout !== hasArmorLayout) {
+                    armorBg._lastHasArmorLayout = hasArmorLayout;
+                    armorBg.clear();
+                    armorBg.roundRect(1, 0, segmentWidth, config.height, config.cornerRadius).fill(config.bgColor);
+                }
+                if (armorFill._lastArmorPct !== armorPct || armorFill._lastHasArmorLayout !== hasArmorLayout) {
+                    armorFill._lastArmorPct = armorPct;
+                    armorFill._lastHasArmorLayout = hasArmorLayout;
+                    armorFill.clear();
+                    if (armorPct > 0) {
+                        armorFill.roundRect(1, 0, segmentWidth * armorPct, config.height, config.cornerRadius).fill(0x00E5FF);
+                    }
+                }
+            } else {
+                armorBg._lastHasArmorLayout = false;
+                armorFill._lastArmorPct = null;
+                armorFill._lastHasArmorLayout = false;
+            }
+        }
     }
     
     /**
@@ -2230,11 +2938,19 @@ class GameEngine {
         healthBarContainer.addChild(cooldownBg);
         healthBarContainer.addChild(cooldownFill);
 
+        // Armor bar graphics
+        const armorBg = new PIXI.Graphics();
+        const armorFill = new PIXI.Graphics();
+        healthBarContainer.addChild(armorBg);
+        healthBarContainer.addChild(armorFill);
+
         healthBarContainer.subBarGeom = { w, barHeight, r };
         healthBarContainer.reloadBg = reloadBg;
         healthBarContainer.reloadFill = reloadFill;
         healthBarContainer.cooldownBg = cooldownBg;
         healthBarContainer.cooldownFill = cooldownFill;
+        healthBarContainer.armorBg = armorBg;
+        healthBarContainer.armorFill = armorFill;
     }
 
     /**
@@ -2324,16 +3040,125 @@ class GameEngine {
             cooldownFill._lastTopY = null;
         }
     }
+
+    /**
+     * Map a status effect render hint to its corresponding emoji badge.
+     * RenderHint Format: "effect_name:#COLOR:animation_type:show_icon:Display Name:params"
+     */
+    getStatusEffectEmoji(hint) {
+        if (!hint) return '';
+
+        const parts = hint.split(':');
+        const effectName = (parts[0] || '').toLowerCase();
+        const animation = (parts[2] || '').toLowerCase();
+        const displayName = (parts[4] || '').toLowerCase();
+
+        if (effectName.includes('vip') || animation === 'crown' || displayName.includes('vip')) {
+            return '👑';
+        }
+        if (effectName.includes('invincib') || displayName.includes('invincible')) {
+            return '⭐';
+        }
+        if (effectName.includes('shield') || displayName.includes('protect') || displayName.includes('shield') || animation === 'shield') {
+            return '🛡️';
+        }
+        if (effectName.includes('speed') || displayName.includes('speed')) {
+            return '⚡';
+        }
+        if (effectName.includes('heal') || displayName.includes('regen') || displayName.includes('heal')) {
+            return '💖';
+        }
+        if (effectName.includes('power') || effectName.includes('berserk') || displayName.includes('damage boost')) {
+            return '💥';
+        }
+        if (effectName.includes('ammo') || displayName.includes('ammo')) {
+            return '♾️';
+        }
+        if (effectName.includes('poison') || animation === 'cloud' || displayName.includes('poison')) {
+            return '☠️';
+        }
+        if (effectName.includes('slow') || animation === 'slow' || displayName.includes('slow')) {
+            return '🐌';
+        }
+        if (effectName.includes('fire') || animation === 'flame' || displayName.includes('burn')) {
+            return '🔥';
+        }
+
+        if (animation === 'sparkle') return '✨';
+        if (animation === 'star') return '🌟';
+
+        return '✨';
+    }
+
+    /**
+     * Update status effect emoji badges displayed under player health/reload/cooldown bars.
+     */
+    updatePowerUpIndicators(sprite, playerData) {
+        const healthBarContainer = sprite.healthBar;
+        if (!healthBarContainer) return;
+
+        const activePowerUps = playerData.activePowerUps || [];
+        const emojiSet = new Set();
+
+        if (playerData.active && playerData.health > 0) {
+            for (const hint of activePowerUps) {
+                const emoji = this.getStatusEffectEmoji(hint);
+                if (emoji) {
+                    emojiSet.add(emoji);
+                }
+            }
+        }
+
+        const emojis = Array.from(emojiSet);
+
+        if (emojis.length === 0) {
+            if (healthBarContainer.statusEffectLabel) {
+                healthBarContainer.statusEffectLabel.visible = false;
+            }
+            return;
+        }
+
+        const emojiString = emojis.join(' ');
+
+        if (!healthBarContainer.statusEffectLabel) {
+            const label = new PIXI.Text(emojiString, {
+                fontSize: 12,
+                stroke: 0x000000,
+                strokeThickness: 2
+            });
+            label.anchor.set(0.5);
+            label.scale.y = -1; // Flip Y-axis back so text is readable in Y-flipped nameContainer
+            healthBarContainer.statusEffectLabel = label;
+            healthBarContainer.addChild(label);
+        } else {
+            if (healthBarContainer.statusEffectLabel.text !== emojiString) {
+                healthBarContainer.statusEffectLabel.text = emojiString;
+            }
+        }
+
+        // Determine Y position below health bar (y = 0) and active sub-bars (y = -5 or -10)
+        let activeSubBars = 0;
+        if (healthBarContainer.reloadBg && healthBarContainer.reloadBg.visible) activeSubBars++;
+        if (healthBarContainer.cooldownBg && healthBarContainer.cooldownBg.visible) activeSubBars++;
+
+        const badgeY = -7 - (activeSubBars * 5);
+        healthBarContainer.statusEffectLabel.position.set(0, badgeY);
+        healthBarContainer.statusEffectLabel.visible = true;
+    }
     
     createProjectile(projectileData) {
+        const isMissile = projectileData.ordinance === 'MISSILE';
+
         // Create main projectile container
         const projectileContainer = new PIXI.Container();
-        
         projectileContainer.position.set(projectileData.x, projectileData.y);
+        if (isMissile) {
+            projectileContainer.rotation = projectileData.rotation || 0;
+        }
         
         // Create the main projectile sprite
-        const sprite = new PIXI.Sprite(this.projectileTexture);
-        sprite.anchor.set(0.5);
+        const sprite = new PIXI.Sprite(isMissile ? this.missileTexture : this.projectileTexture);
+        sprite.anchor.set(isMissile ? (7 / 16) : 0.5, 0.5);
         
         // Flip Y-axis back so sprite appears right-side up (gameContainer is Y-flipped)
         sprite.scale.y = -1;
@@ -2366,7 +3191,7 @@ class GameEngine {
             this.createPlasmaEffects(projectileContainer, sprite);
         }
 
-        // Trails are now derived from caliber/speed/effects, not the ordinance name.
+        // Trails are now derived from caliber/speed/effects, or ordinance type (missiles always trail).
         if (this.shouldProjectileHaveTrail(projectileData)) {
             const trail = this.createProjectileTrail(projectileData);
             trail.zIndex = -1; // Behind the main projectile
@@ -2385,19 +3210,22 @@ class GameEngine {
         this.projectiles.set(projectileData.id, projectileContainer);
         this.gameContainer.addChild(projectileContainer);
         
-        // Create interpolator for smooth movement
-        const velocity = { x: projectileData.vx || 0, y: projectileData.vy || 0 };
-        
-        // Initialize interpolator with velocity
-        const interpolator = new ProjectileInterpolator(projectileContainer, velocity);
-        this.projectileInterpolators.set(projectileData.id, interpolator);
+        // Create interpolator for smooth movement and rotation
+        projectileContainer.interpolator = new EntityInterpolator(projectileContainer, {
+            vx: projectileData.vx || 0,
+            vy: projectileData.vy || 0,
+            snapThreshold: 100,
+            lerpRate: 24.0,
+            hasRotation: isMissile
+        });
     }
     
     /**
      * Whether a projectile leaves a trail — derived from gameplay rather than the
-     * ordinance name: big-caliber rounds (exhaust/smoke) or very fast rounds (tracer).
+     * ordinance name: missiles always trail, big-caliber rounds (exhaust/smoke), or very fast rounds (tracer).
      */
     shouldProjectileHaveTrail(projectileData) {
+        if (projectileData.ordinance === 'MISSILE') return true;
         const caliber = projectileData.caliber || 1;
         const speed = Math.hypot(projectileData.vx || 0, projectileData.vy || 0);
         return caliber >= 1.3 || speed >= 800;
@@ -2405,30 +3233,40 @@ class GameEngine {
 
     /**
      * Trail style derived from caliber (width) and the dominant bullet effect
-     * (color), instead of the ordinance type.
+     * (color), with billowing smoke for missiles.
      */
     createProjectileTrail(projectileData) {
         const trail = new PIXI.Graphics();
         const caliber = projectileData.caliber || 1;
         const effects = projectileData.bulletEffects || [];
+        const isMissile = projectileData.ordinance === 'MISSILE';
 
-        let color = 0xff8800, secondary = 0xffcc44; // default warm exhaust
+        let color = isMissile ? 0xd0d5dd : 0xff8800;
+        let secondary = isMissile ? 0xffaa22 : 0xffcc44; // nozzle thrust
+
         if (effects.includes('SMOKE'))         { color = 0x666666; secondary = 0x999999; }
-        else if (effects.includes('FREEZING')) { color = 0x88ccff; secondary = 0xcceeff; }
-        else if (effects.includes('POISON'))   { color = 0x88cc44; secondary = 0xaaff66; }
-        else if (effects.includes('ELECTRIC')) { color = 0x66ccff; secondary = 0xaaddff; }
-        else if (effects.includes('INCENDIARY') || effects.includes('EXPLOSIVE')) { color = 0xff6600; secondary = 0xffaa00; }
+        else if (effects.includes('FREEZING')) { color = isMissile ? 0x99d4ee : 0x88ccff; secondary = 0xddeeff; }
+        else if (effects.includes('POISON'))   { color = isMissile ? 0xaacc66 : 0x88cc44; secondary = 0xddff88; }
+        else if (effects.includes('ELECTRIC')) { color = isMissile ? 0x88ccee : 0x66ccff; secondary = 0xccffff; }
+        else if (effects.includes('INCENDIARY') || effects.includes('EXPLOSIVE')) {
+            color = isMissile ? 0xd48855 : 0xff6600;
+            secondary = 0xffaa00;
+        }
 
+        trail.isMissile = isMissile;
         trail.trailColor = color;
         trail.trailSecondaryColor = secondary;
-        trail.trailWidth = 3 * caliber + 2; // ~5 at baseline, ~8 at ×2
-        trail.trailAlpha = 0.7;
+        trail.trailWidth = (isMissile ? 4.5 : 3.0) * caliber + 2; // wider for missile smoke
+        trail.trailAlpha = isMissile ? 0.85 : 0.7;
         return trail;
     }
 
-    /** Trail length (sample count) derived from caliber — bigger rounds trail longer. */
+    /** Trail length (sample count) derived from caliber — missiles trail ~2.5x-3x longer than bullets. */
     getTrailLength(projectileData) {
         const caliber = projectileData.caliber || 1;
+        if (projectileData.ordinance === 'MISSILE') {
+            return Math.round(28 + (caliber - 1) * 12); // ~28 baseline, ~40 at ×2
+        }
         return Math.round(8 + (caliber - 1) * 7); // ~8 baseline, ~15 at ×2
     }
     
@@ -2480,48 +3318,95 @@ class GameEngine {
 
     updateProjectileTrail(projectileContainer) {
         const trail = projectileContainer.trail;
-        const points = projectileContainer.trailPoints;
-        if (!trail || !points) {
+        if (!trail) {
             return;
         }
 
-        // Record the projectile's current world position (its container lives in
-        // gameContainer space, driven by the interpolator). We keep a short
-        // rolling history and drop the oldest sample once we exceed the cap.
         const cx = projectileContainer.position.x;
         const cy = projectileContainer.position.y;
-        points.push({ x: cx, y: cy });
-        const maxLen = projectileContainer.maxTrailLength || 8;
-        if (points.length > maxLen) {
-            points.splice(0, points.length - maxLen);
+
+        // Initialize flat coordinate ring buffer on demand
+        if (!projectileContainer.trailCoords) {
+            projectileContainer.trailMaxLen = projectileContainer.maxTrailLength || 8;
+            projectileContainer.trailCoords = new Float32Array(projectileContainer.trailMaxLen * 2);
+            projectileContainer.trailHead = 0;
+            projectileContainer.trailCount = 0;
+        }
+
+        const maxLen = projectileContainer.trailMaxLen;
+        const coords = projectileContainer.trailCoords;
+        let head = projectileContainer.trailHead;
+        let count = projectileContainer.trailCount;
+
+        coords[head * 2] = cx;
+        coords[head * 2 + 1] = cy;
+        head = (head + 1) % maxLen;
+        projectileContainer.trailHead = head;
+        if (count < maxLen) {
+            count++;
+            projectileContainer.trailCount = count;
         }
 
         trail.clear();
-        if (points.length < 2) return;
+        if (count < 2) return;
 
-        // The trail Graphics is a CHILD of the moving container, so draw each
-        // recorded world point relative to the container's current position —
-        // that anchors the trail in world space behind the projectile. Taper
-        // width + alpha from oldest (thin/faint) to newest (full) so it fades
-        // out into the distance.
-        // Large-caliber rounds get a bright inner core near the head (exhaust look).
+        // The trail Graphics is a CHILD of the moving container, so unrotate each
+        // recorded world point by -container.rotation to keep world positions fixed.
+        const rot = projectileContainer.rotation || 0;
+        const cosR = Math.cos(rot);
+        const sinR = Math.sin(rot);
+
+        const startIndex = (head - count + maxLen) % maxLen;
+        const isMissile = !!trail.isMissile;
         const bigBore = (projectileContainer.projectileData?.caliber || 1) >= 1.7;
-        for (let i = 1; i < points.length; i++) {
-            const progress = i / (points.length - 1); // 0 = oldest segment, 1 = newest
-            const ax = points[i - 1].x - cx, ay = points[i - 1].y - cy;
-            const bx = points[i].x - cx, by = points[i].y - cy;
-            const width = trail.trailWidth * (0.2 + 0.8 * progress);
-            const alpha = trail.trailAlpha * progress;
 
-            trail.moveTo(ax, ay);
-            trail.lineTo(bx, by);
-            trail.stroke({ width, color: trail.trailColor, alpha });
+        for (let i = 1; i < count; i++) {
+            const prevIdx = ((startIndex + i - 1) % maxLen) * 2;
+            const currIdx = ((startIndex + i) % maxLen) * 2;
+            const progress = i / (count - 1); // 0 = oldest segment, 1 = newest
 
-            // Bright inner core near the head of a large round's exhaust.
-            if (bigBore && progress > 0.7) {
+            const dax = coords[prevIdx] - cx;
+            const day = coords[prevIdx + 1] - cy;
+            const dbx = coords[currIdx] - cx;
+            const dby = coords[currIdx + 1] - cy;
+
+            // Unrotate into local coordinate space
+            const ax = dax * cosR + day * sinR;
+            const ay = -dax * sinR + day * cosR;
+            const bx = dbx * cosR + dby * sinR;
+            const by = -dbx * sinR + dby * cosR;
+
+            if (isMissile) {
+                // Expanding smoke plume: wider at the back (older), compact near the engine
+                const width = trail.trailWidth * (0.6 + 1.2 * (1.0 - progress));
+                const alpha = trail.trailAlpha * Math.pow(progress, 0.65);
+
                 trail.moveTo(ax, ay);
                 trail.lineTo(bx, by);
-                trail.stroke({ width: width * 0.4, color: trail.trailSecondaryColor, alpha: alpha * 0.8 });
+                trail.stroke({ width, color: trail.trailColor, alpha });
+
+                // Bright fiery engine flame core near the rocket nozzle
+                if (progress > 0.6) {
+                    const coreProgress = (progress - 0.6) / 0.4;
+                    const coreWidth = width * (0.35 + 0.25 * coreProgress);
+                    trail.moveTo(ax, ay);
+                    trail.lineTo(bx, by);
+                    trail.stroke({ width: coreWidth, color: trail.trailSecondaryColor, alpha: alpha * 0.95 });
+                }
+            } else {
+                const width = trail.trailWidth * (0.2 + 0.8 * progress);
+                const alpha = trail.trailAlpha * progress;
+
+                trail.moveTo(ax, ay);
+                trail.lineTo(bx, by);
+                trail.stroke({ width, color: trail.trailColor, alpha });
+
+                // Bright inner core near the head of a large round's exhaust.
+                if (bigBore && progress > 0.7) {
+                    trail.moveTo(ax, ay);
+                    trail.lineTo(bx, by);
+                    trail.stroke({ width: width * 0.4, color: trail.trailSecondaryColor, alpha: alpha * 0.8 });
+                }
             }
         }
     }
@@ -2531,34 +3416,34 @@ class GameEngine {
      */
     customizeProjectileAppearance(sprite, projectileData) {
         const effects = projectileData.bulletEffects || [];
+        const isMissile = projectileData.ordinance === 'MISSILE';
 
-        // Base appearance. Size is driven by CALIBER (applied as a scale multiplier
-        // by the caller), and color is modulated by bullet effects below — there's
-        // no longer a per-ordinance sub-type to switch on.
         sprite.scale.set(1.0);
-        sprite.tint = 0xf39c12; // Default projectile color
+        if (!isMissile) {
+            sprite.tint = 0xf39c12; // Default projectile color
+        }
 
         // Add visual effects for special bullet effects
         if (effects.includes('HOMING')) {
             // Add a subtle glow for homing projectiles
             const glow = new PIXI.Graphics();
-            glow.circle(0, 0, 8).fill({ color: 0xffffff, alpha: 0.3 });
+            glow.circle(isMissile ? 3 : 0, 0, isMissile ? 6 : 8).fill({ color: 0xffffff, alpha: 0.3 });
             sprite.addChild(glow);
         }
         
         if (effects.includes('ELECTRIC')) {
             // Add electric sparks
-            sprite.tint = this.blendColors(sprite.tint, 0x88aaff, 0.5);
+            sprite.tint = this.blendColors(sprite.tint || 0xffffff, 0x88aaff, 0.5);
         }
         
         if (effects.includes('INCENDIARY')) {
             // Add fire tint
-            sprite.tint = this.blendColors(sprite.tint, 0xff4444, 0.3);
+            sprite.tint = this.blendColors(sprite.tint || 0xffffff, 0xff4444, 0.3);
         }
         
         if (effects.includes('FREEZING')) {
             // Add ice tint
-            sprite.tint = this.blendColors(sprite.tint, 0x88ccff, 0.3);
+            sprite.tint = this.blendColors(sprite.tint || 0xffffff, 0x88ccff, 0.3);
         }
         
         if (effects.includes('PIERCING')) {
@@ -2574,18 +3459,14 @@ class GameEngine {
         // Update projectile data
         projectileContainer.projectileData = projectileData;
         
-        // Use interpolator for smooth movement
-        const interpolator = this.projectileInterpolators.get(projectileData.id);
-        if (interpolator) {
-            const velocity = { x: projectileData.vx || 0, y: projectileData.vy || 0 };
-            
-            // Update interpolator with server data
-            interpolator.updateFromServer(projectileData.x, projectileData.y, velocity.x, velocity.y);
-        } else {
-            // Fallback to direct position update if no interpolator
-            // This should rarely happen, but provides safety
-            projectileContainer.position.set(projectileData.x, projectileData.y);
-        }
+        // Use interpolator for smooth movement and rotation
+        projectileContainer.interpolator.updateFromServer(
+            projectileData.x,
+            projectileData.y,
+            projectileData.vx || 0,
+            projectileData.vy || 0,
+            projectileData.rotation !== undefined ? projectileData.rotation : null
+        );
     }
     
     removeProjectile(projectileId) {
@@ -2597,13 +3478,6 @@ class GameEngine {
             // Remove from parent container
             this.gameContainer.removeChild(projectileContainer);
             this.projectiles.delete(projectileId);
-        }
-        
-        // Clean up interpolator properly to prevent memory leaks
-        const interpolator = this.projectileInterpolators.get(projectileId);
-        if (interpolator) {
-            interpolator.destroy();
-            this.projectileInterpolators.delete(projectileId);
         }
     }
     
@@ -2645,6 +3519,12 @@ class GameEngine {
             projectileContainer.sprite = null;
         }
         
+        // Clean up interpolator
+        if (projectileContainer.interpolator) {
+            projectileContainer.interpolator.destroy();
+            projectileContainer.interpolator = null;
+        }
+
         // Clear all references
         projectileContainer.projectileData = null;
         projectileContainer.isPlasma = null;
@@ -2676,18 +3556,27 @@ class GameEngine {
      *   { type: 'circle',  cx, cy, r }
      *   { type: 'polygon', points: [[x,y], ...] }
      */
-    parseObstacleShapes(shapesStr) {
-        if (!shapesStr) return [];
-        return shapesStr.split(';').filter(s => s.length > 0).map(fixtureStr => {
-            const parts = fixtureStr.split('/').map(v => {
-                return v.replace(/[()]/g, '').split(',').map(Number);
-            });
-            if (parts[0].length === 3) {
-                const [cx, cy, r] = parts[0];
-                return { type: 'circle', cx, cy, r };
+    areShapesEqual(a, b) {
+        if (a === b) return true;
+        if (!a || !b) return false;
+        if (typeof a === 'string' && typeof b === 'string') return a === b;
+        if (Array.isArray(a) && Array.isArray(b)) {
+            if (a.length !== b.length) return false;
+            for (let i = 0; i < a.length; i++) {
+                const sa = a[i], sb = b[i];
+                if (!sa || !sb || sa.type !== sb.type) return false;
+                if (sa.type === 'circle') {
+                    if (sa.cx !== sb.cx || sa.cy !== sb.cy || sa.r !== sb.r) return false;
+                } else if (sa.type === 'polygon') {
+                    if (!sa.points || !sb.points || sa.points.length !== sb.points.length) return false;
+                    for (let j = 0; j < sa.points.length; j++) {
+                        if (sa.points[j][0] !== sb.points[j][0] || sa.points[j][1] !== sb.points[j][1]) return false;
+                    }
+                }
             }
-            return { type: 'polygon', points: parts };
-        });
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -2700,7 +3589,7 @@ class GameEngine {
         const obstacleType = obstacleData.type || 'BOULDER';
         const color = this.getObstacleColor(obstacleType);
         const outlineColor = this.darkenColor(color);
-        const shapes = this.parseObstacleShapes(obstacleData.shapes);
+        const shapes = BinaryStateDecoder.parseShapes(obstacleData.shapes);
         for (const shape of shapes) {
             if (shape.type === 'circle') {
                 graphics.circle(shape.cx, shape.cy, shape.r);
@@ -2824,7 +3713,7 @@ class GameEngine {
         effectContainer.rotation = effectData.rotation || 0;
 
         // If shapes data changed (e.g. beam length clipped by raycast or rotating), re-draw graphics
-        if (effectContainer._lastShapes !== effectData.shapes) {
+        if (!this.areShapesEqual(effectContainer._lastShapes, effectData.shapes)) {
             effectContainer._lastShapes = effectData.shapes;
             if (effectContainer.effectGraphics) {
                 this.drawEffectGraphics(effectContainer.effectGraphics, effectData);
@@ -2875,6 +3764,13 @@ class GameEngine {
         this.createCTFFlagGraphics(flagContainer, flagData);
         flagContainer.zIndex = 11;
         flagContainer.flagData = flagData;
+
+        flagContainer.interpolator = new EntityInterpolator(flagContainer, {
+            vx: flagData.vx || 0,
+            vy: flagData.vy || 0,
+            snapThreshold: 150
+        });
+
         this.flags.set(flagData.id, flagContainer);
         this.gameContainer.addChild(flagContainer);
     }
@@ -2914,7 +3810,7 @@ class GameEngine {
         container.zIndex = 12;
 
         const isRampage = npcData.personality === 'RAMPAGE';
-        const radius = npcData.radius;
+        const radius = npcData.radius || (isRampage ? 20 : 12);
 
         const ball = new PIXI.Graphics();
 
@@ -2958,6 +3854,13 @@ class GameEngine {
         container.ball = ball;
         container.npcData = npcData;
 
+        container.interpolator = new EntityInterpolator(container, {
+            vx: npcData.vx || 0,
+            vy: npcData.vy || 0,
+            snapThreshold: 150,
+            lerpRate: 18.0
+        });
+
         this.oddballNpcs.set(npcData.id, container);
         this.gameContainer.addChild(container);
     }
@@ -2965,16 +3868,200 @@ class GameEngine {
     updateOddballNpc(npcData) {
         const container = this.oddballNpcs.get(npcData.id);
         if (!container) return;
-        container.position.set(npcData.x, npcData.y);
+
+        container.interpolator.updateFromServer(
+            npcData.x,
+            npcData.y,
+            npcData.vx || 0,
+            npcData.vy || 0
+        );
         container.npcData = npcData;
     }
 
     removeOddballNpc(npcId) {
         const container = this.oddballNpcs.get(npcId);
         if (container) {
+            if (container.interpolator) {
+                container.interpolator.destroy();
+                container.interpolator = null;
+            }
             this.gameContainer.removeChild(container);
             container.destroy({ children: true });
             this.oddballNpcs.delete(npcId);
+        }
+    }
+
+    createZombie(zombieData) {
+        const container = new PIXI.Container();
+        container.position.set(zombieData.x, zombieData.y);
+        container.rotation = zombieData.rotation || 0;
+        container.zIndex = 11;
+
+        const radius = zombieData.radius || 15;
+        container.zombieRadius = radius;
+
+        const type = zombieData.type || 'WALKER';
+        const gfx = new PIXI.Graphics();
+
+        // Type-specific colors and shapes
+        let bodyColor = 0x3a5a20; // classic walker
+        let strokeColor = 0x1f3410;
+        let eyeColor = 0xdd2222;
+
+        if (type === 'RUNNER') {
+            bodyColor = 0x5a8c22;
+            strokeColor = 0x2c4a10;
+            eyeColor = 0xff4400;
+        } else if (type === 'TANK') {
+            bodyColor = 0x243818;
+            strokeColor = 0x475b37;
+            eyeColor = 0xcc1111;
+        } else if (type === 'LUNGER') {
+            bodyColor = 0x2e6b27;
+            strokeColor = 0x164012;
+            eyeColor = 0xff1133;
+        } else if (type === 'STALKER') {
+            bodyColor = 0x1a2b16;
+            strokeColor = 0x0e170c;
+            eyeColor = 0xee3355;
+        } else if (type === 'BOOMER') {
+            bodyColor = 0x687828;
+            strokeColor = 0x3d4710;
+            eyeColor = 0xaaff22;
+        } else if (type === 'SPITTER') {
+            bodyColor = 0x245942;
+            strokeColor = 0x113324;
+            eyeColor = 0x22ff99;
+        }
+
+        // Lunge aura (drawn behind body, visible when lunging)
+        const lungeAura = new PIXI.Graphics();
+        lungeAura.circle(0, 0, radius + 8).fill({ color: 0xFF2200, alpha: 0.35 });
+        lungeAura.circle(0, 0, radius + 12).stroke({ width: 2, color: 0xFF6600, alpha: 0.6 });
+        lungeAura.visible = !!zombieData.isLunging;
+        container.addChild(lungeAura);
+        container.lungeAura = lungeAura;
+
+        // Reaching zombie arms / claws extending forward along x-axis (facing direction)
+        const armLength = type === 'LUNGER' ? radius * 1.3 : (type === 'SPITTER' ? radius * 0.7 : radius * 0.9);
+        const armThickness = type === 'TANK' ? 6 : (type === 'BOOMER' ? 5 : 3.5);
+
+        // Left arm
+        gfx.moveTo(radius * 0.2, -radius * 0.55).lineTo(armLength, -radius * 0.45);
+        gfx.stroke({ width: armThickness, color: bodyColor, cap: 'round' });
+        // Left hand/claws
+        gfx.circle(armLength, -radius * 0.45, type === 'TANK' ? 4 : 2.5).fill(0x881111);
+
+        // Right arm
+        gfx.moveTo(radius * 0.2, radius * 0.55).lineTo(armLength, radius * 0.45);
+        gfx.stroke({ width: armThickness, color: bodyColor, cap: 'round' });
+        // Right hand/claws
+        gfx.circle(armLength, radius * 0.45, type === 'TANK' ? 4 : 2.5).fill(0x881111);
+
+        // Main body torso / head
+        gfx.circle(0, 0, radius).fill(bodyColor);
+        gfx.circle(0, 0, radius).stroke({ width: type === 'TANK' ? 3.5 : 2, color: strokeColor });
+
+        // Tank armor plates or stalker markings
+        if (type === 'TANK') {
+            gfx.arc(0, 0, radius - 3, -Math.PI * 0.7, Math.PI * 0.7);
+            gfx.stroke({ width: 3, color: 0x61784c });
+        } else if (type === 'RUNNER') {
+            // Speed streaks
+            gfx.moveTo(-radius * 0.6, 0).lineTo(radius * 0.4, 0);
+            gfx.stroke({ width: 2, color: 0x84cc16, alpha: 0.7 });
+        } else if (type === 'BOOMER') {
+            // Bile boils / toxic pustules on bloated body
+            gfx.circle(-radius * 0.35, -radius * 0.35, radius * 0.3).fill(0x8cb828);
+            gfx.circle(-radius * 0.35, -radius * 0.35, radius * 0.3).stroke({ width: 1.5, color: 0x4a6312 });
+            gfx.circle(-radius * 0.4, radius * 0.3, radius * 0.25).fill(0x9ecf2d);
+            gfx.circle(-radius * 0.4, radius * 0.3, radius * 0.25).stroke({ width: 1.5, color: 0x4a6312 });
+            gfx.circle(0, -radius * 0.45, radius * 0.22).fill(0xbbef3a);
+        } else if (type === 'SPITTER') {
+            // Elongated venom maw / spitting nozzle extending forward
+            gfx.moveTo(radius * 0.4, -radius * 0.25).lineTo(radius * 1.25, 0).lineTo(radius * 0.4, radius * 0.25);
+            gfx.fill(0x1a4532);
+            gfx.stroke({ width: 2, color: 0x38e88c });
+            // Corrosive acid gland spots
+            gfx.circle(-radius * 0.3, -radius * 0.3, 2.5).fill(0x44ffaa);
+            gfx.circle(-radius * 0.3, radius * 0.3, 2.5).fill(0x44ffaa);
+        }
+
+        // Glowing predatory eyes
+        const eyeX = radius * 0.45;
+        const eyeY = radius * 0.35;
+        gfx.circle(eyeX, -eyeY, 2).fill(eyeColor);
+        gfx.circle(eyeX, eyeY, 2).fill(eyeColor);
+
+        container.addChild(gfx);
+        container.zombieGfx = gfx;
+        container.zombieData = zombieData;
+
+        // Health bar
+        const healthBarConfig = {
+            width: Math.max(28, radius * 2),
+            height: 4,
+            yOffset: radius + 10,
+            bgColor: 0x222222,
+            fillColor: 0x22C55E,
+            cornerRadius: 2,
+            showWhenFull: false,
+            dynamicColor: true
+        };
+        const healthBar = this.createHealthBar(zombieData, healthBarConfig);
+        container.healthBar = healthBar;
+
+        container.interpolator = new EntityInterpolator(container, {
+            vx: zombieData.vx || 0,
+            vy: zombieData.vy || 0,
+            snapThreshold: 150,
+            lerpRate: 18.0
+        });
+
+        this.zombies.set(zombieData.id, container);
+        this.gameContainer.addChild(container);
+    }
+
+    updateZombie(zombieData) {
+        const container = this.zombies.get(zombieData.id);
+        if (!container) return;
+
+        container.interpolator.updateFromServer(
+            zombieData.x,
+            zombieData.y,
+            zombieData.vx || 0,
+            zombieData.vy || 0
+        );
+
+        container.rotation = zombieData.rotation || 0;
+        container.zombieData = zombieData;
+
+        if (container.lungeAura) {
+            container.lungeAura.visible = !!zombieData.isLunging;
+        }
+
+        if (container.healthBar) {
+            this.updateHealthBar(container.healthBar, zombieData, container, container.healthBar.config);
+        }
+    }
+
+    removeZombie(zombieId) {
+        const container = this.zombies.get(zombieId);
+        if (container) {
+            if (container.interpolator) {
+                container.interpolator.destroy();
+                container.interpolator = null;
+            }
+            if (container.healthBar) {
+                if (container.healthBar.parent) {
+                    container.healthBar.parent.removeChild(container.healthBar);
+                }
+                container.healthBar.destroy({ children: true, context: true });
+                container.healthBar = null;
+            }
+            this.gameContainer.removeChild(container);
+            container.destroy({ children: true });
+            this.zombies.delete(zombieId);
         }
     }
 
@@ -2984,8 +4071,12 @@ class GameEngine {
             return;
         }
 
-        // Update position (important for carried flags)
-        flagContainer.position.set(flagData.x, flagData.y);
+        flagContainer.interpolator.updateFromServer(
+            flagData.x,
+            flagData.y,
+            flagData.vx || 0,
+            flagData.vy || 0
+        );
 
         // Update visual state based on flag state
         const state = flagData.state;
@@ -3007,6 +4098,10 @@ class GameEngine {
     removeFlag(flagId) {
         const flagContainer = this.flags.get(flagId);
         if (flagContainer) {
+            if (flagContainer.interpolator) {
+                flagContainer.interpolator.destroy();
+                flagContainer.interpolator = null;
+            }
             flagContainer.destroy({ children: true, context: true });
             this.gameContainer.removeChild(flagContainer);
             this.flags.delete(flagId);
@@ -3014,6 +4109,16 @@ class GameEngine {
     }
     
     createKothZone(zoneData) {
+        if ((zoneData.x === undefined || zoneData.radius === undefined) && this.initialKothZones) {
+            const initZone = this.initialKothZones.get(zoneData.id);
+            if (initZone) {
+                if (zoneData.x === undefined) zoneData.x = initZone.x;
+                if (zoneData.y === undefined) zoneData.y = initZone.y;
+                if (zoneData.radius === undefined) zoneData.radius = initZone.radius;
+                if (zoneData.zoneNumber === undefined) zoneData.zoneNumber = initZone.zoneNumber;
+            }
+        }
+
         const zoneContainer = new PIXI.Container();
         
         zoneContainer.position.set(zoneData.x, zoneData.y);
@@ -3031,7 +4136,6 @@ class GameEngine {
         zoneContainer.addChild(cautionStripes);
         const cautionMask = new PIXI.Graphics();
         zoneContainer.cautionMask = cautionMask;
-        zoneContainer.addChild(cautionMask);
         cautionStripes.mask = cautionMask;
 
         // Create capture progress ring
@@ -3105,6 +4209,21 @@ class GameEngine {
     updateKothZone(zoneData) {
         const zoneContainer = this.kothZones.get(zoneData.id);
         if (!zoneContainer) return;
+
+        if (zoneContainer.zoneData) {
+            if (zoneData.x === undefined) zoneData.x = zoneContainer.zoneData.x;
+            if (zoneData.y === undefined) zoneData.y = zoneContainer.zoneData.y;
+            if (zoneData.radius === undefined) zoneData.radius = zoneContainer.zoneData.radius;
+            if (zoneData.zoneNumber === undefined) zoneData.zoneNumber = zoneContainer.zoneData.zoneNumber;
+        } else if (this.initialKothZones) {
+            const initZone = this.initialKothZones.get(zoneData.id);
+            if (initZone) {
+                if (zoneData.x === undefined) zoneData.x = initZone.x;
+                if (zoneData.y === undefined) zoneData.y = initZone.y;
+                if (zoneData.radius === undefined) zoneData.radius = initZone.radius;
+                if (zoneData.zoneNumber === undefined) zoneData.zoneNumber = initZone.zoneNumber;
+            }
+        }
         
         // Update position
         zoneContainer.position.set(zoneData.x, zoneData.y);
@@ -3141,6 +4260,7 @@ class GameEngine {
                 stripes.visible = true;
             } else {
                 stripes.clear();
+                zoneContainer.cautionMask.clear();
                 stripes.visible = false;
             }
 
@@ -3174,15 +4294,15 @@ class GameEngine {
         g.clear();
         const stripeW = 16;          // band thickness
         const step = stripeW * 2;    // band + equal gap
-        // 45° bands: each is the strip between the lines x - y = c and = c + stripeW.
+        // 45° bands: each is a separate closed quad polygon to prevent earcut triangulation glitches.
         for (let c = -2 * radius; c < 2 * radius; c += step) {
-            g.moveTo(c - radius, -radius);
-            g.lineTo(c + stripeW - radius, -radius);
-            g.lineTo(c + stripeW + radius, radius);
-            g.lineTo(c + radius, radius);
-            g.closePath();
+            g.poly([
+                c - radius, -radius,
+                c + stripeW - radius, -radius,
+                c + stripeW + radius, radius,
+                c + radius, radius
+            ]).fill({ color: 0xFFD21A, alpha: 0.55 });
         }
-        g.fill({ color: 0xFFD21A, alpha: 0.55 });
     }
 
     getKothZoneColors(zoneData) {
@@ -3229,7 +4349,7 @@ class GameEngine {
     getKothZoneStatusText(zoneData) {
         switch (zoneData.state) {
             case 'CONTROLLED':
-                return `TEAM ${zoneData.controllingTeam + 1}`;
+                return zoneData.controllingTeam > 0 ? `TEAM ${zoneData.controllingTeam}` : 'CONTROLLED';
             case 'CONTESTED':
                 return 'CONTESTED!';
             case 'NEUTRAL':
@@ -3244,6 +4364,10 @@ class GameEngine {
     removeKothZone(zoneId) {
         const zoneContainer = this.kothZones.get(zoneId);
         if (zoneContainer) {
+            if (zoneContainer.cautionMask) {
+                zoneContainer.cautionMask.destroy({ context: true });
+                zoneContainer.cautionMask = null;
+            }
             zoneContainer.destroy({ children: true, context: true });
             this.gameContainer.removeChild(zoneContainer);
             this.kothZones.delete(zoneId);
@@ -3490,9 +4614,21 @@ class GameEngine {
      * Create headquarters graphics
      */
     createHeadquartersGraphics(graphics, entityData) {
-        // Derive dimensions from the compact shapes string; fall back to
-        // sensible defaults so the renderer never breaks on missing data.
-        const shapes = this.parseObstacleShapes(entityData.shapes);
+        // Derive dimensions from the compact shapes string or initialHQ map
+        let shapesData = entityData.shapes;
+        if ((!shapesData || (Array.isArray(shapesData) && shapesData.length === 0)) && this.initialHeadquarters) {
+            const team = entityData.team !== undefined ? entityData.team : (entityData.ownerTeam || 0);
+            const initHq = this.initialHeadquarters.get(entityData.id)
+                || this.initialHeadquarters.get((entityData.id << 16) >> 16)
+                || this.initialHeadquarters.get(entityData.id & 0xFFFF)
+                || this.initialHeadquarters.get(`team_${team}`)
+                || Array.from(this.initialHeadquarters.values()).find(h => (h.ownerTeam !== undefined ? h.ownerTeam : h.team) === team);
+            if (initHq) {
+                shapesData = initHq.shapes;
+                entityData.shapes = shapesData;
+            }
+        }
+        const shapes = BinaryStateDecoder.parseShapes(shapesData);
 
         // The physics body is composed of wall polygon(s) plus one circle fixture
         // per corner turret. Honor that data directly rather than synthesizing
@@ -3513,14 +4649,15 @@ class GameEngine {
         }
         const width  = halfWidth  * 2;
         const height = halfHeight * 2;
-        const team = entityData.team || 0;
+        const team = entityData.team || entityData.ownerTeam || 0;
 
         // Get team color
         const teamColor = this.getTeamColor(team);
         const darkerTeamColor = this.darkenColor(teamColor);
 
+        const isDestroyed = entityData.isDestroyed || entityData.active === false || (entityData.health !== undefined && entityData.health <= 0);
         // Health is already sent as a percentage (0.0 - 1.0) from backend
-        const healthPct = entityData.health || 1.0;
+        const healthPct = typeof entityData.health === 'number' ? Math.max(0, Math.min(1, entityData.health)) : (isDestroyed ? 0 : 1.0);
         const damageAlpha = healthPct < 1.0 ? (1.0 - healthPct) * 0.6 : 0;
 
         // Re-issue the wall path(s) so they can be filled, damage-overlaid, and stroked.
@@ -3534,6 +4671,72 @@ class GameEngine {
             }
         };
 
+        let turrets = turretShapes.map(c => ({ x: c.cx, y: c.cy, r: c.r }));
+        if (turrets.length === 0) {
+            // Standard HQ has 4 corner turrets with radius HQ_TURRET_RADIUS (15px)
+            // matching the physics body created in Headquarters.java
+            const turretRadius = 15;
+            turrets = [
+                { x: -halfWidth, y: -halfHeight, r: turretRadius },
+                { x: halfWidth,  y: -halfHeight, r: turretRadius },
+                { x: halfWidth,  y: halfHeight,  r: turretRadius },
+                { x: -halfWidth, y: halfHeight,  r: turretRadius }
+            ];
+        }
+
+        if (isDestroyed) {
+            // Destroyed / Ruins visual - distinct charred rubble style at full opacity
+            traceWalls();
+            graphics.fill({ color: 0x1f1f1f, alpha: 0.95 });
+            traceWalls();
+            graphics.stroke({ width: 3, color: 0x444444, alpha: 0.9 });
+
+            turrets.forEach(turret => {
+                graphics.circle(turret.x, turret.y, turret.r).fill({ color: 0x151515, alpha: 0.95 });
+                graphics.circle(turret.x, turret.y, turret.r).stroke({ width: 2, color: 0x333333, alpha: 0.8 });
+                graphics.circle(turret.x, turret.y, turret.r * 0.5).fill({ color: 0x0a0a0a, alpha: 0.9 });
+            });
+
+            // Scorched crater / center
+            const centerSize = Math.min(halfWidth, halfHeight) * 0.5;
+            graphics.circle(0, 0, centerSize).fill({ color: 0x111111, alpha: 0.9 });
+            graphics.circle(0, 0, centerSize).stroke({ width: 2, color: 0x552222, alpha: 0.8 });
+
+            // Team indicator - clearly marked destroyed
+            const statusText = new PIXI.Text(`HQ ${team}\nDESTROYED`, {
+                fontSize: 13,
+                fill: 0xFF4444,
+                fontWeight: 'bold',
+                align: 'center',
+                stroke: 0x000000,
+                strokeThickness: 3
+            });
+            statusText.anchor.set(0.5);
+            statusText.scale.y = -1; // Flip Y-axis back so text is readable
+            graphics.addChild(statusText);
+
+            // Empty dark bar labeled DESTROYED
+            const barWidth = width * 0.8;
+            const barHeight = 6;
+            const barY = -halfHeight - 15;
+            graphics.rect(-barWidth / 2, barY, barWidth, barHeight).fill({ color: 0x1a1a1a, alpha: 0.8 });
+            graphics.rect(-barWidth / 2, barY, barWidth, barHeight).stroke({ width: 1.5, color: 0x552222, alpha: 0.8 });
+
+            const labelText = new PIXI.Text('DESTROYED', {
+                fontSize: 9,
+                fill: 0xCC3333,
+                fontWeight: 'bold',
+                stroke: 0x000000,
+                strokeThickness: 2
+            });
+            labelText.anchor.set(0.5);
+            labelText.scale.y = -1;
+            labelText.position.set(0, barY - 10);
+            graphics.addChild(labelText);
+
+            return graphics;
+        }
+
         // Walls: team-colored fill, damage overlay, fortified white outline.
         traceWalls();
         graphics.fill({ color: teamColor, alpha: 0.9 });
@@ -3544,7 +4747,6 @@ class GameEngine {
         traceWalls();
         graphics.stroke({ width: 4, color: 0xFFFFFF, alpha: 0.9 });
 
-        const turrets = turretShapes.map(c => ({ x: c.cx, y: c.cy, r: c.r }))
         turrets.forEach(turret => {
             // Turret base (darker shade of team color)
             graphics.circle(turret.x, turret.y, turret.r).fill({ color: darkerTeamColor, alpha: 0.95 });
@@ -3631,10 +4833,25 @@ class GameEngine {
         const graphics = container.getChildAt(0);
         if (!graphics) return;
 
-        // Only rebuild when health or team changes. The HQ is otherwise static,
+        // Ensure shapesData is populated if initialHeadquarters became available after initial creation
+        if ((!entityData.shapes || (Array.isArray(entityData.shapes) && entityData.shapes.length === 0)) && this.initialHeadquarters) {
+            const team = entityData.team !== undefined ? entityData.team : (entityData.ownerTeam || 0);
+            const initHq = this.initialHeadquarters.get(entityData.id)
+                || this.initialHeadquarters.get((entityData.id << 16) >> 16)
+                || this.initialHeadquarters.get(entityData.id & 0xFFFF)
+                || this.initialHeadquarters.get(`team_${team}`)
+                || Array.from(this.initialHeadquarters.values()).find(h => (h.ownerTeam !== undefined ? h.ownerTeam : h.team) === team);
+            if (initHq && initHq.shapes) {
+                entityData.shapes = initHq.shapes;
+                delete container._hqRenderKey; // Force rebuild with shapes
+            }
+        }
+
+        // Only rebuild when health, team, or destroyed state changes. The HQ is otherwise static,
         // and a rebuild allocates two PIXI.Text objects (each owns a GPU texture),
         // so redrawing every tick churned both geometry and textures.
-        const renderKey = `${entityData.health}|${entityData.team}`;
+        const isDestroyed = entityData.isDestroyed || entityData.active === false || (entityData.health !== undefined && entityData.health <= 0);
+        const renderKey = `${entityData.health}|${entityData.team || entityData.ownerTeam || 0}|${isDestroyed}`;
         if (container._hqRenderKey === renderKey) return;
         container._hqRenderKey = renderKey;
 
@@ -3727,8 +4944,10 @@ class GameEngine {
      * Update utility entity visual state
      */
     updateUtilityEntityVisual(container, entityData) {
-        // Update alpha based on activity
-        if (!entityData.active) {
+        // Headquarters manages its own destroyed / ruin styling at full opacity (never ephemeral)
+        if (entityData.type === 'HEADQUARTERS') {
+            container.alpha = 1.0;
+        } else if (!entityData.active) {
             container.alpha = 0.5;
         } else {
             container.alpha = 1.0;
@@ -3947,7 +5166,7 @@ class GameEngine {
         const style = this.getFieldEffectStyle(effectData.type);
         
         if (effectData.shapes && effectData.shapes.length > 0) {
-            const shapes = this.parseObstacleShapes(effectData.shapes);
+            const shapes = BinaryStateDecoder.parseShapes(effectData.shapes);
             for (const shape of shapes) {
                 if (shape.type === 'circle') {
                     graphics.circle(shape.cx, shape.cy, shape.r);
@@ -4598,7 +5817,7 @@ class GameEngine {
         // Update consolidated HUD
         this.updateConsolidatedHUD(myPlayer);
         
-        if (!myPlayer.active && myPlayer.respawnTime > 0) {
+        if (!myPlayer.active) {
             this.showRespawnTimer(myPlayer.respawnTime, myPlayer);
         } else {
             this.hideDeathScreen();
@@ -4724,6 +5943,7 @@ class GameEngine {
         vipKills:    { label: '🎯 VIP',  read: bd => bd.vipKills ?? 0 },
         hqDamage:    { label: '🏰 Dmg',  read: bd => Math.round(bd.hqDamage ?? 0) },
         hqDestroyed: { label: '💥 HQ',   read: bd => bd.hqDestroyed ?? 0 },
+        zombieKills: { label: '🧟 Kills', color: '#76BA1B', read: bd => bd.zombieKills ?? 0 },
     };
 
     /**
@@ -4761,6 +5981,15 @@ class GameEngine {
         if (bd && typeof bd.total === 'number') return bd.total;
         if (typeof entry.score === 'number') return entry.score;
         return entry.kills || 0;
+    }
+
+    /** Authoritative deaths for any entry: breakdown.deaths, else numeric deaths, else 0. */
+    playerDeaths(entry) {
+        if (!entry) return 0;
+        const bd = this.getBreakdown(entry);
+        if (bd && typeof bd.deaths === 'number') return bd.deaths;
+        if (typeof entry.deaths === 'number') return entry.deaths;
+        return 0;
     }
 
     /** Append one styled stat span per active score component to a stats element. */
@@ -4825,7 +6054,7 @@ class GameEngine {
                             <td style="text-align: left;">#${i + 1} <span style="color: ${this.getTeamColorCSS(player.team || 0)}">●</span> ${player.name || `Player ${player.id}`}${vipIndicator}</td>
                             ${showScore ? `<td style="font-weight: bold;">${this.playerScoreTotal(player)}</td>` : ''}
                             ${columns.map(c => `<td${c.color ? ` style="color: ${c.color};"` : ''}>${c.read(this.getBreakdown(player))}</td>`).join('')}
-                            <td>${player.deaths || 0}</td>
+                            <td>${this.playerDeaths(player)}</td>
                             <td>${player.active ? 'Alive' : (player.eliminated ? 'Out' : 'Dead')}</td>
                         </tr>
                     `}).join('')}
@@ -4866,7 +6095,7 @@ class GameEngine {
             const componentTotals = columns
                 .map(c => `${c.label}: ${teamPlayers.reduce((s, p) => s + (c.read(this.getBreakdown(p)) || 0), 0)}`)
                 .join(' | ');
-            const teamDeaths = teamPlayers.reduce((s, p) => s + (p.deaths || 0), 0);
+            const teamDeaths = teamPlayers.reduce((s, p) => s + this.playerDeaths(p), 0);
             const headerStats = `Score: ${effectiveScore}${componentTotals ? ' | ' + componentTotals : ''} | D: ${teamDeaths}`;
 
             html += `
@@ -4891,7 +6120,7 @@ class GameEngine {
                                 <td style="padding: 2px; text-align: left;">${player.name || `Player ${player.id}`}${vipIndicator}</td>
                                 <td style="padding: 2px; text-align: center; font-weight: bold;">${this.playerScoreTotal(player)}</td>
                                 ${columns.map(c => `<td style="padding: 2px; text-align: center;${c.color ? ` color: ${c.color};` : ''}">${c.read(this.getBreakdown(player))}</td>`).join('')}
-                                <td style="padding: 2px; text-align: center;">${player.deaths || 0}</td>
+                                <td style="padding: 2px; text-align: center;">${this.playerDeaths(player)}</td>
                                 <td style="padding: 2px; text-align: center;">${player.active ? '✓' : '✗'}</td>
                             </tr>
                         `}).join('')}
@@ -4987,6 +6216,19 @@ class GameEngine {
             dots.circle(x, y, r).fill(color);
             dots.circle(x, y, r).stroke({ width: 1, color: 0xFFFFFF, alpha: 0.6 });
         });
+
+        // Draw zombies on minimap
+        this.zombies.forEach(container => {
+            const data = container.zombieData;
+            if (!data) return;
+            const x = (data.x + this.worldBounds.width / 2) * scale + offsetX;
+            const y = (-data.y + this.worldBounds.height / 2) * scale + offsetY;
+            const isLarge = data.type === 'TANK' || data.type === 'BOOMER';
+            const r = isLarge ? 3.5 : 2.0;
+            const color = data.isLunging ? 0xFF3333 : 0x22C55E;
+            dots.circle(x, y, r).fill(color);
+            dots.circle(x, y, r).stroke({ width: 1, color: 0x000000, alpha: 0.6 });
+        });
     }
     
     showDeathScreen(data) {
@@ -5077,6 +6319,16 @@ class GameEngine {
             return;
         }
         if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+            // Drop routine continuous movement packets if client-to-server outbound buffer
+            // is backed up to avoid queue buildup and latency spiraling during network hitches.
+            if (this.websocket.bufferedAmount > 2048) {
+                // High-priority action inputs (shooting, utility activation, reload) can still proceed
+                // unless buffer is severely backed up (> 8192 bytes).
+                const hasAction = input.left || input.altFire || input.reload;
+                if (!hasAction || this.websocket.bufferedAmount > 8192) {
+                    return;
+                }
+            }
             this.websocket.send(JSON.stringify(input));
         }
     }
@@ -5254,14 +6506,6 @@ class GameEngine {
         
         // Log entity management stats for monitoring
         this.logEntityManagementStats();
-        
-        // Clean up any orphaned interpolators
-        this.projectileInterpolators.forEach((interpolator, id) => {
-            if (!this.projectiles.has(id)) {
-                interpolator.destroy();
-                this.projectileInterpolators.delete(id);
-            }
-        });
 
         // Clean up any field effects with orphaned animation functions
         this.fieldEffects.forEach((effect, id) => {
@@ -5291,6 +6535,25 @@ class GameEngine {
      * Clean up all resources when the game engine is destroyed
      */
     destroy() {
+        if (this.destroyed) return;
+        this.destroyed = true;
+
+        this.expectingSocketClose = true;
+
+        if (this.eventHandlers) {
+            if (this.eventHandlers.pagehide) {
+                window.removeEventListener('pagehide', this.eventHandlers.pagehide);
+            }
+            if (this.eventHandlers.beforeunload) {
+                window.removeEventListener('beforeunload', this.eventHandlers.beforeunload);
+            }
+            if (this.eventHandlers.popstate) {
+                window.removeEventListener('popstate', this.eventHandlers.popstate);
+            }
+            if (this.eventHandlers.pageshow) {
+                window.removeEventListener('pageshow', this.eventHandlers.pageshow);
+            }
+        }
         // Clear the memory cleanup interval
         if (this.memoryCleanupInterval) {
             clearInterval(this.memoryCleanupInterval);
@@ -5302,6 +6565,9 @@ class GameEngine {
             clearInterval(this._lobbyCountdownInterval);
             this._lobbyCountdownInterval = null;
         }
+
+        // Stop periodic ping monitor
+        this.stopPingMonitor();
 
         // Clear all pending timeouts
         this.pendingTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
@@ -5354,10 +6620,6 @@ class GameEngine {
             this.eventContainer = null;
         }
         
-        // Clean up all interpolators
-        this.projectileInterpolators.forEach(interpolator => interpolator.destroy());
-        this.projectileInterpolators.clear();
-        
         // Clean up all game objects
         this.projectiles.forEach(projectile => this.cleanupProjectileContainer(projectile));
         this.projectiles.clear();
@@ -5383,12 +6645,53 @@ class GameEngine {
             flag.destroy({ children: true, context: true });
         });
         this.flags.clear();
+
+        // Clean up oddball NPCs
+        if (this.oddballNpcs) {
+            this.oddballNpcs.forEach(container => {
+                if (container.interpolator) container.interpolator.destroy();
+                container.destroy({ children: true });
+            });
+            this.oddballNpcs.clear();
+        }
+
+        // Clean up zombies
+        if (this.zombies) {
+            this.zombies.forEach(container => {
+                if (container.interpolator) container.interpolator.destroy();
+                if (container.healthBar) {
+                    if (container.healthBar.parent) container.healthBar.parent.removeChild(container.healthBar);
+                    container.healthBar.destroy({ children: true, context: true });
+                }
+                container.destroy({ children: true });
+            });
+            this.zombies.clear();
+        }
         
         // Clean up KOTH zones
         this.kothZones.forEach(zone => {
+            if (zone.cautionMask) {
+                zone.cautionMask.destroy({ context: true });
+                zone.cautionMask = null;
+            }
             zone.destroy({ children: true, context: true });
         });
         this.kothZones.clear();
+
+        // Clean up floating damage text
+        if (this.floatingDamageTexts) {
+            this.floatingDamageTexts.forEach(item => {
+                if (item.pixiText) item.pixiText.destroy({ context: true });
+            });
+            this.floatingDamageTexts = [];
+        }
+        if (this.damageTextPool) {
+            this.damageTextPool.forEach(item => {
+                item.destroy({ context: true });
+            });
+            this.damageTextPool = [];
+        }
+        this.damageTextContainer = null;
 
         // Clean up smoke overlay
         if (this.smokeOverlay) {
@@ -5398,10 +6701,23 @@ class GameEngine {
             this.smokeOverlay.destroy({ children: true, context: true });
             this.smokeOverlay = null;
         }
+
+        // Clean up ping display
+        if (this.pingContainer) {
+            if (this.pingContainer.parent) {
+                this.pingContainer.parent.removeChild(this.pingContainer);
+            }
+            this.pingContainer.destroy({ children: true });
+            this.pingContainer = null;
+        }
         
         // Close WebSocket connection
         if (this.websocket) {
-            this.websocket.close();
+            try {
+                this.websocket.close(1000, "Navigated away");
+            } catch (e) {
+                // ignore
+            }
             this.websocket = null;
         }
         

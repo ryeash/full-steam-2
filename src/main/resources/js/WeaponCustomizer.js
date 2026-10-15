@@ -1,37 +1,3 @@
-/**
- * Weapon customization UI — render-from-state, no dependencies.
- *
- * Renders the loadout picker (attribute sliders, bullet-effect checkboxes,
- * ordnance/utility dropdowns, preset chooser, point tracker) into a host
- * container. The host page owns the "Ready" button and listens for validity
- * changes via `onValidityChange`. Element IDs and CSS class names match
- * unified.css, and #name-select/#name-randomize are populated by the host.
- *
- * Architecture — state is the single source of truth:
- *
- *     state is authoritative → every interaction mutates state and calls
- *     _commit() → _commit() normalizes state, then _render() syncs the DOM to
- *     match. Handlers NEVER touch the DOM directly.
- *
- * Consequences:
- *   - _applyPreset / load / reset just assign state and _commit() — no hand-poking
- *     of individual sliders/checkboxes/selects.
- *   - All validation (stale-ordnance coercion, step-snapping, dropping effects
- *     forbidden by the current ordnance) lives in one place: _normalizeState().
- *   - There is exactly one DOM-writing path (_render()), so "set the value but
- *     forget the detail line / gating / budget" desync bugs can't occur.
- *
- * Build-once + sync-update (not innerHTML-rebuild) means sliders/selects keep
- * focus and don't get torn down mid-drag — _render() only sets .value/.checked/
- * .disabled/text on nodes that already exist, which is idempotent and cheap.
- *
- * Usage:
- *   const customizer = new WeaponCustomizer(rootEl, {
- *     onValidityChange: (isValid) => { readyButton.disabled = !isValid; }
- *   });
- *   await customizer.init();                     // fetches /api/weapon-customization
- *   const cfg = customizer.getPlayerConfig();    // { weaponConfig, utilityWeapon }
- */
 class WeaponCustomizer {
     constructor(rootEl, options = {}) {
         if (!rootEl) {
@@ -41,14 +7,27 @@ class WeaponCustomizer {
         this.onValidityChange = options.onValidityChange || (() => {});
 
         this.weaponData = null;
-
-        // THE state. currentWeapon/currentUtilityWeapon in the old version were the
-        // same data, just spread across two fields and mutated in many places.
         this.state = {
-            attributes: {},          // { DAMAGE: 0, FIRE_RATE: 0, ... }
-            effects: [],             // ['EXPLOSIVE', ...]
+            attributes: {
+                MIN_DAMAGE: 10,
+                MAX_DAMAGE: 10,
+                FIRE_RATE: 30,
+                RANGE: 5,
+                ACCURACY: 0,
+                MAGAZINE_SIZE: 36,
+                RELOAD_TIME: 5,
+                PROJECTILE_SPEED: 4,
+                BULLETS_PER_SHOT: 0,
+                LINEAR_DAMPING: 0,
+                HANDLING: 0,
+                CALIBER: 0,
+                KNOCKBACK: 0
+            },
+            effects: [],
             ordinance: 'PROJECTILE',
-            utility: 'HEAL_ZONE'
+            varianceFormula: 'GAUSSIAN',
+            utility: 'HEAL_ZONE',
+            armor: 'NONE'
         };
 
         this._lastValid = false;
@@ -70,7 +49,9 @@ class WeaponCustomizer {
     }
 
     isValid() {
-        if (!this.weaponData) return false;
+        if (!this.weaponData) {
+            return false;
+        }
         return this._totalPoints() <= this.weaponData.maxPoints;
     }
 
@@ -80,10 +61,18 @@ class WeaponCustomizer {
      */
     getPlayerConfig() {
         const attributeMapping = {
-            'DAMAGE': 'damage', 'FIRE_RATE': 'fireRate', 'RANGE': 'range',
-            'ACCURACY': 'accuracy', 'MAGAZINE_SIZE': 'magazineSize', 'RELOAD_TIME': 'reloadTime',
-            'PROJECTILE_SPEED': 'projectileSpeed', 'BULLETS_PER_SHOT': 'bulletsPerShot',
-            'LINEAR_DAMPING': 'linearDamping', 'HANDLING': 'handling', 'CALIBER': 'caliber',
+            'MIN_DAMAGE': 'minDamage',
+            'MAX_DAMAGE': 'maxDamage',
+            'FIRE_RATE': 'fireRate',
+            'RANGE': 'range',
+            'ACCURACY': 'accuracy',
+            'MAGAZINE_SIZE': 'magazineSize',
+            'RELOAD_TIME': 'reloadTime',
+            'PROJECTILE_SPEED': 'projectileSpeed',
+            'BULLETS_PER_SHOT': 'bulletsPerShot',
+            'LINEAR_DAMPING': 'linearDamping',
+            'HANDLING': 'handling',
+            'CALIBER': 'caliber',
             'KNOCKBACK': 'knockback'
         };
         const mappedAttributes = {};
@@ -95,9 +84,10 @@ class WeaponCustomizer {
             type: 'Custom Weapon',
             bulletEffects: this.state.effects,
             ordinance: this.state.ordinance,
+            varianceFormula: this.state.varianceFormula,
             ...mappedAttributes
         };
-        return { weaponConfig, utilityWeapon: this.state.utility };
+        return { weaponConfig, utilityWeapon: this.state.utility, armorType: this.state.armor };
     }
 
     // ===================================================================
@@ -143,11 +133,14 @@ class WeaponCustomizer {
                             </div>
                             <div class="point-tracker">
                                 <div class="point-status-line">
-                                    <span id="points-used" class="pt-used">0</span><span class="pt-sep">/</span><span id="points-max" class="pt-max">100</span><span class="pt-label">pts</span>
+                                    <span class="pt-allocation">
+                                        <span id="points-used" class="pt-used">0</span><span class="pt-sep">/</span><span id="points-max" class="pt-max">100</span><span class="pt-label">pts</span>
+                                    </span>
                                     <span id="alloc-icon" class="alloc-icon">⚠</span>
                                     <span class="pt-breakdown-label">Attr:</span><span id="attr-points" class="pt-breakdown-value">0</span>
                                     <span class="pt-breakdown-label">FX:</span><span id="effect-points" class="pt-breakdown-value">0</span>
                                     <span class="pt-breakdown-label">Ord:</span><span id="ordinance-points" class="pt-breakdown-value">0</span>
+                                    <span class="pt-breakdown-label">Var:</span><span id="variance-points" class="pt-breakdown-value">0</span>
                                 </div>
                             </div>
                             <h3>Primary Weapon Attributes</h3>
@@ -158,16 +151,26 @@ class WeaponCustomizer {
                             <div id="effect-checkboxes"></div>
                         </div>
                         <div class="customization-section">
-                            <h3>Munitions</h3>
+                            <h3>Munitions & Variance</h3>
                             <div class="munitions-field">
                                 <label class="munitions-label" for="ordinance-select">Ordnance Type</label>
                                 <select id="ordinance-select" class="loadout-select" aria-label="Ordnance type"></select>
                                 <div id="ordinance-detail" class="munitions-detail"></div>
                             </div>
                             <div class="munitions-field">
+                                <label class="munitions-label" for="variance-select">Damage Variance Formula</label>
+                                <select id="variance-select" class="loadout-select" aria-label="Damage variance formula"></select>
+                                <div id="variance-detail" class="munitions-detail"></div>
+                            </div>
+                            <div class="munitions-field">
                                 <label class="munitions-label" for="utility-select">Utility Weapon</label>
                                 <select id="utility-select" class="loadout-select" aria-label="Utility weapon"></select>
                                 <div id="utility-detail" class="munitions-detail"></div>
+                            </div>
+                            <div class="munitions-field">
+                                <label class="munitions-label" for="armor-select">Armor Vest</label>
+                                <select id="armor-select" class="loadout-select" aria-label="Armor vest"></select>
+                                <div id="armor-detail" class="munitions-detail"></div>
                             </div>
                         </div>
                         <div class="customization-section rs-rail">
@@ -191,11 +194,15 @@ class WeaponCustomizer {
         this._buildAttributeSliders();
         this._buildEffectCheckboxes();
         this._buildOrdinanceOptions();
+        this._buildVarianceOptions();
         this._buildUtilityOptions();
+        this._buildArmorOptions();
         this._buildPresetButtons();
 
-        // Seed from saved config if present (state only — no DOM poking).
-        this._loadSavedConfiguration();
+        // Seed from saved config if present; otherwise default to Assault Rifle preset.
+        if (!this._loadSavedConfiguration()) {
+            this._applyDefaultPreset();
+        }
 
         // First paint. _commit() normalizes (fills defaults, coerces stale
         // ordinance, drops forbidden effects, snaps steps) then renders.
@@ -274,6 +281,22 @@ class WeaponCustomizer {
         });
     }
 
+    _buildVarianceOptions() {
+        const select = this._q('#variance-select');
+        if (!select || !this.weaponData.varianceFormulas) return;
+        select.innerHTML = '';
+        this.weaponData.varianceFormulas.forEach(vf => {
+            const opt = document.createElement('option');
+            opt.value = vf.name;
+            opt.textContent = vf.cost !== 0 ? `${vf.displayName} — ${vf.cost > 0 ? '+' : ''}${vf.cost} pts` : vf.displayName;
+            select.appendChild(opt);
+        });
+        select.addEventListener('change', () => {
+            this.state.varianceFormula = select.value;
+            this._commit();
+        });
+    }
+
     _buildUtilityOptions() {
         const select = this._q('#utility-select');
         if (!select) return;
@@ -294,12 +317,34 @@ class WeaponCustomizer {
         });
     }
 
+    _buildArmorOptions() {
+        const select = this._q('#armor-select');
+        if (!select) return;
+        select.innerHTML = '';
+        const armorOptions = [
+            { name: 'NONE', displayName: 'No Armor (+10% Speed)', detail: '0 Armor. Grants +10% movement handling speed.' },
+            { name: 'LIGHT', displayName: 'Light Armor (-10% Speed)', detail: '50 Armor. Reduces movement handling speed by 10%.' },
+            { name: 'HEAVY', displayName: 'Heavy Armor (-25% Speed)', detail: '100 Armor. Reduces movement handling speed by 25%.' }
+        ];
+        armorOptions.forEach(opt => {
+            const el = document.createElement('option');
+            el.value = opt.name;
+            el.textContent = opt.displayName;
+            select.appendChild(el);
+        });
+        select.value = this.state.armor;
+        select.addEventListener('change', () => {
+            this.state.armor = select.value;
+            this._commit();
+        });
+    }
+
     _buildPresetButtons() {
         const categories = {
             kinetic: ['ASSAULT_RIFLE', 'HAND_CANNON', 'SNIPER_RIFLE', 'MINIGUN', 'SHOTGUN', 'TWIN_SIXES', 'CONCUSSION_CANNON'],
             effects: ['ROCKET_LAUNCHER', 'INCENDIARY_SHOTGUN', 'ARC_PISTOL', 'ICE_CANNON', 'TOXIC_SPRAYER',
                       'PIERCING_RIFLE', 'BOUNCY_SMG', 'SEEKER_DART', 'CLUSTER_MORTAR',
-                      'NAPALM_LAUNCHER', 'STORM_CALLER', 'VENOM_NEEDLER', 'FROST_LANCE', 'SHRAPNEL_CANNON', 'PHANTOM_NEEDLES'],
+                      'NAPALM_LAUNCHER', 'STORM_CALLER', 'VENOM_NEEDLER', 'FROST_LANCE', 'SHRAPNEL_CANNON', 'PHANTOM_NEEDLES', 'KILLER_BEES'],
             beams: ['LASER_RIFLE', 'PLASMA_CANNON', 'ARC_LASER', 'RAILGUN', 'RICOCHET_LASER']
         };
         Object.entries(categories).forEach(([categoryName, presetKeys]) => {
@@ -330,11 +375,44 @@ class WeaponCustomizer {
         });
     }
 
+    /** Default weapon customization to the Assault Rifle preset when no saved config exists. */
+    _applyDefaultPreset() {
+        const assaultRifle = this.weaponData && this.weaponData.presets && (
+            this.weaponData.presets['ASSAULT_RIFLE'] || this.weaponData.presets['Assault Rifle']
+        );
+        if (assaultRifle) {
+            this.state.attributes = { ...assaultRifle.attributes };
+            this.state.effects = [...assaultRifle.effects];
+            this.state.ordinance = assaultRifle.ordinance;
+            this.state.varianceFormula = assaultRifle.varianceFormula || 'UNIFORM';
+        } else {
+            this.state.attributes = {
+                MIN_DAMAGE: 10,
+                MAX_DAMAGE: 10,
+                FIRE_RATE: 30,
+                RANGE: 5,
+                ACCURACY: 0,
+                MAGAZINE_SIZE: 36,
+                RELOAD_TIME: 5,
+                PROJECTILE_SPEED: 4,
+                BULLETS_PER_SHOT: 0,
+                LINEAR_DAMPING: 0,
+                HANDLING: 0,
+                CALIBER: 0,
+                KNOCKBACK: 0
+            };
+            this.state.effects = [];
+            this.state.ordinance = 'PROJECTILE';
+            this.state.varianceFormula = 'GAUSSIAN';
+        }
+    }
+
     /** Apply a preset = replace loadout state, then commit. No DOM poking. */
     _applyPreset(preset) {
         this.state.attributes = { ...preset.attributes }; // _normalize fills the rest with 0
         this.state.effects = [...preset.effects];
         this.state.ordinance = preset.ordinance;
+        this.state.varianceFormula = preset.varianceFormula || 'UNIFORM';
         this._commit();
     }
 
@@ -382,9 +460,19 @@ class WeaponCustomizer {
             return !(isBeam && !e.validForBeams);       // beam-forbidden
         });
 
+        const vfNames = (d.varianceFormulas || []).map(v => v.name);
+        if (vfNames.length && !vfNames.includes(this.state.varianceFormula)) {
+            this.state.varianceFormula = vfNames[0];
+        }
+
         const utilNames = (d.utilityWeapons || []).map(u => u.name);
         if (utilNames.length && !utilNames.includes(this.state.utility)) {
             this.state.utility = utilNames[0];
+        }
+
+        const armorNames = ['NONE', 'LIGHT', 'HEAVY'];
+        if (!armorNames.includes(this.state.armor)) {
+            this.state.armor = 'NONE';
         }
     }
 
@@ -434,11 +522,27 @@ class WeaponCustomizer {
         const ordDetail = this._q('#ordinance-detail');
         if (ordDetail) ordDetail.textContent = ord ? ord.description : '';
 
+        const varSelect = this._q('#variance-select');
+        if (varSelect) varSelect.value = this.state.varianceFormula;
+        const varDetail = this._q('#variance-detail');
+        const vf = (d.varianceFormulas || []).find(x => x.name === this.state.varianceFormula);
+        if (varDetail) varDetail.textContent = vf ? `${vf.description}` : '';
+
         const utilSelect = this._q('#utility-select');
         if (utilSelect) utilSelect.value = this.state.utility;
         const utilDetail = this._q('#utility-detail');
         const u = (d.utilityWeapons || []).find(x => x.name === this.state.utility);
         if (utilDetail) utilDetail.textContent = u ? `${u.category} · ${u.cooldown}s cooldown — ${u.description}` : '';
+
+        const armorSelect = this._q('#armor-select');
+        if (armorSelect) armorSelect.value = this.state.armor;
+        const armorDetail = this._q('#armor-detail');
+        const armorInfo = {
+            'NONE': '0 Armor. Grants +10% movement handling speed.',
+            'LIGHT': '50 Armor. Reduces movement handling speed by 10%.',
+            'HEAVY': '100 Armor. Reduces movement handling speed by 25%.'
+        };
+        if (armorDetail) armorDetail.textContent = armorInfo[this.state.armor] || '';
 
         // Point tracker + validity
         this._renderPoints();
@@ -448,7 +552,8 @@ class WeaponCustomizer {
         const attrPoints = this._attrPoints();
         const effectPoints = this._effectPoints();
         const ordinancePoints = this._ordinancePoints();
-        const totalPoints = attrPoints + effectPoints + ordinancePoints;
+        const variancePoints = this._variancePoints();
+        const totalPoints = attrPoints + effectPoints + ordinancePoints + variancePoints;
         const maxPoints = this.weaponData.maxPoints;
 
         const pointsUsedEl = this._q('#points-used');
@@ -458,6 +563,8 @@ class WeaponCustomizer {
         this._q('#attr-points').textContent = attrPoints;
         this._q('#effect-points').textContent = effectPoints;
         this._q('#ordinance-points').textContent = ordinancePoints;
+        const varPtsEl = this._q('#variance-points');
+        if (varPtsEl) varPtsEl.textContent = variancePoints;
 
         let valid;
         if (totalPoints > maxPoints) {
@@ -499,8 +606,13 @@ class WeaponCustomizer {
         const o = this.weaponData.ordinances.find(x => x.name === this.state.ordinance);
         return o ? o.cost : 0;
     }
+    _variancePoints() {
+        if (!this.weaponData || !this.weaponData.varianceFormulas) return 0;
+        const vf = this.weaponData.varianceFormulas.find(x => x.name === this.state.varianceFormula);
+        return vf ? vf.cost : 0;
+    }
     _totalPoints() {
-        return this._attrPoints() + this._effectPoints() + this._ordinancePoints();
+        return this._attrPoints() + this._effectPoints() + this._ordinancePoints() + this._variancePoints();
     }
 
     // ===================================================================
@@ -531,7 +643,7 @@ class WeaponCustomizer {
 
     _renderResolved(panel, data) {
         const attrs = data.attributes || {};
-        const order = ['DAMAGE', 'FIRE_RATE', 'BULLETS_PER_SHOT', 'MAGAZINE_SIZE', 'RELOAD_TIME',
+        const order = ['MIN_DAMAGE', 'MAX_DAMAGE', 'FIRE_RATE', 'BULLETS_PER_SHOT', 'MAGAZINE_SIZE', 'RELOAD_TIME',
                        'RANGE', 'PROJECTILE_SPEED', 'ACCURACY', 'HANDLING', 'LINEAR_DAMPING', 'CALIBER', 'KNOCKBACK'];
         const statRows = order.filter(k => attrs[k]).map(k => {
             const a = attrs[k];
@@ -540,10 +652,13 @@ class WeaponCustomizer {
         }).join('');
 
         const d = data.derived || {};
+        const armorMult = { 'NONE': 1.10, 'LIGHT': 0.90, 'HEAVY': 0.75 }[this.state.armor] || 1.0;
+        const totalMoveSpeed = (d.moveSpeedMultiplier || 1) * armorMult;
         const derivedRows = `
             <div class="rs-row"><span class="rs-label">DPS</span><span class="rs-val">${Math.round(d.dps || 0)}</span></div>
+            <div class="rs-row"><span class="rs-label">Expected Damage</span><span class="rs-val">${Math.round(d.expectedDamage || 0)}</span></div>
             <div class="rs-row"><span class="rs-label">Damage / bullet</span><span class="rs-val">${(d.damagePerBullet || 0).toFixed(1)}</span></div>
-            <div class="rs-row"><span class="rs-label">Move speed</span><span class="rs-val">${Math.round((d.moveSpeedMultiplier || 1) * 100)}%</span></div>`;
+            <div class="rs-row"><span class="rs-label">Move speed</span><span class="rs-val">${Math.round(totalMoveSpeed * 100)}%</span></div>`;
 
         const couplings = (data.couplings || []).map(c =>
             `<div class="rs-coupling ${c.delta > 0 ? 'up' : 'down'}">${c.label}: ${c.display}</div>`
@@ -567,9 +682,11 @@ class WeaponCustomizer {
                 weapon: {
                     attributes: this.state.attributes,
                     effects: this.state.effects,
-                    ordinance: this.state.ordinance
+                    ordinance: this.state.ordinance,
+                    varianceFormula: this.state.varianceFormula
                 },
                 utilityWeapon: this.state.utility,
+                armorType: this.state.armor,
                 timestamp: Date.now()
             }));
         } catch (error) {
@@ -589,7 +706,9 @@ class WeaponCustomizer {
             this.state.attributes = { ...config.weapon.attributes };
             this.state.effects = [...config.weapon.effects];
             this.state.ordinance = config.weapon.ordinance;       // normalize coerces if stale
+            if (config.weapon.varianceFormula) this.state.varianceFormula = config.weapon.varianceFormula;
             if (config.utilityWeapon) this.state.utility = config.utilityWeapon;
+            if (config.armorType) this.state.armor = config.armorType;
             return true;
         } catch (error) {
             console.error('Failed to load saved configuration:', error);

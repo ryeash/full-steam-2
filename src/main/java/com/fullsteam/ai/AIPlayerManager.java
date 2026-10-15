@@ -3,6 +3,7 @@ package com.fullsteam.ai;
 import com.fullsteam.Config;
 import com.fullsteam.RandomNames;
 import com.fullsteam.games.GameConfig;
+import com.fullsteam.model.ArmorType;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.model.WeaponConfig;
@@ -17,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
 
@@ -31,9 +33,9 @@ public class AIPlayerManager {
     // How far ahead of an obstacle's surface the AI starts steering around it.
     private static final double OBSTACLE_LOOK_AHEAD = 70.0;
 
-    private final Map<Integer, AIPlayer> aiPlayers = new HashMap<>();
-    private final Map<Integer, List<AIBehavior>> availableBehaviors = new HashMap<>();
-    private final Map<Integer, PlayerInput> generatedInputs = new HashMap<>();
+    private final Map<Integer, AIPlayer> aiPlayers = new ConcurrentSkipListMap<>();
+    private final Map<Integer, List<AIBehavior>> availableBehaviors = new ConcurrentSkipListMap<>();
+    private final Map<Integer, PlayerInput> generatedInputs = new ConcurrentSkipListMap<>();
 
     // Factories for the behaviors each AI can choose between. Each AI gets its own
     // fresh instances so behavior state (targets, timers, etc.) is independent.
@@ -103,7 +105,7 @@ public class AIPlayerManager {
             if (input != null) {
                 // If stuck, override movement with an escape direction
                 if (aiPlayer.isStuck()) {
-                    applyUnstickMovement(aiPlayer, input, gameEntities);
+                    applyUnstickMovement(aiPlayer, input);
                 }
 
                 // Steer around solid map obstacles. Applied here (after behavior and
@@ -122,7 +124,7 @@ public class AIPlayerManager {
      * Picks a direction roughly opposite to the current (failed) movement,
      * with some randomization to avoid oscillating between two stuck states.
      */
-    private void applyUnstickMovement(AIPlayer aiPlayer, PlayerInput input, GameEntities gameEntities) {
+    private void applyUnstickMovement(AIPlayer aiPlayer, PlayerInput input) {
         Vector2 stuckDirection = aiPlayer.getCurrentMovementDirection();
 
         Vector2 escapeDirection;
@@ -176,33 +178,30 @@ public class AIPlayerManager {
     }
 
     /**
-     * Create an AI player with a specific personality type, team, and personality-appropriate weapons.
+     * Create an AI player with a name whose hash deterministically defines their personality and weapons.
      */
-    public static AIPlayer createAIPlayerWithPersonality(int id, double x, double y, AIPersonality.Type personalityType, int team, double maxHealth) {
-        AIPersonality personality = switch (personalityType) {
-            case aggressive -> AIPersonality.createAggressive();
-            case defensive -> AIPersonality.createDefensive();
-            case sniper -> AIPersonality.createSniper();
-            case rusher -> AIPersonality.createRusher();
-            default -> AIPersonality.createBalanced();
-        };
+    public static AIPlayer createAIPlayerWithName(int id, String name, AIPersonality.Type personalityType, double x, double y, int team, double maxHealth) {
+        double skillLevel = AIPersonality.generateSkillLevelForName(name);
+        AIPersonality personality = AIPersonality.createForType(personalityType, skillLevel);
+        AIPlayer aiPlayer = new AIPlayer(id, name, x, y, personality, team, maxHealth);
+        // Vary decision cooldown between 0.05s (veteran) and 0.15s (rookie)
+        aiPlayer.setDecisionCooldown(0.05 + (1.0 - skillLevel) * 0.10);
 
-        AIPlayer aiPlayer = new AIPlayer(id, RandomNames.randomName(), x, y, personality, team, maxHealth);
-
-        // Assign weapons based on personality
+        // Assign weapons and armor based on personality
         WeaponConfig weapon = AIWeaponSelector.selectWeaponForPersonality(personality);
         UtilityWeapon utilityWeapon = AIWeaponSelector.selectUtilityWeaponForPersonality(personality);
-        aiPlayer.applyWeaponConfig(weapon, utilityWeapon);
-        log.debug("Assigned weapons to AI player {} ({}): Primary={}, Utility={}",
-                aiPlayer.getId(), aiPlayer.getPersonality().getPersonalityType(),
-                weapon.getType(), utilityWeapon.getDisplayName());
+        ArmorType armorType = AIWeaponSelector.selectArmorForPersonality(personality);
+        aiPlayer.applyWeaponConfig(weapon, utilityWeapon, armorType);
+        log.debug("Assigned loadout to AI player {} ({} - {}, Skill={}): Primary={}, Utility={}, Armor={}",
+                aiPlayer.getId(), name, personality.getPersonalityType(), String.format("%.2f", skillLevel),
+                weapon.getType(), utilityWeapon.getDisplayName(), armorType.getDisplayName());
         return aiPlayer;
     }
 
     private void updateAIMemory(AIPlayer aiPlayer, GameEntities gameEntities) {
         // Update memory with observations of other players
         for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() != aiPlayer.getId() && player.isActive()) {
+            if (player.getId() != aiPlayer.getId() && player.isActive() && !player.isVisionObscured()) {
                 // AI can "see" players within a certain range
                 double distance = aiPlayer.getPosition().distance(player.getPosition());
                 if (distance < 400) { // Sight range
@@ -290,8 +289,8 @@ public class AIPlayerManager {
             input.setMoveY(input.getMoveY() * 0.5);
         }
 
-        // Modify shooting based on patience
-        if (input.isLeft() && personality.getPatience() > 0.7) {
+        // Modify shooting based on patience (do not interrupt an active continuous plasma beam)
+        if (input.isLeft() && personality.getPatience() > 0.7 && !aiPlayer.hasActivePlasmaBeam()) {
             // Patient personalities wait for better shots
             if (ThreadLocalRandom.current().nextDouble() < 0.3) {
                 input.setLeft(false);
@@ -303,7 +302,7 @@ public class AIPlayerManager {
             input.setReload(true);
             // Don't try to shoot when out of ammo
             input.setLeft(false);
-            input.setRight(false);
+            input.setAltFire(false);
         }
 
         // Apply reaction speed delays (not implemented in this simple version)

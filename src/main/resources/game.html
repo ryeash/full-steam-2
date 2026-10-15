@@ -13,17 +13,14 @@
     <meta name="game:category" content="Multiplayer Battle Arena">
     <link rel="stylesheet" type="text/css" href="unified.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/8.13.2/pixi.min.js"></script>
-    <!-- All styles live in unified.css -->
-    <script src="js/ProjectileInterpolator.js"></script>
+    <script src="js/EntityInterpolator.js"></script>
     <script src="js/InputManager.js"></script>
-    <!-- Weapon Customization Modal -->
     <script src="js/WeaponCustomizer.js"></script>
-    <!-- Spectator Mode Modules -->
     <script src="js/spectator/SpectatorCamera.js"></script>
     <script src="js/spectator/SpectatorUI.js"></script>
     <script src="js/spectator/SpectatorInput.js"></script>
     <script src="js/spectator/SpectatorMode.js"></script>
-    <!-- Main Game Engine -->
+    <script src="js/BinaryStateDecoder.js"></script>
     <script src="js/GameEngine.js"></script>
     <script type="text/javascript">
         // Initialize the game when everything is loaded
@@ -51,6 +48,14 @@
 
     <!-- Game UI Overlay -->
     <div id="game-ui" style="display: none;">
+        <div id="game-start-banner" style="display: none;">
+            <div class="game-start-content">
+                <div class="game-start-label">GAME STARTING IN</div>
+                <div class="game-start-countdown" id="game-start-countdown-text">10s</div>
+                <div class="game-start-sub">Configure loadout &amp; prepare for battle!</div>
+            </div>
+        </div>
+
         <div id="scoreboard" style="display: none;">
             <div class="scoreboard-header">
                 <h3>Scoreboard</h3>

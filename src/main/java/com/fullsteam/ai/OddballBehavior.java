@@ -41,6 +41,10 @@ public class OddballBehavior implements AIBehavior {
     private Role role = Role.SEEK;
     private double evalTimer = 0.0;
 
+    public int getTargetNpcId() {
+        return targetNpcId;
+    }
+
     // Stable strafe side so the AI doesn't flip-flop every tick
     private double strafeSign = 1.0;
 
@@ -57,7 +61,7 @@ public class OddballBehavior implements AIBehavior {
         }
 
         Oddball target = gameEntities.getOddballNpc(targetNpcId);
-        if (target == null || !target.isActive()) {
+        if (target == null || !target.isActive() || target.isVisionObscured()) {
             role = Role.SEEK;
             target = null;
         } else {
@@ -105,7 +109,7 @@ public class OddballBehavior implements AIBehavior {
         Vector2 myPos = aiPlayer.getPosition();
 
         for (Oddball npc : gameEntities.getAllOddballNpcs()) {
-            if (!npc.isActive()) {
+            if (!npc.isActive() || npc.isVisionObscured()) {
                 continue;
             }
             double dist = myPos.distance(npc.getPosition());
@@ -220,10 +224,16 @@ public class OddballBehavior implements AIBehavior {
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
     private void aimAndShoot(AIPlayer aiPlayer, Vector2 targetPos, double dist, PlayerInput input) {
-        input.setWorldX(targetPos.x);
-        input.setWorldY(targetPos.y);
+        if (aiPlayer.isUsingPlasmaBeam()) {
+            Vector2 aim = aiPlayer.trackAim(targetPos, -1, 0.016);
+            input.setWorldX(aim.x);
+            input.setWorldY(aim.y);
+        } else {
+            input.setWorldX(targetPos.x);
+            input.setWorldY(targetPos.y);
+        }
         double weaponRange = aiPlayer.getCurrentWeapon().getRange();
-        if (dist < weaponRange * 0.95) {
+        if (dist < weaponRange * 0.95 && aiPlayer.canShoot()) {
             input.setLeft(true);
         }
     }

@@ -41,7 +41,10 @@ public enum UtilityWeapon {
             null, "ProximityMine", 2.0, 50.0, 40.0, 40.0, UtilityCategory.DEFENSIVE),
 
     DEFENSE_LASER("Defense Laser", "Deploys rotating laser beams that sweep around the area",
-            null, "DefenseLaser", 8.0, 60.0, 40.0, 20.0, UtilityCategory.DEFENSIVE);
+            null, "DefenseLaser", 8.0, 60.0, 40.0, 20.0, UtilityCategory.DEFENSIVE),
+
+    RIOT_SHIELD("Riot Shield", "Raises a ballistic frontal shield (150 HP) that blocks incoming attacks in a 120-degree cone",
+            null, "StatusEffect", 12.0, 0.0, 0.0, 150.0, UtilityCategory.DEFENSIVE);
 
 
     private final String displayName;

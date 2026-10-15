@@ -6,6 +6,7 @@ import com.fullsteam.model.UtilityWeapon;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Turret;
+import com.fullsteam.physics.Zombie;
 import org.dyn4j.geometry.Vector2;
 
 import java.util.ArrayList;
@@ -19,7 +20,7 @@ public class CombatBehavior implements AIBehavior {
     private int targetId = -1;
     private boolean targetIsPlayer = true; // Track if target is a player or turret
     private double lastShotTime = 0;
-    private double combatTimeout = 8.0; // Longer combat persistence
+    private final double combatTimeout = 8.0; // Longer combat persistence
     private double timeSinceLastTarget = 0;
 
     // Enhanced tactical state
@@ -75,6 +76,7 @@ public class CombatBehavior implements AIBehavior {
             targetId = -1;
             isRetreating = false;
             timeSinceLastTarget += deltaTime;
+            aiPlayer.resetAimTracking();
         }
 
         return input;
@@ -174,33 +176,44 @@ public class CombatBehavior implements AIBehavior {
         double distance = playerPos.distance(targetPos);
 
         // Check if using beam weapon (instant hit, no prediction needed)
+        boolean isPlasmaBeam = aiPlayer.isUsingPlasmaBeam();
         boolean isBeamWeapon = isBeamWeapon(aiPlayer);
 
+        double accuracy = aiPlayer.getPersonality().getAccuracy();
+        double skillLevel = aiPlayer.getPersonality().getSkillLevel();
+
         Vector2 aimPos;
-        if (isBeamWeapon) {
-            // Beam weapons are instant hit - aim directly at target
+        if (isPlasmaBeam) {
+            // Plasma beam is continuous: smooth tracking while holding fire without random per-frame noise
+            aimPos = aiPlayer.trackAim(targetPos, target.getId(), deltaTime);
+        } else if (isBeamWeapon) {
+            // Beam weapons are instant hit - aim directly at target with skill spread
             aimPos = targetPos.copy();
 
-            // Add slight inaccuracy based on personality
-            double accuracy = aiPlayer.getPersonality().getAccuracy();
-            double spread = (1.0 - accuracy) * 15;
+            double spread = (1.0 - accuracy) * 40.0;
             aimPos.add((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread);
+            aiPlayer.resetAimTracking();
         } else {
-            // Projectile weapons - predict target movement
+            // Projectile weapons - predict target movement with skill-based lead
             Vector2 targetVelocity = target.getVelocity();
             double projectileSpeed = aiPlayer.getCurrentWeapon().getProjectileSpeed();
             double timeToTarget = distance / projectileSpeed;
 
-            // Predict target movement with some uncertainty for realism
-            aimPos = targetPos.copy().add(targetVelocity.copy().multiply(timeToTarget));
+            // Lower-skilled AI under-leads or over-leads moving targets
+            double leadFactor = 0.35 + 0.65 * skillLevel;
+            Vector2 predictedVelocity = targetVelocity.copy().multiply(leadFactor);
+            aimPos = targetPos.copy().add(predictedVelocity.multiply(timeToTarget));
 
-            // Add slight inaccuracy based on distance and personality
-            double accuracy = aiPlayer.getPersonality().getAccuracy();
-            double distanceInaccuracy = Math.max(0, distance - 200) * 0.05 * (1.0 - accuracy);
-            double randomOffsetX = (Math.random() - 0.5) * distanceInaccuracy;
-            double randomOffsetY = (Math.random() - 0.5) * distanceInaccuracy;
+            // Base inaccuracy even at point-blank range + distance scaling
+            double baseSpread = (1.0 - accuracy) * 35.0;
+            double distanceSpread = (distance / 100.0) * (1.0 - accuracy) * 12.0;
+            double totalSpread = baseSpread + distanceSpread;
+
+            double randomOffsetX = (Math.random() - 0.5) * totalSpread;
+            double randomOffsetY = (Math.random() - 0.5) * totalSpread;
 
             aimPos.add(randomOffsetX, randomOffsetY);
+            aiPlayer.resetAimTracking();
         }
 
         // Set aim
@@ -208,10 +221,15 @@ public class CombatBehavior implements AIBehavior {
         input.setWorldY(aimPos.y);
 
         // Enhanced shooting decision
-        boolean shouldShoot = shouldShootAtTarget(aiPlayer, target, distance);
-        if (shouldShoot && aiPlayer.canShoot() && lastShotTime > 0.1) { // Minimum time between shots
-            input.setLeft(true);
-            lastShotTime = 0;
+        double weaponRange = aiPlayer.getCurrentWeapon().getRange();
+        if (isPlasmaBeam) {
+            handlePlasmaBeamShooting(aiPlayer, target, distance, weaponRange, input);
+        } else {
+            boolean shouldShoot = shouldShootAtTarget(aiPlayer, target, distance);
+            if (shouldShoot && aiPlayer.canShoot() && lastShotTime > 0.1) { // Minimum time between shots
+                input.setLeft(true);
+                lastShotTime = 0;
+            }
         }
 
         // Smart reloading with improved ammo management
@@ -230,6 +248,11 @@ public class CombatBehavior implements AIBehavior {
             shouldReload = true; // Reload when safe and below 25%
         } else if (ammoPercent < 0.4 && !target.isActive()) {
             shouldReload = true; // Reload during lull in combat
+        }
+
+        // Don't interrupt an active plasma beam to reload early if ammo is still remaining
+        if (aiPlayer.hasActivePlasmaBeam() && currentAmmo > 0) {
+            shouldReload = false;
         }
 
         // Don't reload if enemy is very close and we have some ammo
@@ -309,6 +332,12 @@ public class CombatBehavior implements AIBehavior {
         targetId = -1;
         timeSinceLastTarget = 0;
         lastShotTime = 0;
+        aiPlayer.resetAimTracking();
+    }
+
+    @Override
+    public void onExit(AIPlayer aiPlayer) {
+        aiPlayer.resetAimTracking();
     }
 
     @Override
@@ -360,8 +389,8 @@ public class CombatBehavior implements AIBehavior {
     private AITargetWrapper findOrMaintainTarget(AIPlayer aiPlayer, GameEntities gameEntities) {
         // First, try to maintain current target if valid
         if (targetId != -1) {
-            AITargetWrapper currentTarget = findTargetById(gameEntities, targetId, targetIsPlayer);
-            if (currentTarget != null && currentTarget.isActive() && !currentTarget.isTeammateOf(aiPlayer)) {
+            AITargetWrapper currentTarget = findTargetById(gameEntities, targetId);
+            if (currentTarget != null && currentTarget.isVisible() && !currentTarget.isTeammateOf(aiPlayer)) {
                 double distance = aiPlayer.getPosition().distance(currentTarget.getPosition());
                 if (distance <= 800) { // Increased persistence range
                     return currentTarget;
@@ -383,28 +412,7 @@ public class CombatBehavior implements AIBehavior {
         AITargetWrapper bestTarget = null;
         double bestScore = 0;
 
-        // Create list of all potential targets (players and turrets)
-        List<AITargetWrapper> allTargets = new ArrayList<>();
-
-        // Add all enemy players
-        for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() != aiPlayer.getId() && player.isActive()) {
-                AITargetWrapper wrapper = AITargetWrapper.fromPlayer(player);
-                if (!wrapper.isTeammateOf(aiPlayer)) {
-                    allTargets.add(wrapper);
-                }
-            }
-        }
-
-        // Add all enemy turrets
-        for (Turret turret : gameEntities.getAllTurrets()) {
-            if (turret.isActive()) {
-                AITargetWrapper wrapper = AITargetWrapper.fromTurret(turret);
-                if (!wrapper.isTeammateOf(aiPlayer)) {
-                    allTargets.add(wrapper);
-                }
-            }
-        }
+        List<AITargetWrapper> allTargets = collectEnemyTargets(aiPlayer, gameEntities);
 
         for (AITargetWrapper target : allTargets) {
             double distance = playerPos.distance(target.getPosition());
@@ -449,19 +457,18 @@ public class CombatBehavior implements AIBehavior {
         return bestTarget;
     }
 
-    private AITargetWrapper findTargetById(GameEntities gameEntities, int targetId, boolean isPlayer) {
-        if (isPlayer) {
-            for (Player player : gameEntities.getAllPlayers()) {
-                if (player.getId() == targetId) {
-                    return AITargetWrapper.fromPlayer(player);
-                }
-            }
-        } else {
-            for (Turret turret : gameEntities.getAllTurrets()) {
-                if (turret.getId() == targetId) {
-                    return AITargetWrapper.fromTurret(turret);
-                }
-            }
+    private AITargetWrapper findTargetById(GameEntities gameEntities, int targetId) {
+        Player player = gameEntities.getPlayer(targetId);
+        if (player != null && player.isActive()) {
+            return AITargetWrapper.fromPlayer(player);
+        }
+        Turret turret = gameEntities.getTurret(targetId);
+        if (turret != null && turret.isActive()) {
+            return AITargetWrapper.fromTurret(turret);
+        }
+        Zombie zombie = gameEntities.getZombie(targetId);
+        if (zombie != null && zombie.isActive()) {
+            return AITargetWrapper.fromZombie(zombie);
         }
         return null;
     }
@@ -483,6 +490,40 @@ public class CombatBehavior implements AIBehavior {
         }
     }
 
+    /**
+     * Handle continuous firing decision for the plasma beam.
+     * When actively firing, holds the button down and tracks the target.
+     * Releases fire when the target dies, is lost, goes out of range, or ammo runs out.
+     */
+    private void handlePlasmaBeamShooting(AIPlayer aiPlayer, AITargetWrapper target, double distance, double weaponRange, PlayerInput input) {
+        boolean currentlyHolding = aiPlayer.hasActivePlasmaBeam();
+
+        if (currentlyHolding) {
+            // While holding the plasma beam:
+            // Maintain continuous fire as long as the target is alive, visible, within range, and we have ammo.
+            boolean targetStillValid = target != null && target.isActive() && target.getHealth() > 0 && target.isVisible();
+            boolean inRange = distance <= weaponRange * 1.1; // 10% buffer so beam doesn't flicker at edge
+            boolean hasAmmo = aiPlayer.getCurrentWeapon().getCurrentAmmo() > 0 && !aiPlayer.isReloading();
+
+            if (targetStillValid && inRange && hasAmmo) {
+                input.setLeft(true); // Keep holding the fire button!
+            } else {
+                input.setLeft(false); // Release trigger
+                aiPlayer.resetAimTracking();
+            }
+        } else {
+            // Not currently firing: decide whether to start firing
+            boolean inRange = distance <= weaponRange * 0.95;
+            boolean canShoot = aiPlayer.canShoot();
+            boolean targetVisible = target != null && target.isActive() && target.isVisible();
+
+            if (inRange && canShoot && targetVisible) {
+                input.setLeft(true); // Press and start holding!
+                lastShotTime = 0;
+            }
+        }
+    }
+
     private boolean shouldShootAtTarget(AIPlayer aiPlayer, AITargetWrapper target, double distance) {
         // Don't shoot if reloading or no ammo
         if (aiPlayer.isReloading() || aiPlayer.getCurrentWeapon().getCurrentAmmo() <= 0) {
@@ -493,17 +534,16 @@ public class CombatBehavior implements AIBehavior {
         double accuracy = aiPlayer.getCurrentWeapon().getAccuracy();
         double effectiveRange = aiPlayer.getCurrentWeapon().getRange();
 
-        // Reduce accuracy at longer ranges but be more generous
-        double rangeAccuracy = Math.max(0.3, 1.0 - (distance / (effectiveRange * 1.5)));
-        double personalityAccuracy = Math.max(0.4, aiPlayer.getPersonality().getAccuracy());
+        // Reduce accuracy at longer ranges
+        double rangeAccuracy = Math.max(0.15, 1.0 - (distance / (effectiveRange * 1.5)));
+        double personalityAccuracy = Math.max(0.15, aiPlayer.getPersonality().getAccuracy());
         double finalAccuracy = accuracy * rangeAccuracy * personalityAccuracy;
 
-        // Be more aggressive - shoot more frequently
-        double shootChance = Math.max(0.6, finalAccuracy); // At least 60% chance to shoot
+        double shootChance = Math.max(0.35, finalAccuracy);
 
-        // Always shoot if very close
+        // Shoot more reliably if close
         if (distance < 100) {
-            shootChance = 0.9;
+            shootChance = 0.75;
         }
 
         return Math.random() < shootChance;

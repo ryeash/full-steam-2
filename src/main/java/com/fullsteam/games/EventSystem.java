@@ -192,6 +192,12 @@ public class EventSystem {
                 double multiplier = rules.getBlizzardDensity().getMultiplier();
                 yield (int) Math.max(2, Math.round(baseCount * multiplier));
             }
+            case DUST_STORM -> {
+                // Base: 1 dust storm smoke zone per 700,000 square units
+                double baseCount = mapArea / 700000.0;
+                double multiplier = rules.getDustStormDensity().getMultiplier();
+                yield (int) Math.max(2, Math.round(baseCount * multiplier));
+            }
         };
     }
 
@@ -269,6 +275,7 @@ public class EventSystem {
             case EARTHQUAKE -> worldWidth * 0.3; // Large area
             case ION_STORM -> 80.0;
             case BLIZZARD -> 90.0;
+            case DUST_STORM -> rules.getDustStormRadius();
         };
     }
 
@@ -337,6 +344,18 @@ public class EventSystem {
                             event.getEventType().getBaseDuration(),
                             0,
                             0
+                    ));
+            case DUST_STORM -> triggerStaggeredEventFieldEffect(event, (e, l) ->
+                    new FieldEffectCircle(
+                            -1, // System event
+                            FieldEffectType.SMOKE,
+                            l,
+                            rules.getDustStormRadius(),
+                            rules.getDustStormRadius(),
+                            0.0, // Smoke deals no damage
+                            event.getEventType().getBaseDuration(),
+                            0,
+                            0 // No team
                     ));
         }
     }

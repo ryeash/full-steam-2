@@ -23,7 +23,7 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 @Getter
 @Setter
-public class Oddball extends GameEntity implements HasWeapon {
+public class Oddball extends GameEntity implements HasWeapon, Damageable {
 
     public enum Personality {
         RAMPAGE,  // Slow, heavy, high DPS — primary scoring target
@@ -207,11 +207,14 @@ public class Oddball extends GameEntity implements HasWeapon {
     }
 
     private Player nearestPlayer(Collection<Player> players) {
+        if (this.isVisionObscured()) {
+            return null;
+        }
         Player nearest = null;
         double nearestDist = DETECTION_RANGE;
         Vector2 myPos = getPosition();
         for (Player p : players) {
-            if (!p.isActive() || p.getHealth() <= 0) {
+            if (!p.isActive() || p.getHealth() <= 0 || p.isVisionObscured()) {
                 continue;
             }
             double d = myPos.distance(p.getPosition());
@@ -224,11 +227,14 @@ public class Oddball extends GameEntity implements HasWeapon {
     }
 
     private Vector2 clusterCenter(Collection<Player> players) {
+        if (this.isVisionObscured()) {
+            return getPosition();
+        }
         double sumX = 0, sumY = 0;
         int count = 0;
         Vector2 myPos = getPosition();
         for (Player p : players) {
-            if (!p.isActive() || p.getHealth() <= 0) {
+            if (!p.isActive() || p.getHealth() <= 0 || p.isVisionObscured()) {
                 continue;
             }
             if (myPos.distance(p.getPosition()) < DETECTION_RANGE) {
@@ -241,11 +247,14 @@ public class Oddball extends GameEntity implements HasWeapon {
     }
 
     private Player scoreLeader(Collection<Player> players) {
+        if (this.isVisionObscured()) {
+            return null;
+        }
         Player leader = null;
         double bestScore = -1;
         Vector2 myPos = getPosition();
         for (Player p : players) {
-            if (!p.isActive() || p.getHealth() <= 0) {
+            if (!p.isActive() || p.getHealth() <= 0 || p.isVisionObscured()) {
                 continue;
             }
             if (myPos.distance(p.getPosition()) >= DETECTION_RANGE) {

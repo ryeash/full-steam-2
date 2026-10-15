@@ -114,9 +114,15 @@ public class VipBehavior implements AIBehavior {
             input.setMoveY(away.y);
 
             // Shoot back if within range
-            input.setWorldX(enemyPos.x);
-            input.setWorldY(enemyPos.y);
-            if (dist < aiPlayer.getCurrentWeapon().getRange() * 0.85) {
+            if (aiPlayer.isUsingPlasmaBeam()) {
+                Vector2 aim = aiPlayer.trackAim(enemyPos, nearestEnemy.getId(), deltaTime);
+                input.setWorldX(aim.x);
+                input.setWorldY(aim.y);
+            } else {
+                input.setWorldX(enemyPos.x);
+                input.setWorldY(enemyPos.y);
+            }
+            if (dist < aiPlayer.getCurrentWeapon().getRange() * 0.85 && aiPlayer.canShoot()) {
                 input.setLeft(true);
             }
         } else {
@@ -209,9 +215,15 @@ public class VipBehavior implements AIBehavior {
         input.setMoveY(toTarget.y);
 
         // Aim and shoot
-        input.setWorldX(targetPos.x);
-        input.setWorldY(targetPos.y);
-        if (dist < aiPlayer.getCurrentWeapon().getRange() * 0.9) {
+        if (aiPlayer.isUsingPlasmaBeam()) {
+            Vector2 aim = aiPlayer.trackAim(targetPos, targetVip.getId(), deltaTime);
+            input.setWorldX(aim.x);
+            input.setWorldY(aim.y);
+        } else {
+            input.setWorldX(targetPos.x);
+            input.setWorldY(targetPos.y);
+        }
+        if (dist < aiPlayer.getCurrentWeapon().getRange() * 0.9 && aiPlayer.canShoot()) {
             input.setLeft(true);
         }
     }
@@ -274,7 +286,7 @@ public class VipBehavior implements AIBehavior {
             Integer vipId = gameEntities.getTeamVip(t);
             if (vipId == null) continue;
             Player vip = gameEntities.getPlayer(vipId);
-            if (vip == null || !vip.isActive()) continue;
+            if (vip == null || !vip.isActive() || vip.isVisionObscured()) continue;
 
             double d = aiPlayer.getPosition().distance(vip.getPosition());
             if (d < nearestDist) {
@@ -335,7 +347,7 @@ public class VipBehavior implements AIBehavior {
     private void handleReload(AIPlayer aiPlayer, PlayerInput input) {
         int ammo = aiPlayer.getCurrentWeapon().getCurrentAmmo();
         int mag = aiPlayer.getCurrentWeapon().getMagazineSize();
-        if (ammo == 0 || (ammo < mag * 0.3 && currentRole != VipRole.HUNTER)) {
+        if (ammo == 0 || (ammo < mag * 0.3 && currentRole != VipRole.HUNTER && !aiPlayer.hasActivePlasmaBeam())) {
             input.setReload(true);
             input.setLeft(false);
         }

@@ -1,10 +1,14 @@
 package com.fullsteam.ai;
 
+import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerInput;
+import com.fullsteam.model.Weapon;
 import com.fullsteam.physics.Player;
 import lombok.Getter;
 import lombok.Setter;
 import org.dyn4j.geometry.Vector2;
+
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * AIPlayer extends Player with AI-specific properties and behavior management.
@@ -35,6 +39,13 @@ public class AIPlayer extends Player {
     private static final double STUCK_MOVEMENT_THRESHOLD = 5.0; // Less than 5 units moved = stuck
     private static final double STUCK_DURATION_THRESHOLD = 1.5; // Considered stuck after 1.5s of no progress
     private boolean isStuck = false;
+
+    // Aim tracking state (especially for continuous weapons like PLASMA_BEAM)
+    private Vector2 currentAimPoint = null;
+    private Vector2 currentAimOffset = new Vector2(0, 0);
+    private Vector2 targetAimOffset = new Vector2(0, 0);
+    private double aimOffsetTimer = 0.0;
+    private int lastAimTargetId = -1;
 
     public AIPlayer(int id, String playerName, double x, double y, AIPersonality personality, int team, double maxHealth) {
         super(id, "[AI] " + playerName, x, y, team, maxHealth);
@@ -107,6 +118,89 @@ public class AIPlayer extends Player {
         isStuck = false;
         lastRecordedPosition = null;
         lastMoveDirection.set(0, 0);
+        resetAimTracking();
+    }
+
+    public boolean isUsingPlasmaBeam() {
+        Weapon weapon = getCurrentWeapon();
+        return weapon != null && weapon.getOrdinance() == Ordinance.PLASMA_BEAM;
+    }
+
+    public boolean isHoldingPlasmaBeam() {
+        return isUsingPlasmaBeam() && hasActivePlasmaBeam();
+    }
+
+    /**
+     * Smoothly track aim towards a target position, avoiding frame-by-frame jitter
+     * and simulating realistic tracking when firing continuous weapons like PLASMA_BEAM.
+     *
+     * @param targetPos the current world position of the target
+     * @param targetId  unique identifier of the target
+     * @param deltaTime frame delta time in seconds
+     * @return the smoothed world-space aim position
+     */
+    public Vector2 trackAim(Vector2 targetPos, int targetId, double deltaTime) {
+        if (targetPos == null) {
+            return currentAimPoint != null ? currentAimPoint.copy() : getPosition().copy();
+        }
+
+        // If target changed, or no prior aim point, or teleported across map: re-acquire target
+        if (targetId != lastAimTargetId || currentAimPoint == null || currentAimPoint.distance(targetPos) > 1200.0) {
+            lastAimTargetId = targetId;
+            currentAimPoint = targetPos.copy();
+            currentAimOffset.set(0, 0);
+            targetAimOffset.set(0, 0);
+            aimOffsetTimer = 0.0;
+
+            double accuracy = personality != null ? personality.getAccuracy() : 0.7;
+            double initialSpread = (1.0 - accuracy) * 20.0;
+            currentAimOffset.set(
+                    (ThreadLocalRandom.current().nextDouble() - 0.5) * initialSpread,
+                    (ThreadLocalRandom.current().nextDouble() - 0.5) * initialSpread
+            );
+            currentAimPoint.add(currentAimOffset);
+            return currentAimPoint.copy();
+        }
+
+        // Update subtle aim drift timer based on personality accuracy
+        aimOffsetTimer += deltaTime;
+        if (aimOffsetTimer >= 0.35) {
+            aimOffsetTimer = 0.0;
+            double accuracy = personality != null ? personality.getAccuracy() : 0.7;
+            double maxSpread = (1.0 - accuracy) * 20.0;
+            targetAimOffset.set(
+                    (ThreadLocalRandom.current().nextDouble() - 0.5) * maxSpread,
+                    (ThreadLocalRandom.current().nextDouble() - 0.5) * maxSpread
+            );
+        }
+
+        // Drift the offset smoothly
+        double offsetLerp = Math.min(1.0, 5.0 * deltaTime);
+        currentAimOffset.x += (targetAimOffset.x - currentAimOffset.x) * offsetLerp;
+        currentAimOffset.y += (targetAimOffset.y - currentAimOffset.y) * offsetLerp;
+
+        Vector2 desiredAim = targetPos.copy().add(currentAimOffset);
+
+        // Smoothly steer the aim point towards the desired position
+        double skillLevel = personality != null ? personality.getSkillLevel() : 0.5;
+        double trackingSpeed = 12.0 + 20.0 * skillLevel; // 12.0 (rookie) to 32.0 (veteran) units/s lerp factor
+        double trackingLerp = Math.min(1.0, trackingSpeed * deltaTime);
+
+        currentAimPoint.x += (desiredAim.x - currentAimPoint.x) * trackingLerp;
+        currentAimPoint.y += (desiredAim.y - currentAimPoint.y) * trackingLerp;
+
+        return currentAimPoint.copy();
+    }
+
+    /**
+     * Reset aim tracking state (e.g. when target is lost or AI respawns).
+     */
+    public void resetAimTracking() {
+        currentAimPoint = null;
+        currentAimOffset.set(0, 0);
+        targetAimOffset.set(0, 0);
+        aimOffsetTimer = 0.0;
+        lastAimTargetId = -1;
     }
 
     public void setCurrentBehavior(AIBehavior behavior) {

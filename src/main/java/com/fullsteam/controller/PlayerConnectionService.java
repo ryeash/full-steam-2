@@ -56,6 +56,7 @@ public class PlayerConnectionService {
                 session.put(SESSION_KEY, playerSession);
 
                 if (!asSpectator) {
+                    playerSession.setCountedInGlobalPlayerCount(true);
                     gameLobby.incrementPlayerCount();
                 }
                 log.debug("{} {} connected to game {}",
@@ -83,14 +84,14 @@ public class PlayerConnectionService {
             GameManager game = playerSession.getGame();
             if (game != null) {
                 game.removePlayer(playerSession.getPlayerId());
-                // Remove empty games
-                if (game.getPlayerCount() == 0) {
+                // Remove games that have no human players left or are over
+                if (!game.hasHumanPlayers() || game.getRuleSystem().isGameOver()) {
                     gameLobby.removeGame(game.getGameId());
                 }
             }
-            // Only decrement player count for actual players, not spectators
-            if (!playerSession.isSpectator()) {
+            if (playerSession.isCountedInGlobalPlayerCount()) {
                 gameLobby.decrementPlayerCount();
+                playerSession.setCountedInGlobalPlayerCount(false);
             }
             log.debug("{} {} disconnected",
                     playerSession.isSpectator() ? "Spectator" : "Player",

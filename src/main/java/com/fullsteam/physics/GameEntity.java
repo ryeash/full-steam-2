@@ -13,6 +13,7 @@ public abstract class GameEntity {
     protected double health;
     protected double maxHealth;
     protected boolean active = true;
+    protected boolean visionObscured = false;
     protected long lastUpdateTime;
     protected final long created = System.currentTimeMillis();
     protected long expires = -1L;
@@ -65,15 +66,22 @@ public abstract class GameEntity {
         return body.getRotationDiscRadius();
     }
 
+    public void heal(double amount) {
+        if (!active || amount <= 0) {
+            return;
+        }
+        health = Math.min(maxHealth, health + amount);
+    }
+
     public boolean takeDamage(double damage) {
+        if (damage < 0) {
+            heal(-damage);
+            return false;
+        }
         boolean wasActive = active;
         health -= damage;
         if (health <= 0) {
             active = false;
-        }
-        if (health > maxHealth) {
-            // prevent over-heal for negative damage
-            health = maxHealth;
         }
         return wasActive && !active; // Return true if entity became inactive
     }

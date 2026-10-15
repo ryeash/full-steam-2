@@ -60,6 +60,28 @@ class UtilitySystemTest extends BaseTestClass {
     // ============================================================================
 
     @Test
+    @DisplayName("Should regenerate player life when player is healed")
+    void testPlayerHealDirect() {
+        Player player = createTestPlayer(1, 1);
+        player.setActive(true);
+        // Take 40 damage
+        player.takeDamage(40.0, true);
+        assertEquals(60.0, player.getHealth(), "Player should be at 60 health after 40 damage");
+
+        // Heal 15 health
+        player.heal(15.0);
+        assertEquals(75.0, player.getHealth(), "Player should be healed to 75 health");
+
+        // Heal via negative damage
+        player.takeDamage(-10.0, false);
+        assertEquals(85.0, player.getHealth(), "Player should be healed to 85 health via negative damage");
+
+        // Heal beyond max health should clamp to maxHealth
+        player.heal(50.0);
+        assertEquals(100.0, player.getHealth(), "Health should clamp to maxHealth 100.0");
+    }
+
+    @Test
     @DisplayName("Should create heal zone field effect")
     void testHealZoneCreation() {
         // Arrange

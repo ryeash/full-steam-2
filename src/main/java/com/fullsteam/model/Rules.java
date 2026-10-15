@@ -57,7 +57,7 @@ public class Rules {
      */
     @NotNull
     @Builder.Default
-    private VictoryCondition victoryCondition = VictoryCondition.ENDLESS;
+    private VictoryCondition victoryCondition = VictoryCondition.SCORE_LIMIT;
 
     /**
      * Score limit for SCORE_LIMIT victory condition.
@@ -94,6 +94,17 @@ public class Rules {
     @Max(3600)
     @Builder.Default
     private double lockGameAfterSeconds = 0.0;
+
+    /**
+     * Countdown in seconds before the game officially starts (prep/ready-up phase).
+     * 0 = start immediately (no countdown).
+     * Allows players to enter the game and configure loadouts before action begins.
+     */
+    @Min(0)
+    @Max(300)
+    @JsonProperty("gameStartCountdown")
+    @Builder.Default
+    private double gameStartCountdown = 0.0;
 
     /**
      * How players respawn after death.
@@ -216,6 +227,36 @@ public class Rules {
     private EntityWorldDensity obstacleDensity = EntityWorldDensity.RANDOM;
 
     /**
+     * Whether to enable zombie NPCs.
+     */
+    @NotNull
+    @JsonProperty("enableZombies")
+    @Builder.Default
+    private boolean enableZombies = false;
+
+    /**
+     * Spawn style for zombies (WAVE, CONSTANT, EBB_AND_FLOW).
+     */
+    @NotNull
+    @Builder.Default
+    private ZombieSpawnStyle zombieSpawnStyle = ZombieSpawnStyle.WAVE;
+
+    /**
+     * Intensity level for zombie spawning.
+     */
+    @NotNull
+    @Builder.Default
+    private ZombieIntensity zombieIntensity = ZombieIntensity.MEDIUM;
+
+    /**
+     * Points awarded per zombie kill (0 to 5).
+     */
+    @Min(0)
+    @Max(5)
+    @Builder.Default
+    private int zombiePointsPerKill = 1;
+
+    /**
      * Whether to add headquarters to the game. When enabled, each team gets one headquarters in their spawn zone.
      * Headquarters are destructible structures that can be shot to score points.
      */
@@ -249,13 +290,6 @@ public class Rules {
     @Max(10000)
     @Builder.Default
     private int headquartersDestructionBonus = 100;
-
-    /**
-     * Whether destroying headquarters ends the game.
-     */
-    @NotNull
-    @Builder.Default
-    private boolean headquartersDestructionEndsGame = true;
 
     /**
      * Whether to enable random events during gameplay.
@@ -348,6 +382,14 @@ public class Rules {
     private EntityWorldDensity blizzardDensity = EntityWorldDensity.DENSE;
 
     /**
+     * Density of dust storm smoke zones.
+     * Controls how many dust storm smoke zones spawn relative to map size.
+     */
+    @NotNull
+    @Builder.Default
+    private EntityWorldDensity dustStormDensity = EntityWorldDensity.DENSE;
+
+    /**
      * Damage per meteor impact.
      */
     @DecimalMin("1.0")
@@ -394,6 +436,14 @@ public class Rules {
     @DecimalMax("500.0")
     @Builder.Default
     private double ionStormDamage = 25.0;
+
+    /**
+     * Radius of each dust storm smoke zone.
+     */
+    @DecimalMin("10.0")
+    @DecimalMax("500.0")
+    @Builder.Default
+    private double dustStormRadius = 100.0;
 
     /**
      * Check if this game mode uses flags.
@@ -448,9 +498,10 @@ public class Rules {
 
     /**
      * Check if this game has a time limit.
+     * All games are capped by time to prevent indefinite resource consumption.
      */
     public boolean hasTimeLimit() {
-        return victoryCondition == VictoryCondition.TIME_LIMIT && timeLimit > 0;
+        return timeLimit > 0;
     }
 
     /**
@@ -469,6 +520,13 @@ public class Rules {
      */
     public boolean hasVip() {
         return enableVip;
+    }
+
+    /**
+     * Check if this game mode uses zombies.
+     */
+    public boolean hasZombies() {
+        return enableZombies;
     }
 
     /**
@@ -505,6 +563,10 @@ public class Rules {
             components.add("hqDamage");
             components.add("hqDestroyed");
         }
+        // bonusPoints: Zombie kills count when zombies are present and yield points.
+        if (hasZombies() && zombiePointsPerKill > 0) {
+            components.add("zombieKills");
+        }
         return components;
     }
 
@@ -520,5 +582,12 @@ public class Rules {
      */
     public boolean hasRandomWeapons() {
         return enableRandomWeapons;
+    }
+
+    /**
+     * Check if this game has a start countdown (prep phase).
+     */
+    public boolean hasGameStartCountdown() {
+        return gameStartCountdown > 0;
     }
 }

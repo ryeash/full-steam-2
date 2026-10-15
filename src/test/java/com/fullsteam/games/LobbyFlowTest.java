@@ -64,7 +64,11 @@ class LobbyFlowTest extends BaseTestClass {
         WebSocketSession stub = (WebSocketSession) Proxy.newProxyInstance(
                 getClass().getClassLoader(),
                 new Class<?>[]{WebSocketSession.class},
-                (proxy, method, args) -> defaultFor(method.getReturnType())
+                (proxy, method, args) -> {
+                    if ("isOpen".equals(method.getName())) return true;
+                    if ("isWritable".equals(method.getName())) return false;
+                    return defaultFor(method.getReturnType());
+                }
         );
         return new PlayerSession(playerId, stub);
     }

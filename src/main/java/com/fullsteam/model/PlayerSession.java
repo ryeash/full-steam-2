@@ -20,6 +20,7 @@ public class PlayerSession {
      * by {@link com.fullsteam.controller.PlayerConnectionService} immediately.
      */
     private PlayerSessionState state = PlayerSessionState.LOBBY;
+    private boolean countedInGlobalPlayerCount = false;
 
     /**
      * Wall-clock timestamp (ms) when the session entered the {@code LOBBY}

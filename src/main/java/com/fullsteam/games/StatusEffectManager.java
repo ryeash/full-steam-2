@@ -5,6 +5,7 @@ import com.fullsteam.model.AttributeModification;
 import com.fullsteam.model.BaseAttributeModification;
 import com.fullsteam.model.Weapon;
 import com.fullsteam.physics.Player;
+import lombok.Getter;
 
 /**
  * Manages status effects that can be applied to players during gameplay.
@@ -67,7 +68,13 @@ public final class StatusEffectManager {
      * Apply an effect to a player, replacing any existing effect with the same unique key.
      */
     private static void applyEffect(Player player, AttributeModification attributeModification) {
-        player.getAttributeModifications().removeIf(am -> am.uniqueKey().equals(attributeModification.uniqueKey()));
+        player.getAttributeModifications().removeIf(am -> {
+            if (am.uniqueKey().equals(attributeModification.uniqueKey())) {
+                am.revert(player);
+                return true;
+            }
+            return false;
+        });
         player.getAttributeModifications().add(attributeModification);
     }
 
@@ -305,9 +312,12 @@ public final class StatusEffectManager {
             @Override
             public void update(Player player, double delta) {
                 double damage = damagePerSecond * (delta / 1000);
-                if (player.takeDamage(damage)) {
+                boolean killed = player.takeDamage(damage);
+                boolean armorMitigated = player.isLastDamageArmorMitigated();
+                if (killed) {
                     gameManager.killPlayer(player, effectOwner);
                 }
+                gameManager.getGameEntities().recordDotDamageHit(player.getPosition().x, player.getPosition().y, damage, effectOwner, player.getId(), killed, armorMitigated);
             }
         });
     }
@@ -370,6 +380,65 @@ public final class StatusEffectManager {
     public static boolean isVip(Player player) {
         return player.getAttributeModifications().stream()
                 .anyMatch(am -> "vipStatus".equals(am.uniqueKey()));
+    }
+
+    /**
+     * Riot Shield attribute modification with hitpoints and movement slowing effect.
+     */
+    @Getter
+    public static class RiotShieldAttributeModification extends BaseAttributeModification {
+        private final double maxHealth;
+        private double health;
+        private final double linearDamping;
+
+        public RiotShieldAttributeModification(double durationSeconds, double maxHealth, double linearDamping) {
+            super(System.currentTimeMillis() + (long) (durationSeconds * 1000));
+            this.maxHealth = maxHealth;
+            this.health = maxHealth;
+            this.linearDamping = linearDamping;
+        }
+
+        public void damageShield(double damage) {
+            if (damage > 0) {
+                this.health = Math.max(0.0, this.health - damage);
+            }
+        }
+
+        @Override
+        public void update(Player player, double delta) {
+            player.getBody().setLinearDamping(linearDamping);
+        }
+
+        @Override
+        public void revert(Player player) {
+            player.getBody().setLinearDamping(Config.PLAYER_LINEAR_DAMPING);
+        }
+
+        @Override
+        public boolean isExpired() {
+            return health <= 0 || super.isExpired();
+        }
+
+        @Override
+        public String uniqueKey() {
+            return "riotShield";
+        }
+
+        @Override
+        public String renderHint() {
+            return "riot_shield:#00E5FF:shield:true:Riot Shield";
+        }
+    }
+
+    /**
+     * Apply Riot Shield effect to a player.
+     */
+    public static void applyRiotShield(Player player, double durationSeconds) {
+        RiotShieldAttributeModification rs = new RiotShieldAttributeModification(
+                durationSeconds,
+                Config.RIOT_SHIELD_MAX_HEALTH,
+                Config.PLAYER_LINEAR_DAMPING * 1.8);
+        applyEffect(player, rs);
     }
 }
 

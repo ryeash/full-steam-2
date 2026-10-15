@@ -4,6 +4,7 @@ import com.fullsteam.model.PlayerInput;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Turret;
+import com.fullsteam.physics.Zombie;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -84,7 +85,7 @@ public interface AIBehavior {
 
         if (currentAmmo == 0) {
             input.setReload(true);
-        } else if (isSafe && currentAmmo < magazineSize * 0.3) {
+        } else if (isSafe && currentAmmo < magazineSize * 0.3 && !aiPlayer.hasActivePlasmaBeam()) {
             input.setReload(true);
         }
     }
@@ -103,7 +104,7 @@ public interface AIBehavior {
         List<AITargetWrapper> targets = new ArrayList<>();
 
         for (Player player : gameEntities.getAllPlayers()) {
-            if (player.getId() == aiPlayer.getId() || !player.isActive()) {
+            if (player.getId() == aiPlayer.getId() || !player.isActive() || player.isVisionObscured()) {
                 continue;
             }
             AITargetWrapper wrapper = AITargetWrapper.fromPlayer(player);
@@ -113,13 +114,20 @@ public interface AIBehavior {
         }
 
         for (Turret turret : gameEntities.getAllTurrets()) {
-            if (!turret.isActive()) {
+            if (!turret.isActive() || turret.isVisionObscured()) {
                 continue;
             }
             AITargetWrapper wrapper = AITargetWrapper.fromTurret(turret);
             if (!wrapper.isTeammateOf(aiPlayer)) {
                 targets.add(wrapper);
             }
+        }
+
+        for (Zombie zombie : gameEntities.getAllZombies()) {
+            if (!zombie.isActive() || zombie.getHealth() <= 0 || zombie.isVisionObscured()) {
+                continue;
+            }
+            targets.add(AITargetWrapper.fromZombie(zombie));
         }
 
         return targets;

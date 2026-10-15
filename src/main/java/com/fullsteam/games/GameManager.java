@@ -6,6 +6,7 @@ import com.fullsteam.RandomNames;
 import com.fullsteam.ai.AIPersonality;
 import com.fullsteam.ai.AIPlayer;
 import com.fullsteam.ai.AIPlayerManager;
+import com.fullsteam.model.ArmorType;
 import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.FieldEffectCircle;
 import com.fullsteam.model.FieldEffectType;
@@ -31,6 +32,7 @@ import com.fullsteam.physics.Projectile;
 import com.fullsteam.physics.TeamSpawnManager;
 import com.fullsteam.physics.Turret;
 import com.fullsteam.physics.UtilityActivation;
+import com.fullsteam.physics.Zombie;
 import io.micronaut.websocket.WebSocketSession;
 import io.micronaut.websocket.exceptions.WebSocketSessionException;
 import lombok.Getter;
@@ -44,7 +46,6 @@ import org.slf4j.LoggerFactory;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -55,6 +56,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
+@Getter
 public class GameManager {
     protected static final Logger log = LoggerFactory.getLogger(GameManager.class);
 
@@ -65,38 +67,27 @@ public class GameManager {
      */
     public static final long LOBBY_TIMEOUT_MS = 180_000L;
 
-    @Getter
-    protected final String gameId;
-    @Getter
-    protected final GameConfig gameConfig;
-    @Getter
-    protected final GameEntities gameEntities;
-    @Getter
-    protected final CollisionProcessor collisionProcessor;
-    @Getter
-    protected final AIPlayerManager aiPlayerManager;
-    @Getter
-    protected final TeamSpawnManager teamSpawnManager;
-    @Getter
-    protected final TerrainGenerator terrainGenerator;
-    @Getter
-    protected final GameEventManager gameEventManager;
-    @Getter
-    protected final RuleSystem ruleSystem;
-    @Getter
-    protected final WeaponSystem weaponSystem;
-    @Getter
-    protected final UtilitySystem utilitySystem;
-    @Getter
-    protected final EntitySpawner entitySpawner;
-    @Getter
-    protected final SpawnPointManager spawnPointManager;
-    @Getter
-    protected final GameStateSerializer gameStateSerializer;
+    public static final long FRAME_RATE = 30L;
+    public static final long FRAME_PERIOD = 1000L / FRAME_RATE; // ms/s / frame/s = ms/frame
 
+    protected final String gameId;
+    protected final GameConfig gameConfig;
+    protected final GameEntities gameEntities;
+    protected final CollisionProcessor collisionProcessor;
+    protected final AIPlayerManager aiPlayerManager;
+    protected final TeamSpawnManager teamSpawnManager;
+    protected final TerrainGenerator terrainGenerator;
+    protected final GameEventManager gameEventManager;
+    protected final RuleSystem ruleSystem;
+    protected final WeaponSystem weaponSystem;
+    protected final UtilitySystem utilitySystem;
+    protected final ZombieManager zombieManager;
+    protected final EntitySpawner entitySpawner;
+    protected final SpawnPointManager spawnPointManager;
+    protected final GameStateSerializer gameStateSerializer;
+    protected final BinaryGameStateSerializer binaryGameStateSerializer;
     protected final ObjectMapper objectMapper;
 
-    @Getter
     protected long gameStartTime;
     protected boolean gameRunning = false;
     private final long aiCheckIntervalMs;
@@ -106,11 +97,18 @@ public class GameManager {
     private double lastUpdateTime = System.nanoTime() / 1e9;
 
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
+    private volatile boolean hadHumanPlayers = false;
+    private final GameLobby gameLobby;
 
     public GameManager(String gameId, GameConfig gameConfig, ObjectMapper objectMapper) {
+        this(gameId, gameConfig, objectMapper, null);
+    }
+
+    public GameManager(String gameId, GameConfig gameConfig, ObjectMapper objectMapper, GameLobby gameLobby) {
         this.gameId = gameId;
         this.gameConfig = gameConfig;
         this.objectMapper = objectMapper;
+        this.gameLobby = gameLobby;
         this.gameStartTime = System.currentTimeMillis();
         this.aiPlayerManager = new AIPlayerManager(gameConfig);
 
@@ -154,6 +152,10 @@ public class GameManager {
                 terrainGenerator
         );
 
+        this.zombieManager = gameConfig.getRules().hasZombies()
+                ? new ZombieManager(gameId, gameConfig, gameEntities, gameEventManager, terrainGenerator, teamSpawnManager, weaponSystem)
+                : null;
+
         // Initialize spawn point manager
         this.spawnPointManager = new SpawnPointManager(
                 gameConfig,
@@ -166,10 +168,15 @@ public class GameManager {
         this.gameStateSerializer = new GameStateSerializer(
                 gameConfig,
                 gameEntities,
-                ruleSystem,
-                teamSpawnManager,
-                terrainGenerator
+                teamSpawnManager
         );
+
+        this.binaryGameStateSerializer = new BinaryGameStateSerializer(
+                gameConfig,
+                gameEntities,
+                ruleSystem
+        );
+        this.binaryGameStateSerializer.setGameManager(this);
 
         entitySpawner.createWorldBoundaries();
         entitySpawner.createObstacles();
@@ -196,7 +203,7 @@ public class GameManager {
             log.debug("AI filling disabled for game {} - no initial AI players added", gameId);
         }
 
-        this.shutdownHook = Config.EXECUTOR.scheduleAtFixedRate(this::update, 0, 16, TimeUnit.MILLISECONDS);
+        this.shutdownHook = Config.EXECUTOR.scheduleAtFixedRate(this::update, FRAME_PERIOD, FRAME_PERIOD, TimeUnit.MILLISECONDS);
     }
 
     public boolean addPlayer(PlayerSession playerSession) {
@@ -211,6 +218,7 @@ public class GameManager {
         }
 
         if (!asSpectator) {
+            hadHumanPlayers = true;
             if (getPlayingAndLobbyCount() >= getMaxPlayers()) {
                 return false;
             }
@@ -235,8 +243,7 @@ public class GameManager {
     public int addMixedAIPlayers(int count) {
         int added = 0;
         for (int i = 0; i < count; i++) {
-            AIPersonality.Type personality = AIPersonality.Type.values()[i % AIPersonality.Type.values().length];
-            if (addAIPlayer(personality)) {
+            if (addAIPlayer()) {
                 added++;
             } else {
                 log.warn("Could not add AI player {} of {} - game may be full", i + 1, count);
@@ -323,20 +330,22 @@ public class GameManager {
                         request.getUtilityWeapon(), playerId);
             }
         }
+        ArmorType armorType = parseArmorType(request);
 
         // Apply chosen name only when it comes from the curated list.
         applyPlayerNameFromRequest(playerSession, request);
 
         switch (playerSession.getState()) {
             case PLAYING -> log.debug("Ignoring readyToSpawn from already-playing session {}", playerId);
-            case LOBBY -> spawnPlayerFromSession(playerSession, weaponConfig, utilityWeapon);
-            case SPECTATOR -> spawnFromSpectator(playerSession, weaponConfig, utilityWeapon);
+            case LOBBY -> spawnPlayerFromSession(playerSession, weaponConfig, utilityWeapon, armorType);
+            case SPECTATOR -> spawnFromSpectator(playerSession, weaponConfig, utilityWeapon, armorType);
         }
     }
 
     private void spawnFromSpectator(PlayerSession playerSession,
                                     WeaponConfig weaponConfig,
-                                    UtilityWeapon utilityWeapon) {
+                                    UtilityWeapon utilityWeapon,
+                                    ArmorType armorType) {
         if (ruleSystem.isGameOver()) {
             sendJoinRejected(playerSession, "GAME_ENDED");
             return;
@@ -354,7 +363,7 @@ public class GameManager {
                 return;
             }
         }
-        spawnPlayerFromSession(playerSession, weaponConfig, utilityWeapon);
+        spawnPlayerFromSession(playerSession, weaponConfig, utilityWeapon, armorType);
     }
 
     private void sendJoinRejected(PlayerSession playerSession, String reason) {
@@ -379,12 +388,38 @@ public class GameManager {
         }
     }
 
-    public void broadcast(Object message) {
-        gameEntities.getPlayerSessions().values().forEach(player -> {
-            if (player.getSession().isOpen()) {
-                send(player.getSession(), message);
+    public void sendBinary(WebSocketSession session, byte[] bytes) {
+        try {
+            if (session.isWritable() && session.isOpen()) {
+                session.sendAsync(bytes);
             }
-        });
+        } catch (WebSocketSessionException e) {
+            if (!(e.getCause() instanceof InterruptedException)) {
+                log.error("Error sending binary message", e);
+            } else {
+                log.debug("interrupted sending binary message, likely game was shutdown", e);
+            }
+        }
+    }
+
+    public void broadcast(Object message) {
+        gameEntities.getPlayerSessions()
+                .values()
+                .forEach(player -> {
+                    if (player.getSession().isOpen()) {
+                        send(player.getSession(), message);
+                    }
+                });
+    }
+
+    public void broadcastBinary(byte[] bytes) {
+        gameEntities.getPlayerSessions()
+                .values()
+                .forEach(player -> {
+                    if (player.getSession().isOpen()) {
+                        sendBinary(player.getSession(), bytes);
+                    }
+                });
     }
 
     public GameInfo getGameInfo() {
@@ -398,17 +433,16 @@ public class GameManager {
         );
     }
 
-    public int getPlayerCount() {
-        return gameEntities.getPlayerSessions().size();
-    }
-
     /**
      * Number of sessions that are reserving a player slot - both {@code LOBBY}
      * (yet-to-spawn) and {@code PLAYING}. Spectators are excluded. This is the
      * count that gates new joins against {@link #getMaxPlayers()}.
      */
     public int getPlayingAndLobbyCount() {
-        return (int) gameEntities.getPlayerSessions().values().stream()
+        return (int) gameEntities.getPlayerSessions()
+                .values()
+                .stream()
+                .filter(player -> player.getSession().isOpen())
                 .filter(s -> s.getState() != PlayerSessionState.SPECTATOR)
                 .count();
     }
@@ -438,8 +472,11 @@ public class GameManager {
         if (!gameConfig.getRules().shouldLockGame()) {
             return false; // Game never locks
         }
+        if (ruleSystem.isCountdown()) {
+            return false; // Never lock during pre-game countdown
+        }
 
-        double elapsedSeconds = (System.currentTimeMillis() - gameStartTime) / 1000.0;
+        double elapsedSeconds = (System.currentTimeMillis() - ruleSystem.getMatchStartTime()) / 1000.0;
         return elapsedSeconds >= gameConfig.getRules().getLockGameAfterSeconds();
     }
 
@@ -451,14 +488,15 @@ public class GameManager {
     /**
      * Add an AI player with a specific personality type.
      */
-    public boolean addAIPlayer(AIPersonality.Type personalityType) {
+    public boolean addAIPlayer() {
         if (gameEntities.getAllPlayers().size() >= getMaxPlayers()) {
             return false;
         }
 
         int assignedTeam = assignPlayerToTeam();
         Vector2 spawnPoint = spawnPointManager.findVariedSpawnPointForTeam(assignedTeam);
-        AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithPersonality(Config.nextEntityId(), spawnPoint.x, spawnPoint.y, personalityType, assignedTeam, gameConfig.getPlayerMaxHealth());
+        String name = RandomNames.randomName();
+        AIPlayer aiPlayer = AIPlayerManager.createAIPlayerWithName(Config.nextEntityId(), name, AIPersonality.typeFromName(name), spawnPoint.x, spawnPoint.y, assignedTeam, gameConfig.getPlayerMaxHealth());
         aiPlayer.setHealth(gameConfig.getPlayerMaxHealth());
 
         // Initialize lives based on respawn mode (delegated to RuleSystem)
@@ -473,6 +511,8 @@ public class GameManager {
 
         // Add to AI manager
         aiPlayerManager.addAIPlayer(aiPlayer);
+
+        this.binaryGameStateSerializer.triggerLowFreqSync();
 
         // Ensure VIP is assigned for this team if VIP mode is enabled
         if (gameConfig.getRules().hasVip()) {
@@ -508,13 +548,11 @@ public class GameManager {
      * Get the number of AI players in the game.
      */
     public int getAIPlayerCount() {
-        int count = 0;
-        for (Player player : gameEntities.getAllPlayers()) {
-            if (aiPlayerManager.isAIPlayer(player.getId())) {
-                count++;
-            }
-        }
-        return count;
+        return (int) gameEntities.getAllPlayers()
+                .stream()
+                .map(Player::getId)
+                .filter(aiPlayerManager::isAIPlayer)
+                .count();
     }
 
     /**
@@ -524,14 +562,12 @@ public class GameManager {
         return aiPlayerManager.isAIPlayer(playerId);
     }
 
-    /**
-     * Check if the game has any human player sessions occupying a slot
-     * (LOBBY or PLAYING). Spectators are intentionally excluded so the
-     * AI-only cleanup sweep ({@link GameLobby#cleanupAIOnlyGames()})
-     * can reap a game that has nothing but spectators hanging around.
-     */
     public boolean hasHumanPlayers() {
         return getPlayingAndLobbyCount() > 0;
+    }
+
+    public boolean hadHumanPlayers() {
+        return hadHumanPlayers;
     }
 
     /**
@@ -570,11 +606,7 @@ public class GameManager {
                 candidates.add(t);
             }
         }
-        int bestTeam = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
-
-        log.debug("Team assignment – counts: {} → assigning to team {} (min={})",
-                Arrays.toString(teamCounts), bestTeam, minCount);
-        return bestTeam;
+        return candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
     }
 
     /**
@@ -627,7 +659,9 @@ public class GameManager {
      */
     private void rebalanceAITeams() {
         int teamCount = gameConfig.getTeamCount();
-        if (teamCount < 2) return;
+        if (teamCount < 2) {
+            return;
+        }
 
         for (int iteration = 0; iteration < teamCount * 2; iteration++) {
             // Build a fresh per-team headcount each pass.
@@ -635,7 +669,9 @@ public class GameManager {
             Map<Integer, List<Integer>> aiByTeam = new HashMap<>();
             for (Player p : gameEntities.getAllPlayers()) {
                 int t = p.getTeam();
-                if (t < 1 || t > teamCount) continue;
+                if (t < 1 || t > teamCount) {
+                    continue;
+                }
                 teamCounts[t]++;
                 if (isAIPlayer(p.getId())) {
                     aiByTeam.computeIfAbsent(t, k -> new ArrayList<>()).add(p.getId());
@@ -645,16 +681,24 @@ public class GameManager {
             // Find most- and least-populated teams.
             int maxTeam = 1, minTeam = 1;
             for (int t = 2; t <= teamCount; t++) {
-                if (teamCounts[t] > teamCounts[maxTeam]) maxTeam = t;
-                if (teamCounts[t] < teamCounts[minTeam]) minTeam = t;
+                if (teamCounts[t] > teamCounts[maxTeam]) {
+                    maxTeam = t;
+                }
+                if (teamCounts[t] < teamCounts[minTeam]) {
+                    minTeam = t;
+                }
             }
 
             // Already balanced (gap ≤ 1) — done.
-            if (teamCounts[maxTeam] - teamCounts[minTeam] <= 1) break;
+            if (teamCounts[maxTeam] - teamCounts[minTeam] <= 1) {
+                break;
+            }
 
             // Can only fix the imbalance if the over-full team has a removable AI.
             List<Integer> aiOnMaxTeam = aiByTeam.getOrDefault(maxTeam, List.of());
-            if (aiOnMaxTeam.isEmpty()) break; // all excess players on that team are human — can't move
+            if (aiOnMaxTeam.isEmpty()) {
+                break; // all excess players on that team are human — can't move
+            }
 
             int aiToMove = aiOnMaxTeam.getFirst();
             removeAIPlayer(aiToMove);
@@ -678,7 +722,9 @@ public class GameManager {
             // In FFA there are no teams; just pick any AI.
             for (Player p : gameEntities.getAllPlayers()) {
                 int t = p.getTeam();
-                if (t >= 1 && t < teamCounts.length) teamCounts[t]++;
+                if (t >= 1 && t < teamCounts.length) {
+                    teamCounts[t]++;
+                }
             }
 
             // Find the team with the most total players (AI or human).
@@ -696,14 +742,20 @@ public class GameManager {
             // Remove one AI from that team (or any AI in FFA).
             boolean found = false;
             for (Player p : gameEntities.getAllPlayers()) {
-                if (!isAIPlayer(p.getId())) continue;
-                if (targetTeam != 0 && p.getTeam() != targetTeam) continue;
+                if (!isAIPlayer(p.getId())) {
+                    continue;
+                }
+                if (targetTeam != 0 && p.getTeam() != targetTeam) {
+                    continue;
+                }
                 removeAIPlayer(p.getId());
                 removed++;
                 found = true;
                 break;
             }
-            if (!found) break; // no more AI to remove
+            if (!found) {
+                break; // no more AI to remove
+            }
         }
         return removed;
     }
@@ -719,7 +771,7 @@ public class GameManager {
         }
     }
 
-    protected void update() {
+    public void update() {
         if (shutdown.get()) {
             return;
         }
@@ -732,6 +784,8 @@ public class GameManager {
             if (ruleSystem.isGameOver()) {
                 return;
             }
+
+            purgeClosedSessions();
 
             // Update rule systems (rounds, victory conditions, respawns)
             ruleSystem.update(deltaTime);
@@ -748,8 +802,10 @@ public class GameManager {
 
             gameEntities.getPlayerInputs().forEach(this::processPlayerInput);
             gameEntities.updateAll(deltaTime);
-            updateCarriedFlags(); // Update flag positions for carried flags
-            collisionProcessor.updateKothZones(deltaTime);
+            if (!ruleSystem.isCountdown()) {
+                updateCarriedFlags(); // Update flag positions for carried flags
+                collisionProcessor.updateKothZones(deltaTime);
+            }
             gameEntities.getProjectiles().entrySet().removeIf(entry -> {
                 Projectile projectile = entry.getValue();
                 if (!projectile.isActive()) {
@@ -760,7 +816,7 @@ public class GameManager {
                     world.removeBody(projectile.getBody());
                     return true;
                 }
-                collisionProcessor.getBulletEffectProcessor().applyHomingBehavior(projectile);
+                collisionProcessor.getBulletEffectProcessor().applyHomingBehavior(projectile, deltaTime);
                 return false;
             });
 
@@ -768,7 +824,7 @@ public class GameManager {
             updateDefenseLaserBeamEndpoints();
 
             // Reset vision flags before physics collision pass re-evaluates them
-            gameEntities.getAllPlayers().forEach(p -> p.setVisionObscured(false));
+            gameEntities.resetVisionObscuredFlags();
 
             world.updatev(deltaTime);
 
@@ -777,6 +833,31 @@ public class GameManager {
             sendGameState();
         } catch (Throwable t) {
             log.error("Error in update loop", t);
+        }
+    }
+
+    private void purgeClosedSessions() {
+        List<PlayerSession> closedSessions = gameEntities.getPlayerSessions().values().stream()
+                .filter(session -> session.getSession() != null && !session.getSession().isOpen())
+                .toList();
+
+        if (closedSessions.isEmpty()) {
+            return;
+        }
+
+        for (PlayerSession closedSession : closedSessions) {
+            log.info("Purging closed WebSocket session for player {} in game {}", closedSession.getPlayerId(), gameId);
+            removePlayer(closedSession.getPlayerId());
+            if (closedSession.isCountedInGlobalPlayerCount()) {
+                if (gameLobby != null) {
+                    gameLobby.decrementPlayerCount();
+                }
+                closedSession.setCountedInGlobalPlayerCount(false);
+            }
+        }
+
+        if ((!hasHumanPlayers() || ruleSystem.isGameOver()) && gameLobby != null) {
+            gameLobby.removeGame(gameId);
         }
     }
 
@@ -804,15 +885,21 @@ public class GameManager {
     private void updateUtilityEntities(double deltaTime) {
         for (Turret turret : gameEntities.getAllTurrets()) {
             if (turret.isActive()) {
-                turret.acquireTarget(gameEntities.getAllPlayers().stream().toList());
+                turret.acquireTarget(gameEntities.getAllPlayers(), gameEntities.getAllZombies());
                 weaponSystem.handleTurretFire(turret);
             }
         }
 
-        for (Oddball oddball : gameEntities.getAllOddballNpcs()) {
-            if (oddball.isActive()) {
-                oddball.tickAI(Collections.unmodifiableCollection(gameEntities.getAllPlayers()));
-                weaponSystem.handleOddballFire(oddball);
+        if (!ruleSystem.isCountdown()) {
+            for (Oddball oddball : gameEntities.getAllOddballNpcs()) {
+                if (oddball.isActive()) {
+                    oddball.tickAI(Collections.unmodifiableCollection(gameEntities.getAllPlayers()));
+                    weaponSystem.handleOddballFire(oddball);
+                }
+            }
+
+            if (zombieManager != null) {
+                zombieManager.update(deltaTime);
             }
         }
     }
@@ -865,7 +952,8 @@ public class GameManager {
      */
     protected void spawnPlayerFromSession(PlayerSession playerSession,
                                           WeaponConfig weaponConfig,
-                                          UtilityWeapon utilityWeapon) {
+                                          UtilityWeapon utilityWeapon,
+                                          ArmorType armorType) {
         int assignedTeam = assignPlayerToTeam();
         Vector2 spawnPoint = spawnPointManager.findVariedSpawnPointForTeam(assignedTeam);
         log.debug("Player {} spawning in game {} at spawn point ({}, {}) on team {}",
@@ -876,11 +964,10 @@ public class GameManager {
         player.setHealth(gameConfig.getPlayerMaxHealth());
 
         // Apply the loadout the client chose before we add the player to the world
-        if (weaponConfig != null || utilityWeapon != null) {
-            WeaponConfig primary = weaponConfig != null ? weaponConfig : WeaponConfig.ASSAULT_RIFLE_PRESET;
-            UtilityWeapon utility = utilityWeapon != null ? utilityWeapon : UtilityWeapon.HEAL_ZONE;
-            player.applyWeaponConfig(primary, utility);
-        }
+        WeaponConfig primary = weaponConfig != null ? weaponConfig : WeaponConfig.ASSAULT_RIFLE_PRESET;
+        UtilityWeapon utility = utilityWeapon != null ? utilityWeapon : UtilityWeapon.HEAL_ZONE;
+        ArmorType armor = armorType != null ? armorType : ArmorType.NONE;
+        player.applyWeaponConfig(primary, utility, armor);
 
         // Apply spawn invincibility to give player time to get their bearings
 
@@ -890,7 +977,7 @@ public class GameManager {
         ruleSystem.ensureVipForTeam(assignedTeam);
 
         playerSession.setState(PlayerSessionState.PLAYING);
-        send(playerSession.getSession(), createInitialGameState(player));
+        send(playerSession.getSession(), gameStateSerializer.createInitialGameState(player));
         log.debug("Player {} ({}) spawned in game {} successfully. Total players: {}, Total sessions: {}",
                 playerSession.getPlayerId(), playerSession.getPlayerName(), gameId,
                 gameEntities.getPlayers().size(), gameEntities.getPlayerSessions().size());
@@ -899,6 +986,8 @@ public class GameManager {
         gameEventManager.broadcastPlayerJoin(playerSession.getPlayerName(), assignedTeam);
 
         StatusEffectManager.applySpawnInvincibility(player);
+
+        this.binaryGameStateSerializer.triggerLowFreqSync();
 
         // Adjust AI players when a human player spawns
         adjustAIPlayers();
@@ -939,16 +1028,25 @@ public class GameManager {
     protected void processPlayerInput(Integer playerId, PlayerInput input) {
         Player player = gameEntities.getPlayer(playerId);
         if (player != null && input != null) {
+            if (ruleSystem.isCountdown()) {
+                input.setMoveX(0.0);
+                input.setMoveY(0.0);
+                input.setLeft(false);
+                input.setAltFire(false);
+                input.setReload(false);
+            }
             player.processInput(input);
 
-            // Handle primary weapon fire (delegated to WeaponSystem)
-            weaponSystem.handlePrimaryFire(player, input);
+            if (!ruleSystem.isCountdown()) {
+                // Handle primary weapon fire (delegated to WeaponSystem)
+                weaponSystem.handlePrimaryFire(player, input);
 
-            // Handle utility weapon fire (delegated to UtilitySystem)
-            if (input.isAltFire()) {
-                UtilityActivation activation = player.useUtility();
-                if (activation != null) {
-                    utilitySystem.handleUtilityActivation(activation);
+                // Handle utility weapon fire (delegated to UtilitySystem)
+                if (input.isAltFire()) {
+                    UtilityActivation activation = player.useUtility();
+                    if (activation != null) {
+                        utilitySystem.handleUtilityActivation(activation);
+                    }
                 }
             }
         }
@@ -960,6 +1058,7 @@ public class GameManager {
         if (player != null) {
             WeaponConfig primaryConfig = WeaponConfig.ASSAULT_RIFLE_PRESET;
             UtilityWeapon utilityConfig = UtilityWeapon.HEAL_ZONE;
+            ArmorType armorConfig = parseArmorType(request);
             if (request.getWeaponConfig() != null) {
                 primaryConfig = request.getWeaponConfig();
             }
@@ -971,9 +1070,20 @@ public class GameManager {
                             request.getUtilityWeapon(), playerSession.getPlayerId());
                 }
             }
-            player.applyWeaponConfig(primaryConfig, utilityConfig);
+            player.applyWeaponConfig(primaryConfig, utilityConfig, armorConfig);
             player.setPlayerName(playerSession.getPlayerName());
         }
+    }
+
+    private ArmorType parseArmorType(PlayerConfigRequest request) {
+        if (request != null && request.getArmorType() != null) {
+            try {
+                return ArmorType.valueOf(request.getArmorType().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                log.warn("Unknown armor type '{}', defaulting to NONE", request.getArmorType());
+            }
+        }
+        return ArmorType.NONE;
     }
 
     /**
@@ -982,7 +1092,9 @@ public class GameManager {
      * names so that the server-assigned random name is kept as the fallback.
      */
     private void applyPlayerNameFromRequest(PlayerSession playerSession, PlayerConfigRequest request) {
-        if (request == null || request.getPlayerName() == null) return;
+        if (request == null || request.getPlayerName() == null) {
+            return;
+        }
         String name = request.getPlayerName().trim();
         if (RandomNames.getNames().contains(name)) {
             playerSession.setPlayerName(name);
@@ -1051,42 +1163,52 @@ public class GameManager {
     }
 
     private void sendGameState() {
-        Map<String, Object> fullState = gameStateSerializer.createGameState();
-
-        boolean anyBlinded = gameEntities.getAllPlayers().stream()
-                .anyMatch(Player::isVisionObscured);
-        boolean anyLobby = gameEntities.getPlayerSessions().values().stream()
-                .anyMatch(s -> s.getState() == PlayerSessionState.LOBBY);
+        boolean anyBlinded = false;
+        for (Player p : gameEntities.getAllPlayers()) {
+            if (p.isVisionObscured()) {
+                anyBlinded = true;
+                break;
+            }
+        }
+        boolean anyLobby = false;
+        for (PlayerSession s : gameEntities.getPlayerSessions().values()) {
+            if (s.getState() == PlayerSessionState.LOBBY) {
+                anyLobby = true;
+                break;
+            }
+        }
 
         if (!anyBlinded && !anyLobby) {
-            broadcast(fullState);
+            byte[] fullStateBinary = binaryGameStateSerializer.serializeGameState();
+            broadcastBinary(fullStateBinary);
             return;
         }
 
-        // Per-session filtering for blinded/lobby sessions. Lazily computed so
-        // we don't materialize the stripped state when nobody's actually in
-        // LOBBY this tick.
-        Map<String, Object> lobbyState = null;
+        byte[] fullStateBinary = null;
+        byte[] lobbyStateBinary = null;
 
         for (PlayerSession session : gameEntities.getPlayerSessions().values()) {
+            if (!session.getSession().isOpen()) {
+                continue;
+            }
             if (session.getState() == PlayerSessionState.LOBBY) {
-                if (lobbyState == null) {
-                    lobbyState = gameStateSerializer.createLobbyGameState(fullState);
+                if (lobbyStateBinary == null) {
+                    lobbyStateBinary = binaryGameStateSerializer.serializeLobbyGameState();
                 }
-                send(session.getSession(), lobbyState);
+                sendBinary(session.getSession(), lobbyStateBinary);
                 continue;
             }
             Player player = gameEntities.getPlayer(session.getPlayerId());
             if (player != null && player.isVisionObscured()) {
-                send(session.getSession(), gameStateSerializer.createBlindedGameState(player, fullState));
+                byte[] blindedStateBinary = binaryGameStateSerializer.serializeBlindedGameState(player);
+                sendBinary(session.getSession(), blindedStateBinary);
             } else {
-                send(session.getSession(), fullState);
+                if (fullStateBinary == null) {
+                    fullStateBinary = binaryGameStateSerializer.serializeGameState();
+                }
+                sendBinary(session.getSession(), fullStateBinary);
             }
         }
-    }
-
-    private Map<String, Object> createInitialGameState(Player player) {
-        return gameStateSerializer.createInitialGameState(player);
     }
 
     private void processPlayerRespawns() {
@@ -1158,14 +1280,36 @@ public class GameManager {
     public void respawnPlayer(Player player) {
         player.setActive(true);
         player.setHealth(gameConfig.getPlayerMaxHealth());
+        player.resetArmor();
         player.setRespawnTime(0);
         player.getWeapon().reload();
 
-        // Move to spawn point
+        // Clear any lingering attribute modifications / debuffs from previous life
+        player.getAttributeModifications().removeIf(am -> {
+            am.revert(player);
+            return true;
+        });
+
+        // Reset physics body state and restore damping to defaults
+        Body body = player.getBody();
+        body.setLinearDamping(Config.PLAYER_LINEAR_DAMPING);
+        body.setAngularDamping(Config.PLAYER_ANGULAR_DAMPING);
+        body.clearForce();
+        body.clearAccumulatedForce();
+        body.clearTorque();
+        body.clearAccumulatedTorque();
+        body.setLinearVelocity(0, 0);
+        body.setAngularVelocity(0);
+        body.setAtRest(false);
+        body.setEnabled(true);
+
+        // Move to spawn point and sync transforms
         Vector2 spawnPoint = spawnPointManager.findVariedSpawnPointForTeam(player.getTeam());
-        player.getBody().getTransform().setTranslation(spawnPoint.x, spawnPoint.y);
-        player.getBody().setLinearVelocity(0, 0);
-        player.getBody().setAngularVelocity(0);
+        body.getTransform().setTranslation(spawnPoint.x, spawnPoint.y);
+        body.getPreviousTransform().set(body.getTransform());
+
+        // Notify world so broadphase AABBs and contacts update immediately
+        world.setUpdateRequired(true);
 
         // Apply spawn invincibility to give player time to get their bearings
         StatusEffectManager.applySpawnInvincibility(player);
@@ -1187,6 +1331,13 @@ public class GameManager {
         if (shooter != null) {
             killPlayer(victim, shooter, killerIdentityOf(shooter));
             return;
+        }
+        if (ownerId < 0) {
+            Zombie zombie = gameEntities.getZombie(-ownerId);
+            if (zombie != null) {
+                killPlayer(victim, null, killerIdentityOf(zombie));
+                return;
+            }
         }
         Oddball oddball = ownerId < 0 ? gameEntities.getOddballNpc(-ownerId) : null;
         killPlayer(victim, null, killerIdentityOf(oddball));
@@ -1298,6 +1449,26 @@ public class GameManager {
                 oddball.getId());
     }
 
+    private static KillerIdentity killerIdentityOf(Zombie zombie) {
+        if (zombie == null) {
+            return KillerIdentity.UNKNOWN;
+        }
+        String weaponName = switch (zombie.getType()) {
+            case BOOMER -> "Poison Explosion";
+            case SPITTER -> "Poison Spit";
+            default -> "Melee";
+        };
+        return new KillerIdentity(
+                zombie.getDisplayName(),
+                null,
+                weaponName,
+                zombie.getId());
+    }
+
+    public ZombieManager getZombieManager() {
+        return zombieManager;
+    }
+
     /**
      * Handle headquarters damage and scoring.
      * Called by CollisionProcessor when HQ is hit.
@@ -1324,14 +1495,8 @@ public class GameManager {
             // Broadcast HQ destruction event
             if (attacker != null) {
                 gameEventManager.broadcastHeadquartersDestroyed(hq.getOwnerTeam(), attacker.getTeam());
-            }
-
-            // Check if this ends the game
-            if (rules.isHeadquartersDestructionEndsGame()) {
-                int winningTeam = attacker != null ? attacker.getTeam() : -1;
-                if (winningTeam > 0) {
-                    ruleSystem.declareVictory(winningTeam, -1, "Headquarters Destroyed");
-                }
+            } else {
+                gameEventManager.broadcastHeadquartersDestroyed(hq.getOwnerTeam(), 0);
             }
         }
     }

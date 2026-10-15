@@ -6,6 +6,8 @@ import com.fullsteam.RandomNames;
 import com.fullsteam.games.GameConfig;
 import com.fullsteam.games.GameManager;
 import com.fullsteam.model.BulletEffect;
+import com.fullsteam.model.DamageVarianceFormula;
+import com.fullsteam.model.GamePresets;
 import com.fullsteam.model.LobbyInfo;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.UtilityWeapon;
@@ -38,6 +40,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -77,6 +80,16 @@ public class GameController {
         return GameConfig.builder().build();
     }
 
+    @Get("/api/game-presets")
+    public List<GamePresets.Preset> getGamePresets() {
+        return GamePresets.ALL_PRESETS;
+    }
+
+    @Get("/api/game-config/presets")
+    public List<GamePresets.Preset> getGameConfigPresets() {
+        return GamePresets.ALL_PRESETS;
+    }
+
     @Post("/api/games")
     public Map<String, String> createGame(@Valid @Body GameConfig gameConfig) {
         try {
@@ -94,29 +107,42 @@ public class GameController {
 
     @Get("/api/weapon-customization")
     public Map<String, Object> getWeaponCustomizationData() {
-        Map<String, Object> data = new HashMap<>();
+        Map<String, Object> data = new LinkedHashMap<>();
 
         // Weapon attributes with min/max values
-        Map<String, Map<String, Object>> attributes = new HashMap<>();
+        Map<String, Map<String, Object>> attributes = new LinkedHashMap<>();
         for (WeaponAttribute attr : WeaponAttribute.values()) {
-            Map<String, Object> attrData = new HashMap<>();
+            Map<String, Object> attrData = new LinkedHashMap<>();
             attrData.put("min", attr.getMin());
             attrData.put("max", attr.getMax());
             attrData.put("name", attr.name());
             attrData.put("displayName", formatDisplayName(attr.name()));
-            // Lets the customizer disable projectile-only attributes (KNOCKBACK)
+            // Lets the customizer disable projectile-only attributes (e.g. KNOCKBACK)
             // when a beam ordnance is selected.
             attrData.put("validForBeams", attr.appliesToBeams());
             attributes.put(attr.name(), attrData);
         }
         data.put("attributes", attributes);
 
+        // Damage variance formulas
+        List<Map<String, Object>> varianceFormulas = Arrays.stream(DamageVarianceFormula.values())
+                .map(vf -> {
+                    Map<String, Object> vfData = new LinkedHashMap<>();
+                    vfData.put("name", vf.name());
+                    vfData.put("displayName", vf.getDisplayName());
+                    vfData.put("cost", vf.getPointCost());
+                    vfData.put("description", vf.getDescription());
+                    return vfData;
+                })
+                .collect(Collectors.toList());
+        data.put("varianceFormulas", varianceFormulas);
+
         // Bullet effects with costs and descriptions (utility-only effects like
         // STRIKE are not selectable, so they're excluded from the customizer).
         List<Map<String, Object>> effects = Arrays.stream(BulletEffect.values())
                 .filter(BulletEffect::isSelectable)
                 .map(effect -> {
-                    Map<String, Object> effectData = new HashMap<>();
+                    Map<String, Object> effectData = new LinkedHashMap<>();
                     effectData.put("name", effect.name());
                     effectData.put("displayName", formatDisplayName(effect.name()));
                     effectData.put("cost", effect.getPointCost());
@@ -132,12 +158,13 @@ public class GameController {
         // Ordinance types with costs and properties
         List<Map<String, Object>> ordinances = Arrays.stream(Ordinance.values())
                 .map(ord -> {
-                    Map<String, Object> ordData = new HashMap<>();
+                    Map<String, Object> ordData = new LinkedHashMap<>();
                     ordData.put("name", ord.name());
                     ordData.put("displayName", formatDisplayName(ord.name()));
                     ordData.put("cost", ord.getPointCost());
                     ordData.put("description", ord.getDescription());
                     ordData.put("speedMultiplier", ord.getSpeedMultiplier());
+                    ordData.put("rangeMultiplier", ord.getRangeMultiplier());
                     ordData.put("beam", ord.isBeamType());
                     return ordData;
                 })
@@ -145,7 +172,7 @@ public class GameController {
         data.put("ordinances", ordinances);
 
         // Preset weapons
-        Map<String, Map<String, Object>> presets = new HashMap<>();
+        Map<String, Map<String, Object>> presets = new LinkedHashMap<>();
 
         // basics
         presets.put("ASSAULT_RIFLE", createPresetData(WeaponConfig.ASSAULT_RIFLE_PRESET));
@@ -182,6 +209,7 @@ public class GameController {
         presets.put("FROST_LANCE", createPresetData(WeaponConfig.FROST_LANCE_PRESET));
         presets.put("SHRAPNEL_CANNON", createPresetData(WeaponConfig.SHRAPNEL_CANNON_PRESET));
         presets.put("PHANTOM_NEEDLES", createPresetData(WeaponConfig.PHANTOM_NEEDLES_PRESET));
+        presets.put("KILLER_BEES", createPresetData(WeaponConfig.KILLER_BEES_PRESET));
 
         data.put("presets", presets);
 
@@ -191,7 +219,7 @@ public class GameController {
         data.put("utilityWeapons", Arrays.stream(UtilityWeapon.values())
                 .sorted(Comparator.comparing(String::valueOf))
                 .map(utility -> {
-                    Map<String, Object> utilityData = new HashMap<>();
+                    Map<String, Object> utilityData = new LinkedHashMap<>();
                     utilityData.put("name", utility.name());
                     utilityData.put("displayName", utility.getDisplayName());
                     utilityData.put("description", utility.getDescription());
@@ -215,7 +243,8 @@ public class GameController {
     @Post("/api/weapon-customization/resolve")
     public HttpResponse<Map<String, Object>> resolveCustomization(@Body WeaponConfig config) {
         Map<WeaponAttribute, Integer> allocated = new EnumMap<>(WeaponAttribute.class);
-        allocated.put(WeaponAttribute.DAMAGE, config.damage);
+        allocated.put(WeaponAttribute.MIN_DAMAGE, config.minDamage);
+        allocated.put(WeaponAttribute.MAX_DAMAGE, config.maxDamage);
         allocated.put(WeaponAttribute.FIRE_RATE, config.fireRate);
         allocated.put(WeaponAttribute.RANGE, config.range);
         allocated.put(WeaponAttribute.ACCURACY, config.accuracy);
@@ -236,8 +265,9 @@ public class GameController {
         }
 
         Ordinance ordinance = config.ordinance != null ? config.ordinance : Ordinance.PROJECTILE;
+        DamageVarianceFormula formula = config.varianceFormula != null ? config.varianceFormula : DamageVarianceFormula.UNIFORM;
 
-        Map<String, Object> attributes = new HashMap<>();
+        Map<String, Object> attributes = new LinkedHashMap<>();
         for (WeaponAttribute a : WeaponAttribute.values()) {
             double value = res.values().get(a);
             double base = res.baseValues().get(a);
@@ -255,7 +285,7 @@ public class GameController {
         }
 
         List<Map<String, Object>> couplings = res.appliedCouplings().stream().map(c -> {
-            Map<String, Object> m = new HashMap<>();
+            Map<String, Object> m = new LinkedHashMap<>();
             m.put("source", c.source().name());
             m.put("target", c.target().name());
             m.put("label", formatDisplayName(c.source().name()) + " → " + formatDisplayName(c.target().name()));
@@ -268,27 +298,37 @@ public class GameController {
         int attrPoints = config.getAttributePoints();
         int effectPoints = config.getBulletEffects().stream().mapToInt(BulletEffect::getPointCost).sum();
         int ordinancePoints = ordinance.getPointCost();
-        int total = attrPoints + effectPoints + ordinancePoints;
+        int variancePoints = formula.getPointCost();
+        int total = attrPoints + effectPoints + ordinancePoints + variancePoints;
         Map<String, Object> budget = new HashMap<>();
         budget.put("attributePoints", attrPoints);
         budget.put("effectPoints", effectPoints);
         budget.put("ordinancePoints", ordinancePoints);
+        budget.put("variancePoints", variancePoints);
         budget.put("total", total);
         budget.put("max", 100);
         budget.put("remaining", 100 - total);
 
-        double damage = res.values().get(WeaponAttribute.DAMAGE);
+        double minDmgVal = res.values().get(WeaponAttribute.MIN_DAMAGE);
+        double maxDmgVal = res.values().get(WeaponAttribute.MAX_DAMAGE);
+        double actualMinDmg = Math.min(minDmgVal, maxDmgVal);
+        double actualMaxDmg = Math.max(minDmgVal, maxDmgVal);
+        double expectedDamage = formula.expectedValue(actualMinDmg, actualMaxDmg);
         int bullets = (int) Math.round(res.values().get(WeaponAttribute.BULLETS_PER_SHOT));
         double fireRate = res.values().get(WeaponAttribute.FIRE_RATE);
-        double dpb = Weapon.damagePerBullet(damage, bullets);
-        Map<String, Object> derived = new HashMap<>();
+        double dpb = Weapon.damagePerBullet(expectedDamage, bullets);
+        Map<String, Object> derived = new LinkedHashMap<>();
+        derived.put("minDamage", actualMinDmg);
+        derived.put("maxDamage", actualMaxDmg);
+        derived.put("expectedDamage", expectedDamage);
         derived.put("damagePerBullet", dpb);
         derived.put("burstDamage", dpb * bullets);
         derived.put("dps", dpb * bullets * fireRate);
         derived.put("effectiveProjectileSpeed", res.values().get(WeaponAttribute.PROJECTILE_SPEED) * ordinance.getSpeedMultiplier());
+        derived.put("effectiveRange", Math.max(30.0, res.values().get(WeaponAttribute.RANGE) * ordinance.getRangeMultiplier()));
         derived.put("moveSpeedMultiplier", res.values().get(WeaponAttribute.HANDLING));
 
-        Map<String, Object> out = new HashMap<>();
+        Map<String, Object> out = new LinkedHashMap<>();
         out.put("valid", total <= 100);
         out.put("budget", budget);
         out.put("attributes", attributes);
@@ -319,11 +359,11 @@ public class GameController {
             case FIRE_RATE -> String.format("%.1f shots/s", v);
             case RELOAD_TIME -> String.format("%.2f s", v);
             case LINEAR_DAMPING -> String.format("%.2f drag", v);
-            case RANGE -> Math.round(v) + " units";
+            case RANGE -> Math.round(Math.max(30.0, v * ordinance.getRangeMultiplier())) + " units";
             case PROJECTILE_SPEED -> Math.round(v * ordinance.getSpeedMultiplier()) + " units/s";
             case MAGAZINE_SIZE -> (int) Math.round(v) + " rounds";
             case BULLETS_PER_SHOT -> (int) Math.round(v) + (Math.round(v) == 1 ? " bullet" : " bullets");
-            case DAMAGE -> String.valueOf((int) Math.round(v));
+            case MIN_DAMAGE, MAX_DAMAGE -> String.valueOf((int) Math.round(v));
             case CALIBER -> String.format("×%.2f size", v);
             case KNOCKBACK -> v <= 0 ? "none" : String.format("%.0fk impulse", v / 1000.0);
         };
@@ -339,8 +379,9 @@ public class GameController {
         Map<String, Object> preset = new HashMap<>();
         preset.put("displayName", weapon.getType());
         // Map.of caps at 10 pairs; the attribute count exceeds it, so build explicitly.
-        Map<String, Integer> attributes = new HashMap<>();
-        attributes.put(WeaponAttribute.DAMAGE.name(), weapon.getDamage());
+        Map<String, Integer> attributes = new LinkedHashMap<>();
+        attributes.put(WeaponAttribute.MIN_DAMAGE.name(), weapon.getMinDamage());
+        attributes.put(WeaponAttribute.MAX_DAMAGE.name(), weapon.getMaxDamage());
         attributes.put(WeaponAttribute.FIRE_RATE.name(), weapon.getFireRate());
         attributes.put(WeaponAttribute.RANGE.name(), weapon.getRange());
         attributes.put(WeaponAttribute.ACCURACY.name(), weapon.getAccuracy());
@@ -353,6 +394,7 @@ public class GameController {
         attributes.put(WeaponAttribute.CALIBER.name(), weapon.getCaliber());
         attributes.put(WeaponAttribute.KNOCKBACK.name(), weapon.getKnockback());
         preset.put("attributes", attributes);
+        preset.put("varianceFormula", weapon.getVarianceFormula() != null ? weapon.getVarianceFormula().name() : "UNIFORM");
         preset.put("effects", weapon.getBulletEffects()
                 .stream()
                 .map(Enum::name)
@@ -362,7 +404,8 @@ public class GameController {
         // Calculate total points
         int effectPoints = weapon.getBulletEffects().stream().mapToInt(BulletEffect::getPointCost).sum();
         int ordPoints = weapon.getOrdinance().getPointCost();
-        preset.put("totalPoints", weapon.getAttributePoints() + effectPoints + ordPoints);
+        int varPoints = weapon.getVarianceFormula() != null ? weapon.getVarianceFormula().getPointCost() : 0;
+        preset.put("totalPoints", weapon.getAttributePoints() + effectPoints + ordPoints + varPoints);
 
         return preset;
     }

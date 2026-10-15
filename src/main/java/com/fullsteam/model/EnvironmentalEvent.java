@@ -12,7 +12,8 @@ public enum EnvironmentalEvent {
     VOLCANIC_ERUPTION("Volcanic Eruption", "🌋", 20.0, 2000),
     EARTHQUAKE("Earthquake", "🌊", 12.0, 1000),
     ION_STORM("Ion Storm", "⚡", 15.0, 600),      // Electric field effects
-    BLIZZARD("Blizzard", "❄️", 20.0, 4000);       // Freeze effects and reduced movement
+    BLIZZARD("Blizzard", "❄️", 20.0, 4000),       // Freeze effects and reduced movement
+    DUST_STORM("Dust Storm", "🌪️", 18.0, 2000);   // Smoke field effects
 
     private final String displayName;
     private final String icon;

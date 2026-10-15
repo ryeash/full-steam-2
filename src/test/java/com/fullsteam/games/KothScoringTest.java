@@ -54,6 +54,7 @@ public class KothScoringTest extends BaseTestClass {
 
         // Create game manager first (it will create its own GameEntities)
         gameManager = new GameManager("test_game", testConfig, null);
+        gameManager.shutdown(); // Stop background ticker for deterministic step-by-step test execution
 
         // Clear all AI players that were added initially
         gameManager.getGameEntities().getAllPlayers().forEach(player -> {

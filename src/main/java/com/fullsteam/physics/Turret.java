@@ -11,6 +11,7 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -28,12 +29,12 @@ import java.util.List;
  */
 @Getter
 @Setter
-public class Turret extends OwnedGameEntity implements HasWeapon {
+public class Turret extends OwnedGameEntity implements HasWeapon, Damageable {
     public static final double TURRET_FIRE_RATE_PENALTY = 2;
 
     private final Weapon weapon;
     private long lastShotTime = 0;
-    private Player currentTarget;
+    private OwnedGameEntity currentTarget;
     private Vector2 aimDirection = new Vector2(1, 0);
 
     public Turret(int ownerId, int ownerTeam, Vector2 position, double lifespan, Weapon weapon) {
@@ -58,66 +59,118 @@ public class Turret extends OwnedGameEntity implements HasWeapon {
         if (!active) {
             return;
         }
-        if (currentTarget != null && (!currentTarget.isActive() || !isValidTarget(currentTarget))) {
+        if (currentTarget != null && (!currentTarget.isActive() || !isValidTarget(currentTarget) || this.isVisionObscured())) {
             currentTarget = null;
         }
     }
 
     /**
-     * Find and acquire the nearest valid target from the supplied player list.
+     * Find and acquire the nearest valid target from players and zombies.
      */
-    public void acquireTarget(List<Player> players) {
+    public void acquireTarget(Collection<Player> players, Collection<Zombie> zombies) {
+        if (!active || this.isVisionObscured()) {
+            currentTarget = null;
+            return;
+        }
+
+        Vector2 turretPos = getPosition();
+        double maxRangeSq = weapon.getRange() * weapon.getRange();
+
         if (currentTarget != null && isValidTarget(currentTarget)) {
             return;
         }
 
-        Player closestTarget = null;
-        double closestDistance = Double.MAX_VALUE;
+        OwnedGameEntity closestTarget = null;
+        double closestDistSq = maxRangeSq;
 
-        for (Player player : players) {
-            if (!isValidTarget(player)) {
-                continue;
+        if (players != null) {
+            for (Player player : players) {
+                if (!isTargetable(player)) {
+                    continue;
+                }
+                double distSq = turretPos.distanceSquared(player.getPosition());
+                if (distSq <= closestDistSq) {
+                    closestDistSq = distSq;
+                    closestTarget = player;
+                }
             }
-            double distance = getPosition().distance(player.getPosition());
-            if (distance <= weapon.getRange() && distance < closestDistance) {
-                closestTarget = player;
-                closestDistance = distance;
+        }
+
+        if (zombies != null) {
+            for (Zombie zombie : zombies) {
+                if (!isTargetable(zombie)) {
+                    continue;
+                }
+                double distSq = turretPos.distanceSquared(zombie.getPosition());
+                if (distSq <= closestDistSq) {
+                    closestDistSq = distSq;
+                    closestTarget = zombie;
+                }
             }
         }
 
         currentTarget = closestTarget;
 
         if (currentTarget != null) {
-            Vector2 turretPos = getPosition();
             Vector2 targetPos = currentTarget.getPosition();
-            aimDirection = new Vector2(targetPos.x - turretPos.x, targetPos.y - turretPos.y);
-            if (aimDirection.getMagnitude() > 0) {
-                aimDirection.normalize();
-                setRotation(Math.atan2(aimDirection.y, aimDirection.x));
+            double dx = targetPos.x - turretPos.x;
+            double dy = targetPos.y - turretPos.y;
+            double magSq = dx * dx + dy * dy;
+            if (magSq > 0.0001) {
+                double invMag = 1.0 / Math.sqrt(magSq);
+                aimDirection = new Vector2(dx * invMag, dy * invMag);
+                setRotation(Math.atan2(dy, dx));
             }
         }
     }
 
-    private boolean isValidTarget(Player player) {
-        double distance = getPosition().distance(player.getPosition());
-        if (!player.isActive() || player.getHealth() <= 0 || distance > weapon.getRange()) {
+    /**
+     * Overload for backwards compatibility.
+     */
+    public void acquireTarget(List<Player> players) {
+        acquireTarget(players, List.of());
+    }
+
+    private boolean isTargetable(OwnedGameEntity target) {
+        if (target == null || !target.isActive() || target.getHealth() <= 0 || target.isVisionObscured()) {
             return false;
         }
-        if (player.getId() == ownerId) {
+        if (target instanceof Player player) {
+            if (player.getId() == ownerId) {
+                return false;
+            }
+            if (ownerTeam == 0 || player.getTeam() == 0) {
+                return true;
+            }
+            return ownerTeam != player.getTeam();
+        } else if (target instanceof Zombie) {
+            return true; // Hostile to all zombies
+        }
+        return false;
+    }
+
+    private boolean isValidTarget(OwnedGameEntity target) {
+        if (!isTargetable(target)) {
             return false;
         }
-        if (ownerTeam == 0 || player.getTeam() == 0) {
-            return true;
-        }
-        return ownerTeam != player.getTeam();
+        return getPosition().distanceSquared(target.getPosition()) <= (weapon.getRange() * weapon.getRange());
     }
 
     public boolean canFire() {
-        if (!active || currentTarget == null) {
+        if (!active || currentTarget == null || this.isVisionObscured() || currentTarget.isVisionObscured()) {
             return false;
         }
         long now = System.currentTimeMillis();
         double fireInterval = 1000.0 / (weapon.getFireRate() / TURRET_FIRE_RATE_PENALTY);
         return (now - lastShotTime) >= fireInterval;
+    }
+
+    private transient com.fullsteam.ai.AITargetWrapper targetWrapper;
+
+    public com.fullsteam.ai.AITargetWrapper getTargetWrapper() {
+        if (targetWrapper == null) {
+            targetWrapper = com.fullsteam.ai.AITargetWrapper.createDirect(this, com.fullsteam.ai.AITargetWrapper.TargetType.TURRET);
+        }
+        return targetWrapper;
     }
 }

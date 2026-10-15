@@ -2,13 +2,14 @@ package com.fullsteam.model;
 
 import com.fullsteam.Config;
 import com.fullsteam.physics.GameEntity;
+import com.fullsteam.physics.Oddball;
 import com.fullsteam.physics.OwnedGameEntity;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.Turret;
+import com.fullsteam.physics.Zombie;
 import lombok.Getter;
+import lombok.Setter;
 import org.dyn4j.dynamics.Body;
-import org.dyn4j.dynamics.BodyFixture;
-import org.dyn4j.geometry.Vector2;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -16,9 +17,10 @@ import java.util.Map;
 import java.util.Set;
 
 @Getter
+@Setter
 public abstract class FieldEffect extends OwnedGameEntity {
     protected final FieldEffectType type;
-    protected final double damage;
+    protected double damage;
     protected final long armingTime;
     protected final Set<Integer> affectedEntities; // Track which entities have been affected
     protected final Map<Integer, Long> lastDamageTime; // Track last damage time for each player (in milliseconds)
@@ -39,9 +41,9 @@ public abstract class FieldEffect extends OwnedGameEntity {
     }
 
     public boolean canAffect(GameEntity entity) {
-        // SMOKE affects ALL players/turrets regardless of team or ownership
+        // SMOKE affects ALL players, turrets, and NPCs regardless of team or ownership
         if (type == FieldEffectType.SMOKE) {
-            return entity instanceof Player || entity instanceof Turret;
+            return entity instanceof Player || entity instanceof Oddball || entity instanceof Zombie || entity instanceof Turret;
         }
 
         if (!active

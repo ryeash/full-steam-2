@@ -30,6 +30,7 @@ public class RuleSystem {
 
     private final String gameId;
     private final long start = System.currentTimeMillis();
+    @Getter
     private final Rules rules;
     private final GameEntities gameEntities;
     private final GameEventManager gameEventManager;
@@ -39,9 +40,15 @@ public class RuleSystem {
     // Event system (optional)
     private EventSystem eventSystem = null;
 
-    // Game state (always PLAYING; games run continuously until a victory condition ends them)
+    // Game state
     @Getter
-    private final GameState gameState = GameState.PLAYING;
+    private GameState gameState;
+    @Getter
+    private double startCountdownRemaining = 0.0;
+    @Getter
+    private long matchStartTime;
+    @Getter
+    private long matchEndTime;
 
     // Victory state
     @Getter
@@ -75,6 +82,16 @@ public class RuleSystem {
         this.gameEventManager = gameEventManager;
         this.broadcaster = broadcaster;
         this.teamCount = teamCount;
+
+        this.matchStartTime = System.currentTimeMillis();
+        if (rules.hasGameStartCountdown()) {
+            this.gameState = GameState.COUNTDOWN;
+            this.startCountdownRemaining = rules.getGameStartCountdown();
+        } else {
+            this.gameState = GameState.PLAYING;
+            this.startCountdownRemaining = 0.0;
+        }
+        this.matchEndTime = rules.hasTimeLimit() ? matchStartTime + (long) (rules.getTimeLimit() * 1000) : 0;
 
         // Initialize VIP mode if enabled
         if (rules.hasVip()) {
@@ -212,12 +229,29 @@ public class RuleSystem {
         selectVipForTeam(teamNumber);
     }
 
+    public boolean isCountdown() {
+        return gameState == GameState.COUNTDOWN;
+    }
+
     /**
      * Update all rule systems with the given time delta.
      */
     public void update(double deltaTime) {
         if (gameOver) {
             return;
+        }
+
+        if (gameState == GameState.COUNTDOWN) {
+            startCountdownRemaining -= deltaTime;
+            if (startCountdownRemaining <= 0) {
+                gameState = GameState.PLAYING;
+                startCountdownRemaining = 0.0;
+                matchStartTime = System.currentTimeMillis();
+                log.info("Game {} start countdown finished; gameplay is now PLAYING.", gameId);
+                gameEventManager.broadcastSystemMessage("⚔️ Game started! Fight!");
+            } else {
+                return;
+            }
         }
 
         // Update wave respawn timer if using wave mode
@@ -291,6 +325,7 @@ public class RuleSystem {
         if (collapsed) {
             gameEventManager.broadcastSystemMessage("⚔️ Last one standing — respawning!");
             waiting.forEach(p -> p.setRespawnTime(1L)); // release ASAP; GameManager respawns next tick
+            all.stream().filter(Player::isActive).forEach(StatusEffectManager::applySpawnInvincibility);
         }
     }
 
@@ -342,20 +377,26 @@ public class RuleSystem {
         }
 
         VictoryCondition condition = rules.getVictoryCondition();
-        if (condition == null || condition == VictoryCondition.ENDLESS) {
+        if (condition == null) {
             return;
         }
 
+        // Layer 1: Check primary victory conditions (SCORE_LIMIT or ELIMINATION)
         switch (condition) {
-            case SCORE_LIMIT:
-                checkScoreLimitVictory();
-                break;
-            case TIME_LIMIT:
-                checkTimeLimitVictory();
-                break;
-            case ELIMINATION:
-                checkEliminationVictory();
-                break;
+            case SCORE_LIMIT -> checkScoreLimitVictory();
+            case ELIMINATION -> checkEliminationVictory();
+            case TIME_LIMIT -> {
+            }
+        }
+
+        // If primary condition triggered victory, return immediately
+        if (gameOver) {
+            return;
+        }
+
+        // Layer 2: Every game is capped by time limit
+        if (rules.hasTimeLimit()) {
+            checkTimeLimitVictory();
         }
     }
 
@@ -388,7 +429,7 @@ public class RuleSystem {
     }
 
     private void checkTimeLimitVictory() {
-        if (System.currentTimeMillis() < start + (rules.getTimeLimit() * 1000)) {
+        if (System.currentTimeMillis() < matchStartTime + (long) (rules.getTimeLimit() * 1000)) {
             return;
         }
 
@@ -585,12 +626,13 @@ public class RuleSystem {
         m.put("hqDamage", s.getHeadquarterDamage());
         m.put("hqDestroyed", s.getHeadquartersDestroyed());
         m.put("vipKills", s.getVipKills());
+        m.put("zombieKills", s.getZombieKills());
         m.put("bonus", s.bonusPoints(rules));
         m.put("total", s.total(rules));
         return m;
     }
 
-    private Map<Integer, Integer> calculateTeamScores() {
+    public Map<Integer, Integer> calculateTeamScores() {
         Map<Integer, Integer> teamScores = new HashMap<>();
 
         // Every scoring mechanism is now credited to the player who earned it, so
@@ -724,11 +766,13 @@ public class RuleSystem {
     public Map<String, Object> getStateData() {
         Map<String, Object> data = new HashMap<>();
 
-        // Game timer data (single continuous timer; only present for time-limited games)
+        // Game timer data
         data.put("gameState", gameState.name());
+        data.put("isCountdown", isCountdown());
+        data.put("startCountdownRemaining", Math.max(0.0, startCountdownRemaining));
         if (rules.hasTimeLimit()) {
             data.put("gameTimed", true);
-            long endTime = start + (long) (rules.getTimeLimit() * 1000);
+            long endTime = matchStartTime + (long) (rules.getTimeLimit() * 1000);
             data.put("gameTimeRemaining", Math.max(0, (endTime - System.currentTimeMillis()) / 1000));
         } else {
             data.put("gameTimed", false);
@@ -808,10 +852,10 @@ public class RuleSystem {
     private void rotateAllPlayerWeapons() {
         int rotatedCount = 0;
 
-        newWeapon = AIWeaponSelector.selectRandomWeapon();
-        newUtility = AIWeaponSelector.selectRandomUtilityWeapon();
-
         for (Player player : gameEntities.getAllPlayers()) {
+            if (!player.isActive()) continue;
+            newWeapon = AIWeaponSelector.selectRandomWeapon();
+            newUtility = AIWeaponSelector.selectRandomUtilityWeapon();
             // Notify player of their new loadout
             String message = String.format("🔀 New Loadout: %s + %s", newWeapon.getType(), newUtility.getDisplayName());
             gameEventManager.broadcastToPlayer(message, player.getId(), GameEvent.EventCategory.INFO);

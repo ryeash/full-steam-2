@@ -142,7 +142,7 @@ class EventSystemTest extends BaseTestClass {
                 .enabledEvents(enabledEvents)
                 .build();
 
-        assertEquals(2, rules.getEnabledEvents().size());
+        assertEquals(1, rules.getEnabledEvents().size());
         assertTrue(rules.getEnabledEvents().contains(EnvironmentalEvent.METEOR_SHOWER));
         assertFalse(rules.getEnabledEvents().contains(EnvironmentalEvent.VOLCANIC_ERUPTION));
     }
@@ -187,6 +187,18 @@ class EventSystemTest extends BaseTestClass {
                 .build();
 
         assertEquals(20.0, rules.getEarthquakeDamage());
+    }
+
+    @Test
+    void testDustStormConfiguration() {
+        Rules rules = Rules.builder()
+                .enableRandomEvents(true)
+                .dustStormDensity(EntityWorldDensity.CHOKED)
+                .dustStormRadius(120.0)
+                .build();
+
+        assertEquals(EntityWorldDensity.CHOKED, rules.getDustStormDensity());
+        assertEquals(120.0, rules.getDustStormRadius());
     }
 
     @Test

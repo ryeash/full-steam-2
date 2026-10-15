@@ -34,4 +34,3 @@ public enum RespawnMode {
      */
     LAST_STANDING
 }
-

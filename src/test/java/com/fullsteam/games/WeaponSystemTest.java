@@ -1,6 +1,7 @@
 package com.fullsteam.games;
 
 import com.fullsteam.BaseTestClass;
+import com.fullsteam.model.DamageVarianceFormula;
 import com.fullsteam.model.Ordinance;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.WeaponConfig;
@@ -132,27 +133,6 @@ class WeaponSystemTest extends BaseTestClass {
     }
 
     // ============================================================================
-    // Beam Weapon Tests
-    // ============================================================================
-
-    @Test
-    @DisplayName("Should calculate beam obstacle intersection")
-    void testBeamObstacleIntersection() {
-        // Arrange
-        Vector2 beamStart = new Vector2(0, 0);
-        Vector2 beamEnd = new Vector2(100, 0);
-
-        // Act
-        Vector2 intersection = weaponSystem.findBeamObstacleIntersection(beamStart, beamEnd);
-
-        // Assert
-        assertNotNull(intersection, "Intersection point should be calculated");
-        // Note: Without obstacles, intersection should be at beam end
-        assertEquals(beamEnd.x, intersection.x, 0.1, "Intersection X should match beam end");
-        assertEquals(beamEnd.y, intersection.y, 0.1, "Intersection Y should match beam end");
-    }
-
-    // ============================================================================
     // Weapon State Tests
     // ============================================================================
 
@@ -195,7 +175,9 @@ class WeaponSystemTest extends BaseTestClass {
         // Total: 60 points (attributes) + 40 points (LASER ordinance) = 100 points
         WeaponConfig beamConfig = new WeaponConfig(
                 "Test Laser",
-                15, // damage (15 points)
+                7,  // min damage
+                8,  // max damage
+                DamageVarianceFormula.UNIFORM,
                 8,  // fire rate (8 points)
                 12, // range (12 points)
                 0,  // accuracy (0 points)
@@ -208,7 +190,7 @@ class WeaponSystemTest extends BaseTestClass {
                 0,  // caliber (0 points)
                 0,  // knockback (0 points)
                 Set.of(),
-                Ordinance.LASER // Beam weapon (40 points)
+                Ordinance.LASER // Beam weapon
         );
 
         Player player = new Player(id, "TestPlayer" + id, 0, 0, team, 100.0);

@@ -19,6 +19,7 @@ public class Scoring {
     private double headquarterDamage = 0;     // cumulative raw damage dealt to enemy HQs
     private int headquartersDestroyed = 0;     // enemy HQs destroyed by this player
     private int vipKills = 0;                   // enemy VIPs killed by this player
+    private int zombieKills = 0;                // zombies killed by this player
 
     public void addKill() {
         kills++;
@@ -52,6 +53,14 @@ public class Scoring {
         vipKills++;
     }
 
+    public void addZombieKill() {
+        zombieKills++;
+    }
+
+    public void addZombieKills(int count) {
+        zombieKills += count;
+    }
+
     /**
      * Reset all scoring back to zero (e.g. at the start of a new round).
      */
@@ -64,6 +73,7 @@ public class Scoring {
         headquarterDamage = 0;
         headquartersDestroyed = 0;
         vipKills = 0;
+        zombieKills = 0;
     }
 
     /**
@@ -108,6 +118,10 @@ public class Scoring {
         // the previous "bonus team points" behavior.
         bonus += headquarterDamage * rules.getHeadquartersPointsPerDamage();
         bonus += (double) headquartersDestroyed * rules.getHeadquartersDestructionBonus();
+
+        if (rules.hasZombies() && rules.getZombiePointsPerKill() > 0) {
+            bonus += zombieKills * rules.getZombiePointsPerKill();
+        }
 
         return (int) Math.round(bonus);
     }

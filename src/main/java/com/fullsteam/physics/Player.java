@@ -1,7 +1,10 @@
 package com.fullsteam.physics;
 
 import com.fullsteam.Config;
+import com.fullsteam.games.StatusEffectManager;
+import com.fullsteam.model.ArmorType;
 import com.fullsteam.model.AttributeModification;
+import com.fullsteam.model.FieldEffectBeam;
 import com.fullsteam.model.HasWeapon;
 import com.fullsteam.model.PlayerInput;
 import com.fullsteam.model.Scoring;
@@ -15,12 +18,14 @@ import org.dyn4j.geometry.Circle;
 import org.dyn4j.geometry.MassType;
 import org.dyn4j.geometry.Vector2;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 
 @Getter
 @Setter
-public class Player extends OwnedGameEntity implements HasWeapon {
+public class Player extends OwnedGameEntity implements HasWeapon, Damageable {
     private String playerName;
     private int team; // 0 = no team (FFA), 1+ = team number
     private Weapon weapon;
@@ -34,9 +39,14 @@ public class Player extends OwnedGameEntity implements HasWeapon {
     private long respawnTime = 0;
     private Vector2 respawnPoint;
     private double maxSpeed = Config.PLAYER_SPEED;
-    private final Set<AttributeModification> attributeModifications = ConcurrentHashMap.newKeySet();
-
-    private boolean visionObscured = false; // Set true each tick while inside SMOKE field, reset before collision processing
+    private ArmorType armorType = ArmorType.NONE;
+    private double armor = 0.0;
+    private double maxArmor = 0.0;
+    private boolean lastDamageArmorMitigated = false;
+    private final Set<AttributeModification> attributeModifications = new ConcurrentSkipListSet<>();
+    private final List<FieldEffectBeam> activePlasmaBeams = new ArrayList<>();
+    private int activePlasmaBeamShotCount = 1;
+    private double[] activePlasmaBeamDamageRates = new double[0];
 
     private int livesRemaining = -1; // -1 = unlimited, 0 = eliminated
     private boolean eliminated = false; // Permanently eliminated (no more respawns)
@@ -71,6 +81,10 @@ public class Player extends OwnedGameEntity implements HasWeapon {
 
     @Override
     public void update(double deltaTime) {
+        if (!active || health <= 0) {
+            stopPlasmaBeam();
+        }
+
         attributeModifications.removeIf(am -> {
             if (am.isExpired()) {
                 am.revert(this);
@@ -82,6 +96,7 @@ public class Player extends OwnedGameEntity implements HasWeapon {
 
         // Handle reloading
         if (isReloading) {
+            stopPlasmaBeam();
             reloadTimeRemaining -= deltaTime;
             if (reloadTimeRemaining <= 0) {
                 getCurrentWeapon().reload();
@@ -117,11 +132,6 @@ public class Player extends OwnedGameEntity implements HasWeapon {
         if (Boolean.TRUE.equals(input.getReload()) && !isReloading) {
             startReload();
         }
-
-        // Handle legacy right-click mapping to altFire
-        if (input.isRight()) {
-            input.setAltFire(true);
-        }
     }
 
     /**
@@ -149,28 +159,96 @@ public class Player extends OwnedGameEntity implements HasWeapon {
     }
 
     public void applyWeaponConfig(WeaponConfig primary, UtilityWeapon utility) {
+        applyWeaponConfig(primary, utility, this.armorType);
+    }
+
+    public void applyWeaponConfig(WeaponConfig primary, UtilityWeapon utility, ArmorType armorType) {
+        stopPlasmaBeam();
+        if (armorType != null) {
+            this.armorType = armorType;
+            this.maxArmor = armorType.getMaxArmor();
+            this.armor = this.maxArmor;
+        }
         if (primary != null) {
             weapon = primary.buildWeapon();
             weapon.reload();
-            // Handling scales the wielder's move speed (1.0 = baseline). Heavy
-            // weapons (incl. the DAMAGE→HANDLING coupling) move you slower.
-            this.maxSpeed = Config.PLAYER_SPEED * weapon.getHandling();
         }
         if (utility != null) {
             this.utilityWeapon = utility;
         }
+        double weaponHandling = weapon != null ? weapon.getHandling() : 1.0;
+        double armorHandling = this.armorType != null ? this.armorType.getHandlingModifier() : 1.0;
+        this.maxSpeed = Config.PLAYER_SPEED * weaponHandling * armorHandling;
+    }
+
+    public void resetArmor() {
+        this.armor = this.maxArmor;
+    }
+
+    public double armorPercent() {
+        return maxArmor > 0 ? Math.max(0.0, armor / maxArmor) : 0.0;
+    }
+
+    public StatusEffectManager.RiotShieldAttributeModification getRiotShieldModification() {
+        for (AttributeModification mod : attributeModifications) {
+            if (mod instanceof StatusEffectManager.RiotShieldAttributeModification rsm && !rsm.isExpired()) {
+                return rsm;
+            }
+        }
+        return null;
+    }
+
+    public boolean isRiotShieldActive() {
+        StatusEffectManager.RiotShieldAttributeModification rsm = getRiotShieldModification();
+        if (rsm != null) {
+            return !rsm.isExpired();
+        }
+        return attributeModifications.stream().anyMatch(am -> "riotShield".equals(am.uniqueKey()) && !am.isExpired());
+    }
+
+    public boolean damageRiotShield(double damage) {
+        StatusEffectManager.RiotShieldAttributeModification rsm = getRiotShieldModification();
+        if (rsm != null && !rsm.isExpired()) {
+            rsm.damageShield(damage);
+            if (rsm.isExpired()) {
+                rsm.revert(this);
+                attributeModifications.remove(rsm);
+            }
+            return true;
+        }
+        // Fallback for generic riotShield modifications
+        return attributeModifications.removeIf(am -> {
+            if ("riotShield".equals(am.uniqueKey())) {
+                am.revert(this);
+                return true;
+            }
+            return false;
+        });
+    }
+
+    public double getRiotShieldHealth() {
+        StatusEffectManager.RiotShieldAttributeModification rsm = getRiotShieldModification();
+        return rsm != null ? rsm.getHealth() : 0.0;
+    }
+
+    public double getRiotShieldMaxHealth() {
+        StatusEffectManager.RiotShieldAttributeModification rsm = getRiotShieldModification();
+        return rsm != null ? rsm.getMaxHealth() : 0.0;
     }
 
     public boolean canShoot() {
         Weapon weapon = this.getCurrentWeapon();
+        if (weapon == null) {
+            return false;
+        }
         long now = System.currentTimeMillis();
-        double fireInterval = 1000.0 / weapon.getFireRate();
+        double fireInterval = 1000.0 / Math.max(0.1, weapon.getFireRate());
         // Check if we have enough ammo for at least one bullet (partial bursts are allowed)
         return isActive()
                 && health > 0
                 && !isReloading
                 && weapon.getCurrentAmmo() > 0
-                && (now - lastShotTime) >= fireInterval;
+                && (hasActivePlasmaBeam() || (now - lastShotTime) >= fireInterval);
     }
 
     public boolean canUseUtility() {
@@ -231,6 +309,7 @@ public class Player extends OwnedGameEntity implements HasWeapon {
     }
 
     public void startReload() {
+        stopPlasmaBeam();
         Weapon weapon = this.getCurrentWeapon();
         if (weapon.needsReload()) {
             isReloading = true;
@@ -255,6 +334,7 @@ public class Player extends OwnedGameEntity implements HasWeapon {
     }
 
     public void die() {
+        stopPlasmaBeam();
         active = false;
         scoring.addDeath();
         health = 0;
@@ -262,6 +342,22 @@ public class Player extends OwnedGameEntity implements HasWeapon {
             am.revert(this);
             return true;
         });
+    }
+
+    public boolean hasActivePlasmaBeam() {
+        return !activePlasmaBeams.isEmpty();
+    }
+
+    public void stopPlasmaBeam() {
+        if (!activePlasmaBeams.isEmpty()) {
+            for (FieldEffectBeam beam : activePlasmaBeams) {
+                beam.setActive(false);
+            }
+            activePlasmaBeams.clear();
+        }
+        activePlasmaBeamShotCount = 0;
+        activePlasmaBeamDamageRates = new double[0];
+        setLastShotTime(0);
     }
 
     public void addKill() {
@@ -354,18 +450,45 @@ public class Player extends OwnedGameEntity implements HasWeapon {
     }
 
     /**
-     * Override damage handling to account for damage resistance.
+     * Override damage handling to account for damage resistance and armor.
      */
-    @Override
-    public boolean takeDamage(double damage) {
+    public boolean takeDamage(double damage, boolean bypassArmor) {
+        lastDamageArmorMitigated = false;
         if (!active) {
             return false;
         }
         double modifiedDamage = damage;
-        for (AttributeModification attributeModification : attributeModifications) {
-            modifiedDamage = attributeModification.modifyDamageReceived(modifiedDamage);
+        if (damage > 0) {
+            for (AttributeModification attributeModification : attributeModifications) {
+                modifiedDamage = attributeModification.modifyDamageReceived(modifiedDamage);
+            }
+            if (!bypassArmor && modifiedDamage > 0 && armor > 0) {
+                double absorbed = Math.min(armor, modifiedDamage);
+                armor -= absorbed;
+                modifiedDamage -= absorbed;
+                lastDamageArmorMitigated = true;
+            }
+            if (modifiedDamage <= 0) {
+                return false;
+            }
+        } else if (damage == 0) {
+            return false;
         }
         return super.takeDamage(modifiedDamage);
+    }
+
+    @Override
+    public boolean takeDamage(double damage) {
+        return takeDamage(damage, false);
+    }
+
+    private transient com.fullsteam.ai.AITargetWrapper targetWrapper;
+
+    public com.fullsteam.ai.AITargetWrapper getTargetWrapper() {
+        if (targetWrapper == null) {
+            targetWrapper = com.fullsteam.ai.AITargetWrapper.createDirect(this, com.fullsteam.ai.AITargetWrapper.TargetType.PLAYER);
+        }
+        return targetWrapper;
     }
 
 }

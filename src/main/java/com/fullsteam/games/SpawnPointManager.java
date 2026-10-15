@@ -1,5 +1,6 @@
 package com.fullsteam.games;
 
+import com.fullsteam.Config;
 import com.fullsteam.physics.GameEntities;
 import com.fullsteam.physics.Player;
 import com.fullsteam.physics.TeamSpawnArea;
@@ -105,10 +106,29 @@ public class SpawnPointManager {
                     }
                 }
 
-                // Final fallback: stay in team area regardless of obstacles.
-                // Being near an obstacle in your own zone is always better than
-                // spawning in the enemy's zone.
-                return teamArea.generateSpawnPoint();
+                // Third pass: minimum player radius clearance within team area
+                for (int attempts = 0; attempts < 20; attempts++) {
+                    Vector2 candidate = teamArea.generateSpawnPoint();
+                    if (terrainGenerator.isPositionClear(candidate, Config.PLAYER_RADIUS)) {
+                        return candidate;
+                    }
+                }
+
+                // Search outward from team area center in concentric rings to find closest clear spot
+                Vector2 center = teamArea.getCenter();
+                double maxRadius = Math.max(teamArea.getWidth(), teamArea.getHeight());
+                for (double r = 30.0; r <= maxRadius; r += 20.0) {
+                    for (int angleDeg = 0; angleDeg < 360; angleDeg += 30) {
+                        double rad = Math.toRadians(angleDeg);
+                        Vector2 candidate = new Vector2(center.x + r * Math.cos(rad), center.y + r * Math.sin(rad));
+                        if (terrainGenerator.isPositionClear(candidate, Config.PLAYER_RADIUS)) {
+                            return candidate;
+                        }
+                    }
+                }
+
+                // Final guaranteed-clear fallback: use terrainGenerator's safe spawn position
+                return terrainGenerator.getSafeSpawnPosition(Config.PLAYER_RADIUS);
             }
         }
 
@@ -151,14 +171,18 @@ public class SpawnPointManager {
      * @return Legacy spawn point
      */
     public Vector2 findLegacySpawnPoint() {
-        for (int attempts = 0; attempts < 10; attempts++) {
+        for (int attempts = 0; attempts < 20; attempts++) {
             double x = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldWidth() - 100);
             double y = (ThreadLocalRandom.current().nextDouble() - 0.5) * (gameConfig.getWorldHeight() - 100);
             Vector2 candidate = new Vector2(x, y);
 
+            if (!terrainGenerator.isPositionClear(candidate, Config.PLAYER_RADIUS)) {
+                continue;
+            }
+
             boolean tooClose = false;
             for (Player other : gameEntities.getAllPlayers()) {
-                if (other.getPosition().distance(candidate) < 100) {
+                if (other.isActive() && other.getPosition().distance(candidate) < 100) {
                     tooClose = true;
                     break;
                 }
@@ -169,9 +193,7 @@ public class SpawnPointManager {
             }
         }
 
-        return new Vector2(
-                (ThreadLocalRandom.current().nextDouble() - 0.5) * gameConfig.getWorldWidth() * 0.8,
-                (ThreadLocalRandom.current().nextDouble() - 0.5) * gameConfig.getWorldHeight() * 0.8);
+        return terrainGenerator.getSafeSpawnPosition(Config.PLAYER_RADIUS);
     }
 }
 
