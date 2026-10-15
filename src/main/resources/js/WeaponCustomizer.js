@@ -8,10 +8,24 @@ class WeaponCustomizer {
 
         this.weaponData = null;
         this.state = {
-            attributes: {},
+            attributes: {
+                MIN_DAMAGE: 10,
+                MAX_DAMAGE: 10,
+                FIRE_RATE: 30,
+                RANGE: 5,
+                ACCURACY: 0,
+                MAGAZINE_SIZE: 36,
+                RELOAD_TIME: 5,
+                PROJECTILE_SPEED: 4,
+                BULLETS_PER_SHOT: 0,
+                LINEAR_DAMPING: 0,
+                HANDLING: 0,
+                CALIBER: 0,
+                KNOCKBACK: 0
+            },
             effects: [],
             ordinance: 'PROJECTILE',
-            varianceFormula: 'UNIFORM',
+            varianceFormula: 'GAUSSIAN',
             utility: 'HEAL_ZONE',
             armor: 'NONE'
         };
@@ -185,8 +199,10 @@ class WeaponCustomizer {
         this._buildArmorOptions();
         this._buildPresetButtons();
 
-        // Seed from saved config if present (state only — no DOM poking).
-        this._loadSavedConfiguration();
+        // Seed from saved config if present; otherwise default to Assault Rifle preset.
+        if (!this._loadSavedConfiguration()) {
+            this._applyDefaultPreset();
+        }
 
         // First paint. _commit() normalizes (fills defaults, coerces stale
         // ordinance, drops forbidden effects, snaps steps) then renders.
@@ -357,6 +373,38 @@ class WeaponCustomizer {
                 this._q(`#category-${tab.dataset.category}`).classList.add('active');
             });
         });
+    }
+
+    /** Default weapon customization to the Assault Rifle preset when no saved config exists. */
+    _applyDefaultPreset() {
+        const assaultRifle = this.weaponData && this.weaponData.presets && (
+            this.weaponData.presets['ASSAULT_RIFLE'] || this.weaponData.presets['Assault Rifle']
+        );
+        if (assaultRifle) {
+            this.state.attributes = { ...assaultRifle.attributes };
+            this.state.effects = [...assaultRifle.effects];
+            this.state.ordinance = assaultRifle.ordinance;
+            this.state.varianceFormula = assaultRifle.varianceFormula || 'UNIFORM';
+        } else {
+            this.state.attributes = {
+                MIN_DAMAGE: 10,
+                MAX_DAMAGE: 10,
+                FIRE_RATE: 30,
+                RANGE: 5,
+                ACCURACY: 0,
+                MAGAZINE_SIZE: 36,
+                RELOAD_TIME: 5,
+                PROJECTILE_SPEED: 4,
+                BULLETS_PER_SHOT: 0,
+                LINEAR_DAMPING: 0,
+                HANDLING: 0,
+                CALIBER: 0,
+                KNOCKBACK: 0
+            };
+            this.state.effects = [];
+            this.state.ordinance = 'PROJECTILE';
+            this.state.varianceFormula = 'GAUSSIAN';
+        }
     }
 
     /** Apply a preset = replace loadout state, then commit. No DOM poking. */
