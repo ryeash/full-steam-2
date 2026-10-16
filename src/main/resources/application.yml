@@ -29,7 +29,5 @@ endpoints:
     details-visible: NEVER
 
 app:
-  # Comma-separated allowlist of permitted WebSocket Origins
-  # (e.g. https://game.example.com). Empty = allow any origin, which is fine for
-  # local dev; set APP_ALLOWED_ORIGINS in production to block cross-site sockets.
   allowed-origins: ${APP_ALLOWED_ORIGINS:}
+  frame-ancestors: ${APP_FRAME_ANCESTORS:}
