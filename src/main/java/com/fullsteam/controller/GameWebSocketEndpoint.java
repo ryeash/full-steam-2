@@ -20,10 +20,12 @@ import org.slf4j.LoggerFactory;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 import static com.fullsteam.controller.PlayerConnectionService.SESSION_KEY;
 
@@ -35,9 +37,9 @@ public class GameWebSocketEndpoint {
     private final PlayerConnectionService connectionService;
     private final ObjectMapper objectMapper;
     /**
-     * Permitted Origins for WS handshakes; empty = allow any (dev). See application.yml.
+     * Permitted Origin regex patterns for WS handshakes; empty = allow any (dev). See application.yml.
      */
-    private final List<String> allowedOrigins;
+    private final List<Pattern> allowedOriginPatterns;
 
     @Inject
     public GameWebSocketEndpoint(PlayerConnectionService connectionService,
@@ -45,12 +47,37 @@ public class GameWebSocketEndpoint {
                                  @Value("${app.allowed-origins:}") List<String> allowedOrigins) {
         this.connectionService = connectionService;
         this.objectMapper = objectMapper;
-        this.allowedOrigins = Optional.ofNullable(allowedOrigins)
-                .orElse(List.of())
-                .stream()
-                .map(StringUtils::trimToNull)
-                .filter(Objects::nonNull)
-                .toList();
+        this.allowedOriginPatterns = parseAllowedOrigins(allowedOrigins);
+    }
+
+    public static List<Pattern> parseAllowedOrigins(List<String> rawOrigins) {
+        if (rawOrigins == null || rawOrigins.isEmpty()) {
+            return List.of();
+        }
+        List<Pattern> patterns = new ArrayList<>();
+        for (String raw : rawOrigins) {
+            if (raw == null) {
+                continue;
+            }
+            for (String part : StringUtils.split(raw, ',')) {
+                String trimmed = part.trim();
+                if (!trimmed.isEmpty()) {
+                    try {
+                        patterns.add(Pattern.compile(trimmed, Pattern.CASE_INSENSITIVE));
+                    } catch (PatternSyntaxException e) {
+                        log.error("Invalid origin regex pattern: '{}'", trimmed, e);
+                    }
+                }
+            }
+        }
+        return Collections.unmodifiableList(patterns);
+    }
+
+    public static List<Pattern> parseAllowedOrigins(String commaSeparated) {
+        if (commaSeparated == null || commaSeparated.isBlank()) {
+            return List.of();
+        }
+        return parseAllowedOrigins(List.of(commaSeparated));
     }
 
     @OnOpen
@@ -79,14 +106,25 @@ public class GameWebSocketEndpoint {
     /**
      * Whether the handshake's Origin is permitted. When no allowlist is configured
      * (empty {@code app.allowed-origins}) all origins are allowed — convenient for
-     * local dev. In production, set APP_ALLOWED_ORIGINS to your site origin(s).
+     * local dev. In production, set APP_ALLOWED_ORIGINS to comma-separated regex patterns
+     * matching permitted origin(s) (e.g. {@code https://(.*\.)?full-steam\.io}).
      */
     private boolean isOriginAllowed(HttpRequest<?> request) {
-        if (allowedOrigins == null || allowedOrigins.isEmpty()) {
+        if (allowedOriginPatterns.isEmpty()) {
             return true;
         }
         String origin = request.getHeaders().get(HttpHeaders.ORIGIN);
-        return origin != null && allowedOrigins.contains(origin);
+        return isOriginAllowed(origin);
+    }
+
+    public boolean isOriginAllowed(String origin) {
+        if (allowedOriginPatterns.isEmpty()) {
+            return true;
+        }
+        if (origin == null) {
+            return false;
+        }
+        return allowedOriginPatterns.stream().anyMatch(pattern -> pattern.matcher(origin).matches());
     }
 
     private void sendJoinRejected(WebSocketSession session, String reason) {

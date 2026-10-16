@@ -859,6 +859,147 @@
                 display: none;
             }
         }
+
+        /* Collapsible & Searchable Active Games Section */
+        .collapsible-section {
+            margin-top: 35px;
+            margin-bottom: 25px;
+        }
+
+        .collapsible-header {
+            background: rgba(42, 42, 60, 0.85);
+            border: 1px solid rgba(100, 200, 255, 0.25);
+            border-radius: 12px;
+            padding: 16px 22px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            transition: all 0.25s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .collapsible-header:hover {
+            border-color: #5fc4b8;
+            background: rgba(50, 50, 75, 0.95);
+            box-shadow: 0 6px 20px rgba(95, 196, 184, 0.15);
+        }
+
+        .collapsible-header:focus-visible {
+            outline: 2px solid #5fc4b8;
+            outline-offset: 2px;
+        }
+
+        .collapsible-header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .collapsible-arrow {
+            font-size: 0.85em;
+            color: #5fc4b8;
+            transition: transform 0.25s ease;
+            display: inline-block;
+        }
+
+        .collapsible-section.expanded .collapsible-arrow {
+            transform: rotate(90deg);
+        }
+
+        .collapsible-title {
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+            font-size: 1.35em;
+            color: #7cb9e8;
+            letter-spacing: 0.5px;
+        }
+
+        .games-count-badge {
+            background: rgba(95, 196, 184, 0.2);
+            color: #5fc4b8;
+            border: 1px solid rgba(95, 196, 184, 0.4);
+            font-size: 0.8em;
+            padding: 2px 9px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .collapsible-header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .collapsible-hint {
+            font-size: 0.85em;
+            color: #94a3b8;
+            font-weight: 400;
+        }
+
+        .collapsible-content {
+            margin-top: 15px;
+        }
+
+        .active-games-search-bar {
+            margin-bottom: 15px;
+            background: rgba(0, 0, 0, 0.45);
+            border: 1px solid rgba(100, 200, 255, 0.25);
+            border-radius: 10px;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .active-games-search-bar input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(95, 196, 184, 0.25);
+            border-radius: 6px;
+            padding: 9px 14px;
+            color: #fff;
+            font-size: 0.92em;
+            font-family: 'Exo 2', sans-serif;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .active-games-search-bar input:focus {
+            border-color: #5fc4b8;
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 10px rgba(95, 196, 184, 0.2);
+        }
+
+        .btn-clear-filter {
+            margin-top: 12px;
+            background: rgba(95, 196, 184, 0.15);
+            border: 1px solid rgba(95, 196, 184, 0.4);
+            color: #5fc4b8;
+            border-radius: 6px;
+            padding: 6px 14px;
+            font-size: 0.88em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-clear-filter:hover {
+            background: rgba(95, 196, 184, 0.3);
+            color: #fff;
+        }
+
+        @media (max-width: 600px) {
+            .collapsible-header {
+                padding: 12px 16px;
+            }
+            .collapsible-title {
+                font-size: 1.15em;
+            }
+            .collapsible-hint {
+                display: none;
+            }
+        }
     </style>
 </head>
 <body>
@@ -889,10 +1030,36 @@
         <div class="loading">Loading game types...</div>
     </div>
 
-    <h2>Join Active Games</h2>
-    <ul id="games-list">
-        <li class="loading">Loading games...</li>
-    </ul>
+    <!-- Collapsible & Searchable Join Active Games Section -->
+    <div id="active-games-section" class="collapsible-section collapsed">
+        <div class="collapsible-header" id="active-games-toggle" role="button" tabindex="0"
+             aria-expanded="false" aria-controls="active-games-content" onclick="toggleActiveGamesSection()">
+            <div class="collapsible-header-left">
+                <span class="collapsible-arrow" id="active-games-arrow">▶</span>
+                <span class="collapsible-title">Join Active Games</span>
+                <span id="active-games-badge" class="games-count-badge" style="display: none;">0</span>
+            </div>
+            <div class="collapsible-header-right">
+                <span class="collapsible-hint" id="active-games-hint">Click to expand</span>
+            </div>
+        </div>
+
+        <div id="active-games-content" class="collapsible-content" style="display: none;">
+            <div class="active-games-search-bar">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="gameSearchInput"
+                       placeholder="Search active games (e.g. 'CTF', 'Zombies', 'FFA', 'Game 1')..."
+                       oninput="handleGameSearchInput(this.value)"
+                       autocomplete="off">
+                <button type="button" id="clearGameSearchBtn" class="clear-search-btn" onclick="clearGameSearch()"
+                        style="display: none;" title="Clear search">&times;
+                </button>
+            </div>
+            <ul id="games-list">
+                <li class="loading">Loading active games...</li>
+            </ul>
+        </div>
+    </div>
 </div>
 
 <!-- Custom Game Configuration Modal (Split-Pane Rule Tree Layout) -->
@@ -1613,6 +1780,297 @@
     let gamePresetsMap = {};
     let cachedDefaultConfig = null;
 
+    // Active Games expandable & searchable state
+    let isActiveGamesExpanded = false;
+    let activeGamesPollInterval = null;
+    let cachedActiveGames = [];
+    let currentSearchQuery = '';
+    let isFetchingLobby = false;
+
+    function escapeHtml(str) {
+        if (str == null) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function toggleActiveGamesSection() {
+        isActiveGamesExpanded = !isActiveGamesExpanded;
+        const section = document.getElementById('active-games-section');
+        const content = document.getElementById('active-games-content');
+        const toggle = document.getElementById('active-games-toggle');
+        const hint = document.getElementById('active-games-hint');
+
+        if (isActiveGamesExpanded) {
+            if (section) {
+                section.classList.remove('collapsed');
+                section.classList.add('expanded');
+            }
+            if (content) content.style.display = 'block';
+            if (toggle) toggle.setAttribute('aria-expanded', 'true');
+            if (hint) hint.textContent = 'Click to collapse';
+
+            // Show loading if we haven't fetched games yet
+            if (cachedActiveGames.length === 0) {
+                gamesList.innerHTML = '<li class="loading">Loading active games...</li>';
+            }
+
+            // Immediately fetch active games and begin polling
+            fetchLobbyInfo();
+            startActiveGamesPolling();
+        } else {
+            if (section) {
+                section.classList.add('collapsed');
+                section.classList.remove('expanded');
+            }
+            if (content) content.style.display = 'none';
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+            if (hint) hint.textContent = 'Click to expand';
+
+            // Stop polling to save bandwidth
+            stopActiveGamesPolling();
+        }
+    }
+
+    function startActiveGamesPolling() {
+        stopActiveGamesPolling();
+        if (isActiveGamesExpanded) {
+            activeGamesPollInterval = setInterval(() => {
+                if (isActiveGamesExpanded && document.visibilityState === 'visible') {
+                    fetchLobbyInfo();
+                }
+            }, 3000);
+        }
+    }
+
+    function stopActiveGamesPolling() {
+        if (activeGamesPollInterval) {
+            clearInterval(activeGamesPollInterval);
+            activeGamesPollInterval = null;
+        }
+    }
+
+    function handleGameSearchInput(value) {
+        currentSearchQuery = (value || '').trim();
+        const clearBtn = document.getElementById('clearGameSearchBtn');
+        if (clearBtn) {
+            clearBtn.style.display = currentSearchQuery ? 'inline-block' : 'none';
+        }
+        renderActiveGamesList();
+    }
+
+    function clearGameSearch() {
+        const input = document.getElementById('gameSearchInput');
+        if (input) {
+            input.value = '';
+            input.focus();
+        }
+        handleGameSearchInput('');
+    }
+
+    function getSearchableTextForGame(game) {
+        const parts = [];
+        parts.push(`game ${game.gameId}`);
+        parts.push(String(game.gameId));
+
+        if (game.status) {
+            parts.push(String(game.status));
+        }
+
+        const isFull = (game.playerCount || 0) >= (game.maxPlayers || 0);
+        parts.push(isFull ? 'full' : 'open');
+        parts.push(`${game.playerCount}/${game.maxPlayers}`);
+
+        if (game.gameConfig) {
+            const config = game.gameConfig;
+            const rules = config.rules || {};
+
+            // FFA vs Teams
+            if (config.teamCount === 0) {
+                parts.push('ffa free for all deathmatch solo');
+            } else {
+                parts.push(`team teams ${config.teamCount} teams team battle`);
+            }
+
+            // CTF
+            if (rules.flagsPerTeam > 0) {
+                parts.push('ctf capture the flag flag flags objective');
+            }
+
+            // KOTH / Domination
+            if (rules.kothZones > 0) {
+                parts.push('koth king of the hill domination hill zone zones');
+            }
+
+            // Zombies
+            if (rules.enableZombies) {
+                parts.push('zombie zombies siege horde infection infected undead');
+            }
+
+            // Battle Royale / Elimination
+            if (rules.victoryCondition === 'ELIMINATION') {
+                parts.push('br battle royale elimination last man standing survival');
+            } else if (rules.victoryCondition === 'SCORE_LIMIT') {
+                parts.push(`score limit first to ${rules.scoreLimit}`);
+            } else if (rules.victoryCondition === 'TIME_LIMIT') {
+                parts.push('time limit timed match timer');
+            }
+
+            // Respawn modes
+            if (rules.respawnMode === 'LAST_STANDING') {
+                parts.push('last stand last standing elimination');
+            } else if (rules.respawnMode === 'LIMITED') {
+                parts.push('stock lives limited lives');
+                if (rules.maxLives === 1) {
+                    parts.push('one life single life 1 life');
+                } else if (rules.maxLives > 1) {
+                    parts.push(`${rules.maxLives} lives ${rules.maxLives} stock`);
+                }
+            } else if (rules.respawnMode === 'WAVE') {
+                parts.push('wave wave respawn');
+            }
+
+            // Oddball
+            if (rules.enableOddballNpcs) {
+                parts.push('oddball rampage seeker npc ball');
+            }
+
+            // VIP
+            if (rules.enableVip) {
+                parts.push('vip assassination escort protect');
+            }
+
+            // Headquarters
+            if (rules.addHeadquarters) {
+                parts.push('hq headquarters base base assault');
+            }
+
+            // Special modifiers
+            if (rules.enableRandomWeapons) {
+                parts.push('random weapons gun game rotating weapons');
+            }
+            if (rules.enableRandomEvents) {
+                parts.push('events chaos hazards environmental');
+            }
+
+            if (config.worldWidth && config.worldHeight) {
+                parts.push(`${config.worldWidth}x${config.worldHeight}`);
+                parts.push(`${config.worldWidth}×${config.worldHeight}`);
+            }
+        }
+
+        return parts.join(' ').toLowerCase();
+    }
+
+    function matchesGameSearch(game, query) {
+        if (!query) return true;
+        const normalized = query.trim().toLowerCase();
+        if (!normalized) return true;
+
+        const searchableText = getSearchableTextForGame(game);
+        const tokens = normalized.split(/\s+/).filter(Boolean);
+        return tokens.every(token => searchableText.includes(token));
+    }
+
+    function renderActiveGamesList() {
+        const badge = document.getElementById('active-games-badge');
+        if (!gamesList) return;
+
+        if (!cachedActiveGames || cachedActiveGames.length === 0) {
+            if (badge) {
+                badge.style.display = 'inline-block';
+                badge.textContent = '0';
+            }
+            gamesList.innerHTML = `
+                <li class="empty-state">
+                    <div class="empty-state-icon">🎮</div>
+                    <div><strong>No Active Games</strong></div>
+                    <div>Be the first to create a game! Click one of the "Create Game" buttons above.</div>
+                </li>
+            `;
+            return;
+        }
+
+        const filteredGames = cachedActiveGames.filter(game => matchesGameSearch(game, currentSearchQuery));
+
+        if (badge) {
+            badge.style.display = 'inline-block';
+            if (currentSearchQuery && filteredGames.length !== cachedActiveGames.length) {
+                badge.textContent = `${filteredGames.length} / ${cachedActiveGames.length}`;
+            } else {
+                badge.textContent = `${cachedActiveGames.length}`;
+            }
+        }
+
+        if (filteredGames.length === 0) {
+            const safeQuery = escapeHtml(currentSearchQuery);
+            gamesList.innerHTML = `
+                <li class="empty-state">
+                    <div class="empty-state-icon">🔍</div>
+                    <div><strong>No games match "${safeQuery}"</strong></div>
+                    <div style="margin-top: 8px;">Try searching for "CTF", "FFA", "Zombies", or a Game ID.</div>
+                    <button type="button" class="modal-button primary" style="margin-top: 14px; padding: 6px 16px; font-size: 0.9em;" onclick="clearGameSearch()">Clear Search</button>
+                </li>
+            `;
+            return;
+        }
+
+        gamesList.innerHTML = '';
+        filteredGames.forEach(game => {
+            const listItem = document.createElement('li');
+            listItem.className = 'game-item';
+
+            const isFull = (game.playerCount || 0) >= game.maxPlayers;
+            const gameAge = getGameAge(game.createdTime);
+            const playerPercentage = Math.round(((game.playerCount || 0) / game.maxPlayers) * 100);
+
+            const configHtml = game.gameConfig ? createGameConfigSummary(game.gameConfig) : '';
+
+            listItem.innerHTML = `
+                <div class="game-header">
+                    <div class="game-type">Game ${escapeHtml(String(game.gameId))}</div>
+                    <div class="game-status ${isFull ? 'full' : ''}">${isFull ? 'Full' : 'Open'}</div>
+                </div>
+                <div class="game-info">
+                    <div class="info-item">
+                        <span class="info-icon">👥</span>
+                        <div>
+                            <span class="info-label">Players:</span>
+                            <span class="info-value player-indicator">
+                                <span class="player-dot ${isFull ? 'full' : ''}"></span>
+                                ${game.playerCount || 0}/${game.maxPlayers} (${playerPercentage}%)
+                            </span>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-icon">🎮</span>
+                        <div>
+                            <span class="info-label">Game ID:</span>
+                            <span class="info-value">${escapeHtml(String(game.gameId))}</span>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-icon">⏱️</span>
+                        <div>
+                            <span class="info-label">Duration:</span>
+                            <span class="info-value">${gameAge}</span>
+                        </div>
+                    </div>
+                </div>
+                ${configHtml}
+                <div class="game-actions">
+                    ${!isFull ? `<button class="join-button" onclick="joinGame('${escapeHtml(String(game.gameId))}')">🎯 Join Game</button>` : 
+                      `<button class="join-button" disabled>Game Full</button>`}
+                    <button class="join-button spectate-button" onclick="spectateGame('${escapeHtml(String(game.gameId))}')">👁️ Spectate</button>
+                </div>
+            `;
+            gamesList.appendChild(listItem);
+        });
+    }
+
     async function fetchGamePresets() {
         try {
             const response = await fetch('/api/game-presets');
@@ -1624,9 +2082,14 @@
                 });
                 renderPresetButtons();
                 populatePresetDropdown();
+                updateServerStatus(true);
+                lastUpdateTime = Date.now();
+            } else {
+                updateServerStatus(false);
             }
         } catch (error) {
             console.error('Error fetching game presets:', error);
+            updateServerStatus(false);
         }
     }
 
@@ -1658,14 +2121,22 @@
     }
 
     function fetchLobbyInfo() {
+        if (isFetchingLobby) return;
+        isFetchingLobby = true;
+
         fetch('/api/games')
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                return response.json();
+            })
             .then(lobbyInfo => {
+                isFetchingLobby = false;
                 updateLobby(lobbyInfo);
                 updateServerStatus(true);
                 lastUpdateTime = Date.now();
             })
             .catch(error => {
+                isFetchingLobby = false;
                 console.error('Error fetching lobby info:', error);
                 updateServerStatus(false);
                 showErrorState();
@@ -1699,73 +2170,12 @@
 
     function updateLobby(lobbyInfo) {
         // Update stats bar
-        playerCountValue.textContent = lobbyInfo.globalPlayerCount || 0;
-        gamesCountValue.textContent = lobbyInfo.activeGames ? lobbyInfo.activeGames.length : 0;
+        if (playerCountValue) playerCountValue.textContent = lobbyInfo.globalPlayerCount || 0;
+        if (gamesCountValue) gamesCountValue.textContent = lobbyInfo.activeGames ? lobbyInfo.activeGames.length : 0;
 
-        // Update "Create Game" buttons
-        renderPresetButtons();
-
-        // Update active games list
-        gamesList.innerHTML = '';
-        if (lobbyInfo.activeGames && lobbyInfo.activeGames.length > 0) {
-            lobbyInfo.activeGames.forEach(game => {
-                const listItem = document.createElement('li');
-                listItem.className = 'game-item';
-
-                const isFull = (game.playerCount || 0) >= game.maxPlayers;
-                const gameAge = getGameAge(game.createdTime);
-                const playerPercentage = Math.round(((game.playerCount || 0) / game.maxPlayers) * 100);
-
-                const configHtml = game.gameConfig ? createGameConfigSummary(game.gameConfig) : '';
-                
-                listItem.innerHTML = `
-                    <div class="game-header">
-                        <div class="game-type">Game ${game.gameId}</div>
-                        <div class="game-status ${isFull ? 'full' : ''}">${isFull ? 'Full' : 'Open'}</div>
-                    </div>
-                    <div class="game-info">
-                        <div class="info-item">
-                            <span class="info-icon">👥</span>
-                            <div>
-                                <span class="info-label">Players:</span>
-                                <span class="info-value player-indicator">
-                                    <span class="player-dot ${isFull ? 'full' : ''}"></span>
-                                    ${game.playerCount || 0}/${game.maxPlayers} (${playerPercentage}%)
-                                </span>
-                            </div>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-icon">🎮</span>
-                            <div>
-                                <span class="info-label">Game ID:</span>
-                                <span class="info-value">${game.gameId}</span>
-                            </div>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-icon">⏱️</span>
-                            <div>
-                                <span class="info-label">Duration:</span>
-                                <span class="info-value">${gameAge}</span>
-                            </div>
-                        </div>
-                    </div>
-                    ${configHtml}
-                    <div class="game-actions">
-                        ${!isFull ? `<button class="join-button" onclick="joinGame('${game.gameId}')">🎯 Join Game</button>` : 
-                          `<button class="join-button" disabled>Game Full</button>`}
-                        <button class="join-button spectate-button" onclick="spectateGame('${game.gameId}')">👁️ Spectate</button>
-                    </div>
-                `;
-                gamesList.appendChild(listItem);
-            });
-        } else {
-            gamesList.innerHTML = `
-                <li class="empty-state">
-                    <div><strong>No Active Games</strong></div>
-                    <div>Be the first to create a game! Click one of the "Create Game" buttons above.</div>
-                </li>
-            `;
-        }
+        // Cache active games and render current view
+        cachedActiveGames = lobbyInfo.activeGames || [];
+        renderActiveGamesList();
     }
 
     function getGameAge(createdTime) {
@@ -1951,6 +2361,7 @@
 
     // Add connection status monitoring
     function checkConnectionHealth() {
+        if (!isActiveGamesExpanded) return;
         const timeSinceLastUpdate = Date.now() - lastUpdateTime;
         if (timeSinceLastUpdate > 10000) { // 10 seconds without update
             updateServerStatus(false);
@@ -1961,24 +2372,40 @@
     document.addEventListener('keydown', function(event) {
         if (event.key === 'F5' || (event.ctrlKey && event.key === 'r')) {
             event.preventDefault();
-            fetchLobbyInfo();
+            fetchGamePresets();
+            if (isActiveGamesExpanded) {
+                fetchLobbyInfo();
+            }
         }
     });
 
-    // Initialize page
+    // Keyboard support for collapsible active games toggle
+    const activeGamesToggleEl = document.getElementById('active-games-toggle');
+    if (activeGamesToggleEl) {
+        activeGamesToggleEl.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleActiveGamesSection();
+            }
+        });
+    }
+
+    // Initialize page: only fetch presets on load to save server bandwidth;
+    // active games are only requested when the section is expanded.
     fetchGamePresets();
-    fetchLobbyInfo();
-    
-    // Refresh every 3 seconds for better responsiveness
-    setInterval(fetchLobbyInfo, 3000);
-    
+
     // Check connection health every 5 seconds
     setInterval(checkConnectionHealth, 5000);
 
     // Add page visibility API support for better performance
     document.addEventListener('visibilitychange', function() {
         if (document.visibilityState === 'visible') {
-            fetchLobbyInfo(); // Refresh when user comes back to tab
+            if (isActiveGamesExpanded) {
+                fetchLobbyInfo();
+                startActiveGamesPolling();
+            }
+        } else {
+            stopActiveGamesPolling();
         }
     });
 
